@@ -6,7 +6,6 @@ mkdir -p debian/upstream
 bzr add debian/upstream
 test -f debian/upstream-metadata && mv debian/upstream-metadata debian/upstream/metadata
 test -f debian/upstream-metadata.yaml && mv debian/upstream-metadata.yaml debian/upstream/metadata
-dch "Move upstream metadata to debian/upstream/metadata."
 echo "Move upstream metadata to debian/upstream/metadata."
 echo
 echo "Fixes lintian: debian-upstream-obsolete-path"

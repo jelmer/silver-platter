@@ -33,12 +33,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
 args = parser.parse_args()
 
-fixers = {}
+fixer_scripts = {}
 
 for n in os.listdir('fixers'):
-    fixers[os.path.splitext(n)[0]] = os.path.abspath(os.path.join('fixers', n))
+    fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(os.path.join('fixers', n))
 
-todo = []
+todo = {}
 
 with open('lintian.log', 'r') as f:
     for l in f:
@@ -49,38 +49,55 @@ with open('lintian.log', 'r') as f:
         if args.packages and not pkg in args.packages:
             continue
         err = cs[5]
-        if err in fixers:
-            todo.append((pkg, err))
+        if err in fixer_scripts:
+            todo.setdefault(pkg, set()).add(err)
+
+
+class NoChanges(Exception):
+    """Script didn't make any changes."""
+
+
+class ScriptFailed(Exception):
+    """Script failed to run."""
 
 
 def run_fixer(branch, fixer):
     note('Running fixer %s on %s', fixer, branch.user_url)
-    script = fixers[fixer]
+    script = fixer_scripts[fixer]
     local_tree = branch.controldir.create_workingtree()
     p = subprocess.Popen(script, cwd=local_tree.basedir, stdout=subprocess.PIPE)
     (description, err) = p.communicate("")
     if p.returncode != 0:
-        raise Exception("Script %s failed with error code %d" % (
+        raise ScriptFailed("Script %s failed with error code %d" % (
                 script, p.returncode))
+    # TODO(jelmer): Run dch iff any other changes were made
     try:
         local_tree.commit(description, allow_pointless=False)
     except PointlessCommit:
-        raise Exception("Script didn't make any changes")
+        raise NoChanges("Script didn't make any changes")
     # TODO(jelmer): Run sbuild & verify lintian warning is gone
     return description
 
 
-for pkg, fixer in todo:
+for pkg, fixers in sorted(todo.items()):
     try:
         branch = Branch.open("apt:%s" % pkg)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except urlutils.InvalidURL as e:
-        if 'unsupported VCSes' in e.extra:
+        if 'unsupported VCSes' in e.extra or 'no URLs found' in e.extra:
             note('%s: %s', pkg, e.extra)
         else:
             raise
     except errors.NotBranchError as e:
         note('%s: Branch does not exist: %s', pkg, e)
+    except errors.UnsupportedProtocol:
+        note('%s: Branch available over unsupported protocol', pkg)
     else:
-        autopropose(branch, lambda local_branch: run_fixer(local_branch, fixer), name=fixer)
+        for fixer in fixers:
+            try:
+                autopropose(branch, lambda local_branch: run_fixer(local_branch, fixer), name=fixer)
+            except NoChanges:
+                pass
+            except ScriptFailed:
+                note('%s: Script failed to run', pkg)
