@@ -31,6 +31,7 @@ from breezy.plugins.propose.autopropose import autopropose
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
+parser.add_argument("--fixers", nargs='*')
 args = parser.parse_args()
 
 fixer_scripts = {}
@@ -48,7 +49,9 @@ with open('lintian.log', 'r') as f:
         pkg = cs[1]
         if args.packages and not pkg in args.packages:
             continue
-        err = cs[5]
+        err = cs[5].strip()
+        if args.fixers and not err in args.fixers:
+            continue
         if err in fixer_scripts:
             todo.setdefault(pkg, set()).add(err)
 
@@ -61,7 +64,7 @@ class ScriptFailed(Exception):
     """Script failed to run."""
 
 
-def run_fixer(branch, fixer):
+def run_lintian_fixer(branch, fixer):
     note('Running fixer %s on %s', fixer, branch.user_url)
     script = fixer_scripts[fixer]
     local_tree = branch.controldir.create_workingtree()
@@ -70,6 +73,10 @@ def run_fixer(branch, fixer):
     if p.returncode != 0:
         raise ScriptFailed("Script %s failed with error code %d" % (
                 script, p.returncode))
+    description += "\n"
+    description += "Fixes lintian: %s\n" % fixer
+    description += "See https://lintian.debian.org/tags/%s.html for more details.\n" % fixer
+
     # TODO(jelmer): Run dch iff any other changes were made
     try:
         local_tree.commit(description, allow_pointless=False)
@@ -96,7 +103,7 @@ for pkg, fixers in sorted(todo.items()):
     else:
         for fixer in fixers:
             try:
-                autopropose(branch, lambda local_branch: run_fixer(local_branch, fixer), name=fixer)
+                autopropose(branch, lambda local_branch: run_lintian_fixer(local_branch, fixer), name=fixer)
             except NoChanges:
                 pass
             except ScriptFailed:

@@ -7,6 +7,3 @@ bzr add debian/upstream
 test -f debian/upstream-metadata && mv debian/upstream-metadata debian/upstream/metadata
 test -f debian/upstream-metadata.yaml && mv debian/upstream-metadata.yaml debian/upstream/metadata
 echo "Move upstream metadata to debian/upstream/metadata."
-echo
-echo "Fixes lintian: debian-upstream-obsolete-path"
-echo "See https://lintian.debian.org/tags/debian-upstream-obsolete-path.html and https://wiki.debian.org/UpstreamMetadata for more details."
