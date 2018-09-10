@@ -73,11 +73,14 @@ def run_lintian_fixer(branch, fixer):
     if p.returncode != 0:
         raise ScriptFailed("Script %s failed with error code %d" % (
                 script, p.returncode))
+
+    if list(local_tree.iter_changes(local_tree.basis_tree())):
+        subprocess.check_call(["dch", description.splitlines()[0]])
+
     description += "\n"
     description += "Fixes lintian: %s\n" % fixer
     description += "See https://lintian.debian.org/tags/%s.html for more details.\n" % fixer
 
-    # TODO(jelmer): Run dch iff any other changes were made
     try:
         local_tree.commit(description, allow_pointless=False)
     except PointlessCommit:
