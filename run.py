@@ -26,12 +26,14 @@ from breezy.branch import Branch
 from breezy.commit import PointlessCommit
 from breezy.trace import note
 
+from breezy.plugins.propose.propose import UnsupportedHoster
 from breezy.plugins.propose.autopropose import autopropose
 
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
-parser.add_argument("--fixers", nargs='*')
+parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
+parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append')
 args = parser.parse_args()
 
 fixer_scripts = {}
@@ -47,7 +49,7 @@ with open('lintian.log', 'r') as f:
         if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
             continue
         pkg = cs[1]
-        if args.packages and not pkg in args.packages:
+        if (args.ignore and pkg in args.ignore) or (args.packages and not pkg in args.packages):
             continue
         err = cs[5].strip()
         if args.fixers and not err in args.fixers:
@@ -74,8 +76,9 @@ def run_lintian_fixer(branch, fixer):
         raise ScriptFailed("Script %s failed with error code %d" % (
                 script, p.returncode))
 
-    if list(local_tree.iter_changes(local_tree.basis_tree())):
-        subprocess.check_call(["dch", description.splitlines()[0]])
+    with local_tree.lock_read():
+        if list(local_tree.iter_changes(local_tree.basis_tree())):
+            subprocess.check_call(["dch", "--no-auto-nmu", description.splitlines()[0]], cwd=local_tree.basedir)
 
     description += "\n"
     description += "Fixes lintian: %s\n" % fixer
@@ -95,7 +98,9 @@ for pkg, fixers in sorted(todo.items()):
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except urlutils.InvalidURL as e:
-        if 'unsupported VCSes' in e.extra or 'no URLs found' in e.extra:
+        if ('unsupported VCSes' in e.extra or
+            'no URLs found' in e.extra or
+            'only Vcs-Browser set' in e.extra):
             note('%s: %s', pkg, e.extra)
         else:
             raise
@@ -103,6 +108,8 @@ for pkg, fixers in sorted(todo.items()):
         note('%s: Branch does not exist: %s', pkg, e)
     except errors.UnsupportedProtocol:
         note('%s: Branch available over unsupported protocol', pkg)
+    except errors.ConnectionError as e:
+        note('%s: %s', pkg, e)
     else:
         for fixer in fixers:
             try:
@@ -111,3 +118,7 @@ for pkg, fixers in sorted(todo.items()):
                 pass
             except ScriptFailed:
                 note('%s: Script failed to run', pkg)
+            except errors.DivergedBranches:
+                note('%s: Already proposed', pkg)
+            except UnsupportedHoster:
+                note('%s: Hoster unsupported', pkg)

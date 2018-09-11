@@ -1,0 +1,15 @@
+Breezy issues:
+- weird issues with git branches breaking
+- ,branch=blah support for git branches
+- redirects for git branches - https://anonscm.debian.org/git/pkg-perl/packages/libxml-handler-trees-perl.git
+
+Backends:
+- Support for Mercurial
+- Support for Svn
+- Submit patches against non-Vcs packages to the BTS?
+
+GitLab:
+- wait for repository to exist
+
+* Bail out early if a MP already exists for a fixer
+* Provide a way to opt out
