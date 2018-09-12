@@ -39,7 +39,8 @@ args = parser.parse_args()
 fixer_scripts = {}
 
 for n in os.listdir('fixers'):
-    fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(os.path.join('fixers', n))
+    fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(
+            os.path.join('fixers', n))
 
 todo = {}
 
@@ -49,7 +50,8 @@ with open('lintian.log', 'r') as f:
         if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
             continue
         pkg = cs[1]
-        if (args.ignore and pkg in args.ignore) or (args.packages and not pkg in args.packages):
+        if ((args.ignore and pkg in args.ignore) or
+            (args.packages and not pkg in args.packages)):
             continue
         err = cs[5].strip()
         if args.fixers and not err in args.fixers:
@@ -78,7 +80,9 @@ def run_lintian_fixer(branch, fixer):
 
     with local_tree.lock_read():
         if list(local_tree.iter_changes(local_tree.basis_tree())):
-            subprocess.check_call(["dch", "--no-auto-nmu", description.splitlines()[0]], cwd=local_tree.basedir)
+            subprocess.check_call(
+                ["dch", "--no-auto-nmu", description.splitlines()[0]],
+                cwd=local_tree.basedir)
 
     description += "\n"
     description += "Fixes lintian: %s\n" % fixer
@@ -110,10 +114,19 @@ for pkg, fixers in sorted(todo.items()):
         note('%s: Branch available over unsupported protocol', pkg)
     except errors.ConnectionError as e:
         note('%s: %s', pkg, e)
+    except errors.PermissionDenied as e:
+        note('%s: %s', pkg, e)
+    except errors.RedirectRequested as e:
+        # TODO(jelmer): Remove this once breezy's git support properly handles redirects.
+        # pad.lv/1791535
+        note('%s: %s', pkg, e)
     else:
         for fixer in fixers:
             try:
-                autopropose(branch, lambda local_branch: run_lintian_fixer(local_branch, fixer), name=fixer)
+                autopropose(
+                    branch,
+                    lambda local_branch: run_lintian_fixer(local_branch, fixer),
+                    name=fixer)
             except NoChanges:
                 pass
             except ScriptFailed:
@@ -122,3 +135,5 @@ for pkg, fixers in sorted(todo.items()):
                 note('%s: Already proposed', pkg)
             except UnsupportedHoster:
                 note('%s: Hoster unsupported', pkg)
+            except errors.AlreadyBranchError:
+                note('%s: Already proposed', pkg)
