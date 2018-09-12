@@ -123,17 +123,19 @@ for pkg, fixers in sorted(todo.items()):
     else:
         for fixer in fixers:
             try:
-                autopropose(
+                mp = autopropose(
                     branch,
                     lambda local_branch: run_lintian_fixer(local_branch, fixer),
                     name=fixer)
             except NoChanges:
                 pass
             except ScriptFailed:
-                note('%s: Script failed to run', pkg)
+                note('%s: Script for %s failed to run', pkg, fixer)
             except errors.DivergedBranches:
-                note('%s: Already proposed', pkg)
+                note('%s: Already proposed: %s', pkg, fixer)
             except UnsupportedHoster:
                 note('%s: Hoster unsupported', pkg)
             except errors.AlreadyBranchError:
-                note('%s: Already proposed', pkg)
+                note('%s: Already proposed: %s', pkg, fixer)
+            else:
+                note('%s: Proposed fix for %s: %s', pkg, fixer, mp.url)
