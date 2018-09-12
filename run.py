@@ -33,14 +33,26 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
 parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
-parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append')
+parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append', default=[])
+parser.add_argument("--ignore-file", help="File to load packages to ignore from.",
+                    type=str, action='append', default=[])
 args = parser.parse_args()
 
 fixer_scripts = {}
 
 for n in os.listdir('fixers'):
+    if n.endswith("~"):
+        continue
     fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(
             os.path.join('fixers', n))
+
+ignore_packages = set(args.ignore)
+
+for ignore_file in args.ignore_file:
+    with open(ignore_file, 'rb') as f:
+        for l in f:
+            ignore_packages.add(l.strip())
+
 
 todo = {}
 
@@ -50,7 +62,7 @@ with open('lintian.log', 'r') as f:
         if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
             continue
         pkg = cs[1]
-        if ((args.ignore and pkg in args.ignore) or
+        if (pkg in ignore_packages or
             (args.packages and not pkg in args.packages)):
             continue
         err = cs[5].strip()
