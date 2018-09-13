@@ -1,5 +1,4 @@
 #!/usr/bin/python
-from breezy import debug; debug.debug_flags.add('http')
 import os
 import subprocess
 import socket
@@ -17,6 +16,7 @@ import breezy
 breezy.initialize()
 import breezy.git
 import breezy.bzr
+import breezy.plugins.launchpad
 import breezy.plugins.debian # for apt: urls
 from breezy import (
     errors,
