@@ -1,4 +1,5 @@
 #!/usr/bin/python
+from breezy import debug; debug.debug_flags.add('http')
 import os
 import subprocess
 import socket
@@ -127,10 +128,6 @@ for pkg, fixers in sorted(todo.items()):
     except errors.ConnectionError as e:
         note('%s: %s', pkg, e)
     except errors.PermissionDenied as e:
-        note('%s: %s', pkg, e)
-    except errors.RedirectRequested as e:
-        # TODO(jelmer): Remove this once breezy's git support properly handles redirects.
-        # pad.lv/1791535
         note('%s: %s', pkg, e)
     else:
         for fixer in fixers:
