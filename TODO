@@ -8,3 +8,4 @@ GitLab:
 
 * Refresh pull requests if there are conflicts
 * Provide a way to opt out
+* Way to JFDI - i.e. push rather than propose

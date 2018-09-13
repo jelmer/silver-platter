@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import fnmatch
 import os
 import subprocess
 import socket
@@ -47,30 +48,30 @@ for n in os.listdir('fixers'):
     fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(
             os.path.join('fixers', n))
 
-ignore_packages = set(args.ignore)
-
-for ignore_file in args.ignore_file:
-    with open(ignore_file, 'rb') as f:
-        for l in f:
-            ignore_packages.add(l.strip())
-
-
-todo = {}
-
-with open('lintian.log', 'r') as f:
+def read_lintian_log(f):
+    lintian_errs = {}
     for l in f:
         cs = l.split(' ')
         if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
             continue
         pkg = cs[1]
-        if (pkg in ignore_packages or
-            (args.packages and not pkg in args.packages)):
-            continue
         err = cs[5].strip()
-        if args.fixers and not err in args.fixers:
-            continue
-        if err in fixer_scripts:
-            todo.setdefault(pkg, set()).add(err)
+        lintian_errs.setdefault(pkg, set()).add(err)
+    return lintian_errs
+
+
+with open('lintian.log', 'r') as f:
+    lintian_errs = read_lintian_log(f)
+
+
+ignore_packages = set()
+for ignore_match in args.ignore:
+    ignore_packages.update(fnmatch.filter(lintian_errs.keys(), ignore_match))
+
+for ignore_file in args.ignore_file:
+    with open(ignore_file, 'rb') as f:
+        for l in f:
+            ignore_packages.add(l.strip())
 
 
 class NoChanges(Exception):
@@ -109,7 +110,27 @@ def run_lintian_fixer(branch, fixer):
     return description
 
 
-for pkg, fixers in sorted(todo.items()):
+available_fixers = set(fixer_scripts)
+if args.fixers:
+    available_fixers = available_fixers.intersection(set(args.fixers))
+
+
+todo = set()
+if not args.packages:
+    todo = set(lintian_errs.keys())
+else:
+    for pkg_match in args.packages:
+        todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
+
+todo = todo - ignore_packages
+
+for pkg in sorted(todo):
+    errs = lintian_errs[pkg]
+
+    fixers = available_fixers.intersection(errs)
+    if not fixers:
+        continue
+
     try:
         branch = Branch.open("apt:%s" % pkg)
     except socket.error:
@@ -128,6 +149,8 @@ for pkg, fixers in sorted(todo.items()):
     except errors.ConnectionError as e:
         note('%s: %s', pkg, e)
     except errors.PermissionDenied as e:
+        note('%s: %s', pkg, e)
+    except errors.InvalidHttpResponse as e:
         note('%s: %s', pkg, e)
     else:
         for fixer in fixers:
