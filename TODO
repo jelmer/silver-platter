@@ -3,9 +3,8 @@ Backends:
 - Support for Svn
 - Submit patches against non-Vcs packages to the BTS?
 
-GitLab:
-- wait for repository to exist
-
 * Refresh pull requests if there are conflicts
 * Provide a way to opt out
 * Way to JFDI - i.e. push rather than propose
+* Combine minor changes into a single pull request?
+* Use stacked/shallow branches if possible
