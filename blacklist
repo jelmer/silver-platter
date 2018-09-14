@@ -8,3 +8,10 @@ haskell-adjunctions
 haskell-ansi-wl-pprint
 impressive
 onetime
+openjdk-7  # very big
+openjdk-8  # very big
+openmpi  # / in branch name
+openopt  # SSL Error
+qemu # generated debian/control
+r-cran-mapproj # requires login?
+ucspi-tcp # SSL error

@@ -71,7 +71,7 @@ for ignore_match in args.ignore:
 for ignore_file in args.ignore_file:
     with open(ignore_file, 'rb') as f:
         for l in f:
-            ignore_packages.add(l.strip())
+            ignore_packages.add(l.split('#')[0].strip())
 
 
 class NoChanges(Exception):
