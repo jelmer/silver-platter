@@ -152,6 +152,8 @@ for pkg in sorted(todo):
         note('%s: %s', pkg, e)
     except errors.InvalidHttpResponse as e:
         note('%s: %s', pkg, e)
+    except errors.TransportError as e:
+        note('%s: %s', pkg, e)
     else:
         for fixer in fixers:
             try:
