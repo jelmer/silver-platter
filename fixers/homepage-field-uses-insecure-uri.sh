@@ -7,4 +7,5 @@ perl -p -i -e 's/^Homepage: http:\/\/pecl.php.net/Homepage: https:\/\/pecl.php.n
 perl -p -i -e 's/^Homepage: http:\/\/www.bioconductor.org/Homepage: https:\/\/www.bioconductor.org/' debian/control
 perl -p -i -e 's/^Homepage: http:\/\/bioconductor.org/Homepage: https:\/\/bioconductor.org/' debian/control
 perl -p -i -e 's/^Homepage: http:\/\/cran.r-project.org/Homepage: https:\/\/cran.r-project.org/' debian/control
+perl -p -i -e 's/^Homepage: http:\/\/wiki.debian.org/Homepage: https:\/\/wiki.debian.org/' debian/control
 echo "Use secure URI in Homepage field."
