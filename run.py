@@ -1,9 +1,11 @@
 #!/usr/bin/python
 import fnmatch
 import os
+import shutil
 import subprocess
 import socket
 import sys
+import tempfile
 
 if os.name == "posix":
     import locale
@@ -27,9 +29,12 @@ from breezy import (
 from breezy.branch import Branch
 from breezy.commit import PointlessCommit
 from breezy.trace import note
+from breezy.transport import get_transport
 
-from breezy.plugins.propose.propose import UnsupportedHoster
-from breezy.plugins.propose.autopropose import autopropose
+from breezy.plugins.propose.propose import (
+    get_hoster,
+    UnsupportedHoster,
+    )
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -121,6 +126,40 @@ if not args.packages:
 else:
     for pkg_match in args.packages:
         todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
+
+
+def autopropose(main_branch, callback, name, overwrite=False, labels=None,
+                just_push=False):
+    hoster = get_hoster(main_branch)
+    try:
+        existing_branch = hoster.get_derived_branch(main_branch, name=name)
+    except errors.NotBranchError:
+        pass
+    else:
+        raise errors.AlreadyBranchError(name)
+    td = tempfile.mkdtemp()
+    try:
+        # preserve whatever source format we have.
+        to_dir = main_branch.controldir.sprout(
+                get_transport(td).base, None, create_tree_if_local=False,
+                source_branch=main_branch)
+        local_branch = to_dir.open_branch()
+        orig_revid = local_branch.last_revision()
+        description = callback(local_branch)
+        if local_branch.last_revision() == orig_revid:
+            raise PointlessCommit()
+        # TODO(jelmer): Perhaps set just_push=True if e.g. maintainer==qa-team?
+        if just_push:
+            local_branch.push(main_branch)
+        else:
+            remote_branch, public_branch_url = hoster.publish_derived(
+                local_branch, main_branch, name=name, overwrite=overwrite)
+            proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+            return proposal_builder.create_proposal(
+                description=description, labels=labels)
+    finally:
+        shutil.rmtree(td)
+
 
 todo = todo - ignore_packages
 
