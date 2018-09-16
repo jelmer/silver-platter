@@ -163,6 +163,8 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None,
 
 todo = todo - ignore_packages
 
+note("Considering %d packages for automatic change proposals", len(todo))
+
 for pkg in sorted(todo):
     errs = lintian_errs[pkg]
 
