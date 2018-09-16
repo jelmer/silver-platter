@@ -142,7 +142,7 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None,
         # preserve whatever source format we have.
         to_dir = main_branch.controldir.sprout(
                 get_transport(td).base, None, create_tree_if_local=False,
-                source_branch=main_branch)
+                source_branch=main_branch, stacked=main_branch._format.supports_stacking())
         local_branch = to_dir.open_branch()
         orig_revid = local_branch.last_revision()
         description = callback(local_branch)
