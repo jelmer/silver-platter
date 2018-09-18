@@ -16,3 +16,4 @@ if not ch.version.debian_revision:
 else:
   print("3.0 (quilt)")
 EOF
+echo "Explicit specify source format."
