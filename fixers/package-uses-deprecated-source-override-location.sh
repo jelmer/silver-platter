@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 if [ ! -f debian/source.lintian-overrides ]; then
     echo "File missing" >&2
     exit 1
