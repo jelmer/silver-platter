@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from debian.deb822 import Deb822
+from email.utils import parseaddr
 import fnmatch
 import os
 import shutil
@@ -43,6 +45,9 @@ parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append'
 parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append', default=[])
 parser.add_argument("--ignore-file", help="File to load packages to ignore from.",
                     type=str, action='append', default=[])
+parser.add_argument('--just-push-file', type=str, action='append', default=[],
+                    help=('File with maintainer emails for which just to push, '
+                          'rather than propose changes.'))
 args = parser.parse_args()
 
 fixer_scripts = {}
@@ -78,6 +83,12 @@ for ignore_file in args.ignore_file:
         for l in f:
             ignore_packages.add(l.split('#')[0].strip())
 
+just_push_maintainers = set()
+for just_push_file in args.just_push_file:
+    with open(just_push_file, 'r') as f:
+        for l in f:
+            just_push_maintainers.add(l.split('#')[0].strip())
+
 
 class NoChanges(Exception):
     """Script didn't make any changes."""
@@ -87,20 +98,21 @@ class ScriptFailed(Exception):
     """Script failed to run."""
 
 
-def run_lintian_fixer(branch, fixer):
-    note('Running fixer %s on %s', fixer, branch.user_url)
+def run_lintian_fixer(local_tree, fixer):
+    note('Running fixer %s on %s', fixer, local_tree.branch.user_url)
     script = fixer_scripts[fixer]
-    local_tree = branch.controldir.create_workingtree()
     p = subprocess.Popen(script, cwd=local_tree.basedir, stdout=subprocess.PIPE)
     (description, err) = p.communicate("")
     if p.returncode != 0:
         raise ScriptFailed("Script %s failed with error code %d" % (
                 script, p.returncode))
 
+    summary = description.splitlines()[0]
+
     with local_tree.lock_read():
         if list(local_tree.iter_changes(local_tree.basis_tree())):
             subprocess.check_call(
-                ["dch", "--no-auto-nmu", description.splitlines()[0]],
+                ["dch", "--no-auto-nmu", summary],
                 cwd=local_tree.basedir)
 
     description += "\n"
@@ -112,7 +124,20 @@ def run_lintian_fixer(branch, fixer):
     except PointlessCommit:
         raise NoChanges("Script didn't make any changes")
     # TODO(jelmer): Run sbuild & verify lintian warning is gone
-    return description
+    return summary
+
+
+def run_lintian_fixers(local_branch, fixers):
+    local_tree = local_branch.controldir.create_workingtree()
+    mp_description = []
+    for fixer in fixers:
+        try:
+            mp_description.append(run_lintian_fixer(local_tree, fixer))
+        except ScriptFailed:
+            note('%s: Script for %s failed to run', pkg, fixer)
+        except NoChanges:
+            pass
+    return mp_description
 
 
 available_fixers = set(fixer_scripts)
@@ -128,39 +153,6 @@ else:
         todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
 
 
-def autopropose(main_branch, callback, name, overwrite=False, labels=None,
-                just_push=False):
-    hoster = get_hoster(main_branch)
-    try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name)
-    except errors.NotBranchError:
-        pass
-    else:
-        raise errors.AlreadyBranchError(name)
-    td = tempfile.mkdtemp()
-    try:
-        # preserve whatever source format we have.
-        to_dir = main_branch.controldir.sprout(
-                get_transport(td).base, None, create_tree_if_local=False,
-                source_branch=main_branch, stacked=main_branch._format.supports_stacking())
-        local_branch = to_dir.open_branch()
-        orig_revid = local_branch.last_revision()
-        description = callback(local_branch)
-        if local_branch.last_revision() == orig_revid:
-            raise PointlessCommit()
-        # TODO(jelmer): Perhaps set just_push=True if e.g. maintainer==qa-team?
-        if just_push:
-            local_branch.push(main_branch)
-        else:
-            remote_branch, public_branch_url = hoster.publish_derived(
-                local_branch, main_branch, name=name, overwrite=overwrite)
-            proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-            return proposal_builder.create_proposal(
-                description=description, labels=labels)
-    finally:
-        shutil.rmtree(td)
-
-
 todo = todo - ignore_packages
 
 note("Considering %d packages for automatic change proposals", len(todo))
@@ -173,7 +165,7 @@ for pkg in sorted(todo):
         continue
 
     try:
-        branch = Branch.open("apt:%s" % pkg)
+        main_branch = Branch.open("apt:%s" % pkg)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except urlutils.InvalidURL as e:
@@ -196,21 +188,61 @@ for pkg in sorted(todo):
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
-        for fixer in fixers:
-            try:
-                mp = autopropose(
-                    branch,
-                    lambda local_branch: run_lintian_fixer(local_branch, fixer),
-                    name=fixer)
-            except NoChanges:
-                pass
-            except ScriptFailed:
-                note('%s: Script for %s failed to run', pkg, fixer)
-            except errors.DivergedBranches:
-                note('%s: Already proposed: %s', pkg, fixer)
-            except UnsupportedHoster:
-                note('%s: Hoster unsupported', pkg)
-            except errors.AlreadyBranchError:
-                note('%s: Already proposed: %s', pkg, fixer)
+        try:
+            [name] = fixers
+        except ValueError:  # more than one fixer
+            name = "lintian-fixes"
+        try:
+            hoster = get_hoster(main_branch)
+        except UnsupportedHoster:
+            note('%s: Hoster unsupported', pkg)
+            continue
+        try:
+            existing_branch = hoster.get_derived_branch(main_branch, name=name)
+        except errors.NotBranchError:
+            pass
+        else:
+            # TODO(jelmer): If this is a branch named 'lintian-fixes', verify
+            # that all available fixers were included?
+            note('%s: Already proposed: %s', pkg, name)
+            continue
+        td = tempfile.mkdtemp()
+        try:
+            # preserve whatever source format we have.
+            to_dir = main_branch.controldir.sprout(
+                    get_transport(td).base, None, create_tree_if_local=False,
+                    source_branch=main_branch, stacked=main_branch._format.supports_stacking())
+            local_branch = to_dir.open_branch()
+            orig_revid = local_branch.last_revision()
+            mp_description = run_lintian_fixers(local_branch, fixers)
+            if local_branch.last_revision() == orig_revid:
+                continue
+            revtree = local_branch.repository.revision_tree(local_branch.last_revision())
+            with revtree.lock_read(), revtree.get_file('debian/control') as fh:
+                control = Deb822(fh)
+                just_push = False
+                if parseaddr(control["Maintainer"])[1] in just_push_maintainers:
+                    just_push = True
+                for uploader in control.get("Uploaders", "").split(","):
+                    if parseaddr(uploader)[1] in just_push_maintainers:
+                        just_push = True
+            if just_push:
+                push_url = hoster.get_push_url(main_branch)
+                note('%s: pushing to %s', pkg, push_url)
+                local_branch.push(Branch.open(push_url))
             else:
-                note('%s: Proposed fix for %s: %s', pkg, fixer, mp.url)
+                try:
+                    remote_branch, public_branch_url = hoster.publish_derived(
+                        local_branch, main_branch, name=name, overwrite=False)
+                except errors.DivergedBranches:
+                    note('%s: Already proposed: %s', pkg, name)
+                    continue
+                proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                if len(mp_description) > 1:
+                    mp_description = ["Fix some issues reported by lintian\n"] + [
+                            ("* %s\n" % l) for l in mp_description]
+                mp = proposal_builder.create_proposal(
+                    description=''.join(mp_description), labels=[])
+                note('%s: Proposed fix for %r: %s', pkg, name, mp.url)
+        finally:
+            shutil.rmtree(td)
