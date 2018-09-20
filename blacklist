@@ -3,6 +3,7 @@ arno-iptables-firewall  # Times out
 caspar
 dds
 draai
+flickrbackup  # Marked for removal (https://bugs.debian.org/904925)
 haskell-aeson-pretty  # Haskell massive package
 haskell-adjunctions  # Haskell massive package
 haskell-ansi-wl-pprint  # Haskell massive package

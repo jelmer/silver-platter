@@ -48,6 +48,9 @@ parser.add_argument("--ignore-file", help="File to load packages to ignore from.
 parser.add_argument('--just-push-file', type=str, action='append', default=[],
                     help=('File with maintainer emails for which just to push, '
                           'rather than propose changes.'))
+parser.add_argument('--addon-only', help='Fixers that should be considered add-on-only.',
+                    type=str, action='append',
+                    default=['file-contains-trailing-whitespace'])
 args = parser.parse_args()
 
 fixer_scripts = {}
@@ -140,6 +143,9 @@ def run_lintian_fixers(local_branch, fixers):
     return mp_description
 
 
+addon_only = set(args.addon_only)
+
+
 available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
@@ -162,6 +168,9 @@ for pkg in sorted(todo):
 
     fixers = available_fixers.intersection(errs)
     if not fixers:
+        continue
+
+    if not (fixers - addon_only):
         continue
 
     try:
@@ -188,10 +197,7 @@ for pkg in sorted(todo):
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
-        try:
-            [name] = fixers
-        except ValueError:  # more than one fixer
-            name = "lintian-fixes"
+        name = "lintian-fixes"
         try:
             hoster = get_hoster(main_branch)
         except UnsupportedHoster:
@@ -202,8 +208,7 @@ for pkg in sorted(todo):
         except errors.NotBranchError:
             pass
         else:
-            # TODO(jelmer): If this is a branch named 'lintian-fixes', verify
-            # that all available fixers were included?
+            # TODO(jelmer): Verify that all available fixers were included?
             note('%s: Already proposed: %s', pkg, name)
             continue
         td = tempfile.mkdtemp()
