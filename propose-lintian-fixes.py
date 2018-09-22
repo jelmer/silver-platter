@@ -220,7 +220,7 @@ for pkg in sorted(todo):
             update_changelog = should_update_changelog(local_branch)
             local_tree = local_branch.controldir.create_workingtree()
             applied = run_lintian_fixers(
-                    local_tree, fixer_scripts[fixer] for fixer in fixers], update_changelog)
+                    local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if mode == 'propose' and not (set(f for f, d in applied) - propose_addon_only):
                 note('%s: only add-on fixers found', pkg)
                 continue
