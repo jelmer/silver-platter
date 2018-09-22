@@ -5,7 +5,6 @@ import fnmatch
 import itertools
 import os
 import shutil
-import subprocess
 import socket
 import sys
 import tempfile
@@ -39,6 +38,8 @@ from breezy.plugins.propose.propose import (
     UnsupportedHoster,
     )
 
+from lintian_brush import available_lintian_fixers, run_lintian_fixers
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
@@ -56,13 +57,8 @@ parser.add_argument('--propose-addon-only', help='Fixers that should be consider
                     default=['file-contains-trailing-whitespace'])
 args = parser.parse_args()
 
-fixer_scripts = {}
+fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
 
-for n in os.listdir('fixers'):
-    if n.endswith("~"):
-        continue
-    fixer_scripts[os.path.splitext(n)[0]] = os.path.abspath(
-            os.path.join('fixers', n))
 
 def read_lintian_log(f):
     lintian_errs = {}
@@ -110,59 +106,6 @@ if args.propose_file:
         with open(propose_file, 'r') as f:
             for l in f:
                 propose_owners.add(l.split('#')[0].strip())
-
-class NoChanges(Exception):
-    """Script didn't make any changes."""
-
-
-class ScriptFailed(Exception):
-    """Script failed to run."""
-
-
-def run_lintian_fixer(local_tree, fixer, update_changelog=True):
-    note('Running fixer %s on %s', fixer, local_tree.branch.user_url)
-    script = fixer_scripts[fixer]
-    p = subprocess.Popen(script, cwd=local_tree.basedir, stdout=subprocess.PIPE)
-    (description, err) = p.communicate("")
-    if p.returncode != 0:
-        raise ScriptFailed("Script %s failed with error code %d" % (
-                script, p.returncode))
-
-    summary = description.splitlines()[0]
-
-    if update_changelog:
-        with local_tree.lock_read():
-            if list(local_tree.iter_changes(local_tree.basis_tree())):
-                subprocess.check_call(
-                    ["dch", "--no-auto-nmu", summary],
-                    cwd=local_tree.basedir)
-
-    description += "\n"
-    description += "Fixes lintian: %s\n" % fixer
-    description += "See https://lintian.debian.org/tags/%s.html for more details.\n" % fixer
-
-    try:
-        local_tree.commit(description, allow_pointless=False)
-    except PointlessCommit:
-        raise NoChanges("Script didn't make any changes")
-    # TODO(jelmer): Run sbuild & verify lintian warning is gone
-    return summary
-
-
-def run_lintian_fixers(local_branch, fixers, update_changelog):
-    local_tree = local_branch.controldir.create_workingtree()
-    ret = []
-    for fixer in fixers:
-        try:
-            description = run_lintian_fixer(
-                    local_tree, fixer, update_changelog)
-        except ScriptFailed:
-            note('%s: Script for %s failed to run', pkg, fixer)
-        except NoChanges:
-            pass
-        else:
-            ret.append((fixer, description))
-    return ret
 
 
 def should_update_changelog(branch):
@@ -275,8 +218,9 @@ for pkg in sorted(todo):
             if not mode:
                 continue
             update_changelog = should_update_changelog(local_branch)
+            local_tree = local_branch.controldir.create_workingtree()
             applied = run_lintian_fixers(
-                    local_branch, fixers, update_changelog)
+                    local_tree, fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if mode == 'propose' and not (set(f for f, d in applied) - propose_addon_only):
                 note('%s: only add-on fixers found', pkg)
                 continue
