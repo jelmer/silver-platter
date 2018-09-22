@@ -251,6 +251,7 @@ for pkg in sorted(todo):
             for email in emails:
                 if email in just_push_maintainers:
                     mode = 'push'
+                    break
                 elif propose_owners is None or email in propose_owners:
                     mode = 'propose'
             if not mode:
