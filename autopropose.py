@@ -110,7 +110,8 @@ if args.name is None:
     name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
 else:
     name = args.name
+script = os.path.abspath(args.script)
 proposal = autopropose(
-        main_branch, lambda branch: script_runner(branch, args.script),
+        main_branch, lambda branch: script_runner(branch, script),
         name=name, overwrite=args.overwrite, labels=args.label)
 note(gettext('Merge proposal created: %s') % proposal.url)
