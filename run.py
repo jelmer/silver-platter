@@ -2,6 +2,7 @@
 from debian.deb822 import Deb822
 from email.utils import parseaddr
 import fnmatch
+import itertools
 import os
 import shutil
 import subprocess
@@ -169,7 +170,10 @@ def should_update_changelog(branch):
         graph = branch.repository.get_graph()
         revids = itertools.islice(
             graph.iter_lefthand_ancestry(branch.last_revision()), 200)
-        for rev in branch.repositor.iter_revisions(revids):
+        for revid, rev in branch.repository.iter_revisions(revids):
+            if rev is None:
+                # Ghost
+                continue
             if 'Git-Dch: ' in rev.message:
                 return False
     # Assume yes
@@ -294,7 +298,7 @@ for pkg in sorted(todo):
                 proposal_builder = hoster.get_proposer(remote_branch, main_branch)
                 if len(applied) > 1:
                     mp_description = ["Fix some issues reported by lintian\n"] + [
-                            ("* %s\n" % l) for f, l in mp_description]
+                            ("* %s\n" % l) for f, l in applied]
                 else:
                     mp_description = applied[0][1]
                 mp = proposal_builder.create_proposal(

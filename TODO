@@ -9,6 +9,7 @@ Backends:
  Criteria:
   + Maintainer regex
   + Package name
+  + Branch URL regex
  Settings:
   + mode: push / mode / ignore
   + update changelog yes/no
