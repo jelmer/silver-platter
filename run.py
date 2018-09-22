@@ -48,7 +48,9 @@ parser.add_argument("--ignore-file", help="File to load packages to ignore from.
 parser.add_argument('--just-push-file', type=str, action='append', default=[],
                     help=('File with maintainer emails for which just to push, '
                           'rather than propose changes.'))
-parser.add_argument('--addon-only', help='Fixers that should be considered add-on-only.',
+parser.add_argument('--propose-file', type=str, action='append', default=[],
+                    help=('File with maintainer emails for which to propose changes. '))
+parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
 args = parser.parse_args()
@@ -73,6 +75,14 @@ def read_lintian_log(f):
     return lintian_errs
 
 
+def get_maintainer_and_uploader_emails(revtree):
+    with revtree.lock_read(), revtree.get_file('debian/control') as fh:
+        control = Deb822(fh)
+        yield parseaddr(control["Maintainer"])[1]
+        for uploader in control.get("Uploaders", "").split(","):
+            yield parseaddr(uploader)[1]
+
+
 with open('lintian.log', 'r') as f:
     lintian_errs = read_lintian_log(f)
 
@@ -92,6 +102,13 @@ for just_push_file in args.just_push_file:
         for l in f:
             just_push_maintainers.add(l.split('#')[0].strip())
 
+propose_owners = None
+if args.propose_file:
+    propose_owners = set()
+    for propose_file in args.propose_file:
+        with open(propose_file, 'r') as f:
+            for l in f:
+                propose_owners.add(l.split('#')[0].strip())
 
 class NoChanges(Exception):
     """Script didn't make any changes."""
@@ -132,18 +149,20 @@ def run_lintian_fixer(local_tree, fixer):
 
 def run_lintian_fixers(local_branch, fixers):
     local_tree = local_branch.controldir.create_workingtree()
-    mp_description = []
+    ret = []
     for fixer in fixers:
         try:
-            mp_description.append(run_lintian_fixer(local_tree, fixer))
+            description = run_lintian_fixer(local_tree, fixer)
         except ScriptFailed:
             note('%s: Script for %s failed to run', pkg, fixer)
         except NoChanges:
             pass
-    return mp_description
+        else:
+            ret.append((fixer, description))
+    return ret
 
 
-addon_only = set(args.addon_only)
+propose_addon_only = set(args.propose_addon_only)
 
 
 available_fixers = set(fixer_scripts)
@@ -170,7 +189,7 @@ for pkg in sorted(todo):
     if not fixers:
         continue
 
-    if not (fixers - addon_only):
+    if not (fixers - propose_addon_only):
         continue
 
     try:
@@ -219,19 +238,32 @@ for pkg in sorted(todo):
                     source_branch=main_branch, stacked=main_branch._format.supports_stacking())
             local_branch = to_dir.open_branch()
             orig_revid = local_branch.last_revision()
-            mp_description = run_lintian_fixers(local_branch, fixers)
+            revtree = local_branch.repository.revision_tree(orig_revid)
+            if propose_owners is None:
+                mode = 'propose'
+            else:
+                mode = None
+            try:
+                emails = list(get_maintainer_and_uploader_emails(revtree))
+            except errors.NoSuchFile:
+                note('%s: no debian/control file', pkg)
+                continue
+            for email in emails:
+                if email in just_push_maintainers:
+                    mode = 'push'
+                elif propose_owners is None or email in propose_owners:
+                    mode = 'propose'
+            if not mode:
+                continue
+            applied = run_lintian_fixers(local_branch, fixers)
+            if mode == 'propose' and not (set(f for f, d in applied) - propose_addon_only):
+                note('%s: only add-on fixers found', pkg)
+                continue
             if local_branch.last_revision() == orig_revid:
                 continue
-            revtree = local_branch.repository.revision_tree(local_branch.last_revision())
-            with revtree.lock_read(), revtree.get_file('debian/control') as fh:
-                control = Deb822(fh)
-                just_push = False
-                if parseaddr(control["Maintainer"])[1] in just_push_maintainers:
-                    just_push = True
-                for uploader in control.get("Uploaders", "").split(","):
-                    if parseaddr(uploader)[1] in just_push_maintainers:
-                        just_push = True
-            if just_push:
+            if not mode:
+                continue
+            elif mode == 'push':
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
                 local_branch.push(Branch.open(push_url))
@@ -243,9 +275,11 @@ for pkg in sorted(todo):
                     note('%s: Already proposed: %s', pkg, name)
                     continue
                 proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-                if len(mp_description) > 1:
+                if len(applied) > 1:
                     mp_description = ["Fix some issues reported by lintian\n"] + [
-                            ("* %s\n" % l) for l in mp_description]
+                            ("* %s\n" % l) for f, l in mp_description]
+                else:
+                    mp_description = applied[0][1]
                 mp = proposal_builder.create_proposal(
                     description=''.join(mp_description), labels=[])
                 note('%s: Proposed fix for %r: %s', pkg, name, mp.url)

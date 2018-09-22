@@ -5,8 +5,6 @@ Backends:
 
 * Refresh pull requests if there are conflicts
 * Provide a way to opt out
-* Way to JFDI - i.e. push rather than propose, e.g. for QA packages
-* Combine minor changes into a single pull request?
 
 * Create cherry-pick merge proposals for bug fixes that are forwarded upstream
  + especially for stable debian releases
