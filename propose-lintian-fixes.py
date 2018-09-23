@@ -1,4 +1,20 @@
 #!/usr/bin/python
+# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
 from debian.deb822 import Deb822
 from email.utils import parseaddr
 import fnmatch
@@ -43,6 +59,7 @@ from lintian_brush import available_lintian_fixers, run_lintian_fixers
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
+parser.add_argument('--lintian-log', help="Path to lintian log file.", type=str, default='lintian.log')
 parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
 parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append', default=[])
 parser.add_argument("--ignore-file", help="File to load packages to ignore from.",
@@ -80,7 +97,7 @@ def get_maintainer_and_uploader_emails(revtree):
             yield parseaddr(uploader)[1]
 
 
-with open('lintian.log', 'r') as f:
+with open(args.lintian_log, 'r') as f:
     lintian_errs = read_lintian_log(f)
 
 
