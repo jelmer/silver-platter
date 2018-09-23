@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import apt_pkg
 from debian.deb822 import Deb822
 from email.utils import parseaddr
 import fnmatch
@@ -38,7 +39,7 @@ breezy.initialize()
 import breezy.git
 import breezy.bzr
 import breezy.plugins.launchpad
-import breezy.plugins.debian # for apt: urls
+from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy import (
     errors,
     urlutils,
@@ -89,12 +90,10 @@ def read_lintian_log(f):
     return lintian_errs
 
 
-def get_maintainer_and_uploader_emails(revtree):
-    with revtree.lock_read(), revtree.get_file('debian/control') as fh:
-        control = Deb822(fh)
-        yield parseaddr(control["Maintainer"])[1]
-        for uploader in control.get("Uploaders", "").split(","):
-            yield parseaddr(uploader)[1]
+def get_maintainer_and_uploader_emails(control):
+    yield parseaddr(control["Maintainer"])[1]
+    for uploader in control.get("Uploaders", "").split(","):
+        yield parseaddr(uploader)[1]
 
 
 with open(args.lintian_log, 'r') as f:
@@ -156,6 +155,10 @@ else:
         todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
 
 
+apt_pkg.init()
+
+sources = apt_pkg.SourceRecords()
+
 todo = todo - ignore_packages
 
 note("Considering %d packages for automatic change proposals", len(todo))
@@ -170,8 +173,14 @@ for pkg in sorted(todo):
     if not (fixers - propose_addon_only):
         continue
 
+    if not sources.lookup(pkg):
+        note('%s: not in apt sources', pkg)
+        continue
+    pkg_source = Deb822(source.record)
+    vcs_url = source_package_vcs_url(pkg_source)
+
     try:
-        main_branch = Branch.open("apt:%s" % pkg)
+        main_branch = Branch.open(vcs_url)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except urlutils.InvalidURL as e:
@@ -216,13 +225,12 @@ for pkg in sorted(todo):
                     source_branch=main_branch, stacked=main_branch._format.supports_stacking())
             local_branch = to_dir.open_branch()
             orig_revid = local_branch.last_revision()
-            revtree = local_branch.repository.revision_tree(orig_revid)
             if propose_owners is None:
                 mode = 'propose'
             else:
                 mode = None
             try:
-                emails = list(get_maintainer_and_uploader_emails(revtree))
+                emails = list(get_maintainer_and_uploader_emails(pkg_source))
             except errors.NoSuchFile:
                 note('%s: no debian/control file', pkg)
                 continue
