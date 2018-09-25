@@ -48,7 +48,6 @@ from breezy import (
 from breezy.branch import Branch
 from breezy.commit import PointlessCommit
 from breezy.trace import note
-from breezy.transport import get_transport
 
 from breezy.plugins.propose.propose import (
     get_hoster,
@@ -221,7 +220,7 @@ for pkg in sorted(todo):
         try:
             # preserve whatever source format we have.
             to_dir = main_branch.controldir.sprout(
-                    get_transport(td).base, None, create_tree_if_local=False,
+                    td, None, create_tree_if_local=False,
                     source_branch=main_branch, stacked=main_branch._format.supports_stacking())
             local_branch = to_dir.open_branch()
             orig_revid = local_branch.last_revision()
