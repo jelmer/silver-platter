@@ -175,8 +175,26 @@ for pkg in sorted(todo):
     if not sources.lookup(pkg):
         note('%s: not in apt sources', pkg)
         continue
-    pkg_source = Deb822(source.record)
-    vcs_url = source_package_vcs_url(pkg_source)
+    pkg_source = Deb822(sources.record)
+    try:
+        vcs_url = source_package_vcs_url(pkg_source)
+    except KeyError:
+        note('%s: no VCS URL found', pkg)
+        continue
+
+    if propose_owners is None:
+        mode = 'propose'
+    else:
+        mode = None
+    emails = list(get_maintainer_and_uploader_emails(pkg_source))
+    for email in emails:
+        if email in just_push_maintainers:
+            mode = 'push'
+            break
+        elif propose_owners is None or email in propose_owners:
+            mode = 'propose'
+    if not mode:
+        continue
 
     try:
         main_branch = Branch.open(vcs_url)
@@ -208,69 +226,67 @@ for pkg in sorted(todo):
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
-        try:
-            existing_branch = hoster.get_derived_branch(main_branch, name=name)
-        except errors.NotBranchError:
-            pass
+        if mode == 'propose':
+            try:
+                existing_branch = hoster.get_derived_branch(main_branch, name=name)
+            except errors.NotBranchError:
+                base_branch = main_branch
+            else:
+                # TODO(jelmer): Verify that all available fixers were included?
+                note('%s: Already proposed: %s (branch at %s)', pkg, name,
+                     existing_branch.user_url)
+                base_branch = existing_branch
+                mode = 'propose-update'
         else:
-            # TODO(jelmer): Verify that all available fixers were included?
-            note('%s: Already proposed: %s', pkg, name)
-            continue
+            base_branch = main_branch
         td = tempfile.mkdtemp()
         try:
             # preserve whatever source format we have.
-            to_dir = main_branch.controldir.sprout(
-                    td, None, create_tree_if_local=False,
-                    source_branch=main_branch, stacked=main_branch._format.supports_stacking())
-            local_branch = to_dir.open_branch()
-            orig_revid = local_branch.last_revision()
-            if propose_owners is None:
-                mode = 'propose'
-            else:
-                mode = None
-            try:
-                emails = list(get_maintainer_and_uploader_emails(pkg_source))
-            except errors.NoSuchFile:
-                note('%s: no debian/control file', pkg)
-                continue
-            for email in emails:
-                if email in just_push_maintainers:
-                    mode = 'push'
-                    break
-                elif propose_owners is None or email in propose_owners:
-                    mode = 'propose'
-            if not mode:
-                continue
-            update_changelog = should_update_changelog(local_branch)
-            local_tree = local_branch.controldir.create_workingtree()
-            applied = run_lintian_fixers(
-                    local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
+            to_dir = base_branch.controldir.sprout(td, None, create_tree_if_local=True,
+                    source_branch=base_branch, stacked=base_branch._format.supports_stacking())
+            local_tree = to_dir.open_workingtree()
+            with local_tree.lock_write():
+                if not local_tree.has_filename('debian/control'):
+                    note('%s: missing control file', pkg)
+                    continue
+                local_branch = local_tree.branch
+                orig_revid = local_branch.last_revision()
+
+                update_changelog = should_update_changelog(local_branch)
+                applied = run_lintian_fixers(
+                        local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if mode == 'propose' and not (set(f for f, d in applied) - propose_addon_only):
                 note('%s: only add-on fixers found', pkg)
                 continue
             if local_branch.last_revision() == orig_revid:
                 continue
-            if not mode:
-                continue
-            elif mode == 'push':
+            if mode == 'push':
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
                 local_branch.push(Branch.open(push_url))
-            else:
+            if mode == 'propose':
                 try:
                     remote_branch, public_branch_url = hoster.publish_derived(
                         local_branch, main_branch, name=name, overwrite=False)
                 except errors.DivergedBranches:
                     note('%s: Already proposed: %s', pkg, name)
                     continue
-                proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+            elif mode == 'propose-update':
+                # TODO(jelmer): Enable this once merge proposal description can be updated
+                pass # local_branch.push(existing_branch)
+            if mode == 'propose':
                 if len(applied) > 1:
                     mp_description = ["Fix some issues reported by lintian\n"] + [
                             ("* %s\n" % l) for f, l in applied]
                 else:
                     mp_description = applied[0][1]
-                mp = proposal_builder.create_proposal(
-                    description=''.join(mp_description), labels=[])
+                proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                try:
+                    mp = proposal_builder.create_proposal(
+                        description=''.join(mp_description), labels=[])
+                except PermissionDenied:
+                    note('%s: Permission denied while trying to create proposal. ', pkg)
+                    continue
                 note('%s: Proposed fix for %r: %s', pkg, name, mp.url)
         finally:
             shutil.rmtree(td)
