@@ -43,7 +43,7 @@ message Policy {
     optional Mode mode = 2;
 
     // Changelog update mode
-    optional ChangelogMode changelog = 3 [ default=auto ];
+    optional ChangelogMode changelog = 3;
 
     // Fixers to apply
     repeated string lintian_fixers = 4;

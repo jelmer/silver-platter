@@ -86,12 +86,6 @@ def read_lintian_log(f):
     return lintian_errs
 
 
-def get_maintainer_and_uploader_emails(control):
-    yield parseaddr(control["Maintainer"])[1]
-    for uploader in control.get("Uploaders", "").split(","):
-        yield parseaddr(uploader)[1]
-
-
 with open(args.lintian_log, 'r') as f:
     lintian_errs = read_lintian_log(f)
 
@@ -161,8 +155,8 @@ def matches(match, control):
 
 
 def apply_policy(config, control):
-    mode = None
-    update_changelog = None
+    mode = policy_pb2.skip
+    update_changelog = policy_pb2.auto
     for policy in config.policy:
         if policy.match and not any([matches(m, control) for m in policy.match]):
             continue
