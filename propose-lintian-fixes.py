@@ -57,19 +57,15 @@ from breezy.plugins.propose.propose import (
 
 from lintian_brush import available_lintian_fixers, run_lintian_fixers
 
+from google.protobuf import text_format
+import policy_pb2
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("packages", nargs='*')
 parser.add_argument('--lintian-log', help="Path to lintian log file.", type=str, default='lintian.log')
 parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
-parser.add_argument("--ignore", help="Packages to ignore.", type=str, action='append', default=[])
-parser.add_argument("--ignore-file", help="File to load packages to ignore from.",
-                    type=str, action='append', default=[])
-parser.add_argument('--just-push-file', type=str, action='append', default=[],
-                    help=('File with maintainer emails for which just to push, '
-                          'rather than propose changes.'))
-parser.add_argument('--propose-file', type=str, action='append', default=[],
-                    help=('File with maintainer emails for which to propose changes. '))
+parser.add_argument("--policy", help="Policy file to read.", type=str, default='policy.conf')
 parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
@@ -99,30 +95,8 @@ def get_maintainer_and_uploader_emails(control):
 with open(args.lintian_log, 'r') as f:
     lintian_errs = read_lintian_log(f)
 
-
-ignore_packages = set()
-for ignore_match in args.ignore:
-    ignore_packages.update(fnmatch.filter(lintian_errs.keys(), ignore_match))
-
-for ignore_file in args.ignore_file:
-    with open(ignore_file, 'rb') as f:
-        for l in f:
-            ignore_packages.add(l.split('#')[0].strip())
-
-just_push_maintainers = set()
-for just_push_file in args.just_push_file:
-    with open(just_push_file, 'r') as f:
-        for l in f:
-            just_push_maintainers.add(l.split('#')[0].strip())
-
-propose_owners = None
-if args.propose_file:
-    propose_owners = set()
-    for propose_file in args.propose_file:
-        with open(propose_file, 'r') as f:
-            for l in f:
-                propose_owners.add(l.split('#')[0].strip())
-
+with open(args.policy, 'r') as f:
+    policy = text_format.Parse(f.read(), policy_pb2.PolicyConfig())
 
 def should_update_changelog(branch):
     with branch.lock_read():
@@ -159,8 +133,6 @@ apt_pkg.init()
 
 sources = apt_pkg.SourceRecords()
 
-todo = todo - ignore_packages
-
 note("Considering %d packages for automatic change proposals", len(todo))
 
 def create_mp_description(lines):
@@ -170,6 +142,35 @@ def create_mp_description(lines):
     else:
         mp_description = lines[0]
     return ''.join(mp_description)
+
+
+def matches(match, control):
+    for maintainer in match.maintainer:
+        if maintainer != parseaddr(control["Maintainer"])[1]:
+            return False
+    uploader_emails = [
+            parseaddr(uploader)[1]
+            for uploader in control.get("Uploaders", "").split(",")]
+    for uploader in match.uploader:
+        if uploader not in uploader_emails:
+            return False
+    for source_package in match.source_package:
+        if source_package != control["Package"]:
+            return False
+    return True
+
+
+def apply_policy(config, control):
+    mode = None
+    update_changelog = None
+    for policy in config.policy:
+        if not any([matches(m, control) for m in policy.match]):
+            continue
+        if policy.mode is not None:
+            mode = policy.mode
+        if policy.changelog is not None:
+            update_changelog = policy.changelog
+    return mode, update_changelog
 
 
 for pkg in sorted(todo):
@@ -192,18 +193,10 @@ for pkg in sorted(todo):
         note('%s: no VCS URL found', pkg)
         continue
 
-    if propose_owners is None:
-        mode = 'propose'
-    else:
-        mode = None
-    emails = list(get_maintainer_and_uploader_emails(pkg_source))
-    for email in emails:
-        if email in just_push_maintainers:
-            mode = 'push'
-            break
-        elif propose_owners is None or email in propose_owners:
-            mode = 'propose'
-    if not mode:
+    mode, update_changelog = apply_policy(policy, pkg_source)
+
+    if mode == policy_pb2.skip:
+        note('%s: skipping, per policy', pkg)
         continue
 
     try:
@@ -236,7 +229,7 @@ for pkg in sorted(todo):
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
-        if mode == 'propose':
+        if mode == policy_pb2.propose:
             try:
                 existing_branch = hoster.get_derived_branch(main_branch, name=name)
             except errors.NotBranchError:
@@ -266,24 +259,30 @@ for pkg in sorted(todo):
                 local_branch = local_tree.branch
                 orig_revid = local_branch.last_revision()
 
-                update_changelog = should_update_changelog(local_branch)
+                if update_changelog == policy_pb2.auto:
+                    update_changelog = should_update_changelog(local_branch)
+                elif update_changelog == policy_pb2.update_changelog:
+                    update_changelog = True
+                elif update_changelog == policy_pb2.leave_changlog:
+                    update_changelog = False
+
                 applied = run_lintian_fixers(
                         local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if not applied:
                 note('%s: no fixers to apply', pkg)
                 continue
-            if (mode == 'propose' and
+            if (mode == policy_pb2.propose and
                 not existing_branch and
                 not (set(f for f, d in applied) - propose_addon_only)):
                 note('%s: only add-on fixers found', pkg)
                 continue
             if local_branch.last_revision() == orig_revid:
                 continue
-            if mode == 'push':
+            if mode == policy_pb2.push:
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
                 local_branch.push(Branch.open(push_url))
-            if mode == 'propose':
+            if mode == policy_pb2.propose:
                 if existing_branch is not None:
                     local_branch.push(existing_branch)
                 else:
@@ -293,7 +292,7 @@ for pkg in sorted(todo):
                     except errors.DivergedBranches:
                         note('%s: Already proposed: %s', pkg, name)
                         continue
-            if mode == 'propose':
+            if mode == policy_pb2.propose:
                 if existing_proposal is not None:
                     existing_description = existing_proposal.get_description().splitlines()
                     mp_description = create_mp_description(
