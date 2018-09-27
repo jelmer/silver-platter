@@ -164,7 +164,7 @@ def apply_policy(config, control):
     mode = None
     update_changelog = None
     for policy in config.policy:
-        if not any([matches(m, control) for m in policy.match]):
+        if policy.match and not any([matches(m, control) for m in policy.match]):
             continue
         if policy.mode is not None:
             mode = policy.mode
@@ -280,6 +280,8 @@ for pkg in sorted(todo):
                     local_branch.push(Branch.open(push_url))
                 except errors.PermissionDenied:
                     if mode == policy_pb2.attempt_push:
+                        note('%s: push access denied, falling back to propose',
+                             pkg)
                         mode = policy_pb2.propose
                     else:
                         raise
