@@ -271,17 +271,23 @@ for pkg in sorted(todo):
             if not applied:
                 note('%s: no fixers to apply', pkg)
                 continue
+            if local_branch.last_revision() == orig_revid:
+                continue
+            if mode in (policy_pb2.push, policy_pb2.attempt_push):
+                push_url = hoster.get_push_url(main_branch)
+                note('%s: pushing to %s', pkg, push_url)
+                try:
+                    local_branch.push(Branch.open(push_url))
+                except errors.PermissionDenied:
+                    if mode == policy_pb2.attempt_push:
+                        mode = policy_pb2.propose
+                    else:
+                        raise
             if (mode == policy_pb2.propose and
                 not existing_branch and
                 not (set(f for f, d in applied) - propose_addon_only)):
                 note('%s: only add-on fixers found', pkg)
                 continue
-            if local_branch.last_revision() == orig_revid:
-                continue
-            if mode == policy_pb2.push:
-                push_url = hoster.get_push_url(main_branch)
-                note('%s: pushing to %s', pkg, push_url)
-                local_branch.push(Branch.open(push_url))
             if mode == policy_pb2.propose:
                 if existing_branch is not None:
                     local_branch.push(existing_branch)
