@@ -51,6 +51,7 @@ from breezy.trace import note
 
 from breezy.plugins.propose.propose import (
     get_hoster,
+    NoMergeProposal,
     UnsupportedHoster,
     )
 
@@ -162,6 +163,15 @@ todo = todo - ignore_packages
 
 note("Considering %d packages for automatic change proposals", len(todo))
 
+def create_mp_description(lines):
+    if len(applied) > 1:
+        mp_description = ["Fix some issues reported by lintian\n"] + [
+                ("* %s\n" % l) for l in lines]
+    else:
+        mp_description = lines[0]
+    return ''.join(mp_description)
+
+
 for pkg in sorted(todo):
     errs = lintian_errs[pkg]
 
@@ -231,12 +241,16 @@ for pkg in sorted(todo):
                 existing_branch = hoster.get_derived_branch(main_branch, name=name)
             except errors.NotBranchError:
                 base_branch = main_branch
+                existing_branch = None
+                existing_proposal = None
             else:
-                # TODO(jelmer): Verify that all available fixers were included?
                 note('%s: Already proposed: %s (branch at %s)', pkg, name,
                      existing_branch.user_url)
                 base_branch = existing_branch
-                mode = 'propose-update'
+                try:
+                    existing_proposal = hoster.get_proposal(existing_branch, main_branch)
+                except NoMergeProposal:
+                    existing_proposal = None
         else:
             base_branch = main_branch
         td = tempfile.mkdtemp()
@@ -255,7 +269,12 @@ for pkg in sorted(todo):
                 update_changelog = should_update_changelog(local_branch)
                 applied = run_lintian_fixers(
                         local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
-            if mode == 'propose' and not (set(f for f, d in applied) - propose_addon_only):
+            if not applied:
+                note('%s: no fixers to apply', pkg)
+                continue
+            if (mode == 'propose' and
+                not existing_branch and
+                not (set(f for f, d in applied) - propose_addon_only)):
                 note('%s: only add-on fixers found', pkg)
                 continue
             if local_branch.last_revision() == orig_revid:
@@ -265,28 +284,34 @@ for pkg in sorted(todo):
                 note('%s: pushing to %s', pkg, push_url)
                 local_branch.push(Branch.open(push_url))
             if mode == 'propose':
-                try:
-                    remote_branch, public_branch_url = hoster.publish_derived(
-                        local_branch, main_branch, name=name, overwrite=False)
-                except errors.DivergedBranches:
-                    note('%s: Already proposed: %s', pkg, name)
-                    continue
-            elif mode == 'propose-update':
-                # TODO(jelmer): Enable this once merge proposal description can be updated
-                pass # local_branch.push(existing_branch)
-            if mode == 'propose':
-                if len(applied) > 1:
-                    mp_description = ["Fix some issues reported by lintian\n"] + [
-                            ("* %s\n" % l) for f, l in applied]
+                if existing_branch is not None:
+                    local_branch.push(existing_branch)
                 else:
-                    mp_description = applied[0][1]
-                proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-                try:
-                    mp = proposal_builder.create_proposal(
-                        description=''.join(mp_description), labels=[])
-                except PermissionDenied:
-                    note('%s: Permission denied while trying to create proposal. ', pkg)
-                    continue
-                note('%s: Proposed fix for %r: %s', pkg, name, mp.url)
+                    try:
+                        remote_branch, public_branch_url = hoster.publish_derived(
+                            local_branch, main_branch, name=name, overwrite=False)
+                    except errors.DivergedBranches:
+                        note('%s: Already proposed: %s', pkg, name)
+                        continue
+            if mode == 'propose':
+                if existing_proposal is not None:
+                    existing_description = existing_proposal.get_description().splitlines()
+                    mp_description = create_mp_description(
+                        [l[2:] for l in existing_description if l.startswith('* ')] +
+                        [l for f, l in applied])
+                    existing_proposal.set_description(mp_description)
+                    note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
+                         [f for f, l in applied])
+                else:
+                    mp_description = create_mp_description([l for f, l in applied])
+                    proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                    try:
+                        mp = proposal_builder.create_proposal(
+                            description=mp_description, labels=[])
+                    except PermissionDenied:
+                        note('%s: Permission denied while trying to create proposal. ', pkg)
+                        continue
+                    note('%s: Proposed fixes %r: %s', pkg, [f for f, l in applied], mp.url)
+
         finally:
             shutil.rmtree(td)
