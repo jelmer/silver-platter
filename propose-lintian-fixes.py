@@ -228,23 +228,20 @@ for pkg in sorted(todo):
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
-        if mode == policy_pb2.propose:
-            try:
-                existing_branch = hoster.get_derived_branch(main_branch, name=name)
-            except errors.NotBranchError:
-                base_branch = main_branch
-                existing_branch = None
-                existing_proposal = None
-            else:
-                note('%s: Already proposed: %s (branch at %s)', pkg, name,
-                     existing_branch.user_url)
-                base_branch = existing_branch
-                try:
-                    existing_proposal = hoster.get_proposal(existing_branch, main_branch)
-                except NoMergeProposal:
-                    existing_proposal = None
-        else:
+        try:
+            existing_branch = hoster.get_derived_branch(main_branch, name=name)
+        except errors.NotBranchError:
             base_branch = main_branch
+            existing_branch = None
+            existing_proposal = None
+        else:
+            note('%s: Already proposed: %s (branch at %s)', pkg, name,
+                 existing_branch.user_url)
+            base_branch = existing_branch
+            try:
+                existing_proposal = hoster.get_proposal(existing_branch, main_branch)
+            except NoMergeProposal:
+                existing_proposal = None
         td = tempfile.mkdtemp()
         try:
             # preserve whatever source format we have.
