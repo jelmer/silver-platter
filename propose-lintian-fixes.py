@@ -187,6 +187,8 @@ for pkg in sorted(todo):
     pkg_source = Deb822(sources.record)
     try:
         vcs_url = source_package_vcs_url(pkg_source)
+    except urlutils.InvalidURL as e:
+        note('%s: %s', pkg, e.extra)
     except KeyError:
         note('%s: no VCS URL found', pkg)
         continue
@@ -201,13 +203,6 @@ for pkg in sorted(todo):
         main_branch = Branch.open(vcs_url)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
-    except urlutils.InvalidURL as e:
-        if ('unsupported VCSes' in e.extra or
-            'no URLs found' in e.extra or
-            'only Vcs-Browser set' in e.extra):
-            note('%s: %s', pkg, e.extra)
-        else:
-            raise
     except errors.NotBranchError as e:
         note('%s: Branch does not exist: %s', pkg, e)
     except errors.UnsupportedProtocol:
