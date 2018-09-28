@@ -307,7 +307,8 @@ for pkg in sorted(todo):
                              pkg)
                         mode = policy_pb2.propose
                     else:
-                        raise
+                        note('%s: permission denied during push', pkg)
+                        continue
             if (mode == policy_pb2.propose and
                 not existing_branch and
                 not (set(f for f, d in applied) - propose_addon_only)):
