@@ -4,14 +4,6 @@ Backends:
 - Submit patches against non-Vcs packages to the BTS?
 
 * Provide a way to opt out
-* Override file:
- Criteria:
-  + Maintainer regex
-  + Package name
-  + Branch URL regex
- Settings:
-  + mode: push / mode / ignore
-  + update changelog yes/no
 
 * Create cherry-pick merge proposals for bug fixes that are forwarded upstream
  + especially for stable debian releases
