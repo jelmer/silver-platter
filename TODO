@@ -3,7 +3,6 @@ Backends:
 - Support for Svn
 - Submit patches against non-Vcs packages to the BTS?
 
-* Refresh pull requests if there are conflicts
 * Provide a way to opt out
 * Override file:
  Criteria:

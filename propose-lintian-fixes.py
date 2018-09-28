@@ -42,6 +42,7 @@ import breezy.plugins.launchpad
 from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy import (
     errors,
+    merge as _mod_merge,
     urlutils,
     )
 
@@ -165,8 +166,11 @@ note("Considering %d packages for automatic change proposals", len(todo))
 
 def create_mp_description(lines):
     if len(applied) > 1:
-        mp_description = ["Fix some issues reported by lintian\n"] + [
-                ("* %s\n" % l) for l in lines]
+        mp_description = ["Fix some issues reported by lintian\n"]
+        for l in lines:
+            l = "* %s\n" % l
+            if l not in mp_description:
+                mp_description.append(l)
     else:
         mp_description = lines[0]
     return ''.join(mp_description)
@@ -231,6 +235,7 @@ for pkg in sorted(todo):
         note('%s: %s', pkg, e)
     else:
         name = "lintian-fixes"
+        overwrite = False
         try:
             hoster = get_hoster(main_branch)
         except UnsupportedHoster:
@@ -259,6 +264,33 @@ for pkg in sorted(todo):
             to_dir = base_branch.controldir.sprout(td, None, create_tree_if_local=True,
                     source_branch=base_branch, stacked=base_branch._format.supports_stacking())
             local_tree = to_dir.open_workingtree()
+            main_branch_revid = main_branch.last_revision()
+            with local_tree.branch.lock_read():
+                if (mode == 'propose' and
+                    existing_branch is not None and
+                    not local_tree.branch.repository.get_graph().is_ancestor(
+                        main_branch_revid, local_tree.branch.last_revision())):
+                    local_tree.branch.repository.fetch(
+                            main_branch.repository, revision_id=main_branch_revid)
+                    # Reset custom merge hooks, since they could make it harder to detect
+                    # conflicted merges that would appear on the hosting site.
+                    old_file_content_mergers = _mod_merge.Merger.hooks['merge_file_content']
+                    _mod_merge.Merger.hooks['merge_file_content'] = []
+                    try:
+                        merger = _mod_merge.Merger.from_revision_ids(
+                                local_tree.branch.basis_tree(), other_branch=local_tree.branch,
+                                other=main_branch_revid, tree_branch=local_tree.branch)
+                        merger.merge_type = _mod_merge.Merge3Merger
+                        tree_merger = merger.make_merger()
+                        with tree_merger.make_preview_transform() as tt:
+                            if tree_merger.cooked_conflicts:
+                                note('%s: branch is conflicted, restarting.', pkg)
+                                local_tree.update(revision=main_branch_revid)
+                                local_tree.branch.generate_revision_history(main_branch_revid)
+                                overwrite = True
+                    finally:
+                        _mod_merge.Merger.hooks['merge_file_content'] = old_file_content_mergers
+
             with local_tree.lock_write():
                 if not local_tree.has_filename('debian/control'):
                     note('%s: missing control file', pkg)
@@ -285,19 +317,15 @@ for pkg in sorted(todo):
                 local_branch.push(Branch.open(push_url))
             if mode == 'propose':
                 if existing_branch is not None:
-                    local_branch.push(existing_branch)
+                    local_branch.push(existing_branch, overwrite=overwrite)
                 else:
-                    try:
-                        remote_branch, public_branch_url = hoster.publish_derived(
-                            local_branch, main_branch, name=name, overwrite=False)
-                    except errors.DivergedBranches:
-                        note('%s: Already proposed: %s', pkg, name)
-                        continue
+                    remote_branch, public_branch_url = hoster.publish_derived(
+                        local_branch, main_branch, name=name, overwrite=False)
             if mode == 'propose':
                 if existing_proposal is not None:
                     existing_description = existing_proposal.get_description().splitlines()
                     mp_description = create_mp_description(
-                        [l[2:] for l in existing_description if l.startswith('* ')] +
+                        [l[2:].rstrip('\n') for l in existing_description if l.startswith('* ')] +
                         [l for f, l in applied])
                     existing_proposal.set_description(mp_description)
                     note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
