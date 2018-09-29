@@ -67,12 +67,16 @@ parser.add_argument("packages", nargs='*')
 parser.add_argument('--lintian-log', help="Path to lintian log file.", type=str, default='lintian.log')
 parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
 parser.add_argument("--policy", help="Policy file to read.", type=str, default='policy.conf')
+parser.add_argument("--dry-run", help="Create branches but don't push or propose anything.",
+                    action="store_true", default=False)
 parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
 args = parser.parse_args()
 
 fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
+
+dry_run = args.dry_run
 
 
 def read_lintian_log(f):
@@ -294,45 +298,50 @@ for pkg in sorted(todo):
             if mode in (policy_pb2.push, policy_pb2.attempt_push):
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
-                try:
-                    local_branch.push(Branch.open(push_url))
-                except errors.PermissionDenied:
-                    if mode == policy_pb2.attempt_push:
-                        note('%s: push access denied, falling back to propose',
-                             pkg)
-                        mode = policy_pb2.propose
-                    else:
-                        note('%s: permission denied during push', pkg)
-                        continue
+                if not dry_run:
+                    try:
+                        local_branch.push(Branch.open(push_url))
+                    except errors.PermissionDenied:
+                        if mode == policy_pb2.attempt_push:
+                            note('%s: push access denied, falling back to propose',
+                                 pkg)
+                            mode = policy_pb2.propose
+                        else:
+                            note('%s: permission denied during push', pkg)
+                            continue
             if (mode == policy_pb2.propose and
                 not existing_branch and
                 not (set(f for f, d in applied) - propose_addon_only)):
                 note('%s: only add-on fixers found', pkg)
                 continue
             if mode == policy_pb2.propose:
-                if existing_branch is not None:
-                    local_branch.push(existing_branch, overwrite=overwrite)
-                else:
-                    remote_branch, public_branch_url = hoster.publish_derived(
-                        local_branch, main_branch, name=name, overwrite=False)
+                if not dry_run:
+                    if existing_branch is not None:
+                        local_branch.push(existing_branch, overwrite=overwrite)
+                        remote_branch = existing_branch
+                    else:
+                        remote_branch, public_branch_url = hoster.publish_derived(
+                            local_branch, main_branch, name=name, overwrite=False)
             if mode == policy_pb2.propose:
                 if existing_proposal is not None:
                     existing_description = existing_proposal.get_description().splitlines()
                     mp_description = create_mp_description(
                         [l[2:].rstrip('\n') for l in existing_description if l.startswith('* ')] +
                         [l for f, l in applied])
-                    existing_proposal.set_description(mp_description)
+                    if not dry_run:
+                        existing_proposal.set_description(mp_description)
                     note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
                          [f for f, l in applied])
                 else:
                     mp_description = create_mp_description([l for f, l in applied])
-                    proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-                    try:
-                        mp = proposal_builder.create_proposal(
-                            description=mp_description, labels=[])
-                    except PermissionDenied:
-                        note('%s: Permission denied while trying to create proposal. ', pkg)
-                        continue
+                    if not dry_run:
+                        proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                        try:
+                            mp = proposal_builder.create_proposal(
+                                description=mp_description, labels=[])
+                        except PermissionDenied:
+                            note('%s: Permission denied while trying to create proposal. ', pkg)
+                            continue
                     note('%s: Proposed fixes %r: %s', pkg, [f for f, l in applied], mp.url)
 
         finally:
