@@ -301,7 +301,7 @@ for pkg in sorted(todo):
                 if not dry_run:
                     try:
                         local_branch.push(Branch.open(push_url))
-                    except errors.PermissionDenied:
+                    except (errors.PermissionDenied, errors.LockFailed):
                         if mode == policy_pb2.attempt_push:
                             note('%s: push access denied, falling back to propose',
                                  pkg)
