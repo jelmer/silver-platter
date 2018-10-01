@@ -291,6 +291,7 @@ for pkg in sorted(todo):
                 applied = run_lintian_fixers(
                         local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if not applied:
+                # TODO(jelmer): Remove branch and merge proposal if there is one
                 note('%s: no fixers to apply', pkg)
                 continue
             if local_branch.last_revision() == orig_revid:
