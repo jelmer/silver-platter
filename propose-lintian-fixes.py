@@ -249,7 +249,7 @@ for pkg in sorted(todo):
             local_tree = to_dir.open_workingtree()
             main_branch_revid = main_branch.last_revision()
             with local_tree.branch.lock_read():
-                if (mode == 'propose' and
+                if (mode == policy_pb2.propose and
                     existing_branch is not None and
                     not local_tree.branch.repository.get_graph().is_ancestor(
                         main_branch_revid, local_tree.branch.last_revision())):

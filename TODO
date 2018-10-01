@@ -5,9 +5,16 @@ Backends:
 
 * Provide a way to opt out
 
+* Read apt lists from HTTP, rather than local system
+
 * Create cherry-pick merge proposals for bug fixes that are forwarded upstream
  + especially for stable debian releases
 
 Upstream changes:
 * pngcrush
 * FSF
+
+For packages that are known reproducible:
+ * Build before the changes
+ * Build after the changes
+ * If there is no delta in the output package (except for certain files), tag && upload
