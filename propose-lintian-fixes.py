@@ -39,6 +39,7 @@ breezy.initialize()
 import breezy.git
 import breezy.bzr
 import breezy.plugins.launchpad
+from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy import (
     errors,
@@ -72,6 +73,7 @@ parser.add_argument("--dry-run", help="Create branches but don't push or propose
 parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
+parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
 args = parser.parse_args()
 
 fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
@@ -296,6 +298,8 @@ for pkg in sorted(todo):
                 continue
             if local_branch.last_revision() == orig_revid:
                 continue
+            if args.build_verify:
+                cmd_builddeb().run([td], builder='sbuild')
             if mode in (policy_pb2.push, policy_pb2.attempt_push):
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
