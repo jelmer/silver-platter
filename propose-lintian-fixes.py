@@ -41,6 +41,7 @@ import breezy.bzr
 import breezy.plugins.launchpad
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import source_package_vcs_url
+from breezy.plugins.debian.errors import BuildFailedError
 from breezy import (
     errors,
     merge as _mod_merge,
@@ -54,6 +55,7 @@ from breezy.trace import note
 from breezy.plugins.propose.propose import (
     get_hoster,
     NoMergeProposal,
+    NoSuchProject,
     UnsupportedHoster,
     )
 
@@ -231,6 +233,9 @@ for pkg in sorted(todo):
             continue
         try:
             existing_branch = hoster.get_derived_branch(main_branch, name=name)
+        except NoSuchProject as e:
+            note('%s: project %s was not found', pkg, e.project)
+            continue
         except errors.NotBranchError:
             base_branch = main_branch
             existing_branch = None
@@ -299,7 +304,11 @@ for pkg in sorted(todo):
             if local_branch.last_revision() == orig_revid:
                 continue
             if args.build_verify:
-                cmd_builddeb().run([td], builder='sbuild')
+                try:
+                    cmd_builddeb().run([td], builder='sbuild')
+                except BuildFailedError:
+                    note('%s: build failed', pkg)
+                    continue
             if mode in (policy_pb2.push, policy_pb2.attempt_push):
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
@@ -344,7 +353,7 @@ for pkg in sorted(todo):
                         try:
                             mp = proposal_builder.create_proposal(
                                 description=mp_description, labels=[])
-                        except PermissionDenied:
+                        except errors.PermissionDenied:
                             note('%s: Permission denied while trying to create proposal. ', pkg)
                             continue
                     note('%s: Proposed fixes %r: %s', pkg, [f for f, l in applied], mp.url)
