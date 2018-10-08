@@ -23,6 +23,7 @@ import itertools
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 
@@ -75,6 +76,7 @@ parser.add_argument("--dry-run", help="Create branches but don't push or propose
 parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
+parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
 parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
 args = parser.parse_args()
 
@@ -256,6 +258,12 @@ for pkg in sorted(todo):
             local_tree = to_dir.open_workingtree()
             main_branch_revid = main_branch.last_revision()
             with local_tree.branch.lock_read():
+                if args.pre_check:
+                    try:
+                        subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+                    except subprocess.CalledProcessError:
+                        note('%s: pre-check failed, skipping', pkg)
+                        continue
                 if (mode == policy_pb2.propose and
                     existing_branch is not None and
                     not local_tree.branch.repository.get_graph().is_ancestor(
@@ -339,7 +347,6 @@ for pkg in sorted(todo):
                     else:
                         remote_branch, public_branch_url = hoster.publish_derived(
                             local_branch, main_branch, name=name, overwrite=False)
-            if mode == policy_pb2.propose:
                 if existing_proposal is not None:
                     existing_description = existing_proposal.get_description().splitlines()
                     mp_description = create_mp_description(
