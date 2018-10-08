@@ -140,6 +140,14 @@ sources = apt_pkg.SourceRecords()
 
 note("Considering %d packages for automatic change proposals", len(todo))
 
+def parse_mp_description(description):
+    existing_lines = description.splitlines()
+    if len(existing_lines) == 1:
+        return existing_lines
+    else:
+        return [l[2:].rstrip('\n') for l in existing_lines if l.startswith('* ')]
+
+
 def create_mp_description(lines):
     if len(applied) > 1:
         mp_description = ["Fix some issues reported by lintian\n"]
@@ -348,10 +356,10 @@ for pkg in sorted(todo):
                         remote_branch, public_branch_url = hoster.publish_derived(
                             local_branch, main_branch, name=name, overwrite=False)
                 if existing_proposal is not None:
-                    existing_description = existing_proposal.get_description().splitlines()
+                    existing_description = existing_proposal.get_description()
+                    existing_lines = parse_mp_description(existing_description)
                     mp_description = create_mp_description(
-                        [l[2:].rstrip('\n') for l in existing_description if l.startswith('* ')] +
-                        [l for f, l in applied])
+                        existing_lines + [l for f, l in applied])
                     if not dry_run:
                         existing_proposal.set_description(mp_description)
                     note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
