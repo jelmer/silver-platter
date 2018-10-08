@@ -299,9 +299,10 @@ for pkg in sorted(todo):
                         local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
             if not applied:
                 note('%s: no fixers to apply', pkg)
-                if existing_proposal is not None:
+                if (existing_proposal is not None and
+                    local_branch.last_revision() == main_branch.last_revision()):
                     note('%s: closing existing merge proposal', pkg)
-                    existing_proposal.close()
+                    # TODO(jelmer): existing_proposal.close()
                 continue
             if local_branch.last_revision() == orig_revid:
                 continue
