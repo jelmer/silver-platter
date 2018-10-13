@@ -42,7 +42,10 @@ import breezy.bzr
 import breezy.plugins.launchpad
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import source_package_vcs_url
-from breezy.plugins.debian.errors import BuildFailedError
+from breezy.plugins.debian.errors import (
+    BuildFailedError,
+    MissingUpstreamTarball,
+    )
 from breezy import (
     errors,
     merge as _mod_merge,
@@ -327,6 +330,9 @@ for pkg in sorted(todo):
                     cmd_builddeb().run([td], builder='sbuild')
                 except BuildFailedError:
                     note('%s: build failed', pkg)
+                    continue
+                except MissingUpstreamTarball:
+                    note('%s: unable to find upstream source', pkg)
                     continue
             if mode in (policy_pb2.push, policy_pb2.attempt_push):
                 push_url = hoster.get_push_url(main_branch)
