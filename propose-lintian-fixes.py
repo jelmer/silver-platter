@@ -218,6 +218,8 @@ class LintianFixer(BranchChanger):
             return False
         return True
 
+possible_transports = []
+possible_hosters = []
 
 for pkg in sorted(todo):
     errs = lintian_errs[pkg]
@@ -252,7 +254,7 @@ for pkg in sorted(todo):
     branch_changer = LintianFixer(pkg, update_changelog)
 
     try:
-        main_branch = Branch.open(vcs_url)
+        main_branch = Branch.open(vcs_url, possible_transports=possible_transports)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except errors.NotBranchError as e:
@@ -274,7 +276,9 @@ for pkg in sorted(todo):
             policy_pb2.push: 'push',
             }[mode]
         try:
-            propose_or_push(main_branch, "lintian-fixes", branch_changer, mode)
+            propose_or_push(main_branch, "lintian-fixes", branch_changer, mode,
+                    possible_transports=possible_transports,
+                    possible_hosters=possible_hosters)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue

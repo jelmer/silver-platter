@@ -74,7 +74,8 @@ class BranchChanger(object):
         raise NotImplementedError(self.should_create_proposal)
 
 
-def propose_or_push(main_branch, name, changer, mode, dry_run=False):
+def propose_or_push(main_branch, name, changer, mode, dry_run=False,
+                    possible_transports=None, possible_hosters=None):
     """Create/update a merge proposal into a branch or push directly.
 
     Args:
@@ -83,13 +84,15 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False):
       changer: An instance of `BranchChanger`
       mode: Mode (one of 'push', 'propose', 'attempt-push')
       dry_run: Whether to actually make remote changes
+      possible_transports: Possible transports to reuse
+      possible_hosters: Possible hosters to reuse
     """
     if mode not in ('push', 'propose', 'attempt-push'):
         raise ValueError("invalid mode %r" % mode)
     def report(text, *args, **kwargs):
         note('%r: ' + text, *((changer,)+args), **kwargs)
     overwrite = False
-    hoster = get_hoster(main_branch)
+    hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
     try:
         existing_branch = hoster.get_derived_branch(main_branch, name=name)
     except errors.NotBranchError:
@@ -131,9 +134,10 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False):
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
             report('pushing to %s', push_url)
+            target_branch = Branch.open(push_url, possible_transports=possible_transports)
             if not dry_run:
                 try:
-                    local_branch.push(Branch.open(push_url))
+                    local_branch.push(target_branch)
                 except (errors.PermissionDenied, errors.LockFailed):
                     if mode == 'attempt-push':
                         report('push access denied, falling back to propose')
