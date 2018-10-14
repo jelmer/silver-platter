@@ -29,13 +29,13 @@ import silver_platter
 from silver_platter.debian import (
     build,
     get_source_package,
+    source_package_vcs_url,
     BuildFailedError,
     NoSuchPackage,
     MissingUpstreamTarball,
     )
 
 import breezy.plugins.launchpad
-from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy import (
     errors,
     merge as _mod_merge,

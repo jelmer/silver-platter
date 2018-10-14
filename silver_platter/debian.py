@@ -21,6 +21,7 @@ import apt_pkg
 from debian.deb822 import Deb822
 
 from breezy.plugins.debian.cmds import cmd_builddeb
+from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy.plugins.debian.errors import (
     BuildFailedError,
     MissingUpstreamTarball,
