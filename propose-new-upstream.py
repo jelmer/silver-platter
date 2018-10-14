@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python333
 # Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
