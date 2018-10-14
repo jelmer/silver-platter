@@ -29,6 +29,7 @@ import silver_platter
 from silver_platter.debian import (
     build,
     get_source_package,
+    should_update_changelog,
     source_package_vcs_url,
     BuildFailedError,
     NoSuchPackage,
@@ -97,21 +98,6 @@ with open(args.lintian_log, 'r') as f:
 with open(args.policy, 'r') as f:
     policy = text_format.Parse(f.read(), policy_pb2.PolicyConfig())
 
-def should_update_changelog(branch):
-    with branch.lock_read():
-        graph = branch.repository.get_graph()
-        revids = itertools.islice(
-            graph.iter_lefthand_ancestry(branch.last_revision()), 200)
-        for revid, rev in branch.repository.iter_revisions(revids):
-            if rev is None:
-                # Ghost
-                continue
-            if 'Git-Dch: ' in rev.message:
-                return False
-    # Assume yes
-    return True
-
-
 propose_addon_only = set(args.propose_addon_only)
 
 
@@ -177,6 +163,24 @@ def apply_policy(config, control):
         if policy.changelog is not None:
             update_changelog = policy.changelog
     return mode, update_changelog
+
+
+def make_changes(local_tree, update_changelog):
+    if not local_tree.has_filename('debian/control'):
+        note('%s: missing control file', pkg)
+        continue
+    if update_changelog == policy_pb2.auto:
+        update_changelog = should_update_changelog(local_tree.branch)
+    elif update_changelog == policy_pb2.update_changelog:
+        update_changelog = True
+    elif update_changelog == policy_pb2.leave_changlog:
+        update_changelog = False
+
+    applied = run_lintian_fixers(
+            local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
+    if not applied:
+        note('%s: no fixers to apply', pkg)
+    return applied
 
 
 for pkg in sorted(todo):
@@ -256,7 +260,6 @@ for pkg in sorted(todo):
             to_dir = base_branch.controldir.sprout(td, None, create_tree_if_local=True,
                     source_branch=base_branch, stacked=base_branch._format.supports_stacking())
             local_tree = to_dir.open_workingtree()
-            main_branch_revid = main_branch.last_revision()
             with local_tree.branch.lock_read():
                 if args.pre_check:
                     try:
@@ -268,34 +271,23 @@ for pkg in sorted(todo):
                     existing_branch is not None and
                     merge_conflicts(main_branch, local_tree.branch)):
                     note('%s: branch is conflicted, restarting.', pkg)
+                    main_branch_revid = main_branch.last_revision()
                     local_tree.update(revision=main_branch_revid)
                     local_tree.branch.generate_revision_history(main_branch_revid)
                     overwrite = True
 
             with local_tree.lock_write():
-                if not local_tree.has_filename('debian/control'):
-                    note('%s: missing control file', pkg)
-                    continue
                 local_branch = local_tree.branch
                 orig_revid = local_branch.last_revision()
 
-                if update_changelog == policy_pb2.auto:
-                    update_changelog = should_update_changelog(local_branch)
-                elif update_changelog == policy_pb2.update_changelog:
-                    update_changelog = True
-                elif update_changelog == policy_pb2.leave_changlog:
-                    update_changelog = False
-
-                applied = run_lintian_fixers(
-                        local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
-            if not applied:
-                note('%s: no fixers to apply', pkg)
-                if (existing_proposal is not None and
-                    local_branch.last_revision() == main_branch.last_revision()):
-                    note('%s: closing existing merge proposal', pkg)
+                applied = make_changes(local_tree, update_changelog)
+            if local_branch.last_revision() == main_branch.last_revision():
+                if existing_proposal is not None:
+                    note('%s: closing existing merge proposal - no new revisions', pkg)
                     # TODO(jelmer): existing_proposal.close()
                 continue
-            if local_branch.last_revision() == orig_revid:
+            if orig_revid == local_branch.last_revision():
+                # No new revisions added on this iteration, but still diverged from main branch.
                 continue
             if args.build_verify:
                 try:

@@ -45,3 +45,20 @@ def get_source_package(name):
     if not sources.lookup(name):
         raise NoSuchPackage(name)
     return Deb822(sources.record)
+
+
+def should_update_changelog(branch):
+    """Guess whether the changelog should be updated manually.
+    """
+    with branch.lock_read():
+        graph = branch.repository.get_graph()
+        revids = itertools.islice(
+            graph.iter_lefthand_ancestry(branch.last_revision()), 200)
+        for revid, rev in branch.repository.iter_revisions(revids):
+            if rev is None:
+                # Ghost
+                continue
+            if 'Git-Dch: ' in rev.message:
+                return False
+    # Assume yes
+    return True
