@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import apt_pkg
 from debian.deb822 import Deb822
+import itertools
 
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import source_package_vcs_url

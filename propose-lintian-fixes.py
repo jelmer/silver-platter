@@ -17,7 +17,6 @@
 
 from email.utils import parseaddr
 import fnmatch
-import itertools
 import os
 import shutil
 import socket
@@ -168,7 +167,7 @@ def apply_policy(config, control):
 def make_changes(local_tree, update_changelog):
     if not local_tree.has_filename('debian/control'):
         note('%s: missing control file', pkg)
-        continue
+        return
     if update_changelog == policy_pb2.auto:
         update_changelog = should_update_changelog(local_tree.branch)
     elif update_changelog == policy_pb2.update_changelog:

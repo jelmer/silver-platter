@@ -25,7 +25,7 @@ def merge_conflicts(main_branch, other_branch):
     Returns:
       boolean indicating whether the merge would result in conflicts
     """
-    if main_branch.repository.get_graph().is_ancestor(
+    if other_branch.repository.get_graph().is_ancestor(
         main_branch.last_revision(), other_branch.last_revision()):
         return False
 
