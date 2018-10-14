@@ -31,7 +31,7 @@ setup(
           "GitHub": "https://github.com/jelmer/silver-platter",
       },
       keywords="git bzr vcs github gitlab launchpad",
-      packages=[],
+      packages=['silver_platter'],
       scripts=['autopropose.py', 'propose-lintian-fixes.py'],
       classifiers=[
           'Development Status :: 3 - Alpha',
