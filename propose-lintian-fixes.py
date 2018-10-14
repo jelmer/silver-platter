@@ -185,6 +185,11 @@ def make_changes(local_tree, update_changelog):
             local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
     if not applied:
         note('%s: no fixers to apply', pkg)
+        return
+
+    if args.build_verify:
+        build(local_tree.basedir)
+
     return applied
 
 
@@ -279,7 +284,15 @@ for pkg in sorted(todo):
                 local_branch = local_tree.branch
                 orig_revid = local_branch.last_revision()
 
-                applied = make_changes(local_tree, update_changelog)
+                try:
+                    applied = make_changes(local_tree, update_changelog)
+                except BuildFailedError:
+                    note('%s: build failed', pkg)
+                    continue
+                except MissingUpstreamTarball:
+                    note('%s: unable to find upstream source', pkg)
+                    continue
+
             if local_branch.last_revision() == main_branch.last_revision():
                 if existing_proposal is not None:
                     note('%s: closing existing merge proposal - no new revisions', pkg)
@@ -288,15 +301,6 @@ for pkg in sorted(todo):
             if orig_revid == local_branch.last_revision():
                 # No new revisions added on this iteration, but still diverged from main branch.
                 continue
-            if args.build_verify:
-                try:
-                    build(td)
-                except BuildFailedError:
-                    note('%s: build failed', pkg)
-                    continue
-                except MissingUpstreamTarball:
-                    note('%s: unable to find upstream source', pkg)
-                    continue
             if mode in (policy_pb2.push, policy_pb2.attempt_push):
                 push_url = hoster.get_push_url(main_branch)
                 note('%s: pushing to %s', pkg, push_url)
@@ -344,6 +348,5 @@ for pkg in sorted(todo):
                             note('%s: Permission denied while trying to create proposal. ', pkg)
                             continue
                     note('%s: Proposed fixes %r: %s', pkg, [f for f, l in applied], mp.url)
-
         finally:
             shutil.rmtree(td)
