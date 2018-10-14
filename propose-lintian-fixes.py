@@ -34,6 +34,7 @@ from silver_platter.debian import (
     NoSuchPackage,
     MissingUpstreamTarball,
     )
+from silver_platter.proposal import merge_conflicts
 
 import breezy.plugins.launchpad
 from breezy import (
@@ -265,28 +266,11 @@ for pkg in sorted(todo):
                         continue
                 if (mode == policy_pb2.propose and
                     existing_branch is not None and
-                    not local_tree.branch.repository.get_graph().is_ancestor(
-                        main_branch_revid, local_tree.branch.last_revision())):
-                    local_tree.branch.repository.fetch(
-                            main_branch.repository, revision_id=main_branch_revid)
-                    # Reset custom merge hooks, since they could make it harder to detect
-                    # conflicted merges that would appear on the hosting site.
-                    old_file_content_mergers = _mod_merge.Merger.hooks['merge_file_content']
-                    _mod_merge.Merger.hooks['merge_file_content'] = []
-                    try:
-                        merger = _mod_merge.Merger.from_revision_ids(
-                                local_tree.branch.basis_tree(), other_branch=local_tree.branch,
-                                other=main_branch_revid, tree_branch=local_tree.branch)
-                        merger.merge_type = _mod_merge.Merge3Merger
-                        tree_merger = merger.make_merger()
-                        with tree_merger.make_preview_transform() as tt:
-                            if tree_merger.cooked_conflicts:
-                                note('%s: branch is conflicted, restarting.', pkg)
-                                local_tree.update(revision=main_branch_revid)
-                                local_tree.branch.generate_revision_history(main_branch_revid)
-                                overwrite = True
-                    finally:
-                        _mod_merge.Merger.hooks['merge_file_content'] = old_file_content_mergers
+                    merge_conflicts(main_branch, local_tree.branch)):
+                    note('%s: branch is conflicted, restarting.', pkg)
+                    local_tree.update(revision=main_branch_revid)
+                    local_tree.branch.generate_revision_history(main_branch_revid)
+                    overwrite = True
 
             with local_tree.lock_write():
                 if not local_tree.has_filename('debian/control'):
