@@ -124,7 +124,7 @@ def parse_mp_description(description):
 
 
 def create_mp_description(lines):
-    if len(applied) > 1:
+    if len(lines) > 1:
         mp_description = ["Fix some issues reported by lintian\n"]
         for l in lines:
             l = "* %s\n" % l
@@ -164,33 +164,45 @@ def apply_policy(config, control):
     return mode, update_changelog
 
 
-def make_changes(local_tree, update_changelog):
-    if not local_tree.has_filename('debian/control'):
-        note('%s: missing control file', pkg)
-        return
-    if args.pre_check:
-        try:
-            subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
-        except subprocess.CalledProcessError:
-            note('%s: pre-check failed, skipping', pkg)
+class LintianFixer(object):
+
+    def __init__(self, update_changelog):
+        self._update_changelog = update_changelog
+
+    def make_changes(self, local_tree):
+        if not local_tree.has_filename('debian/control'):
+            note('%s: missing control file', pkg)
             return
-    if update_changelog == policy_pb2.auto:
-        update_changelog = should_update_changelog(local_tree.branch)
-    elif update_changelog == policy_pb2.update_changelog:
-        update_changelog = True
-    elif update_changelog == policy_pb2.leave_changlog:
-        update_changelog = False
+        if args.pre_check:
+            try:
+                subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+            except subprocess.CalledProcessError:
+                note('%s: pre-check failed, skipping', pkg)
+                return
+        if self._update_changelog == policy_pb2.auto:
+            update_changelog = should_update_changelog(local_tree.branch)
+        elif self._update_changelog == policy_pb2.update_changelog:
+            update_changelog = True
+        elif self._update_changelog == policy_pb2.leave_changlog:
+            update_changelog = False
 
-    applied = run_lintian_fixers(
-            local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
-    if not applied:
-        note('%s: no fixers to apply', pkg)
-        return
+        self.applied = run_lintian_fixers(
+                local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
+        if not self.applied:
+            note('%s: no fixers to apply', pkg)
+            return
 
-    if args.build_verify:
-        build(local_tree.basedir)
+        if args.build_verify:
+            build(local_tree.basedir)
 
-    return applied
+    def get_proposal_description(self, existing_proposal):
+        if existing_proposal:
+            existing_description = existing_proposal.get_description()
+            existing_lines = parse_mp_description(existing_description)
+        else:
+            existing_lines = []
+        return create_mp_description(
+            existing_lines + [l for f, l in self.applied])
 
 
 for pkg in sorted(todo):
@@ -222,6 +234,8 @@ for pkg in sorted(todo):
     if mode == policy_pb2.skip:
         note('%s: skipping, per policy', pkg)
         continue
+
+    branch_changer = LintianFixer(update_changelog)
 
     try:
         main_branch = Branch.open(vcs_url)
@@ -285,7 +299,7 @@ for pkg in sorted(todo):
                 orig_revid = local_branch.last_revision()
 
                 try:
-                    applied = make_changes(local_tree, update_changelog)
+                    branch_changer.make_changes(local_tree)
                 except BuildFailedError:
                     note('%s: build failed', pkg)
                     continue
@@ -317,7 +331,7 @@ for pkg in sorted(todo):
                             continue
             if (mode == policy_pb2.propose and
                 not existing_branch and
-                not (set(f for f, d in applied) - propose_addon_only)):
+                not (set(f for f, d in branch_changer.applied) - propose_addon_only)):
                 note('%s: only add-on fixers found', pkg)
                 continue
             if mode == policy_pb2.propose:
@@ -328,25 +342,21 @@ for pkg in sorted(todo):
                     else:
                         remote_branch, public_branch_url = hoster.publish_derived(
                             local_branch, main_branch, name=name, overwrite=False)
+                mp_description = branch_changer.get_proposal_description(existing_proposal)
                 if existing_proposal is not None:
-                    existing_description = existing_proposal.get_description()
-                    existing_lines = parse_mp_description(existing_description)
-                    mp_description = create_mp_description(
-                        existing_lines + [l for f, l in applied])
                     if not dry_run:
                         existing_proposal.set_description(mp_description)
                     note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
-                         [f for f, l in applied])
+                         [f for f, l in branch_changer.applied])
                 else:
-                    mp_description = create_mp_description([l for f, l in applied])
                     if not dry_run:
                         proposal_builder = hoster.get_proposer(remote_branch, main_branch)
                         try:
                             mp = proposal_builder.create_proposal(
                                 description=mp_description, labels=[])
                         except errors.PermissionDenied:
-                            note('%s: Permission denied while trying to create proposal. ', pkg)
+                            note('%s: Permission denied while trying to create proposal.', pkg)
                             continue
-                    note('%s: Proposed fixes %r: %s', pkg, [f for f, l in applied], mp.url)
+                    note('%s: Proposed fixes %r: %s', pkg, [f for f, l in branch_changer.applied], mp.url)
         finally:
             shutil.rmtree(td)
