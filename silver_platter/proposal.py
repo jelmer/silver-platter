@@ -114,11 +114,10 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False):
                 local_tree.branch.generate_revision_history(main_branch_revid)
                 overwrite = True
 
-        with local_tree.lock_write():
-            local_branch = local_tree.branch
-            orig_revid = local_branch.last_revision()
+        local_branch = local_tree.branch
+        orig_revid = local_branch.last_revision()
 
-            changer.make_changes(local_tree)
+        changer.make_changes(local_tree)
 
         if local_branch.last_revision() == main_branch.last_revision():
             if existing_proposal is not None:
@@ -128,6 +127,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False):
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from main branch.
             return
+
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
             report('pushing to %s', push_url)

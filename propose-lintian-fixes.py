@@ -176,27 +176,28 @@ class LintianFixer(BranchChanger):
         return "LintianFixer(%r)" % (self._pkg, )
 
     def make_changes(self, local_tree):
-        if not local_tree.has_filename('debian/control'):
-            note('%s: missing control file', pkg)
-            return
-        if args.pre_check:
-            try:
-                subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
-            except subprocess.CalledProcessError:
-                note('%s: pre-check failed, skipping', pkg)
+        with local_tree.lock_write():
+            if not local_tree.has_filename('debian/control'):
+                note('%s: missing control file', pkg)
                 return
-        if self._update_changelog == policy_pb2.auto:
-            update_changelog = should_update_changelog(local_tree.branch)
-        elif self._update_changelog == policy_pb2.update_changelog:
-            update_changelog = True
-        elif self._update_changelog == policy_pb2.leave_changlog:
-            update_changelog = False
+            if args.pre_check:
+                try:
+                    subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+                except subprocess.CalledProcessError:
+                    note('%s: pre-check failed, skipping', pkg)
+                    return
+            if self._update_changelog == policy_pb2.auto:
+                update_changelog = should_update_changelog(local_tree.branch)
+            elif self._update_changelog == policy_pb2.update_changelog:
+                update_changelog = True
+            elif self._update_changelog == policy_pb2.leave_changlog:
+                update_changelog = False
 
-        self.applied = run_lintian_fixers(
-                local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
-        if not self.applied:
-            note('%s: no fixers to apply', pkg)
-            return
+            self.applied = run_lintian_fixers(
+                    local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
+            if not self.applied:
+                note('%s: no fixers to apply', pkg)
+                return
 
         if args.build_verify:
             build(local_tree.basedir)
