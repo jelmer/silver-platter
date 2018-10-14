@@ -30,5 +30,7 @@ if os.name == "posix":
 
 import breezy
 breezy.initialize()
-import breezy.git
-import breezy.bzr
+import breezy.git  # For git support
+import breezy.bzr  # For bzr support
+import breezy.plugins.launchpad  # For lp: URL support
+import breezy.plugins.debian  # For apt: URL support
