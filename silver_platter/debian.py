@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import apt_pkg
 from debian.deb822 import Deb822
+from debian.changelog import Version
 import itertools
 
 from breezy.plugins.debian.cmds import cmd_builddeb
@@ -43,9 +44,17 @@ def get_source_package(name):
 
     sources = apt_pkg.SourceRecords()
 
-    if not sources.lookup(name):
+    by_version = {}
+    while sources.lookup(name):
+        by_version[sources.version] = sources.record
+
+    if len(by_version) == 0:
         raise NoSuchPackage(name)
-    return Deb822(sources.record)
+
+    # Try the latest version
+    version = sorted(by_version, key=Version)[-1]
+
+    return Deb822(by_version[version])
 
 
 def should_update_changelog(branch):
