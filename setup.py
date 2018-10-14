@@ -24,7 +24,7 @@ setup(
       url="https://jelmer.uk/code/silver-platter",
       description="Automatic merge version control updater",
       version='0.0.1',
-      license='GPLv2',
+      license='GNU GPL v2 or later',
       project_urls={
           "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
           "Repository": "https://jelmer.uk/code/silver-platter",
@@ -35,7 +35,7 @@ setup(
       scripts=['autopropose.py', 'propose-lintian-fixes.py'],
       classifiers=[
           'Development Status :: 3 - Alpha',
-          'License :: OSI Approved :: Apache Software License',
+          'License :: OSI Approved :: GNU General Public License (GPL)',
           'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
