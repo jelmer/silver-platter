@@ -35,6 +35,7 @@ from silver_platter.debian import (
     MissingUpstreamTarball,
     )
 from silver_platter.proposal import merge_conflicts
+from silver_platter.utils import TemporarySprout
 
 import breezy.plugins.launchpad
 from breezy import (
@@ -204,6 +205,97 @@ class LintianFixer(object):
         return create_mp_description(
             existing_lines + [l for f, l in self.applied])
 
+    def should_create_proposal(self):
+        # Is there enough to create a new merge proposal?
+        if not set(f for f, d in self.applied) - propose_addon_only:
+            note('%s: only add-on fixers found', pkg)
+            return False
+        return True
+
+
+def propose_or_push(main_branch, name, changer, mode, dry_run=False):
+    assert mode in ('push', 'propose', 'attempt-push')
+    overwrite = False
+    hoster = get_hoster(main_branch)
+    try:
+        existing_branch = hoster.get_derived_branch(main_branch, name=name)
+    except errors.NotBranchError:
+        base_branch = main_branch
+        existing_branch = None
+        existing_proposal = None
+    else:
+        note('%s: Already proposed: %s (branch at %s)', pkg, name,
+             existing_branch.user_url)
+        base_branch = existing_branch
+        try:
+            existing_proposal = hoster.get_proposal(existing_branch, main_branch)
+        except NoMergeProposal:
+            existing_proposal = None
+    with TemporarySprout(base_branch) as local_tree:
+        with local_tree.branch.lock_read():
+            if (mode == 'propose' and
+                existing_branch is not None and
+                merge_conflicts(main_branch, local_tree.branch)):
+                note('%s: branch is conflicted, restarting.', pkg)
+                main_branch_revid = main_branch.last_revision()
+                local_tree.update(revision=main_branch_revid)
+                local_tree.branch.generate_revision_history(main_branch_revid)
+                overwrite = True
+
+        with local_tree.lock_write():
+            local_branch = local_tree.branch
+            orig_revid = local_branch.last_revision()
+
+            branch_changer.make_changes(local_tree)
+
+        if local_branch.last_revision() == main_branch.last_revision():
+            if existing_proposal is not None:
+                note('%s: closing existing merge proposal - no new revisions', pkg)
+                # TODO(jelmer): existing_proposal.close()
+            return
+        if orig_revid == local_branch.last_revision():
+            # No new revisions added on this iteration, but still diverged from main branch.
+            return
+        if mode in ('push', 'attempt-push'):
+            push_url = hoster.get_push_url(main_branch)
+            note('%s: pushing to %s', pkg, push_url)
+            if not dry_run:
+                try:
+                    local_branch.push(Branch.open(push_url))
+                except (errors.PermissionDenied, errors.LockFailed):
+                    if mode == 'attempt-push':
+                        note('push access denied, falling back to propose')
+                        mode = 'propose'
+                    else:
+                        note('permission denied during push')
+                        raise
+        if mode == 'propose':
+            if not existing_branch and not branch_changer.should_create_proposal():
+                return
+            if not dry_run:
+                if existing_branch is not None:
+                    local_branch.push(existing_branch, overwrite=overwrite)
+                    remote_branch = existing_branch
+                else:
+                    remote_branch, public_branch_url = hoster.publish_derived(
+                        local_branch, main_branch, name=name, overwrite=False)
+            mp_description = branch_changer.get_proposal_description(existing_proposal)
+            if existing_proposal is not None:
+                if not dry_run:
+                    existing_proposal.set_description(mp_description)
+                note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
+                     [f for f, l in branch_changer.applied])
+            else:
+                if not dry_run:
+                    proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                    try:
+                        mp = proposal_builder.create_proposal(
+                            description=mp_description, labels=[])
+                    except errors.PermissionDenied:
+                        note('%s: Permission denied while trying to create proposal.', pkg)
+                        raise
+                note('%s: Proposed fixes %r: %s', pkg, [f for f, l in branch_changer.applied], mp.url)
+
 
 for pkg in sorted(todo):
     errs = lintian_errs[pkg]
@@ -254,109 +346,22 @@ for pkg in sorted(todo):
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
-        name = "lintian-fixes"
-        overwrite = False
+        mode = {
+            policy_pb2.propose: 'propose',
+            policy_pb2.attempt_push: 'attempt-push',
+            policy_pb2.push: 'push',
+            }[mode]
         try:
-            hoster = get_hoster(main_branch)
+            propose_or_push(main_branch, "lintian-fixes", branch_changer, mode)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
-        try:
-            existing_branch = hoster.get_derived_branch(main_branch, name=name)
         except NoSuchProject as e:
             note('%s: project %s was not found', pkg, e.project)
             continue
-        except errors.NotBranchError:
-            base_branch = main_branch
-            existing_branch = None
-            existing_proposal = None
-        else:
-            note('%s: Already proposed: %s (branch at %s)', pkg, name,
-                 existing_branch.user_url)
-            base_branch = existing_branch
-            try:
-                existing_proposal = hoster.get_proposal(existing_branch, main_branch)
-            except NoMergeProposal:
-                existing_proposal = None
-        td = tempfile.mkdtemp()
-        try:
-            # preserve whatever source format we have.
-            to_dir = base_branch.controldir.sprout(td, None, create_tree_if_local=True,
-                    source_branch=base_branch, stacked=base_branch._format.supports_stacking())
-            local_tree = to_dir.open_workingtree()
-            with local_tree.branch.lock_read():
-                if (mode == policy_pb2.propose and
-                    existing_branch is not None and
-                    merge_conflicts(main_branch, local_tree.branch)):
-                    note('%s: branch is conflicted, restarting.', pkg)
-                    main_branch_revid = main_branch.last_revision()
-                    local_tree.update(revision=main_branch_revid)
-                    local_tree.branch.generate_revision_history(main_branch_revid)
-                    overwrite = True
-
-            with local_tree.lock_write():
-                local_branch = local_tree.branch
-                orig_revid = local_branch.last_revision()
-
-                try:
-                    branch_changer.make_changes(local_tree)
-                except BuildFailedError:
-                    note('%s: build failed', pkg)
-                    continue
-                except MissingUpstreamTarball:
-                    note('%s: unable to find upstream source', pkg)
-                    continue
-
-            if local_branch.last_revision() == main_branch.last_revision():
-                if existing_proposal is not None:
-                    note('%s: closing existing merge proposal - no new revisions', pkg)
-                    # TODO(jelmer): existing_proposal.close()
-                continue
-            if orig_revid == local_branch.last_revision():
-                # No new revisions added on this iteration, but still diverged from main branch.
-                continue
-            if mode in (policy_pb2.push, policy_pb2.attempt_push):
-                push_url = hoster.get_push_url(main_branch)
-                note('%s: pushing to %s', pkg, push_url)
-                if not dry_run:
-                    try:
-                        local_branch.push(Branch.open(push_url))
-                    except (errors.PermissionDenied, errors.LockFailed):
-                        if mode == policy_pb2.attempt_push:
-                            note('%s: push access denied, falling back to propose',
-                                 pkg)
-                            mode = policy_pb2.propose
-                        else:
-                            note('%s: permission denied during push', pkg)
-                            continue
-            if (mode == policy_pb2.propose and
-                not existing_branch and
-                not (set(f for f, d in branch_changer.applied) - propose_addon_only)):
-                note('%s: only add-on fixers found', pkg)
-                continue
-            if mode == policy_pb2.propose:
-                if not dry_run:
-                    if existing_branch is not None:
-                        local_branch.push(existing_branch, overwrite=overwrite)
-                        remote_branch = existing_branch
-                    else:
-                        remote_branch, public_branch_url = hoster.publish_derived(
-                            local_branch, main_branch, name=name, overwrite=False)
-                mp_description = branch_changer.get_proposal_description(existing_proposal)
-                if existing_proposal is not None:
-                    if not dry_run:
-                        existing_proposal.set_description(mp_description)
-                    note('%s: Updated proposal %s with fixes %r', pkg, existing_proposal.url,
-                         [f for f, l in branch_changer.applied])
-                else:
-                    if not dry_run:
-                        proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-                        try:
-                            mp = proposal_builder.create_proposal(
-                                description=mp_description, labels=[])
-                        except errors.PermissionDenied:
-                            note('%s: Permission denied while trying to create proposal.', pkg)
-                            continue
-                    note('%s: Proposed fixes %r: %s', pkg, [f for f, l in branch_changer.applied], mp.url)
-        finally:
-            shutil.rmtree(td)
+        except BuildFailedError:
+            note('%s: build failed', pkg)
+            continue
+        except MissingUpstreamTarball:
+            note('%s: unable to find upstream source', pkg)
+            continue

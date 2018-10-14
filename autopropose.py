@@ -27,6 +27,7 @@ import sys
 import tempfile
 
 import silver_platter
+from silver_platter.utils import TemporarySprout
 
 from breezy import osutils
 from breezy import (
@@ -42,8 +43,7 @@ from breezy.plugins.propose import (
     )
 
 
-def script_runner(branch, script):
-    local_tree = branch.controldir.create_workingtree()
+def script_runner(local_tree, script):
     p = subprocess.Popen(script, cwd=local_tree.basedir, stdout=subprocess.PIPE)
     (description, err) = p.communicate("")
     if p.returncode != 0:
@@ -66,21 +66,13 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None):
         pass
     else:
         raise errors.AlreadyBranchError(name)
-    td = tempfile.mkdtemp()
-    try:
-        # preserve whatever source format we have.
-        to_dir = main_branch.controldir.sprout(
-                get_transport(td).base, None, create_tree_if_local=False,
-                source_branch=main_branch)
-        local_branch = to_dir.open_branch()
-        orig_revid = local_branch.last_revision()
-        description = callback(local_branch)
-        if local_branch.last_revision() == orig_revid:
+    with TemporarySprout(main_branch) as local_tree:
+        orig_revid = local_tree.branch.last_revision()
+        description = callback(local_tree)
+        if local_tree.branch.last_revision() == orig_revid:
             raise PointlessCommit()
         remote_branch, public_branch_url = hoster.publish_derived(
-            local_branch, main_branch, name=name, overwrite=overwrite)
-    finally:
-        shutil.rmtree(td)
+            local_tree.branch, main_branch, name=name, overwrite=overwrite)
     proposal_builder = hoster.get_proposer(remote_branch, main_branch)
     return proposal_builder.create_proposal(description=description, labels=labels)
 
@@ -100,6 +92,6 @@ else:
     name = args.name
 script = os.path.abspath(args.script)
 proposal = autopropose(
-        main_branch, lambda branch: script_runner(branch, script),
+        main_branch, lambda tree: script_runner(tree, script),
         name=name, overwrite=args.overwrite, labels=args.label)
 note(gettext('Merge proposal created: %s') % proposal.url)
