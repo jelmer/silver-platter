@@ -27,25 +27,15 @@ import subprocess
 import sys
 import tempfile
 
-if os.name == "posix":
-    import locale
-    locale.setlocale(locale.LC_ALL, '')
-    # Use better default than ascii with posix filesystems that deal in bytes
-    # natively even when the C locale or no locale at all is given. Note that
-    # we need an immortal string for the hack, hence the lack of a hyphen.
-    sys._brz_default_fs_enc = "utf8"
-
-import breezy
-breezy.initialize()
-import breezy.git
-import breezy.bzr
-import breezy.plugins.launchpad
-from breezy.plugins.debian.cmds import cmd_builddeb
-from breezy.plugins.debian.directory import source_package_vcs_url
-from breezy.plugins.debian.errors import (
+import silver_platter
+from silver_platter.debian import (
+    build,
     BuildFailedError,
     MissingUpstreamTarball,
     )
+
+import breezy.plugins.launchpad
+from breezy.plugins.debian.directory import source_package_vcs_url
 from breezy import (
     errors,
     merge as _mod_merge,
@@ -327,7 +317,7 @@ for pkg in sorted(todo):
                 continue
             if args.build_verify:
                 try:
-                    cmd_builddeb().run([td], builder='sbuild')
+                    build(td)
                 except BuildFailedError:
                     note('%s: build failed', pkg)
                     continue
