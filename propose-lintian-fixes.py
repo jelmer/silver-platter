@@ -168,6 +168,12 @@ def make_changes(local_tree, update_changelog):
     if not local_tree.has_filename('debian/control'):
         note('%s: missing control file', pkg)
         return
+    if args.pre_check:
+        try:
+            subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+        except subprocess.CalledProcessError:
+            note('%s: pre-check failed, skipping', pkg)
+            return
     if update_changelog == policy_pb2.auto:
         update_changelog = should_update_changelog(local_tree.branch)
     elif update_changelog == policy_pb2.update_changelog:
@@ -260,12 +266,6 @@ for pkg in sorted(todo):
                     source_branch=base_branch, stacked=base_branch._format.supports_stacking())
             local_tree = to_dir.open_workingtree()
             with local_tree.branch.lock_read():
-                if args.pre_check:
-                    try:
-                        subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
-                    except subprocess.CalledProcessError:
-                        note('%s: pre-check failed, skipping', pkg)
-                        continue
                 if (mode == policy_pb2.propose and
                     existing_branch is not None and
                     merge_conflicts(main_branch, local_tree.branch)):
