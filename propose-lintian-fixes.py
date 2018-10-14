@@ -15,8 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import apt_pkg
-from debian.deb822 import Deb822
 from email.utils import parseaddr
 import fnmatch
 import itertools
@@ -30,7 +28,9 @@ import tempfile
 import silver_platter
 from silver_platter.debian import (
     build,
+    get_source_package,
     BuildFailedError,
+    NoSuchPackage,
     MissingUpstreamTarball,
     )
 
@@ -59,7 +59,7 @@ from google.protobuf import text_format
 import policy_pb2
 
 import argparse
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
 parser.add_argument("packages", nargs='*')
 parser.add_argument('--lintian-log', help="Path to lintian log file.", type=str, default='lintian.log')
 parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
@@ -127,10 +127,6 @@ else:
         todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
 
 
-apt_pkg.init()
-
-sources = apt_pkg.SourceRecords()
-
 note("Considering %d packages for automatic change proposals", len(todo))
 
 def parse_mp_description(description):
@@ -192,10 +188,12 @@ for pkg in sorted(todo):
     if not (fixers - propose_addon_only):
         continue
 
-    if not sources.lookup(pkg):
+    try:
+        pkg_source = get_source_package(pkg)
+    except NoSuchPackage:
         note('%s: not in apt sources', pkg)
         continue
-    pkg_source = Deb822(sources.record)
+
     try:
         vcs_url = source_package_vcs_url(pkg_source)
     except urlutils.InvalidURL as e:
