@@ -26,20 +26,8 @@ import shutil
 import sys
 import tempfile
 
-if os.name == "posix":
-    import locale
-    locale.setlocale(locale.LC_ALL, '')
-    # Use better default than ascii with posix filesystems that deal in bytes
-    # natively even when the C locale or no locale at all is given. Note that
-    # we need an immortal string for the hack, hence the lack of a hyphen.
-    sys._brz_default_fs_enc = "utf8"
+import silver_platter
 
-import breezy
-breezy.initialize()
-import breezy.bzr
-import breezy.git
-import breezy.plugins.launchpad
-import breezy.plugins.debian
 from breezy import osutils
 from breezy import (
     branch as _mod_branch,
