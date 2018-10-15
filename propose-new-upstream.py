@@ -30,6 +30,7 @@ from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_merge_upstream
 
 import argparse
+import subprocess
 parser = argparse.ArgumentParser(prog='propose-new-upstream')
 parser.add_argument("packages", nargs='+')
 parser.add_argument('--no-build-verify', help='Do not build package to verify it.', action='store_true')
@@ -45,6 +46,7 @@ class NewUpstreamMerger(BranchChanger):
         cmd_merge_upstream().run(directory=local_tree.basedir)
         if not args.no_build_verify:
             build(local_tree.basedir)
+        subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
 
     def get_proposal_description(self, existing_proposal):
         return "Merge new upstream release %s" % self._upstream_version
@@ -58,6 +60,8 @@ for package in args.packages:
     pkg_source = get_source_package(package)
     vcs_url = source_package_vcs_url(pkg_source)
     main_branch = Branch.open(vcs_url)
-    # TODO(jelmer): Work out how to propose pristine-tar changes for merging upstream.
+    # TODO(jelmer): Work out how to propose pristine-tar changes for merging
+    # upstream.
     propose_or_push(main_branch, "new-upstream", NewUpstreamMerger(),
-                    mode='propose', dry_run=args.dry_run, additional_branches=["pristine-tar"])
+                    mode='propose', dry_run=args.dry_run,
+                    additional_branches=["pristine-tar", "upstream"])

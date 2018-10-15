@@ -158,6 +158,14 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     else:
                         report('permission denied during push')
                         raise
+                else:
+                    for branch_name in additional_branches:
+                        try:
+                            add_branch = local_branch.controldir.open_branch(name=branch_name)
+                        except NotBranchError:
+                            pass
+                        else:
+                            target_branch.controldir.push_branch(add_branch, name=branch_name)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
                 return
