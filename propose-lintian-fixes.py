@@ -277,7 +277,8 @@ for pkg in sorted(todo):
         try:
             propose_or_push(main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
-                    possible_hosters=possible_hosters)
+                    possible_hosters=possible_hosters,
+                    additional_branches=["pristine-tar"])
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue

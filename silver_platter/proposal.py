@@ -76,7 +76,8 @@ class BranchChanger(object):
 
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
-                    possible_transports=None, possible_hosters=None):
+                    possible_transports=None, possible_hosters=None,
+                    additional_branches=None):
     """Create/update a merge proposal into a branch or push directly.
 
     Args:
@@ -87,7 +88,10 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       dry_run: Whether to actually make remote changes
       possible_transports: Possible transports to reuse
       possible_hosters: Possible hosters to reuse
+      additional_branches: Additional branches to fetch, if present
     """
+    if additional_branches is None:
+        additional_branches = []
     if mode not in ('push', 'propose', 'attempt-push'):
         raise ValueError("invalid mode %r" % mode)
     def report(text, *args, **kwargs):
@@ -108,6 +112,14 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         except NoMergeProposal:
             existing_proposal = None
     with TemporarySprout(base_branch) as local_tree:
+        # TODO(jelmer): Fetch these during the initial clone
+        for branch_name in additional_branches:
+            try:
+                add_branch = main_branch.controldir.open_branch(name=branch_name)
+            except NotBranchError:
+                pass
+            else:
+                add_branch.push(local_tree.controldir.create_branch(branch_name))
         with local_tree.branch.lock_read():
             if (mode == 'propose' and
                 existing_branch is not None and

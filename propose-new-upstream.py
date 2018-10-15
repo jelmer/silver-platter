@@ -1,4 +1,4 @@
-#!/usr/bin/python333
+#!/usr/bin/python3
 # Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,8 @@ parser = argparse.ArgumentParser(prog='propose-new-upstream')
 parser.add_argument("packages", nargs='+')
 parser.add_argument('--no-build-verify', help='Do not build package to verify it.', action='store_true')
 parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
+parser.add_argument("--dry-run", help="Create branches but don't push or propose anything.",
+                    action="store_true", default=False)
 args = parser.parse_args()
 
 
@@ -56,4 +58,6 @@ for package in args.packages:
     pkg_source = get_source_package(package)
     vcs_url = source_package_vcs_url(pkg_source)
     main_branch = Branch.open(vcs_url)
-    propose_or_push(main_branch, "new-upstream", NewUpstreamMerger(), mode='propose', dry_run=True)
+    # TODO(jelmer): Work out how to propose pristine-tar changes for merging upstream.
+    propose_or_push(main_branch, "new-upstream", NewUpstreamMerger(),
+                    mode='propose', dry_run=args.dry_run, additional_branches=["pristine-tar"])
