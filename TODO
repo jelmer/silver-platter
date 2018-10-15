@@ -4,6 +4,9 @@ Backends:
 - Submit patches against non-Vcs packages to the BTS?
 
 * Provide a way to opt out
+ + XS-Janitor: blah header?
+ + Allow pull requests that update policy.conf?
+ + Some web link that edits the policy file automatically?
 
 * Read apt lists from HTTP, rather than local system
 
@@ -13,11 +16,13 @@ Backends:
 * For "push" packages, don't require an associated hoster - make changes, commit, push back
  + Still need a way to convert "public read-only URL" to "writeable URL"
 
+* Maintain some optional state
+ + Last time a branch was checked
+ + Where the merge proposal is
+
+* Clean up merged merge proposals
+ + Can't clean up ones that were closed, otherwise we'd create them again from scratch. :(
+
 Upstream changes:
 * pngcrush
 * FSF
-
-For packages that are known reproducible:
- * Build before the changes
- * Build after the changes
- * If there is no delta in the output package (except for certain files), tag && upload
