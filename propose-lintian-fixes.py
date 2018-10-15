@@ -43,7 +43,6 @@ from silver_platter.utils import TemporarySprout
 import breezy.plugins.launchpad
 from breezy import (
     errors,
-    merge as _mod_merge,
     urlutils,
     )
 

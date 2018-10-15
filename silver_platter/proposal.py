@@ -19,6 +19,7 @@ from breezy.branch import Branch
 from breezy.trace import note
 from breezy import (
     errors,
+    merge as _mod_merge,
     )
 from breezy.plugins.propose.propose import (
     get_hoster,
