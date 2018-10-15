@@ -119,7 +119,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             except NotBranchError:
                 pass
             else:
-                add_branch.push(local_tree.controldir.create_branch(branch_name))
+                local_add_branch = local_tree.controldir.create_branch(name=branch_name)
+                add_branch.push(local_add_branch)
+            assert add_branch.last_revision() == local_add_branch.last_revision()
         with local_tree.branch.lock_read():
             if (mode == 'propose' and
                 existing_branch is not None and
