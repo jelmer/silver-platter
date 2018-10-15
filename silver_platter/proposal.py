@@ -116,12 +116,12 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         for branch_name in additional_branches:
             try:
                 add_branch = main_branch.controldir.open_branch(name=branch_name)
-            except NotBranchError:
+            except errors.NotBranchError:
                 pass
             else:
                 local_add_branch = local_tree.controldir.create_branch(name=branch_name)
                 add_branch.push(local_add_branch)
-            assert add_branch.last_revision() == local_add_branch.last_revision()
+                assert add_branch.last_revision() == local_add_branch.last_revision()
         with local_tree.branch.lock_read():
             if (mode == 'propose' and
                 existing_branch is not None and
@@ -141,10 +141,10 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 report('closing existing merge proposal - no new revisions')
                 # TODO(jelmer): existing_proposal.close()
-            return
+            return None, None
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from main branch.
-            return
+            return None, None
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
@@ -164,13 +164,13 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     for branch_name in additional_branches:
                         try:
                             add_branch = local_branch.controldir.open_branch(name=branch_name)
-                        except NotBranchError:
+                        except errors.NotBranchError:
                             pass
                         else:
                             target_branch.controldir.push_branch(add_branch, name=branch_name)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
-                return
+                return None, None
             if not dry_run:
                 if existing_branch is not None:
                     local_branch.push(existing_branch, overwrite=overwrite)
@@ -182,8 +182,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 if not dry_run:
                     existing_proposal.set_description(mp_description)
-                report('Updated proposal %s with fixes %r', existing_proposal.url,
-                     [f for f, l in changer.applied])
+                return existing_proposal, False
             else:
                 if not dry_run:
                     proposal_builder = hoster.get_proposer(remote_branch, main_branch)
@@ -193,4 +192,6 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     except errors.PermissionDenied:
                         report('Permission denied while trying to create proposal.')
                         raise
-                report('Proposed fixes %r: %s', [f for f, l in changer.applied], mp.url)
+                return mp, True
+        else:
+            return None, None

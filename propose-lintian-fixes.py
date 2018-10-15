@@ -275,7 +275,8 @@ for pkg in sorted(todo):
             policy_pb2.push: 'push',
             }[mode]
         try:
-            propose_or_push(main_branch, "lintian-fixes", branch_changer, mode,
+            proposal, is_new = propose_or_push(
+                    main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
                     possible_hosters=possible_hosters,
                     additional_branches=["pristine-tar", "upstream"])
@@ -291,3 +292,11 @@ for pkg in sorted(todo):
         except MissingUpstreamTarball:
             note('%s: unable to find upstream source', pkg)
             continue
+        else:
+            if proposal:
+                if is_new:
+                    note('%s: Proposed fixes %r: %s', pkg,
+                         [f for f, l in changer.applied], proposal.url)
+                else:
+                    note('%s: Updated proposal %s with fixes %r', pkg, proposal.url,
+                         [f for f, l in changer.applied])
