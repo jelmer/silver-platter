@@ -26,6 +26,8 @@ from silver_platter.proposal import (
     BranchChanger,
     )
 
+from debian.changelog import Changelog
+
 from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_merge_upstream
 
@@ -46,6 +48,8 @@ class NewUpstreamMerger(BranchChanger):
         cmd_merge_upstream().run(directory=local_tree.basedir)
         if not args.no_build_verify:
             build(local_tree.basedir)
+        with local_tree.get_file('debian/changelog') as f:
+            self._upstream_version = Changelog(f.read()).version.upstream_version
         subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
 
     def get_proposal_description(self, existing_proposal):
