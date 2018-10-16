@@ -111,6 +111,10 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             existing_proposal = hoster.get_proposal(existing_branch, main_branch)
         except NoMergeProposal:
             existing_proposal = None
+        else:
+            if existing_proposal.is_merged():
+                report('Proposal has already been merged.')
+                # TODO(jelmer): Perhaps remove it so we can start over?
     with TemporarySprout(base_branch) as local_tree:
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_branches:
@@ -192,6 +196,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     except errors.PermissionDenied:
                         report('Permission denied while trying to create proposal.')
                         raise
-                return mp, True
+                    return mp, True
+                return None, True
         else:
             return None, None

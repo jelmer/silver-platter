@@ -30,6 +30,7 @@ from debian.changelog import Changelog
 
 from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_merge_upstream
+from breezy.trace import note
 
 import argparse
 import subprocess
@@ -66,6 +67,14 @@ for package in args.packages:
     main_branch = Branch.open(vcs_url)
     # TODO(jelmer): Work out how to propose pristine-tar changes for merging
     # upstream.
-    propose_or_push(main_branch, "new-upstream", NewUpstreamMerger(),
-                    mode='propose', dry_run=args.dry_run,
-                    additional_branches=["pristine-tar", "upstream"])
+    proposal, is_new = propose_or_push(
+            main_branch, "new-upstream", NewUpstreamMerger(),
+            mode='propose', dry_run=args.dry_run,
+            additional_branches=["pristine-tar", "upstream"])
+    if proposal:
+        if is_new:
+            note('%s: Created new merge proposal %s.',
+                 package, proposal.url)
+        else:
+            note('%s: Updated merge proposal %s.',
+                 package, proposal.url)
