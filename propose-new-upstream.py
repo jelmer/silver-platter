@@ -67,10 +67,14 @@ for package in args.packages:
     main_branch = Branch.open(vcs_url)
     # TODO(jelmer): Work out how to propose pristine-tar changes for merging
     # upstream.
+    if getattr(main_branch.repository, '_git', None):
+        additional_branches = ["pristine-tar", "upstream"])
+    else:
+        additional_branches = []
     proposal, is_new = propose_or_push(
             main_branch, "new-upstream", NewUpstreamMerger(),
             mode='propose', dry_run=args.dry_run,
-            additional_branches=["pristine-tar", "upstream"])
+            additional_branches=additional_branches)
     if proposal:
         if is_new:
             note('%s: Created new merge proposal %s.',

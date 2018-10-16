@@ -274,12 +274,16 @@ for pkg in sorted(todo):
             policy_pb2.attempt_push: 'attempt-push',
             policy_pb2.push: 'push',
             }[mode]
+        if getattr(main_branch.repository, '_git', None):
+            additional_branches = ["pristine-tar", "upstream"]
+        else:
+            additional_branches = []
         try:
             proposal, is_new = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
                     possible_hosters=possible_hosters,
-                    additional_branches=["pristine-tar", "upstream"])
+                    additional_branches=additional_branches)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
@@ -296,7 +300,7 @@ for pkg in sorted(todo):
             if proposal:
                 if is_new:
                     note('%s: Proposed fixes %r: %s', pkg,
-                         [f for f, l in changer.applied], proposal.url)
+                         [f for f, l in branch_changer.applied], proposal.url)
                 else:
                     note('%s: Updated proposal %s with fixes %r', pkg, proposal.url,
-                         [f for f, l in changer.applied])
+                         [f for f, l in branch_changer.applied])
