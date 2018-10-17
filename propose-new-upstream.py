@@ -19,10 +19,10 @@ import silver_platter
 from silver_platter.debian import (
     build,
     get_source_package,
+    propose_or_push,
     source_package_vcs_url,
     )
 from silver_platter.proposal import (
-    propose_or_push,
     BranchChanger,
     )
 
@@ -67,14 +67,9 @@ for package in args.packages:
     main_branch = Branch.open(vcs_url)
     # TODO(jelmer): Work out how to propose pristine-tar changes for merging
     # upstream.
-    if getattr(main_branch.repository, '_git', None):
-        additional_branches = ["pristine-tar", "upstream"])
-    else:
-        additional_branches = []
     proposal, is_new = propose_or_push(
             main_branch, "new-upstream", NewUpstreamMerger(),
-            mode='propose', dry_run=args.dry_run,
-            additional_branches=additional_branches)
+            mode='propose', dry_run=args.dry_run)
     if proposal:
         if is_new:
             note('%s: Created new merge proposal %s.',

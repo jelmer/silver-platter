@@ -26,36 +26,31 @@ import tempfile
 
 import silver_platter
 from silver_platter.debian import (
-    build,
     get_source_package,
-    should_update_changelog,
     source_package_vcs_url,
+    propose_or_push,
     BuildFailedError,
     NoSuchPackage,
     MissingUpstreamTarball,
     )
-from silver_platter.proposal import (
-    BranchChanger,
-    propose_or_push,
+from silver_platter.debian.lintian import (
+    available_lintian_fixers,
+    read_lintian_log,
+    LintianFixer,
     )
-from silver_platter.utils import TemporarySprout
 
-import breezy.plugins.launchpad
 from breezy import (
     errors,
     urlutils,
     )
 
 from breezy.branch import Branch
-from breezy.commit import PointlessCommit
 from breezy.trace import note
 
 from breezy.plugins.propose.propose import (
     NoSuchProject,
     UnsupportedHoster,
     )
-
-from lintian_brush import available_lintian_fixers, run_lintian_fixers
 
 from google.protobuf import text_format
 import policy_pb2
@@ -75,21 +70,7 @@ parser.add_argument('--pre-check', help='Command to run to check whether to proc
 parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
 args = parser.parse_args()
 
-fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
-
 dry_run = args.dry_run
-
-
-def read_lintian_log(f):
-    lintian_errs = {}
-    for l in f:
-        cs = l.split(' ')
-        if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
-            continue
-        pkg = cs[1]
-        err = cs[5].strip()
-        lintian_errs.setdefault(pkg, set()).add(err)
-    return lintian_errs
 
 
 with open(args.lintian_log, 'r') as f:
@@ -100,8 +81,7 @@ with open(args.policy, 'r') as f:
 
 propose_addon_only = set(args.propose_addon_only)
 
-
-available_fixers = set(fixer_scripts)
+available_fixers = set({f.tag: f for f in available_lintian_fixers()})
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
 
@@ -115,26 +95,6 @@ else:
 
 
 note("Considering %d packages for automatic change proposals", len(todo))
-
-def parse_mp_description(description):
-    existing_lines = description.splitlines()
-    if len(existing_lines) == 1:
-        return existing_lines
-    else:
-        return [l[2:].rstrip('\n') for l in existing_lines if l.startswith('* ')]
-
-
-def create_mp_description(lines):
-    if len(lines) > 1:
-        mp_description = ["Fix some issues reported by lintian\n"]
-        for l in lines:
-            l = "* %s\n" % l
-            if l not in mp_description:
-                mp_description.append(l)
-    else:
-        mp_description = lines[0]
-    return ''.join(mp_description)
-
 
 def matches(match, control):
     for maintainer in match.maintainer:
@@ -154,7 +114,7 @@ def matches(match, control):
 
 def apply_policy(config, control):
     mode = policy_pb2.skip
-    update_changelog = policy_pb2.auto
+    update_changelog = 'auto'
     for policy in config.policy:
         if policy.match and not any([matches(m, control) for m in policy.match]):
             continue
@@ -162,60 +122,12 @@ def apply_policy(config, control):
             mode = policy.mode
         if policy.changelog is not None:
             update_changelog = policy.changelog
-    return mode, update_changelog
+    return mode, {
+        policy_pb2.auto: 'auto',
+        policy_pb2.update_changelog: 'update',
+        policy_pb2.leave_changelog: 'leave',
+        }[update_changelog]
 
-
-class LintianFixer(BranchChanger):
-
-    def __init__(self, pkg, update_changelog):
-        self._pkg = pkg
-        self._update_changelog = update_changelog
-
-    def __repr__(self):
-        return "LintianFixer(%r)" % (self._pkg, )
-
-    def make_changes(self, local_tree):
-        with local_tree.lock_write():
-            if not local_tree.has_filename('debian/control'):
-                note('%s: missing control file', pkg)
-                return
-            if args.pre_check:
-                try:
-                    subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
-                except subprocess.CalledProcessError:
-                    note('%s: pre-check failed, skipping', pkg)
-                    return
-            if self._update_changelog == policy_pb2.auto:
-                update_changelog = should_update_changelog(local_tree.branch)
-            elif self._update_changelog == policy_pb2.update_changelog:
-                update_changelog = True
-            elif self._update_changelog == policy_pb2.leave_changlog:
-                update_changelog = False
-
-            self.applied = run_lintian_fixers(
-                    local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
-            if not self.applied:
-                note('%s: no fixers to apply', pkg)
-                return
-
-        if args.build_verify:
-            build(local_tree.basedir)
-
-    def get_proposal_description(self, existing_proposal):
-        if existing_proposal:
-            existing_description = existing_proposal.get_description()
-            existing_lines = parse_mp_description(existing_description)
-        else:
-            existing_lines = []
-        return create_mp_description(
-            existing_lines + [l for f, l in self.applied])
-
-    def should_create_proposal(self):
-        # Is there enough to create a new merge proposal?
-        if not set(f for f, d in self.applied) - propose_addon_only:
-            note('%s: only add-on fixers found', pkg)
-            return False
-        return True
 
 possible_transports = []
 possible_hosters = []
@@ -274,16 +186,11 @@ for pkg in sorted(todo):
             policy_pb2.attempt_push: 'attempt-push',
             policy_pb2.push: 'push',
             }[mode]
-        if getattr(main_branch.repository, '_git', None):
-            additional_branches = ["pristine-tar", "upstream"]
-        else:
-            additional_branches = []
         try:
             proposal, is_new = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
-                    possible_hosters=possible_hosters,
-                    additional_branches=additional_branches)
+                    possible_hosters=possible_hosters)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue

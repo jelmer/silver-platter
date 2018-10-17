@@ -22,7 +22,7 @@ enum ChangelogMode {
 
     update_changelog = 1;
 
-    leave_changlog = 2;
+    leave_changelog = 2;
 }
 
 message Match {

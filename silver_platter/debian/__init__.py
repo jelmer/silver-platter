@@ -29,6 +29,8 @@ from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
     )
 
+from .. import proposal as _mod_proposal
+
 
 class NoSuchPackage(Exception):
     """No such package."""
@@ -72,3 +74,9 @@ def should_update_changelog(branch):
                 return False
     # Assume yes
     return True
+
+
+def propose_or_push(main_branch, *args, **kwargs):
+    if getattr(main_branch.repository, '_git', None):
+        kwargs['additional_branches'] = kwargs.get('additional_branches', []) + ["pristine-tar", "upstream"]
+    return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)
