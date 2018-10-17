@@ -68,6 +68,7 @@ parser.add_argument('--propose-addon-only', help='Fixers that should be consider
                     default=['file-contains-trailing-whitespace'])
 parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
 parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
+parser.add_argument('--shuffle', help='Shuffle order in which packages are processed.', action='store_true')
 args = parser.parse_args()
 
 dry_run = args.dry_run
@@ -133,7 +134,15 @@ def apply_policy(config, control):
 possible_transports = []
 possible_hosters = []
 
-for pkg in sorted(todo):
+todo = list(todo)
+
+if args.shuffle:
+    import random
+    random.shuffle(todo)
+else:
+    todo.sort()
+
+for pkg in todo:
     errs = lintian_errs[pkg]
 
     fixers = available_fixers.intersection(errs)
@@ -178,6 +187,8 @@ for pkg in sorted(todo):
             pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
             update_changelog=update_changelog, build_verify=args.build_verify,
             pre_check=pre_check, propose_addon_only=propose_addon_only)
+
+    note('Processing: %s', pkg)
 
     try:
         main_branch = Branch.open(vcs_url, possible_transports=possible_transports)
