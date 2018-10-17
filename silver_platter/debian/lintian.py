@@ -61,9 +61,14 @@ def create_mp_description(lines):
 
 class LintianFixer(BranchChanger):
 
-    def __init__(self, pkg, update_changelog):
+    def __init__(self, pkg, fixers, update_changelog, build_verify=False,
+                 pre_check=None, propose_addon_only=None):
         self._pkg = pkg
         self._update_changelog = update_changelog
+        self._build_verify = build_verify
+        self._pre_check = pre_check
+        self._fixers = fixers
+        self._propose_addon_only = propose_addon_only
 
     def __repr__(self):
         return "LintianFixer(%r)" % (self._pkg, )
@@ -73,11 +78,8 @@ class LintianFixer(BranchChanger):
             if not local_tree.has_filename('debian/control'):
                 note('%r: missing control file', self)
                 return
-            if args.pre_check:
-                try:
-                    subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
-                except subprocess.CalledProcessError:
-                    note('%r: pre-check failed, skipping', self)
+            if self._pre_check:
+                if not self._pre_check(local_tree):
                     return
             if self._update_changelog == 'auto':
                 update_changelog = should_update_changelog(local_tree.branch)
@@ -87,12 +89,12 @@ class LintianFixer(BranchChanger):
                 update_changelog = False
 
             self.applied = run_lintian_fixers(
-                    local_tree, [fixer_scripts[fixer] for fixer in fixers], update_changelog)
+                    local_tree, self._fixers, update_changelog)
             if not self.applied:
                 note('%r: no fixers to apply', self)
                 return
 
-        if args.build_verify:
+        if self._build_verify:
             build(local_tree.basedir)
 
     def get_proposal_description(self, existing_proposal):
@@ -106,7 +108,7 @@ class LintianFixer(BranchChanger):
 
     def should_create_proposal(self):
         # Is there enough to create a new merge proposal?
-        if not set(f for f, d in self.applied) - propose_addon_only:
+        if not set(f for f, d in self.applied) - self._propose_addon_only:
             note('%r: only add-on fixers found', self)
             return False
         return True

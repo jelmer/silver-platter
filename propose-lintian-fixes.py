@@ -81,7 +81,8 @@ with open(args.policy, 'r') as f:
 
 propose_addon_only = set(args.propose_addon_only)
 
-available_fixers = set({f.tag: f for f in available_lintian_fixers()})
+fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
+available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
 
@@ -162,7 +163,21 @@ for pkg in sorted(todo):
         note('%s: skipping, per policy', pkg)
         continue
 
-    branch_changer = LintianFixer(pkg, update_changelog)
+    if args.pre_check:
+        def pre_check(local_tree):
+            try:
+                subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+            except subprocess.CalledProcessError:
+                note('%r: pre-check failed, skipping', pkg)
+                return False
+            return True
+    else:
+        pre_check = None
+
+    branch_changer = LintianFixer(
+            pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
+            update_changelog=update_changelog, build_verify=args.build_verify,
+            pre_check=pre_check, propose_addon_only=propose_addon_only)
 
     try:
         main_branch = Branch.open(vcs_url, possible_transports=possible_transports)
