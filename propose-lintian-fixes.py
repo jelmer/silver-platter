@@ -229,6 +229,9 @@ for pkg in todo:
         except MissingUpstreamTarball:
             note('%s: unable to find upstream source', pkg)
             continue
+        except errors.PermissionDenied as e:
+            note('%s: %s', pkg, e)
+            continue
         else:
             if proposal:
                 if is_new:
