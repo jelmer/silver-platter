@@ -67,6 +67,7 @@ parser.add_argument('--propose-addon-only', help='Fixers that should be consider
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
 parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
+parser.add_argument('--post-check', help='Command to run to check package before pushing.', type=str)
 parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
 parser.add_argument('--shuffle', help='Shuffle order in which packages are processed.', action='store_true')
 args = parser.parse_args()
@@ -183,10 +184,22 @@ for pkg in todo:
     else:
         pre_check = None
 
+    if args.post_check:
+        def post_check(local_tree):
+            try:
+                subprocess.check_call(args.post_check, shell=True, cwd=local_tree.basedir)
+            except subprocess.CalledProcessError:
+                note('%r: post-check failed, skipping', pkg)
+                return False
+            return True
+    else:
+        post_check = None
+
     branch_changer = LintianFixer(
             pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
             update_changelog=update_changelog, build_verify=args.build_verify,
-            pre_check=pre_check, propose_addon_only=propose_addon_only)
+            pre_check=pre_check, post_check=post_check,
+            propose_addon_only=propose_addon_only)
 
     note('Processing: %s', pkg)
 

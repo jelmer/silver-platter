@@ -67,6 +67,7 @@ class LintianFixer(BranchChanger):
         self._update_changelog = update_changelog
         self._build_verify = build_verify
         self._pre_check = pre_check
+        self._post_check = post_check
         self._fixers = fixers
         self._propose_addon_only = propose_addon_only
 
@@ -93,6 +94,10 @@ class LintianFixer(BranchChanger):
             if not self.applied:
                 note('%r: no fixers to apply', self)
                 return
+
+            if self._post_check:
+                if not self._post_check(local_tree):
+                    return
 
         if self._build_verify:
             build(local_tree.basedir)
