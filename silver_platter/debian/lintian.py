@@ -62,7 +62,7 @@ def create_mp_description(lines):
 class LintianFixer(BranchChanger):
 
     def __init__(self, pkg, fixers, update_changelog, build_verify=False,
-                 pre_check=None, propose_addon_only=None):
+                 pre_check=None, post_check=None, propose_addon_only=None):
         self._pkg = pkg
         self._update_changelog = update_changelog
         self._build_verify = build_verify
@@ -79,6 +79,7 @@ class LintianFixer(BranchChanger):
             if not local_tree.has_filename('debian/control'):
                 note('%r: missing control file', self)
                 return
+            since_revid = local_tree.last_revision()
             if self._pre_check:
                 if not self._pre_check(local_tree):
                     return
@@ -96,7 +97,7 @@ class LintianFixer(BranchChanger):
                 return
 
             if self._post_check:
-                if not self._post_check(local_tree):
+                if not self._post_check(local_tree, since_revid):
                     return
 
         if self._build_verify:

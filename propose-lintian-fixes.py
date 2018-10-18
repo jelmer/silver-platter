@@ -185,9 +185,10 @@ for pkg in todo:
         pre_check = None
 
     if args.post_check:
-        def post_check(local_tree):
+        def post_check(local_tree, since_revid):
             try:
-                subprocess.check_call(args.post_check, shell=True, cwd=local_tree.basedir)
+                subprocess.check_call(args.post_check, shell=True, cwd=local_tree.basedir,
+                    env={'SINCE_REVID': since_revid})
             except subprocess.CalledProcessError:
                 note('%r: post-check failed, skipping', pkg)
                 return False
