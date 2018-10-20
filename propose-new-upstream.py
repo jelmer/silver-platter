@@ -36,6 +36,7 @@ import argparse
 import subprocess
 parser = argparse.ArgumentParser(prog='propose-new-upstream')
 parser.add_argument("packages", nargs='+')
+parser.add_argument('--snapshot', help='Merge a new upstream snapshot rather than a release', action='store_true')
 parser.add_argument('--no-build-verify', help='Do not build package to verify it.', action='store_true')
 parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
 parser.add_argument("--dry-run", help="Create branches but don't push or propose anything.",
@@ -45,8 +46,11 @@ args = parser.parse_args()
 
 class NewUpstreamMerger(BranchChanger):
 
+    def __init__(self, snapshot=False):
+        self._snapshot = snapshot
+
     def make_changes(self, local_tree):
-        cmd_merge_upstream().run(directory=local_tree.basedir)
+        cmd_merge_upstream().run(directory=local_tree.basedir, snapshot=self._snapshot)
         if not args.no_build_verify:
             build(local_tree.basedir)
         with local_tree.get_file('debian/changelog') as f:
@@ -68,7 +72,7 @@ for package in args.packages:
     # TODO(jelmer): Work out how to propose pristine-tar changes for merging
     # upstream.
     proposal, is_new = propose_or_push(
-            main_branch, "new-upstream", NewUpstreamMerger(),
+            main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
             mode='propose', dry_run=args.dry_run)
     if proposal:
         if is_new:
