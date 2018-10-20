@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+from breezy.errors import BzrError
 from breezy.trace import note
 from lintian_brush import available_lintian_fixers, run_lintian_fixers
 
@@ -25,6 +26,15 @@ from . import (
     should_update_changelog,
     )
 from ..proposal import BranchChanger
+
+
+class PostCheckFailed(BzrError):
+    """The post check failed."""
+
+    _fmt = "Running post-check failed."
+
+    def __init__(self):
+        super(PostCheckFailed, self).__init__()
 
 
 def read_lintian_log(f):
@@ -98,7 +108,7 @@ class LintianFixer(BranchChanger):
 
             if self._post_check:
                 if not self._post_check(local_tree, since_revid):
-                    return
+                    raise PostCheckFailed()
 
         if self._build_verify:
             build(local_tree.basedir)

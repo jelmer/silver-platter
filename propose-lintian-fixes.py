@@ -37,6 +37,7 @@ from silver_platter.debian.lintian import (
     available_lintian_fixers,
     read_lintian_log,
     LintianFixer,
+    PostCheckFailed,
     )
 
 from breezy import (
@@ -244,6 +245,9 @@ for pkg in todo:
             note('%s: unable to find upstream source', pkg)
             continue
         except errors.PermissionDenied as e:
+            note('%s: %s', pkg, e)
+            continue
+        except PostCheckFailed as e:
             note('%s: %s', pkg, e)
             continue
         else:
