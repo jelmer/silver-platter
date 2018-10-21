@@ -15,7 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import silver_platter
+import silver_platter  # noqa: F401
 from silver_platter.debian import (
     build,
     get_source_package,
@@ -36,11 +36,19 @@ import argparse
 import subprocess
 parser = argparse.ArgumentParser(prog='propose-new-upstream')
 parser.add_argument("packages", nargs='+')
-parser.add_argument('--snapshot', help='Merge a new upstream snapshot rather than a release', action='store_true')
-parser.add_argument('--no-build-verify', help='Do not build package to verify it.', action='store_true')
-parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
-parser.add_argument("--dry-run", help="Create branches but don't push or propose anything.",
-                    action="store_true", default=False)
+parser.add_argument('--snapshot',
+                    help='Merge a new upstream snapshot rather than a release',
+                    action='store_true')
+parser.add_argument('--no-build-verify',
+                    help='Do not build package to verify it.',
+                    action='store_true')
+parser.add_argument('--pre-check',
+                    help='Command to run to check whether to process package.',
+                    type=str)
+parser.add_argument("--dry-run",
+                    help="Create branches but don't push or propose anything.",
+                    action="store_true",
+                    default=False)
 args = parser.parse_args()
 
 
@@ -50,11 +58,14 @@ class NewUpstreamMerger(BranchChanger):
         self._snapshot = snapshot
 
     def make_changes(self, local_tree):
-        cmd_merge_upstream().run(directory=local_tree.basedir, snapshot=self._snapshot)
+        # TODO(jelmer): Don't call UI implementation, refactor brz-debian
+        cmd_merge_upstream().run(directory=local_tree.basedir,
+                                 snapshot=self._snapshot)
         if not args.no_build_verify:
             build(local_tree.basedir)
         with local_tree.get_file('debian/changelog') as f:
-            self._upstream_version = Changelog(f.read()).version.upstream_version
+            cl = Changelog(f.read())
+            self._upstream_version = cl.version.upstream_version
         subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
 
     def get_proposal_description(self, existing_proposal):

@@ -17,9 +17,18 @@
 
 from __future__ import absolute_import
 
+__all__ = [
+    'available_lintian_fixers',
+    'PostCheckFailed',
+    'LintianFixer',
+    ]
+
 from breezy.errors import BzrError
 from breezy.trace import note
-from lintian_brush import available_lintian_fixers, run_lintian_fixers
+from lintian_brush import (
+    available_lintian_fixers,
+    run_lintian_fixers,
+    )
 
 from . import (
     build,
@@ -38,6 +47,13 @@ class PostCheckFailed(BzrError):
 
 
 def read_lintian_log(f):
+    """Read a lintian log file.
+
+    Args:
+      f: file-like object to read from
+    Returns:
+      dictionary mapping packages to sets of lintian tags
+    """
     lintian_errs = {}
     for l in f:
         cs = l.split(' ')
@@ -50,20 +66,35 @@ def read_lintian_log(f):
 
 
 def parse_mp_description(description):
+    """Parse a merge proposal description.
+
+    Args:
+      description: The description to parse
+    Returns:
+      list of one-line descriptions of changes
+    """
     existing_lines = description.splitlines()
     if len(existing_lines) == 1:
         return existing_lines
     else:
-        return [l[2:].rstrip('\n') for l in existing_lines if l.startswith('* ')]
+        return [l[2:].rstrip('\n')
+                for l in existing_lines if l.startswith('* ')]
 
 
 def create_mp_description(lines):
+    """Create a merge proposal description.
+
+    Args:
+      lines: List of one-line descriptions of fixes
+    Returns:
+      A string with a merge proposal description
+    """
     if len(lines) > 1:
         mp_description = ["Fix some issues reported by lintian\n"]
-        for l in lines:
-            l = "* %s\n" % l
-            if l not in mp_description:
-                mp_description.append(l)
+        for line in lines:
+            line = "* %s\n" % line
+            if line not in mp_description:
+                mp_description.append(line)
     else:
         mp_description = lines[0]
     return ''.join(mp_description)
@@ -128,5 +159,3 @@ class LintianFixer(BranchChanger):
             note('%r: only add-on fixers found', self)
             return False
         return True
-
-

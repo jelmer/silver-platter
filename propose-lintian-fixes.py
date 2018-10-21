@@ -17,14 +17,10 @@
 
 from email.utils import parseaddr
 import fnmatch
-import os
-import shutil
 import socket
 import subprocess
-import sys
-import tempfile
 
-import silver_platter
+import silver_platter   # noqa: F401
 from silver_platter.debian import (
     get_source_package,
     source_package_vcs_url,
@@ -59,18 +55,32 @@ import policy_pb2
 import argparse
 parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
 parser.add_argument("packages", nargs='*')
-parser.add_argument('--lintian-log', help="Path to lintian log file.", type=str, default='lintian.log')
-parser.add_argument("--fixers", help="Fixers to run.", type=str, action='append')
-parser.add_argument("--policy", help="Policy file to read.", type=str, default='policy.conf')
-parser.add_argument("--dry-run", help="Create branches but don't push or propose anything.",
+parser.add_argument('--lintian-log',
+                    help="Path to lintian log file.", type=str,
+                    default='lintian.log')
+parser.add_argument("--fixers",
+                    help="Fixers to run.", type=str, action='append')
+parser.add_argument("--policy",
+                    help="Policy file to read.", type=str,
+                    default='policy.conf')
+parser.add_argument("--dry-run",
+                    help="Create branches but don't push or propose anything.",
                     action="store_true", default=False)
-parser.add_argument('--propose-addon-only', help='Fixers that should be considered add-on-only.',
+parser.add_argument('--propose-addon-only',
+                    help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
                     default=['file-contains-trailing-whitespace'])
-parser.add_argument('--pre-check', help='Command to run to check whether to process package.', type=str)
-parser.add_argument('--post-check', help='Command to run to check package before pushing.', type=str)
-parser.add_argument('--build-verify', help='Build package to verify it.', action='store_true')
-parser.add_argument('--shuffle', help='Shuffle order in which packages are processed.', action='store_true')
+parser.add_argument('--pre-check',
+                    help='Command to run to check whether to process package.',
+                    type=str)
+parser.add_argument('--post-check',
+                    help='Command to run to check package before pushing.',
+                    type=str)
+parser.add_argument('--build-verify',
+                    help='Build package to verify it.', action='store_true')
+parser.add_argument('--shuffle',
+                    help='Shuffle order in which packages are processed.',
+                    action='store_true')
 args = parser.parse_args()
 
 dry_run = args.dry_run
@@ -100,6 +110,7 @@ else:
 
 note("Considering %d packages for automatic change proposals", len(todo))
 
+
 def matches(match, control):
     for maintainer in match.maintainer:
         if maintainer != parseaddr(control["Maintainer"])[1]:
@@ -120,7 +131,8 @@ def apply_policy(config, control):
     mode = policy_pb2.skip
     update_changelog = 'auto'
     for policy in config.policy:
-        if policy.match and not any([matches(m, control) for m in policy.match]):
+        if (policy.match and
+                not any([matches(m, control) for m in policy.match])):
             continue
         if policy.mode is not None:
             mode = policy.mode
@@ -177,7 +189,8 @@ for pkg in todo:
     if args.pre_check:
         def pre_check(local_tree):
             try:
-                subprocess.check_call(args.pre_check, shell=True, cwd=local_tree.basedir)
+                subprocess.check_call(
+                        args.pre_check, shell=True, cwd=local_tree.basedir)
             except subprocess.CalledProcessError:
                 note('%r: pre-check failed, skipping', pkg)
                 return False
@@ -188,7 +201,8 @@ for pkg in todo:
     if args.post_check:
         def post_check(local_tree, since_revid):
             try:
-                subprocess.check_call(args.post_check, shell=True, cwd=local_tree.basedir,
+                subprocess.check_call(
+                    args.post_check, shell=True, cwd=local_tree.basedir,
                     env={'SINCE_REVID': since_revid})
             except subprocess.CalledProcessError:
                 note('%r: post-check failed, skipping', pkg)
@@ -206,7 +220,8 @@ for pkg in todo:
     note('Processing: %s', pkg)
 
     try:
-        main_branch = Branch.open(vcs_url, possible_transports=possible_transports)
+        main_branch = Branch.open(
+                vcs_url, possible_transports=possible_transports)
     except socket.error:
         note('%s: ignoring, socket error', pkg)
     except errors.NotBranchError as e:
@@ -256,5 +271,5 @@ for pkg in todo:
                     note('%s: Proposed fixes %r: %s', pkg,
                          [f for f, l in branch_changer.applied], proposal.url)
                 else:
-                    note('%s: Updated proposal %s with fixes %r', pkg, proposal.url,
-                         [f for f, l in branch_changer.applied])
+                    note('%s: Updated proposal %s with fixes %r', pkg,
+                         proposal.url, [f for f, l in branch_changer.applied])

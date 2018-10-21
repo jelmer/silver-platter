@@ -28,9 +28,9 @@ if os.name == "posix":
     # we need an immortal string for the hack, hence the lack of a hyphen.
     sys._brz_default_fs_enc = "utf8"
 
-import breezy
+import breezy  # noqa: E402
 breezy.initialize()
-import breezy.git  # For git support
-import breezy.bzr  # For bzr support
-import breezy.plugins.launchpad  # For lp: URL support
-import breezy.plugins.debian  # For apt: URL support
+import breezy.git  # For git support   # noqa: E402
+import breezy.bzr  # For bzr support   # noqa: E402
+import breezy.plugins.launchpad  # For lp: URL support  # noqa: E402
+import breezy.plugins.debian  # For apt: URL support  # noqa: E402

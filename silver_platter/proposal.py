@@ -35,12 +35,13 @@ def merge_conflicts(main_branch, other_branch):
 
     Args:
       main_branch: Main branch to merge into
-      other_branch: Branch to merge (and use for scratch access, needs write access)
+      other_branch: Branch to merge (and use for scratch access, needs write
+                    access)
     Returns:
       boolean indicating whether the merge would result in conflicts
     """
     if other_branch.repository.get_graph().is_ancestor(
-        main_branch.last_revision(), other_branch.last_revision()):
+            main_branch.last_revision(), other_branch.last_revision()):
         return False
 
     other_branch.repository.fetch(
@@ -57,10 +58,11 @@ def merge_conflicts(main_branch, other_branch):
                 other=main_branch.last_revision(), tree_branch=other_branch)
         merger.merge_type = _mod_merge.Merge3Merger
         tree_merger = merger.make_merger()
-        with tree_merger.make_preview_transform() as tt:
+        with tree_merger.make_preview_transform():
             return bool(tree_merger.cooked_conflicts)
     finally:
-        _mod_merge.Merger.hooks['merge_file_content'] = old_file_content_mergers
+        _mod_merge.Merger.hooks['merge_file_content'] = (
+                old_file_content_mergers)
 
 
 class BranchChanger(object):
@@ -94,6 +96,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         additional_branches = []
     if mode not in ('push', 'propose', 'attempt-push'):
         raise ValueError("invalid mode %r" % mode)
+
     def report(text, *args, **kwargs):
         note('%r: ' + text, *((changer,)+args), **kwargs)
     overwrite = False
@@ -105,10 +108,12 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         existing_branch = None
         existing_proposal = None
     else:
-        report('Already proposed: %s (branch at %s)', name, existing_branch.user_url)
+        report('Already proposed: %s (branch at %s)', name,
+               existing_branch.user_url)
         base_branch = existing_branch
         try:
-            existing_proposal = hoster.get_proposal(existing_branch, main_branch)
+            existing_proposal = hoster.get_proposal(
+                    existing_branch, main_branch)
         except NoMergeProposal:
             existing_proposal = None
         else:
@@ -119,17 +124,20 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_branches:
             try:
-                add_branch = main_branch.controldir.open_branch(name=branch_name)
+                add_branch = main_branch.controldir.open_branch(
+                        name=branch_name)
             except errors.NotBranchError:
                 pass
             else:
-                local_add_branch = local_tree.controldir.create_branch(name=branch_name)
+                local_add_branch = local_tree.controldir.create_branch(
+                        name=branch_name)
                 add_branch.push(local_add_branch)
-                assert add_branch.last_revision() == local_add_branch.last_revision()
+                assert (add_branch.last_revision() ==
+                        local_add_branch.last_revision())
         with local_tree.branch.lock_read():
             if (mode == 'propose' and
-                existing_branch is not None and
-                merge_conflicts(main_branch, local_tree.branch)):
+                    existing_branch is not None and
+                    merge_conflicts(main_branch, local_tree.branch)):
                 report('branch is conflicted, restarting.')
                 main_branch_revid = main_branch.last_revision()
                 local_tree.update(revision=main_branch_revid)
@@ -147,13 +155,15 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 # TODO(jelmer): existing_proposal.close()
             return None, None
         if orig_revid == local_branch.last_revision():
-            # No new revisions added on this iteration, but still diverged from main branch.
+            # No new revisions added on this iteration, but still diverged from
+            # main branch.
             return None, None
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
             report('pushing to %s', push_url)
-            target_branch = Branch.open(push_url, possible_transports=possible_transports)
+            target_branch = Branch.open(
+                    push_url, possible_transports=possible_transports)
             if not dry_run:
                 try:
                     local_branch.push(target_branch)
@@ -167,11 +177,13 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 else:
                     for branch_name in additional_branches:
                         try:
-                            add_branch = local_branch.controldir.open_branch(name=branch_name)
+                            add_branch = local_branch.controldir.open_branch(
+                                name=branch_name)
                         except errors.NotBranchError:
                             pass
                         else:
-                            target_branch.controldir.push_branch(add_branch, name=branch_name)
+                            target_branch.controldir.push_branch(
+                                add_branch, name=branch_name)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
                 return None, None
@@ -182,19 +194,22 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 else:
                     remote_branch, public_branch_url = hoster.publish_derived(
                         local_branch, main_branch, name=name, overwrite=False)
-            mp_description = changer.get_proposal_description(existing_proposal)
+            mp_description = changer.get_proposal_description(
+                    existing_proposal)
             if existing_proposal is not None:
                 if not dry_run:
                     existing_proposal.set_description(mp_description)
                 return existing_proposal, False
             else:
                 if not dry_run:
-                    proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+                    proposal_builder = hoster.get_proposer(
+                            remote_branch, main_branch)
                     try:
                         mp = proposal_builder.create_proposal(
                             description=mp_description, labels=[])
                     except errors.PermissionDenied:
-                        report('Permission denied while trying to create proposal.')
+                        report('Permission denied while trying to create '
+                               'proposal.')
                         raise
                     return mp, True
                 return None, True

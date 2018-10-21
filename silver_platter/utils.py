@@ -20,6 +20,7 @@ import tempfile
 
 
 class TemporarySprout(object):
+    """Create a temporary sprout of a branch."""
 
     def __init__(self, branch):
         self.branch = branch
@@ -28,8 +29,10 @@ class TemporarySprout(object):
         self._td = tempfile.mkdtemp()
         try:
             # preserve whatever source format we have.
-            to_dir = self.branch.controldir.sprout(self._td, None, create_tree_if_local=True,
-                    source_branch=self.branch, stacked=self.branch._format.supports_stacking())
+            to_dir = self.branch.controldir.sprout(
+                self._td, None, create_tree_if_local=True,
+                source_branch=self.branch,
+                stacked=self.branch._format.supports_stacking())
             return to_dir.open_workingtree()
         except BaseException as e:
             shutil.rmtree(self._td)

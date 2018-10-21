@@ -17,6 +17,16 @@
 
 from __future__ import absolute_import
 
+__all__ = [
+    'get_source_package',
+    'propose_or_push',
+    'should_update_changelog',
+    'source_package_vcs_url',
+    'build',
+    'BuildFailedError',
+    'MissingUpstreamTarball',
+    ]
+
 import apt_pkg
 from debian.deb822 import Deb822
 from debian.changelog import Version
@@ -37,11 +47,26 @@ class NoSuchPackage(Exception):
 
 
 def build(directory, builder='sbuild'):
-    """Build a debian package in a directory."""
+    """Build a debian package in a directory.
+
+    Args:
+      directory: Directory to build in
+      builder: Builder command (e.g. 'sbuild', 'debuild')
+    """
+    # TODO(jelmer): Refactor brz-debian so it's not necessary
+    # to call out to cmd_builddeb, but to lower-level
+    # functions instead.
     cmd_builddeb().run([directory], builder=builder)
 
 
 def get_source_package(name):
+    """Get source package metadata.
+
+    Args:
+      name: Name of the source package
+    Returns:
+      A `Deb822` object
+    """
     apt_pkg.init()
 
     sources = apt_pkg.SourceRecords()
@@ -61,6 +86,11 @@ def get_source_package(name):
 
 def should_update_changelog(branch):
     """Guess whether the changelog should be updated manually.
+
+    Args:
+      branch: A branch object
+    Returns:
+      boolean indicating whether changelog should be updated
     """
     with branch.lock_read():
         graph = branch.repository.get_graph()
@@ -77,6 +107,10 @@ def should_update_changelog(branch):
 
 
 def propose_or_push(main_branch, *args, **kwargs):
+    """Wrapper for propose_or_push that includes debian-specific branches.
+    """
     if getattr(main_branch.repository, '_git', None):
-        kwargs['additional_branches'] = kwargs.get('additional_branches', []) + ["pristine-tar", "upstream"]
+        kwargs['additional_branches'] = (
+            kwargs.get('additional_branches', []) +
+            ["pristine-tar", "upstream"])
     return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)

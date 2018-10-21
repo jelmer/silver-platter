@@ -22,11 +22,8 @@ from __future__ import absolute_import
 import argparse
 import os
 import subprocess
-import shutil
-import sys
-import tempfile
 
-import silver_platter
+import silver_platter  # noqa: F401
 from silver_platter.utils import TemporarySprout
 
 from breezy import osutils
@@ -37,14 +34,14 @@ from breezy import (
 from breezy.i18n import gettext
 from breezy.commit import PointlessCommit
 from breezy.trace import note
-from breezy.transport import get_transport
 from breezy.plugins.propose import (
     propose as _mod_propose,
     )
 
 
 def script_runner(local_tree, script):
-    p = subprocess.Popen(script, cwd=local_tree.basedir, stdout=subprocess.PIPE)
+    p = subprocess.Popen(script, cwd=local_tree.basedir,
+                         stdout=subprocess.PIPE)
     (description, err) = p.communicate("")
     if p.returncode != 0:
         raise errors.BzrCommandError(
@@ -61,7 +58,7 @@ def script_runner(local_tree, script):
 def autopropose(main_branch, callback, name, overwrite=False, labels=None):
     hoster = _mod_propose.get_hoster(main_branch)
     try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name)
+        hoster.get_derived_branch(main_branch, name=name)
     except errors.NotBranchError:
         pass
     else:
@@ -74,15 +71,19 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None):
         remote_branch, public_branch_url = hoster.publish_derived(
             local_tree.branch, main_branch, name=name, overwrite=overwrite)
     proposal_builder = hoster.get_proposer(remote_branch, main_branch)
-    return proposal_builder.create_proposal(description=description, labels=labels)
+    return proposal_builder.create_proposal(
+            description=description, labels=labels)
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('url', help='URL of branch to work on.', type=str)
 parser.add_argument('script', help='Path to script to run.', type=str)
-parser.add_argument('--overwrite', action="store_true", help='Overwrite changes when publishing')
-parser.add_argument('--label', type=str, help='Label to attach', action="append", default=[])
-parser.add_argument('--name', type=str, help='Proposed branch name', default=None)
+parser.add_argument('--overwrite', action="store_true",
+                    help='Overwrite changes when publishing')
+parser.add_argument('--label', type=str,
+                    help='Label to attach', action="append", default=[])
+parser.add_argument('--name', type=str,
+                    help='Proposed branch name', default=None)
 args = parser.parse_args()
 
 main_branch = _mod_branch.Branch.open(args.url)
