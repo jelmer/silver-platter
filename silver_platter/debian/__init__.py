@@ -84,24 +84,58 @@ def get_source_package(name):
     return Deb822(by_version[version])
 
 
-def should_update_changelog(branch):
-    """Guess whether the changelog should be updated manually.
-
-    Args:
-      branch: A branch object
-    Returns:
-      boolean indicating whether changelog should be updated
-    """
+def _changelog_stats(branch, history):
+    mixed = 0
+    changelog_only = 0
+    other_only = 0
+    dch_references = 0
     with branch.lock_read():
         graph = branch.repository.get_graph()
-        revids = itertools.islice(
-            graph.iter_lefthand_ancestry(branch.last_revision()), 200)
+        revids = list(itertools.islice(
+            graph.iter_lefthand_ancestry(branch.last_revision()), history))
+        revs = []
         for revid, rev in branch.repository.iter_revisions(revids):
             if rev is None:
                 # Ghost
                 continue
             if 'Git-Dch: ' in rev.message:
-                return False
+                dch_references += 1
+            revs.append(rev)
+        for delta in branch.repository.get_deltas_for_revisions(revs):
+            filenames = set([a[0] for a in delta.added] + [r[0] for r in delta.removed] +
+                            [r[1] for r in delta.renamed] + [m[0] for m in delta.modified])
+            if not set([f for f in filenames if f.startswith('debian/')]):
+                continue
+            if 'debian/changelog' in filenames:
+                if len(filenames) > 1:
+                    mixed += 1
+                else:
+                    changelog_only += 1
+            else:
+                other_only += 1
+    return (changelog_only, other_only, mixed, dch_references)
+
+
+def should_update_changelog(branch, history=200):
+    """Guess whether the changelog should be updated manually.
+
+    Args:
+      branch: A branch object
+      history: Number of revisions back to analyze
+    Returns:
+      boolean indicating whether changelog should be updated
+    """
+    # Two indications this branch may be doing changelog entries at
+    # release time:
+    # - "Git-Dch: " is used in the commit messages
+    # - The vast majority of lines in changelog get added in
+    #   commits that only touch the changelog
+    (changelog_only, other_only, mixed, dch_references) = _changelog_stats(branch, history)
+    if dch_references:
+        return False
+    if changelog_only > mixed:
+        # Is this a reasonable threshold?
+        return False
     # Assume yes
     return True
 
