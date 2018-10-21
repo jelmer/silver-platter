@@ -45,4 +45,5 @@ setup(
           'Operating System :: POSIX',
           'Topic :: Software Development :: Version Control',
       ],
+      testsuite='silver_platter.tests.test_suite',
       )

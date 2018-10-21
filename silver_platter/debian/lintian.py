@@ -101,6 +101,7 @@ def create_mp_description(lines):
 
 
 class LintianFixer(BranchChanger):
+    """BranchChanger that fixes lintian issues."""
 
     def __init__(self, pkg, fixers, update_changelog, build_verify=False,
                  pre_check=None, post_check=None, propose_addon_only=None):
