@@ -53,11 +53,17 @@ from breezy.branch import Branch
 import argparse
 parser = argparse.ArgumentParser(prog='upload-pending-commits')
 parser.add_argument("packages", nargs='*')
-parser.add_argument('--acceptable-keys', help='List of acceptable GPG keys', action='append', default=[], type=str)
-parser.add_argument('--no-gpg-verification', help='Do not verify GPG signatures', action='store_true')
-parser.add_argument('--min-commit-age', help='Minimum age of the last commit, in days', type=int, default=7)
+parser.add_argument('--acceptable-keys',
+                    help='List of acceptable GPG keys',
+                    action='append', default=[], type=str)
+parser.add_argument('--no-gpg-verification',
+                    help='Do not verify GPG signatures', action='store_true')
+parser.add_argument('--min-commit-age',
+                    help='Minimum age of the last commit, in days',
+                    type=int, default=7)
 # TODO(jelmer): Support requiring that autopkgtest is present and passing
 args = parser.parse_args()
+
 
 def check_revision(rev):
     print("checking %r" % rev)
@@ -75,7 +81,8 @@ def find_last_release_revid(branch, version):
 
 
 def get_maintainer_keys(context):
-    for key in context.keylist(source='/usr/share/keyrings/debian-keyring.gpg'):
+    for key in context.keylist(
+            source='/usr/share/keyrings/debian-keyring.gpg'):
         yield key.fpr
         for subkey in key.subkeys:
             yield subkey.keyid
@@ -88,16 +95,19 @@ class PackageUploader(BranchChanger):
         self._gpg_strategy = gpg_strategy
         self._last_uploaded_version = Version(last_uploaded_version)
         self._target_changes = None
-        self._builder = 'sbuild --source --source-only-changes --debbuildopt=-v%s' % self._last_uploaded_version
+        self._builder = ('sbuild --source --source-only-changes '
+                         '--debbuildopt=-v%s' % self._last_uploaded_version)
 
     def __repr__(self):
         return "PackageUploader(%r)" % (self._pkg, )
 
     def make_changes(self, local_tree):
-        cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
+        cl, top_level = find_changelog(
+                local_tree, merge=False, max_blocks=None)
         if cl.version == self._last_uploaded_version:
-            raise Exception("nothing to upload, latest version is in archive: %s"
-                            % cl.version)
+            raise Exception(
+                    "nothing to upload, latest version is in archive: %s" %
+                    cl.version)
         previous_version_in_branch = changelog_find_previous_upload(cl)
         if self._last_uploaded_version > previous_version_in_branch:
             raise Exception(
@@ -106,9 +116,11 @@ class PackageUploader(BranchChanger):
                     self._last_uploaded_version, previous_version_in_branch))
 
         print("Checking revisions since %s" % self._last_uploaded_version)
-        last_release_revid = find_last_release_revid(local_tree.branch, self._last_uploaded_version)
+        last_release_revid = find_last_release_revid(
+                local_tree.branch, self._last_uploaded_version)
         graph = local_tree.branch.repository.get_graph()
-        revids = list(graph.iter_lefthand_ancestry(local_tree.branch.last_revision(), [last_release_revid]))
+        revids = list(graph.iter_lefthand_ancestry(
+            local_tree.branch.last_revision(), [last_release_revid]))
         if not revids:
             print("No pending changes")
             return
@@ -117,7 +129,8 @@ class PackageUploader(BranchChanger):
                     local_tree.branch.repository, revids, self._gpg_strategy)
             for revid, code, key in result:
                 if code != gpg.SIGNATURE_VALID:
-                    raise Exception("No valid GPG signature on %r: %d" % (revid, code))
+                    raise Exception(
+                        "No valid GPG signature on %r: %d" % (revid, code))
         for revid, rev in local_tree.branch.repository.iter_revisions(revids):
             check_revision(rev)
 
@@ -125,7 +138,9 @@ class PackageUploader(BranchChanger):
             raise Exception("Nothing left to release")
         release(local_tree)
         target_dir = tempfile.mkdtemp()
-        self._target_changes = _build_helper(local_tree, local_tree.branch, target_dir, builder=self._builder)
+        self._target_changes = _build_helper(
+                local_tree, local_tree.branch, target_dir,
+                builder=self._builder)
         debsign(self._target_changes)
 
     def post_land(self, main_branch):
@@ -133,7 +148,8 @@ class PackageUploader(BranchChanger):
             target_dir = tempfile.mkdtemp()
             with TemporarySprout(main_branch) as local_tree:
                 self._target_changes = _build_helper(
-                    local_tree, local_tree.branch, target_dir, builder=self._builder)
+                    local_tree, local_tree.branch, target_dir,
+                    builder=self._builder)
         dput_changes(self._target_changes)
 
 
@@ -150,7 +166,8 @@ for package in args.packages:
             if args.acceptable_keys:
                 acceptable_keys = args.acceptable_keys
             else:
-                acceptable_keys = list(get_maintainer_keys(gpg_strategy.context))
+                acceptable_keys = list(get_maintainer_keys(
+                    gpg_strategy.context))
             gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
         branch_changer = PackageUploader(

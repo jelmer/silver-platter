@@ -46,7 +46,7 @@ class ShouldUpdateChangelogTests(TestCaseWithTransport):
             ('add', ('upstream', None, 'file', b'upstream')),
             ('add', ('debian/', None, 'directory', '')),
             ('add', ('debian/changelog', None, 'file',
-                make_changelog(['initial release']))),
+                     make_changelog(['initial release']))),
             ('add', ('debian/control', None, 'file', b'initial'))],
             message='Initial\n')
         changelog_entries = ['initial release']
@@ -57,7 +57,7 @@ class ShouldUpdateChangelogTests(TestCaseWithTransport):
             changelog_entries.append('next entry %d' % i)
             builder.build_snapshot(None, [
                 ('modify', ('debian/changelog',
-                    make_changelog(changelog_entries))),
+                 make_changelog(changelog_entries))),
                 ('modify', ('debian/control', b'next %d' % i))],
                 message='Next')
         builder.finish_series()
@@ -71,7 +71,7 @@ class ShouldUpdateChangelogTests(TestCaseWithTransport):
             ('add', ('', None, 'directory', '')),
             ('add', ('debian/', None, 'directory', '')),
             ('add', ('debian/changelog', None, 'file',
-                make_changelog(['initial release']))),
+             make_changelog(['initial release']))),
             ('add', ('debian/control', None, 'file', b'initial'))],
             message='Initial\n')
         changelog_entries = ['initial release']
@@ -82,14 +82,14 @@ class ShouldUpdateChangelogTests(TestCaseWithTransport):
                 message='Next\n')
         builder.build_snapshot(None, [
             ('modify', ('debian/changelog',
-                make_changelog(changelog_entries)))])
+             make_changelog(changelog_entries)))])
         changelog_entries.append('final entry')
         builder.build_snapshot(None, [
             ('modify', ('debian/control', b'more'))],
             message='Next\n')
         builder.build_snapshot(None, [
             ('modify', ('debian/changelog',
-                make_changelog(changelog_entries)))])
+             make_changelog(changelog_entries)))])
         builder.finish_series()
         branch = builder.get_branch()
         self.assertFalse(should_update_changelog(branch))

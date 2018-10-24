@@ -102,8 +102,10 @@ def _changelog_stats(branch, history):
                 dch_references += 1
             revs.append(rev)
         for delta in branch.repository.get_deltas_for_revisions(revs):
-            filenames = set([a[0] for a in delta.added] + [r[0] for r in delta.removed] +
-                            [r[1] for r in delta.renamed] + [m[0] for m in delta.modified])
+            filenames = set([a[0] for a in delta.added] +
+                            [r[0] for r in delta.removed] +
+                            [r[1] for r in delta.renamed] +
+                            [m[0] for m in delta.modified])
             if not set([f for f in filenames if f.startswith('debian/')]):
                 continue
             if 'debian/changelog' in filenames:
@@ -130,7 +132,8 @@ def should_update_changelog(branch, history=200):
     # - "Git-Dch: " is used in the commit messages
     # - The vast majority of lines in changelog get added in
     #   commits that only touch the changelog
-    (changelog_only, other_only, mixed, dch_references) = _changelog_stats(branch, history)
+    (changelog_only, other_only, mixed, dch_references) = _changelog_stats(
+            branch, history)
     if dch_references:
         return False
     if changelog_only > mixed:
