@@ -76,6 +76,13 @@ class BranchChanger(object):
     def should_create_proposal(self):
         raise NotImplementedError(self.should_create_proposal)
 
+    def post_land(self, main_branch):
+        """Called when changes land on the main branch.
+
+        (either because they were directly pushed, or because a merge
+         proposal was merged).
+        """
+
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
@@ -119,6 +126,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         else:
             if existing_proposal.is_merged():
                 report('Proposal has already been merged.')
+                changer.post_land(main_branch)
                 # TODO(jelmer): Perhaps remove it so we can start over?
     with TemporarySprout(base_branch) as local_tree:
         # TODO(jelmer): Fetch these during the initial clone
@@ -184,6 +192,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         else:
                             target_branch.controldir.push_branch(
                                 add_branch, name=branch_name)
+                    changer.post_land(target_branch)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
                 return None, None
