@@ -138,9 +138,9 @@ class LintianFixer(BranchChanger):
                 note('%r: no fixers to apply', self)
                 return
 
-            if self._post_check:
-                if not self._post_check(local_tree, since_revid):
-                    raise PostCheckFailed()
+        if self._post_check:
+            if not self._post_check(local_tree, since_revid):
+                raise PostCheckFailed()
 
         if self._build_verify:
             build(local_tree.basedir)
@@ -155,8 +155,11 @@ class LintianFixer(BranchChanger):
             existing_lines + [l for f, l in self.applied])
 
     def should_create_proposal(self):
+        tags = set()
+        for fixed_tags, unused_summary in self.applied:
+            tags.update(fixed_tags)
         # Is there enough to create a new merge proposal?
-        if not set(f for f, d in self.applied) - self._propose_addon_only:
+        if not tags - self._propose_addon_only:
             note('%r: only add-on fixers found', self)
             return False
         return True

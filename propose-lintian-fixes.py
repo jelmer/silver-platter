@@ -94,7 +94,11 @@ with open(args.policy, 'r') as f:
 
 propose_addon_only = set(args.propose_addon_only)
 
-fixer_scripts = {f.tag: f for f in available_lintian_fixers()}
+fixer_scripts = {}
+for fixer in available_lintian_fixers():
+    for tag in fixer.lintian_tags:
+        fixer_scripts[tag] = fixer
+
 available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
@@ -267,9 +271,11 @@ for pkg in todo:
             continue
         else:
             if proposal:
+                tags = set()
+                for fixer_tags, unused_summary in branch_changer.applied:
+                    tags.update(fixer_tags)
                 if is_new:
-                    note('%s: Proposed fixes %r: %s', pkg,
-                         [f for f, l in branch_changer.applied], proposal.url)
+                    note('%s: Proposed fixes %r: %s', pkg, tags, proposal.url)
                 else:
                     note('%s: Updated proposal %s with fixes %r', pkg,
-                         proposal.url, [f for f, l in branch_changer.applied])
+                         proposal.url, tags)
