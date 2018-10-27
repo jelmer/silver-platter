@@ -81,6 +81,9 @@ parser.add_argument('--build-verify',
 parser.add_argument('--shuffle',
                     help='Shuffle order in which packages are processed.',
                     action='store_true')
+parser.add_argument('--refresh',
+                    help='Discard old branch and apply fixers from scratch.',
+                    action='store_true')
 args = parser.parse_args()
 
 dry_run = args.dry_run
@@ -250,7 +253,8 @@ for pkg in todo:
             proposal, is_new = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
-                    possible_hosters=possible_hosters)
+                    possible_hosters=possible_hosters,
+                    refresh=args.refresh)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue

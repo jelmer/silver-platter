@@ -86,7 +86,7 @@ class BranchChanger(object):
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
-                    additional_branches=None):
+                    additional_branches=None, refresh=False):
     """Create/update a merge proposal into a branch or push directly.
 
     Args:
@@ -98,6 +98,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       possible_transports: Possible transports to reuse
       possible_hosters: Possible hosters to reuse
       additional_branches: Additional branches to fetch, if present
+      refresh: Start over fresh when updating an existing branch for a merge
+        proposal
     """
     if additional_branches is None:
         additional_branches = []
@@ -145,8 +147,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         with local_tree.branch.lock_read():
             if (mode == 'propose' and
                     existing_branch is not None and
-                    merge_conflicts(main_branch, local_tree.branch)):
-                report('branch is conflicted, restarting.')
+                    (refresh or merge_conflicts(main_branch, local_tree.branch))):
+                report('restarting branch')
                 main_branch_revid = main_branch.last_revision()
                 local_tree.update(revision=main_branch_revid)
                 local_tree.branch.generate_revision_history(main_branch_revid)
