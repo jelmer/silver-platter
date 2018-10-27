@@ -136,7 +136,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             try:
                 add_branch = main_branch.controldir.open_branch(
                         name=branch_name)
-            except errors.NotBranchError:
+            except (errors.NotBranchError, errors.NoColocatedBranchSupport):
                 pass
             else:
                 local_add_branch = local_tree.controldir.create_branch(
