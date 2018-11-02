@@ -1,7 +1,0 @@
-Properties:
-* name
-* lintian warning it fixes
-* commit message
-* extended description
-* certainty of fix (i.e. does it need human review of some sort?)
-* code to apply the fix
