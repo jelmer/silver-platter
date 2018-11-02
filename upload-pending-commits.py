@@ -155,7 +155,7 @@ class PackageUploader(BranchChanger):
 
 for package in args.packages:
     pkg_source = get_source_package(package)
-    vcs_url = source_package_vcs_url(pkg_source)
+    vcs_type, vcs_url = source_package_vcs_url(pkg_source)
     main_branch = Branch.open(vcs_url)
     with main_branch.lock_read():
         branch_config = main_branch.get_config_stack()

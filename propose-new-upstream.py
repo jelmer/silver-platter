@@ -78,7 +78,7 @@ class NewUpstreamMerger(BranchChanger):
 
 for package in args.packages:
     pkg_source = get_source_package(package)
-    vcs_url = source_package_vcs_url(pkg_source)
+    vcs_type, vcs_url = source_package_vcs_url(pkg_source)
     main_branch = Branch.open(vcs_url)
     # TODO(jelmer): Work out how to propose pristine-tar changes for merging
     # upstream.

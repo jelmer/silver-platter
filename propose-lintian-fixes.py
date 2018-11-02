@@ -180,7 +180,7 @@ for pkg in todo:
         continue
 
     try:
-        vcs_url = source_package_vcs_url(pkg_source)
+        vcs_type, vcs_url = source_package_vcs_url(pkg_source)
     except urlutils.InvalidURL as e:
         note('%s: %s', pkg, e.extra)
     except KeyError:
