@@ -104,7 +104,8 @@ class LintianFixer(BranchChanger):
     """BranchChanger that fixes lintian issues."""
 
     def __init__(self, pkg, fixers, update_changelog, build_verify=False,
-                 pre_check=None, post_check=None, propose_addon_only=None):
+                 pre_check=None, post_check=None, propose_addon_only=None,
+                 committer=None):
         self._pkg = pkg
         self._update_changelog = update_changelog
         self._build_verify = build_verify
@@ -112,6 +113,7 @@ class LintianFixer(BranchChanger):
         self._post_check = post_check
         self._fixers = fixers
         self._propose_addon_only = propose_addon_only
+        self._committer = committer
 
     def __repr__(self):
         return "LintianFixer(%r)" % (self._pkg, )
@@ -133,7 +135,9 @@ class LintianFixer(BranchChanger):
                 update_changelog = False
 
             self.applied = run_lintian_fixers(
-                    local_tree, self._fixers, update_changelog)
+                    local_tree, self._fixers,
+                    committer=self._committer,
+                    update_changelog=update_changelog)
             if not self.applied:
                 note('%r: no fixers to apply', self)
                 return

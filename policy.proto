@@ -47,6 +47,9 @@ message Policy {
 
     // Fixers to apply
     repeated string lintian_fixers = 4;
+
+    // Committer string
+    optional string committer = 5;
 }
 
 message PolicyConfig {

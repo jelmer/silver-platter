@@ -137,6 +137,7 @@ def matches(match, control):
 def apply_policy(config, control):
     mode = policy_pb2.skip
     update_changelog = 'auto'
+    committer = None
     for policy in config.policy:
         if (policy.match and
                 not any([matches(m, control) for m in policy.match])):
@@ -145,11 +146,13 @@ def apply_policy(config, control):
             mode = policy.mode
         if policy.changelog is not None:
             update_changelog = policy.changelog
+        if policy.committer is not None:
+            committer = policy.committer
     return mode, {
         policy_pb2.auto: 'auto',
         policy_pb2.update_changelog: 'update',
         policy_pb2.leave_changelog: 'leave',
-        }[update_changelog]
+        }[update_changelog], committer
 
 
 possible_transports = []
@@ -187,7 +190,7 @@ for pkg in todo:
         note('%s: no VCS URL found', pkg)
         continue
 
-    mode, update_changelog = apply_policy(policy, pkg_source)
+    mode, update_changelog. committer = apply_policy(policy, pkg_source)
 
     if mode == policy_pb2.skip:
         note('%s: skipping, per policy', pkg)
@@ -222,7 +225,8 @@ for pkg in todo:
             pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
             update_changelog=update_changelog, build_verify=args.build_verify,
             pre_check=pre_check, post_check=post_check,
-            propose_addon_only=propose_addon_only)
+            propose_addon_only=propose_addon_only,
+            committer=committer)
 
     note('Processing: %s', pkg)
 
