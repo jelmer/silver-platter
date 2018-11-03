@@ -35,6 +35,10 @@ from silver_platter.debian.lintian import (
     LintianFixer,
     PostCheckFailed,
     )
+from silver_platter.debian.policy import (
+    read_policy,
+    apply_policy,
+    )
 
 from breezy import (
     errors,
@@ -48,9 +52,6 @@ from breezy.plugins.propose.propose import (
     NoSuchProject,
     UnsupportedHoster,
     )
-
-from google.protobuf import text_format
-import policy_pb2
 
 import argparse
 parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
@@ -92,8 +93,9 @@ dry_run = args.dry_run
 with open(args.lintian_log, 'r') as f:
     lintian_errs = read_lintian_log(f)
 
+
 with open(args.policy, 'r') as f:
-    policy = text_format.Parse(f.read(), policy_pb2.PolicyConfig())
+    policy = read_policy(f)
 
 propose_addon_only = set(args.propose_addon_only)
 
@@ -116,43 +118,6 @@ else:
 
 
 note("Considering %d packages for automatic change proposals", len(todo))
-
-
-def matches(match, control):
-    for maintainer in match.maintainer:
-        if maintainer != parseaddr(control["Maintainer"])[1]:
-            return False
-    uploader_emails = [
-            parseaddr(uploader)[1]
-            for uploader in control.get("Uploaders", "").split(",")]
-    for uploader in match.uploader:
-        if uploader not in uploader_emails:
-            return False
-    for source_package in match.source_package:
-        if source_package != control["Package"]:
-            return False
-    return True
-
-
-def apply_policy(config, control):
-    mode = policy_pb2.skip
-    update_changelog = 'auto'
-    committer = None
-    for policy in config.policy:
-        if (policy.match and
-                not any([matches(m, control) for m in policy.match])):
-            continue
-        if policy.mode is not None:
-            mode = policy.mode
-        if policy.changelog is not None:
-            update_changelog = policy.changelog
-        if policy.committer is not None:
-            committer = policy.committer
-    return mode, {
-        policy_pb2.auto: 'auto',
-        policy_pb2.update_changelog: 'update',
-        policy_pb2.leave_changelog: 'leave',
-        }[update_changelog], committer
 
 
 possible_transports = []
