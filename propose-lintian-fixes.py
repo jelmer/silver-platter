@@ -155,9 +155,9 @@ for pkg in todo:
         note('%s: no VCS URL found', pkg)
         continue
 
-    mode, update_changelog. committer = apply_policy(policy, pkg_source)
+    mode, update_changelog, committer = apply_policy(policy, pkg_source)
 
-    if mode == policy_pb2.skip:
+    if mode == 'skip':
         note('%s: skipping, per policy', pkg)
         continue
 
@@ -213,11 +213,6 @@ for pkg in todo:
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
-        mode = {
-            policy_pb2.propose: 'propose',
-            policy_pb2.attempt_push: 'attempt-push',
-            policy_pb2.push: 'push',
-            }[mode]
         try:
             proposal, is_new = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,

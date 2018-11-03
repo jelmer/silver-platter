@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from email.utils import parseaddr
 from google.protobuf import text_format
 
 from . import policy_pb2
@@ -54,11 +55,15 @@ def apply_policy(config, control):
             update_changelog = policy.changelog
         if policy.committer is not None:
             committer = policy.committer
-    return mode, {
-        policy_pb2.auto: 'auto',
-        policy_pb2.update_changelog: 'update',
-        policy_pb2.leave_changelog: 'leave',
-        }[update_changelog], committer
-
-
+    return (
+        {policy_pb2.propose: 'propose',
+         policy_pb2.attempt_push: 'attempt-push',
+         policy_pb2.push: 'push',
+         policy_pb2.skip: 'skip',
+         }[mode],
+        {policy_pb2.auto: 'auto',
+         policy_pb2.update_changelog: 'update',
+         policy_pb2.leave_changelog: 'leave',
+        }[update_changelog],
+        committer)
 

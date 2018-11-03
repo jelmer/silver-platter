@@ -4,7 +4,6 @@ Backends:
 - Submit patches against non-Vcs packages to the BTS?
 
 * Provide a way to opt out
- + XS-Janitor: blah header?
  + Allow pull requests that update policy.conf?
  + Some web link that edits the policy file automatically?
 
