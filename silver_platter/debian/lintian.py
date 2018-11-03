@@ -134,10 +134,13 @@ class LintianFixer(BranchChanger):
             elif self._update_changelog == 'leave':
                 update_changelog = False
 
-            self.applied = run_lintian_fixers(
+            self.applied, failed = run_lintian_fixers(
                     local_tree, self._fixers,
                     committer=self._committer,
                     update_changelog=update_changelog)
+            if failed:
+                note('%r: some fixers failed to run: %r',
+                     self, failed)
             if not self.applied:
                 note('%r: no fixers to apply', self)
                 return
