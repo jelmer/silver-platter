@@ -65,5 +65,5 @@ def apply_policy(config, control):
          policy_pb2.update_changelog: 'update',
          policy_pb2.leave_changelog: 'leave',
         }[update_changelog],
-        committer)
+        committer if committer else None)
 
