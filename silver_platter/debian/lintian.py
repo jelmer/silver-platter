@@ -159,12 +159,12 @@ class LintianFixer(BranchChanger):
         else:
             existing_lines = []
         return create_mp_description(
-            existing_lines + [l for f, l in self.applied])
+            existing_lines + [r.fixed_lintian_tags for b, l in self.applied])
 
     def should_create_proposal(self):
         tags = set()
-        for fixed_tags, unused_summary in self.applied:
-            tags.update(fixed_tags)
+        for result, unused_summary in self.applied:
+            tags.update(result.fixed_lintian_tags)
         # Is there enough to create a new merge proposal?
         if not tags - self._propose_addon_only:
             note('%r: only add-on fixers found', self)
