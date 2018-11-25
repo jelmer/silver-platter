@@ -159,7 +159,7 @@ class LintianFixer(BranchChanger):
         else:
             existing_lines = []
         return create_mp_description(
-            existing_lines + [r.fixed_lintian_tags for b, l in self.applied])
+            existing_lines + [r.fixed_lintian_tags for r, l in self.applied])
 
     def should_create_proposal(self):
         tags = set()
