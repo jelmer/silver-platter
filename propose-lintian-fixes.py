@@ -240,8 +240,8 @@ for pkg in todo:
         else:
             if proposal:
                 tags = set()
-                for fixer_tags, unused_summary in branch_changer.applied:
-                    tags.update(fixer_tags)
+                for result, unused_summary in branch_changer.applied:
+                    tags.update(result.fixed_lintian_tags)
                 if is_new:
                     note('%s: Proposed fixes %r: %s', pkg, tags, proposal.url)
                 else:
