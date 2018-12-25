@@ -25,3 +25,5 @@ Backends:
 Upstream changes:
 * pngcrush
 * FSF
+
+- use debian.deb822.GPGV_DEFAULT_KEYRING in upload-pending-changes.py ?
