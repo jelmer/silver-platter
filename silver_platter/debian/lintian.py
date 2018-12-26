@@ -65,6 +65,30 @@ def read_lintian_log(f):
     return lintian_errs
 
 
+def download_latest_lintian_log():
+    """Download the latest lintian.log files.
+
+    Returns:
+    """
+    import gzip
+    import re
+    import urllib.parse
+    import urllib3
+
+    http = urllib3.PoolManager()
+
+    BASE = 'https://lintian.debian.org/'
+
+    page = http.request('GET', BASE)
+    resource = re.search(
+        b'<a href="(.*.gz)">lintian.log.gz<\\/a>', page.data).group(1)
+
+    log = http.request(
+        'GET',
+        urllib.parse.urljoin(BASE, resource.decode('ascii')))
+    return gzip.decompress(log.data)
+
+
 def parse_mp_description(description):
     """Parse a merge proposal description.
 
