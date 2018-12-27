@@ -17,6 +17,7 @@
 
 from email.utils import parseaddr
 import fnmatch
+from io import StringIO
 import socket
 import subprocess
 
@@ -31,6 +32,7 @@ from silver_platter.debian import (
     )
 from silver_platter.debian.lintian import (
     available_lintian_fixers,
+    download_latest_lintian_log,
     read_lintian_log,
     LintianFixer,
     PostCheckFailed,
@@ -58,7 +60,7 @@ parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
 parser.add_argument("packages", nargs='*')
 parser.add_argument('--lintian-log',
                     help="Path to lintian log file.", type=str,
-                    default='lintian.log')
+                    default=None)
 parser.add_argument("--fixers",
                     help="Fixers to run.", type=str, action='append')
 parser.add_argument("--policy",
@@ -89,8 +91,13 @@ args = parser.parse_args()
 
 dry_run = args.dry_run
 
+if args.lintian_log:
+    f = open(args.lintian_log, 'r')
+else:
+    log = download_latest_lintian_log()
+    f = StringIO(log.decode('utf-8'))
 
-with open(args.lintian_log, 'r') as f:
+with f:
     lintian_errs = read_lintian_log(f)
 
 

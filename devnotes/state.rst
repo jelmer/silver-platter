@@ -14,9 +14,13 @@ Keeping state is necessary so that we:
 
 Branch
  URL(s?) : string+
+ Run
+  time : timestamp
+  command : string
+  result : "push", "proposal", "failed"
  Merge proposals*
-  name : string
+  url : string
   last updated : time
   status : enum{"open", "conflicted", "merged", "closed", "needs-human-attention"}
-  command : string
+  last_run : <run>?
 
