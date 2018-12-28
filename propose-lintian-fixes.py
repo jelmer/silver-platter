@@ -22,6 +22,9 @@ import socket
 import subprocess
 
 import silver_platter   # noqa: F401
+from silver_platter import (
+    state as _mod_state,
+    )
 from silver_platter.debian import (
     get_source_package,
     source_package_vcs_url,
@@ -254,3 +257,6 @@ for pkg in todo:
                 else:
                     note('%s: Updated proposal %s with fixes %r', pkg,
                          proposal.url, tags)
+            _mod_state.store_run(
+                vcs_url, ["lintian-brush"] + list(fixers),
+                proposal.url if proposal else None)
