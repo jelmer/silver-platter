@@ -30,14 +30,17 @@ def store_run(vcs_url, command, merge_proposal_url):
     :param merge_proposal_url: Optional merge proposal URL
     """
     cur = con.cursor()
-    cur.execute("INSERT INTO branch (url) VALUES (?)", (vcs_url, ))
+    cur.execute("REPLACE INTO branch (url) VALUES (?)", (vcs_url, ))
     branch_id = cur.lastrowid
     if merge_proposal_url:
         cur.execute(
-            "INSERT INTO merge_proposal (url, branch_id) VALUES (?, ?)",
-            (merge_proposal_url, ))
+            "REPLACE INTO merge_proposal (url, branch_id) VALUES (?, ?)",
+            (merge_proposal_url, branch_id))
         merge_proposal_id = cur.lastrowid
+    else:
+        merge_proposal_id = None
     cur.execute(
         "INSERT INTO run (command, finish_time, branch_id, merge_proposal_id) "
         "VALUES (?, ?, ?, ?)", (
             ' '.join(command), time.time(), branch_id, merge_proposal_id, ))
+    con.commit()

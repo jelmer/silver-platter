@@ -100,6 +100,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       additional_branches: Additional branches to fetch, if present
       refresh: Start over fresh when updating an existing branch for a merge
         proposal
+    Returns:
+      tuple with create merge proposal (if any), and
+      boolean indicating whether the merge proposal is new
     """
     if additional_branches is None:
         additional_branches = []
@@ -167,7 +170,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from
             # main branch.
-            return None, None
+            return existing_proposal, False
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
