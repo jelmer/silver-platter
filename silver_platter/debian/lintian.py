@@ -23,6 +23,8 @@ __all__ = [
     'LintianFixer',
     ]
 
+from io import TextIOWrapper
+
 from breezy.errors import BzrError
 from breezy.trace import note
 from lintian_brush import (
@@ -87,7 +89,7 @@ def download_latest_lintian_log():
         'GET',
         urllib.parse.urljoin(BASE, resource.decode('ascii')),
         preload_content=False)
-    return gzip.GzipFile(fileobj=log)
+    return TextIOWrapper(gzip.GzipFile(fileobj=log))
 
 
 def parse_mp_description(description):
