@@ -85,8 +85,9 @@ def download_latest_lintian_log():
 
     log = http.request(
         'GET',
-        urllib.parse.urljoin(BASE, resource.decode('ascii')))
-    return gzip.decompress(log.data)
+        urllib.parse.urljoin(BASE, resource.decode('ascii')),
+        preload_content=False)
+    return gzip.GzipFile(fileobj=log)
 
 
 def parse_mp_description(description):

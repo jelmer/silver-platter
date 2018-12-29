@@ -97,8 +97,7 @@ dry_run = args.dry_run
 if args.lintian_log:
     f = open(args.lintian_log, 'r')
 else:
-    log = download_latest_lintian_log()
-    f = StringIO(log.decode('utf-8'))
+    f = download_latest_lintian_log()
 
 with f:
     lintian_errs = read_lintian_log(f)
