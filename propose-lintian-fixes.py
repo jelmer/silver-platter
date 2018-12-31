@@ -117,13 +117,11 @@ available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
 
-
 todo = set()
 if not args.packages:
     todo = set(lintian_errs.keys())
 else:
-    for pkg_match in args.packages:
-        todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
+    todo = args.packages
 
 
 note("Considering %d packages for automatic change proposals", len(todo))
@@ -141,28 +139,40 @@ else:
     todo.sort()
 
 for pkg in todo:
-    errs = lintian_errs[pkg]
+    if ":" in pkg:
+        # This might be a URL
+        # TODO(jelmer): Better heuristics for distinguishing package names and URLs
+        main_branch = Branch.open(
+            pkg, possible_transports=possible_transports)
+        from silver_platter.utils import TemporarySprout
+        with TemporarySprout(main_branch) as tree:
+            from debian.deb822 import Deb822
+            pkg_source = Deb822(tree.get_file_text('debian/control'))
+            import pdb; pdb.set_trace()
+        vcs_url = main_branch.user_url
+    else:
+        errs = lintian_errs[pkg]
 
-    fixers = available_fixers.intersection(errs)
-    if not fixers:
-        continue
+        fixers = available_fixers.intersection(errs)
+        if not fixers:
+            continue
 
-    if not (fixers - propose_addon_only):
-        continue
+        if not (fixers - propose_addon_only):
+            continue
 
-    try:
-        pkg_source = get_source_package(pkg)
-    except NoSuchPackage:
-        note('%s: not in apt sources', pkg)
-        continue
+        try:
+            pkg_source = get_source_package(pkg)
+        except NoSuchPackage:
+            note('%s: not in apt sources', pkg)
+            continue
 
-    try:
-        vcs_type, vcs_url = source_package_vcs_url(pkg_source)
-    except urlutils.InvalidURL as e:
-        note('%s: %s', pkg, e.extra)
-    except KeyError:
-        note('%s: no VCS URL found', pkg)
-        continue
+        try:
+            vcs_type, vcs_url = source_package_vcs_url(pkg_source)
+        except urlutils.InvalidURL as e:
+            note('%s: %s', pkg, e.extra)
+        except KeyError:
+            note('%s: no VCS URL found', pkg)
+            continue
 
     mode, update_changelog, committer = apply_policy(policy, pkg_source)
 
@@ -195,13 +205,6 @@ for pkg in todo:
     else:
         post_check = None
 
-    branch_changer = LintianFixer(
-            pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
-            update_changelog=update_changelog, build_verify=args.build_verify,
-            pre_check=pre_check, post_check=post_check,
-            propose_addon_only=propose_addon_only,
-            committer=committer)
-
     note('Processing: %s', pkg)
 
     try:
@@ -222,6 +225,12 @@ for pkg in todo:
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
+        branch_changer = LintianFixer(
+                pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
+                update_changelog=update_changelog, build_verify=args.build_verify,
+                pre_check=pre_check, post_check=post_check,
+                propose_addon_only=propose_addon_only,
+                committer=committer)
         try:
             proposal, is_new = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,
