@@ -23,7 +23,6 @@ from breezy import (
     )
 from breezy.plugins.propose.propose import (
     get_hoster,
-    NoMergeProposal,
     )
 
 
@@ -122,17 +121,18 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
     else:
         report('Already proposed: %s (branch at %s)', name,
                existing_branch.user_url)
+        # If there is an open or rejected merge proposal, resume that.
         base_branch = existing_branch
-        try:
-            existing_proposal = hoster.get_proposal(
-                    existing_branch, main_branch)
-        except NoMergeProposal:
-            existing_proposal = None
+        existing_proposal = None
+        for mp in hoster.iter_proposals(
+                existing_branch, main_branch, status='all'):
+            if not mp.is_merged():
+                existing_proposal = mp
+                break
         else:
-            if existing_proposal.is_merged():
-                report('Proposal has already been merged.')
-                changer.post_land(main_branch)
-                # TODO(jelmer): Perhaps remove it so we can start over?
+            report('There is a proposal that already been merged.')
+            changer.post_land(main_branch)
+            base_branch = main_branch
     with TemporarySprout(base_branch) as local_tree:
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_branches:
