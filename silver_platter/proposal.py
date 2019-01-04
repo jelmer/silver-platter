@@ -130,7 +130,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 existing_proposal = mp
                 break
         else:
-            report('There is a proposal that already been merged.')
+            report('There is a proposal that has already been merged.')
             changer.post_land(main_branch)
             base_branch = main_branch
     with TemporarySprout(base_branch) as local_tree:
