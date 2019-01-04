@@ -139,7 +139,7 @@ class LintianFixer(BranchChanger):
         self._pre_check = pre_check
         self._post_check = post_check
         self._fixers = fixers
-        self._propose_addon_only = propose_addon_only
+        self._propose_addon_only = set(propose_addon_only)
         self._committer = committer
 
     def __repr__(self):
@@ -160,6 +160,8 @@ class LintianFixer(BranchChanger):
                 update_changelog = True
             elif self._update_changelog == 'leave':
                 update_changelog = False
+            else:
+                update_changelog = self._update_changelog
 
             self.applied, failed = run_lintian_fixers(
                     local_tree, self._fixers,

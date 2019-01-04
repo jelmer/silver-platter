@@ -15,39 +15,24 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from email.utils import parseaddr
-import fnmatch
-from io import StringIO
 import socket
 import subprocess
 
 import silver_platter   # noqa: F401
-from silver_platter import (
-    state as _mod_state,
-    )
 from silver_platter.debian import (
-    get_source_package,
-    source_package_vcs_url,
     propose_or_push,
     BuildFailedError,
-    NoSuchPackage,
     MissingUpstreamTarball,
     )
 from silver_platter.debian.lintian import (
-    available_lintian_fixers,
-    download_latest_lintian_log,
-    read_lintian_log,
     LintianFixer,
     PostCheckFailed,
+    available_lintian_fixers,
     )
-from silver_platter.debian.policy import (
-    read_policy,
-    apply_policy,
-    )
+from silver_platter.debian.schedule import schedule
 
 from breezy import (
     errors,
-    urlutils,
     )
 
 from breezy.branch import Branch
@@ -94,91 +79,32 @@ args = parser.parse_args()
 
 dry_run = args.dry_run
 
-if args.lintian_log:
-    f = open(args.lintian_log, 'r')
-else:
-    f = download_latest_lintian_log()
-
-with f:
-    lintian_errs = read_lintian_log(f)
-
-
-with open(args.policy, 'r') as f:
-    policy = read_policy(f)
-
-propose_addon_only = set(args.propose_addon_only)
-
 fixer_scripts = {}
 for fixer in available_lintian_fixers():
     for tag in fixer.lintian_tags:
         fixer_scripts[tag] = fixer
 
-available_fixers = set(fixer_scripts)
-if args.fixers:
-    available_fixers = available_fixers.intersection(set(args.fixers))
-
-todo = set()
-if not args.packages:
-    todo = set(lintian_errs.keys())
-else:
-    todo = args.packages
-
-
-note("Considering %d packages for automatic change proposals", len(todo))
-
-
 possible_transports = []
 possible_hosters = []
 
-todo = list(todo)
+todo = schedule(
+    args.lintian_log, args.policy, args.propose_addon_only, args.packages,
+    args.fixers, args.shuffle)
 
-if args.shuffle:
-    import random
-    random.shuffle(todo)
-else:
-    todo.sort()
+subparser = argparse.ArgumentParser(prog='lintian-brush')
+subparser.add_argument("fixers", nargs='*')
+subparser.add_argument(
+    '--no-update-changelog', action="store_false", default=None,
+    dest="update_changelog", help="do not update the changelog")
+subparser.add_argument(
+    '--update-changelog', action="store_true", dest="update_changelog",
+    help="force updating of the changelog", default=None)
 
-for pkg in todo:
-    if ":" in pkg:
-        # This might be a URL
-        # TODO(jelmer): Better heuristics for distinguishing package names and URLs
-        main_branch = Branch.open(
-            pkg, possible_transports=possible_transports)
-        from silver_platter.utils import TemporarySprout
-        with TemporarySprout(main_branch) as tree:
-            from debian.deb822 import Deb822
-            pkg_source = Deb822(tree.get_file_text('debian/control'))
-            import pdb; pdb.set_trace()
-        vcs_url = main_branch.user_url
-    else:
-        errs = lintian_errs[pkg]
 
-        fixers = available_fixers.intersection(errs)
-        if not fixers:
-            continue
-
-        if not (fixers - propose_addon_only):
-            continue
-
-        try:
-            pkg_source = get_source_package(pkg)
-        except NoSuchPackage:
-            note('%s: not in apt sources', pkg)
-            continue
-
-        try:
-            vcs_type, vcs_url = source_package_vcs_url(pkg_source)
-        except urlutils.InvalidURL as e:
-            note('%s: %s', pkg, e.extra)
-        except KeyError:
-            note('%s: no VCS URL found', pkg)
-            continue
-
-    mode, update_changelog, committer = apply_policy(policy, pkg_source)
-
-    if mode == 'skip':
-        note('%s: skipping, per policy', pkg)
-        continue
+for (vcs_url, mode, env, command) in todo:
+    pkg = env['PACKAGE']
+    committer = env['COMMITTER']
+    subargs = subparser.parse_args(command[1:])
 
     if args.pre_check:
         def pre_check(local_tree):
@@ -226,10 +152,11 @@ for pkg in todo:
         note('%s: %s', pkg, e)
     else:
         branch_changer = LintianFixer(
-                pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
-                update_changelog=update_changelog, build_verify=args.build_verify,
+                pkg, fixers=[fixer_scripts[fixer] for fixer in subargs.fixers],
+                update_changelog=subargs.update_changelog,
+                build_verify=args.build_verify,
                 pre_check=pre_check, post_check=post_check,
-                propose_addon_only=propose_addon_only,
+                propose_addon_only=args.propose_addon_only,
                 committer=committer)
         try:
             proposal, is_new = propose_or_push(
@@ -262,9 +189,8 @@ for pkg in todo:
                     tags.update(result.fixed_lintian_tags)
                 if is_new:
                     note('%s: Proposed fixes %r: %s', pkg, tags, proposal.url)
-                else:
+                elif tags:
                     note('%s: Updated proposal %s with fixes %r', pkg,
                          proposal.url, tags)
-            _mod_state.store_run(
-                vcs_url, ["lintian-brush"] + list(fixers),
-                proposal.url if proposal else None)
+                else:
+                    note('%s: No new fixes for proposal %s', pkg, proposal.url)
