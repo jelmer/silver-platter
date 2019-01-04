@@ -124,14 +124,20 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         # If there is an open or rejected merge proposal, resume that.
         base_branch = existing_branch
         existing_proposal = None
+        merged_proposal = None
         for mp in hoster.iter_proposals(
                 existing_branch, main_branch, status='all'):
             if not mp.is_merged():
                 existing_proposal = mp
                 break
+            else:
+                merged_proposal = mp
         else:
-            report('There is a proposal that has already been merged.')
-            changer.post_land(main_branch)
+            if merged_proposal is not None:
+                report(
+                    'There is a proposal that has already been merged at %s.',
+                    merged_proposal.url)
+                changer.post_land(main_branch)
             base_branch = main_branch
     with TemporarySprout(base_branch) as local_tree:
         # TODO(jelmer): Fetch these during the initial clone
