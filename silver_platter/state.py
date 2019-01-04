@@ -19,7 +19,10 @@
 import sqlite3
 import time
 
-con = sqlite3.connect('state.db')
+from xdg.BaseDirectory import save_data_path
+
+state_dir = save_data_path('silver-platter')
+con = sqlite3.connect(os.path.join(state_dir, 'state.db'))
 
 
 def store_run(vcs_url, command, merge_proposal_url):
