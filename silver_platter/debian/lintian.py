@@ -154,12 +154,8 @@ class LintianFixer(BranchChanger):
             if self._pre_check:
                 if not self._pre_check(local_tree):
                     return
-            if self._update_changelog == 'auto':
+            if self._update_changelog is None:
                 update_changelog = should_update_changelog(local_tree.branch)
-            elif self._update_changelog == 'update':
-                update_changelog = True
-            elif self._update_changelog == 'leave':
-                update_changelog = False
             else:
                 update_changelog = self._update_changelog
 

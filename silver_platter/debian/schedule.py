@@ -119,6 +119,11 @@ def schedule(lintian_log, policy, propose_addon_only, packages, fixers, shuffle=
             command.append("--update-changelog")
         elif update_changelog == "leave":
             command.append("--no-update-changelog")
+        elif update_changelog == "auto":
+            pass
+        else:
+            raise ValueError(
+                "Invalid value %r for update_changelog" % update_changelog)
         command += list(fixers)
         yield (
             vcs_url, mode,
