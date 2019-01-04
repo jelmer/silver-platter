@@ -153,7 +153,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 add_branch.push(local_add_branch)
                 assert (add_branch.last_revision() ==
                         local_add_branch.last_revision())
-        with local_tree.branch.lock_read():
+        with local_tree.branch.lock_write():
             if (mode == 'propose' and
                     existing_branch is not None and
                     (refresh or merge_conflicts(main_branch, local_tree.branch))):
