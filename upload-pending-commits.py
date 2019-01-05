@@ -116,26 +116,27 @@ class PackageUploader(BranchChanger):
                     self._last_uploaded_version, previous_version_in_branch))
 
         print("Checking revisions since %s" % self._last_uploaded_version)
-        last_release_revid = find_last_release_revid(
-                local_tree.branch, self._last_uploaded_version)
-        graph = local_tree.branch.repository.get_graph()
-        revids = list(graph.iter_lefthand_ancestry(
-            local_tree.branch.last_revision(), [last_release_revid]))
-        if not revids:
-            print("No pending changes")
-            return
-        if self._gpg_strategy:
-            count, result, all_verifiables = gpg.bulk_verify_signatures(
-                    local_tree.branch.repository, revids, self._gpg_strategy)
-            for revid, code, key in result:
-                if code != gpg.SIGNATURE_VALID:
-                    raise Exception(
-                        "No valid GPG signature on %r: %d" % (revid, code))
-        for revid, rev in local_tree.branch.repository.iter_revisions(revids):
-            check_revision(rev)
+        with local_tree.lock_read():
+            last_release_revid = find_last_release_revid(
+                    local_tree.branch, self._last_uploaded_version)
+            graph = local_tree.branch.repository.get_graph()
+            revids = list(graph.iter_lefthand_ancestry(
+                local_tree.branch.last_revision(), [last_release_revid]))
+            if not revids:
+                print("No pending changes")
+                return
+            if self._gpg_strategy:
+                count, result, all_verifiables = gpg.bulk_verify_signatures(
+                        local_tree.branch.repository, revids, self._gpg_strategy)
+                for revid, code, key in result:
+                    if code != gpg.SIGNATURE_VALID:
+                        raise Exception(
+                            "No valid GPG signature on %r: %d" % (revid, code))
+            for revid, rev in local_tree.branch.repository.iter_revisions(revids):
+                check_revision(rev)
 
-        if cl.distributions != "UNRELEASED":
-            raise Exception("Nothing left to release")
+            if cl.distributions != "UNRELEASED":
+                raise Exception("Nothing left to release")
         release(local_tree)
         target_dir = tempfile.mkdtemp()
         self._target_changes = _build_helper(
