@@ -3,7 +3,7 @@ Backends:
 - Support for Svn
 - Submit patches against non-Vcs packages to the BTS?
 
-* Provide a way to opt out
+* Provide a way to opt out automatically
  + Allow pull requests that update policy.conf?
  + Some web link that edits the policy file automatically?
 
@@ -13,17 +13,14 @@ Backends:
  + especially for stable debian releases
 
 * For "push" packages, don't require an associated hoster - make changes, commit, push back
- + Still need a way to convert "public read-only URL" to "writeable URL"
-
-* Maintain some optional state
- + Last time a branch was checked
- + Where the merge proposal is
-
-* Clean up merged merge proposals
- + Can't clean up ones that were closed, otherwise we'd create them again from scratch. :(
+ + Still need a way to convert "public read-only URL" to "writeable URL".
+  - For git, just use pushInsteadOf
 
 Upstream changes:
 * pngcrush
 * FSF
 
 - use debian.deb822.GPGV_DEFAULT_KEYRING in upload-pending-changes.py ?
+
+upload-pending-commits.py:
+ * Improve speed of verifying signatures
