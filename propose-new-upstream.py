@@ -17,23 +17,18 @@
 
 import silver_platter  # noqa: F401
 from silver_platter.debian import (
-    build,
     get_source_package,
     propose_or_push,
     source_package_vcs_url,
     )
-from silver_platter.proposal import (
-    BranchChanger,
+from silver_platter.debian.upstream import (
+    NewUpstreamMerger,
     )
 
-from debian.changelog import Changelog
-
 from breezy.branch import Branch
-from breezy.plugins.debian.cmds import cmd_merge_upstream
 from breezy.trace import note
 
 import argparse
-import subprocess
 parser = argparse.ArgumentParser(prog='propose-new-upstream')
 parser.add_argument("packages", nargs='+')
 parser.add_argument('--snapshot',
@@ -50,30 +45,6 @@ parser.add_argument("--dry-run",
                     action="store_true",
                     default=False)
 args = parser.parse_args()
-
-
-class NewUpstreamMerger(BranchChanger):
-
-    def __init__(self, snapshot=False):
-        self._snapshot = snapshot
-
-    def make_changes(self, local_tree):
-        # TODO(jelmer): Don't call UI implementation, refactor brz-debian
-        cmd_merge_upstream().run(directory=local_tree.basedir,
-                                 snapshot=self._snapshot)
-        if not args.no_build_verify:
-            build(local_tree.basedir)
-        with local_tree.get_file('debian/changelog') as f:
-            cl = Changelog(f.read())
-            self._upstream_version = cl.version.upstream_version
-        subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
-
-    def get_proposal_description(self, existing_proposal):
-        return "Merge new upstream release %s" % self._upstream_version
-
-    def should_create_proposal(self):
-        # There are no upstream merges too small.
-        return True
 
 
 for package in args.packages:
