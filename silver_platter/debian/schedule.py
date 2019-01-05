@@ -42,8 +42,8 @@ from .policy import (
     )
 
 
-def schedule(lintian_log, policy, propose_addon_only, packages, fixers,
-             shuffle=False):
+def schedule(lintian_log, policy, propose_addon_only, packages,
+             available_fixers, shuffle=False):
     if lintian_log:
         f = open(lintian_log, 'r')
     else:
@@ -79,7 +79,7 @@ def schedule(lintian_log, policy, propose_addon_only, packages, fixers,
     for pkg in todo:
         errs = lintian_errs[pkg]
 
-        fixers = fixers.intersection(errs)
+        fixers = available_fixers.intersection(errs)
         if not fixers:
             continue
 
