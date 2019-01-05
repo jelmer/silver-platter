@@ -17,6 +17,10 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from silver_platter.debian.schedule import schedule
+from silver_platter.debian.lintian import (
+    available_lintian_fixers,
+    )
+
 
 import argparse
 parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
@@ -38,7 +42,16 @@ parser.add_argument('--shuffle',
                     action='store_true')
 args = parser.parse_args()
 
+fixer_scripts = {}
+for fixer in available_lintian_fixers():
+    for tag in fixer.lintian_tags:
+        fixer_scripts[tag] = fixer
+
+available_fixers = set(fixer_scripts)
+if args.fixers:
+    available_fixers = available_fixers.intersection(set(args.fixers))
+
 for entry in schedule(
         args.lintian_log, args.policy, args.propose_addon_only, args.packages,
-        args.fixers, args.shuffle):
+        available_fixers, args.shuffle):
     print(entry)
