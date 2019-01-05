@@ -40,6 +40,10 @@ from breezy.plugins.propose import (
 
 
 def script_runner(local_tree, script):
+    """Run a script in a tree and commit the result.
+
+    This ignores newly added files.
+    """
     p = subprocess.Popen(script, cwd=local_tree.basedir,
                          stdout=subprocess.PIPE)
     (description, err) = p.communicate("")
@@ -56,6 +60,16 @@ def script_runner(local_tree, script):
 
 
 def autopropose(main_branch, callback, name, overwrite=False, labels=None):
+    """Create a new merge proposal based on a callback.
+
+    :param main_branch: Target branch
+    :param callback: Callback to call (should accept tree to commit to and
+        return a description for the proposal)
+    :param name: Branch name
+    :param overwrite: Whether to overwrite existing changes in the branch
+    :param labels: Labels for the merge proposal
+    :return: A MergeProposal object
+    """
     hoster = _mod_propose.get_hoster(main_branch)
     try:
         hoster.get_derived_branch(main_branch, name=name)
