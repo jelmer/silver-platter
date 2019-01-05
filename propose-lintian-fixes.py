@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import distro_info
 import socket
 import subprocess
 
@@ -100,6 +101,7 @@ subparser.add_argument(
     '--update-changelog', action="store_true", dest="update_changelog",
     help="force updating of the changelog", default=None)
 
+debian_info = distro_info.DebianDistroInfo()
 
 for (vcs_url, mode, env, command) in todo:
     pkg = env['PACKAGE']
@@ -154,6 +156,7 @@ for (vcs_url, mode, env, command) in todo:
         branch_changer = LintianFixer(
                 pkg, fixers=[fixer_scripts[fixer] for fixer in subargs.fixers],
                 update_changelog=subargs.update_changelog,
+                compat_release=debian_info.stable(),
                 build_verify=args.build_verify,
                 pre_check=pre_check, post_check=post_check,
                 propose_addon_only=args.propose_addon_only,

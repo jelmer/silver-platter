@@ -130,8 +130,9 @@ def create_mp_description(lines):
 class LintianFixer(BranchChanger):
     """BranchChanger that fixes lintian issues."""
 
-    def __init__(self, pkg, fixers, update_changelog, build_verify=False,
-                 pre_check=None, post_check=None, propose_addon_only=None,
+    def __init__(self, pkg, fixers, update_changelog, compat_release,
+                 build_verify=False, pre_check=None, post_check=None,
+                 propose_addon_only=None,
                  committer=None):
         self._pkg = pkg
         self._update_changelog = update_changelog
@@ -141,6 +142,7 @@ class LintianFixer(BranchChanger):
         self._fixers = fixers
         self._propose_addon_only = set(propose_addon_only)
         self._committer = committer
+        self._compat_release = compat_release
 
     def __repr__(self):
         return "LintianFixer(%r)" % (self._pkg, )
@@ -162,7 +164,8 @@ class LintianFixer(BranchChanger):
             self.applied, failed = run_lintian_fixers(
                     local_tree, self._fixers,
                     committer=self._committer,
-                    update_changelog=update_changelog)
+                    update_changelog=update_changelog,
+                    compat_release=self._compat_release)
             if failed:
                 note('%r: some fixers failed to run: %r',
                      self, failed)
