@@ -42,7 +42,8 @@ from .policy import (
     )
 
 
-def schedule(lintian_log, policy, propose_addon_only, packages, fixers, shuffle=False):
+def schedule(lintian_log, policy, propose_addon_only, packages, fixers,
+             shuffle=False):
     if lintian_log:
         f = open(lintian_log, 'r')
     else:
@@ -55,15 +56,6 @@ def schedule(lintian_log, policy, propose_addon_only, packages, fixers, shuffle=
         policy = read_policy(f)
 
     propose_addon_only = set(propose_addon_only)
-
-    fixer_scripts = {}
-    for fixer in available_lintian_fixers():
-        for tag in fixer.lintian_tags:
-            fixer_scripts[tag] = fixer
-
-    available_fixers = set(fixer_scripts)
-    if fixers:
-        available_fixers = available_fixers.intersection(set(fixers))
 
     todo = set()
     if not packages:
@@ -87,7 +79,7 @@ def schedule(lintian_log, policy, propose_addon_only, packages, fixers, shuffle=
     for pkg in todo:
         errs = lintian_errs[pkg]
 
-        fixers = available_fixers.intersection(errs)
+        fixers = fixers.intersection(errs)
         if not fixers:
             continue
 
