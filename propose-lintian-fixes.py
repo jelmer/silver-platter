@@ -156,8 +156,8 @@ for (vcs_url, mode, env, command) in todo:
         note('%s: %s', pkg, e)
     else:
         # If it's unknown which fixers are relevant, just try all of them.
-        if args.fixers:
-            fixers = args.fixers
+        if subargs.fixers:
+            fixers = subargs.fixers
         else:
             fixers = available_fixers
         branch_changer = LintianFixer(

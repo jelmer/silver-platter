@@ -32,6 +32,7 @@ from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
 
+from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs_url,
@@ -165,3 +166,10 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('unknown vcs %s' % vcs_type)
     except InvalidURL as e:
         raise ValueError('invalid URL: %s' % e)
+
+
+def open_packaging_branch(location):
+    if '/' not in location:
+        pkg_source = get_source_package(package)
+        vcs_type, location = source_package_vcs_url(pkg_source)
+    return Branch.open(location)
