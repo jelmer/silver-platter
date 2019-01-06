@@ -7,8 +7,6 @@ Backends:
  + Allow pull requests that update policy.conf?
  + Some web link that edits the policy file automatically?
 
-* Read apt lists from HTTP, rather than local system
-
 * Create cherry-pick merge proposals for bug fixes that are forwarded upstream
  + especially for stable debian releases
 
