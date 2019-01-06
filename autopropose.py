@@ -31,7 +31,6 @@ from breezy import (
     branch as _mod_branch,
     errors,
     )
-from breezy.i18n import gettext
 from breezy.commit import PointlessCommit
 from breezy.trace import note
 from breezy.plugins.propose import (
@@ -49,13 +48,13 @@ def script_runner(local_tree, script):
     (description, err) = p.communicate("")
     if p.returncode != 0:
         raise errors.BzrCommandError(
-            gettext("Script %s failed with error code %d") % (
+            "Script %s failed with error code %d" % (
                 script, p.returncode))
     try:
         local_tree.commit(description, allow_pointless=False)
     except PointlessCommit:
-        raise errors.BzrCommandError(gettext(
-            "Script didn't make any changes"))
+        raise errors.BzrCommandError(
+            "Script didn't make any changes")
     return description
 
 
@@ -109,4 +108,4 @@ script = os.path.abspath(args.script)
 proposal = autopropose(
         main_branch, lambda tree: script_runner(tree, script),
         name=name, overwrite=args.overwrite, labels=args.label)
-note(gettext('Merge proposal created: %s') % proposal.url)
+note('Merge proposal created: %s', proposal.url)
