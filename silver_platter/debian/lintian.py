@@ -23,8 +23,6 @@ __all__ = [
     'LintianFixer',
     ]
 
-from io import TextIOWrapper
-
 from breezy.errors import BzrError
 from breezy.trace import note
 from lintian_brush import (
@@ -37,6 +35,12 @@ from . import (
     should_update_changelog,
     )
 from ..proposal import BranchChanger
+
+
+DEFAULT_ADDON_FIXERS = [
+    'file-contains-trailing-whitespace',
+    'package-uses-old-debhelper-compat-version',
+    ]
 
 
 class PostCheckFailed(BzrError):

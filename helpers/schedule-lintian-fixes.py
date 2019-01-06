@@ -22,6 +22,7 @@ from silver_platter.debian.schedule import (
     )
 from silver_platter.debian.lintian import (
     available_lintian_fixers,
+    DEFAULT_ADDON_FIXERS,
     )
 
 
@@ -36,7 +37,7 @@ parser.add_argument("--policy",
 parser.add_argument('--propose-addon-only',
                     help='Fixers that should be considered add-on-only.',
                     type=str, action='append',
-                    default=['file-contains-trailing-whitespace'])
+                    default=DEFAULT_ADDON_FIXERS)
 parser.add_argument('--shuffle',
                     help='Shuffle order in which packages are processed.',
                     action='store_true')
