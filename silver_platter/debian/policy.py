@@ -25,15 +25,15 @@ def read_policy(f):
     return text_format.Parse(f.read(), policy_pb2.PolicyConfig())
 
 
-def matches(match, package_name, maintainer, uploaders):
+def matches(match, package_name, package_maintainer, package_uploaders):
     for maintainer in match.maintainer:
-        if maintainer != parseaddr(maintainer)[1]:
+        if maintainer != parseaddr(package_maintainer)[1]:
             return False
-    uploader_emails = [
+    package_uploader_emails = [
             parseaddr(uploader)[1]
-            for uploader in uploaders]
+            for uploader in package_uploaders]
     for uploader in match.uploader:
-        if uploader not in uploader_emails:
+        if uploader not in package_uploader_emails:
             return False
     for source_package in match.source_package:
         if source_package != package_name:
