@@ -27,8 +27,9 @@ import distro_info
 
 class PackageData(object):
 
-    def __init__(self, name, vcs_url, maintainer_email, uploader_emails):
+    def __init__(self, name, vcs_type, vcs_url, maintainer_email, uploader_emails):
         self.name = name
+        self.vcs_type = vcs_type
         self.vcs_url = vcs_url
         self.maintainer_email = maintainer_email
         self.uploader_emails = uploader_emails
@@ -68,11 +69,11 @@ class UDD(object):
         row = cursor.fetchone()
         uploader_emails = extract_uploader_emails(row[4])
         return PackageData(
-                name=row[0], vcs_url=row[2],
+                name=row[0], vcs_type=row[1], vcs_url=row[2],
                 maintainer_email=row[3],
                 uploader_emails=uploader_emails)
 
-    def iter_ubuntu_source_packages(self, packages=None):
+    def iter_ubuntu_source_packages(self, packages=None, shuffle=False):
         release = distro_info.UbuntuDistroInfo().devel()
         cursor = self._conn.cursor()
         cursor.execute("""\
@@ -81,12 +82,12 @@ class UDD(object):
         while row:
             uploader_emails = extract_uploader_emails(row[4])
             yield PackageData(
-                name=row[0], vcs_url=row[2],
+                name=row[0], vcs_type=row[1], vcs_url=row[2],
                 maintainer_email=row[3],
                 uploader_emails=uploader_emails)
             row = cursor.fetchone()
 
-    def iter_source_packages_by_lintian(self, tags, packages=None):
+    def iter_source_packages_by_lintian(self, tags, packages=None, shuffle=False):
         """Iterate over all of the packages affected by a set of tags."""
         package_rows = {}
         package_tags = {}
@@ -103,8 +104,13 @@ class UDD(object):
         cursor.execute("""\
 select distinct sources.source, sources.vcs_type, sources.vcs_url, sources.maintainer_email, sources.uploaders, lintian.tag from lintian inner join packages on packages.package = lintian.package and packages.version = lintian.package_version inner join sources on sources.version = packages.version and sources.source = packages.source and sources.release = 'sid' where lintian.tag in %s and lintian.package_type = 'binary' and vcs_type != ''""" + (" AND sources.source IN %s" if packages is not None else ""), (tuple(tags), ) + ((tuple(packages),) if packages is not None else ()))
         process(cursor)
-        for row in package_rows.values():
+        package_values = package_rows.values()
+        if shuffle:
+            package_values = list(package_values)
+            import random
+            random.shuffle(package_values)
+        for row in package_values:
             uploader_emails = extract_uploader_emails(row[4])
             yield PackageData(
-                name=row[0], vcs_url=row[2], maintainer_email=row[3],
+                name=row[0], vcs_type=row[1], vcs_url=row[2], maintainer_email=row[3],
                 uploader_emails=uploader_emails), package_tags[row[0]]

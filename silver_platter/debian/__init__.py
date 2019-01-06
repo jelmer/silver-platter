@@ -33,7 +33,10 @@ from debian.changelog import Version
 import itertools
 
 from breezy.plugins.debian.cmds import cmd_builddeb
-from breezy.plugins.debian.directory import source_package_vcs_url
+from breezy.plugins.debian.directory import (
+    source_package_vcs_url,
+    vcs_field_to_bzr_url_converters,
+    )
 from breezy.plugins.debian.errors import (
     BuildFailedError,
     MissingUpstreamTarball,
@@ -151,3 +154,6 @@ def propose_or_push(main_branch, *args, **kwargs):
             kwargs.get('additional_branches', []) +
             ["pristine-tar", "upstream"])
     return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)
+
+
+vcs_field_to_bzr_url_converters = dict(vcs_field_to_bzr_url_converters)

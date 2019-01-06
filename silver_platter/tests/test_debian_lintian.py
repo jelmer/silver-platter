@@ -22,7 +22,6 @@ from io import StringIO
 from ..debian.lintian import (
     parse_mp_description,
     create_mp_description,
-    read_lintian_log,
     )
 
 
@@ -51,38 +50,3 @@ Fix some issues reported by lintian
 * some change
 * some other change
 """, create_mp_description(['some change', 'some other change']))
-
-
-LINTIAN_LOG_EXAMPLE = """\
-N: Using profile debian/main.
-N: Setting up lab in /srv/org/scratch/temp-lintian-lab-Aitc_iD_k8 ...
-N: Starting on group 4digits/1.1.4-1
-N: Unpacking packages in group 4digits/1.1.4-1
-N: ----
-N: Processing source package 4digits (version 1.1.4-1, arch source) ...
-C: 4digits source (1.1.4-1) [source]: rules-requires-root-implicitly
-C: 4digits source (1.1.4-1) [source]: debian-build-system dh
-P: 4digits source (1.1.4-1) [source]: insecure-copyright-format-uri \
-http://www.debian.org/doc/packaging-manuals/copyright-format/1.0
-W: 4digits source (1.1.4-1) [source]: ancient-standards-version 3.9.5 \
-(released 2013-10-28) (current is 4.2.1)
-I: 4digits binary (1.1.4-1+b1) [i386]: hardening-no-bindnow \
-usr/games/4digits-text
-C: 4digits binary (1.1.4-1+b1) [i386]: ctrl-script postinst
-C: 4pane source (5.0-1) [source]: source-format 3.0 (quilt)
-P: 4pane source (5.0-1) [source]: insecure-copyright-format-uri \
-http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-"""
-
-
-class LintianLogReaderTests(unittest.TestCase):
-
-    def test_simple(self):
-        f = StringIO(LINTIAN_LOG_EXAMPLE)
-        self.assertEqual(
-                read_lintian_log(f),
-                {'4digits': {
-                    'ancient-standards-version',
-                    'hardening-no-bindnow',
-                    'insecure-copyright-format-uri'},
-                 '4pane': {'insecure-copyright-format-uri'}})

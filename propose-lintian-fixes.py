@@ -30,7 +30,7 @@ from silver_platter.debian.lintian import (
     PostCheckFailed,
     available_lintian_fixers,
     )
-from silver_platter.debian.schedule import schedule
+from silver_platter.debian.schedule import schedule_udd
 
 from breezy import (
     errors,
@@ -47,9 +47,6 @@ from breezy.plugins.propose.propose import (
 import argparse
 parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
 parser.add_argument("packages", nargs='*')
-parser.add_argument('--lintian-log',
-                    help="Path to lintian log file.", type=str,
-                    default=None)
 parser.add_argument("--fixers",
                     help="Fixers to run.", type=str, action='append')
 parser.add_argument("--policy",
@@ -92,8 +89,8 @@ available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
 
-todo = schedule(
-    args.lintian_log, args.policy, args.propose_addon_only, args.packages,
+todo = schedule_udd(
+    args.policy, args.propose_addon_only, args.packages,
     available_fixers, args.shuffle)
 
 subparser = argparse.ArgumentParser(prog='lintian-brush')

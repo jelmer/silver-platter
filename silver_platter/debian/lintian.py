@@ -48,50 +48,6 @@ class PostCheckFailed(BzrError):
         super(PostCheckFailed, self).__init__()
 
 
-def read_lintian_log(f):
-    """Read a lintian log file.
-
-    Args:
-      f: file-like object to read from
-    Returns:
-      dictionary mapping packages to sets of lintian tags
-    """
-    lintian_errs = {}
-    for l in f:
-        cs = l.split(' ')
-        if cs[0] not in ('E:', 'W:', 'I:', 'P:'):
-            continue
-        pkg = cs[1]
-        err = cs[5].strip()
-        lintian_errs.setdefault(pkg, set()).add(err)
-    return lintian_errs
-
-
-def download_latest_lintian_log():
-    """Download the latest lintian.log files.
-
-    Returns:
-    """
-    import gzip
-    import re
-    import urllib.parse
-    import urllib3
-
-    http = urllib3.PoolManager()
-
-    BASE = 'https://lintian.debian.org/'
-
-    page = http.request('GET', BASE)
-    resource = re.search(
-        b'<a href="(.*.gz)">lintian.log.gz<\\/a>', page.data).group(1)
-
-    log = http.request(
-        'GET',
-        urllib.parse.urljoin(BASE, resource.decode('ascii')),
-        preload_content=False)
-    return TextIOWrapper(gzip.GzipFile(fileobj=log))
-
-
 def parse_mp_description(description):
     """Parse a merge proposal description.
 

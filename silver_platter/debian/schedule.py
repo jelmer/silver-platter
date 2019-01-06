@@ -18,21 +18,14 @@
 from __future__ import absolute_import
 
 __all__ = [
-    'schedule',
+    'schedule_udd',
+    'schedule_ubuntu',
     ]
 
-import fnmatch
-
-from breezy import trace, urlutils
+from breezy import trace
 
 from . import (
-    get_source_package,
-    source_package_vcs_url,
-    NoSuchPackage,
-    )
-from .lintian import (
-    download_latest_lintian_log,
-    read_lintian_log,
+    vcs_field_to_bzr_url_converters,
     )
 from .policy import (
     read_policy,
@@ -47,9 +40,13 @@ def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
     with open(policy, 'r') as f:
         policy = read_policy(f)
 
-    for package in udd.iter_ubuntu_source_packages(packages if packages else None):
+    for package in udd.iter_ubuntu_source_packages(
+            packages if packages else None, shuffle=shuffle):
+        vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
+            package.vcs_url)
         mode, update_changelog, committer = apply_policy(
-            policy, package.name, package.maintainer_email, package.uploader_emails)
+            policy, package.name, package.maintainer_email,
+            package.uploader_emails)
 
         if mode == 'skip':
             trace.note('%s: skipping, per policy', package.name)
@@ -66,20 +63,26 @@ def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
             raise ValueError(
                 "Invalid value %r for update_changelog" % update_changelog)
         yield (
-            package.vcs_url, mode,
+            vcs_url, mode,
             {'COMMITTER': committer, 'PACKAGE': package.name},
             command)
 
 
-def schedule_udd(policy, propose_addon_only, packages, available_fixers, shuffle=False):
+def schedule_udd(policy, propose_addon_only, packages, available_fixers,
+                 shuffle=False):
     udd = UDD.public_udd_mirror()
 
     with open(policy, 'r') as f:
         policy = read_policy(f)
 
-    for package, tags in udd.iter_source_packages_by_lintian(available_fixers, packages if packages else None):
+    for package, tags in udd.iter_source_packages_by_lintian(
+            available_fixers, packages if packages else None, shuffle=shuffle):
+        vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
+            package.vcs_url)
+
         mode, update_changelog, committer = apply_policy(
-            policy, package.name, package.maintainer_email, package.uploader_emails)
+            policy, package.name, package.maintainer_email,
+            package.uploader_emails)
 
         if mode == 'skip':
             trace.note('%s: skipping, per policy', package.name)
@@ -97,89 +100,6 @@ def schedule_udd(policy, propose_addon_only, packages, available_fixers, shuffle
                 "Invalid value %r for update_changelog" % update_changelog)
         command += list(tags)
         yield (
-            package.vcs_url, mode,
-            {'COMMITTER': committer, 'PACKAGE': package.name},
-            command)
-
-
-def schedule(lintian_log, policy, propose_addon_only, packages,
-             available_fixers, shuffle=False):
-    if lintian_log:
-        f = open(lintian_log, 'r')
-    else:
-        f = download_latest_lintian_log()
-
-    with f:
-        lintian_errs = read_lintian_log(f)
-
-    with open(policy, 'r') as f:
-        policy = read_policy(f)
-
-    propose_addon_only = set(propose_addon_only)
-
-    todo = set()
-    if not packages:
-        todo = set(lintian_errs.keys())
-    else:
-        for pkg_match in packages:
-            todo.update(fnmatch.filter(lintian_errs.keys(), pkg_match))
-
-    trace.note(
-        "Considering %d packages for automatic change proposals",
-        len(todo))
-
-    todo = list(todo)
-
-    if shuffle:
-        import random
-        random.shuffle(todo)
-    else:
-        todo.sort()
-
-    for pkg in todo:
-        errs = lintian_errs[pkg]
-
-        fixers = available_fixers.intersection(errs)
-        if not fixers:
-            continue
-
-        if not (fixers - propose_addon_only):
-            continue
-
-        try:
-            pkg_source = get_source_package(pkg)
-        except NoSuchPackage:
-            trace.note('%s: not in apt sources', pkg)
-            continue
-
-        try:
-            vcs_type, vcs_url = source_package_vcs_url(pkg_source)
-        except urlutils.InvalidURL as e:
-            trace.note('%s: %s', pkg, e.extra)
-        except KeyError:
-            trace.note('%s: no VCS URL found', pkg)
-            continue
-
-        mode, update_changelog, committer = apply_policy(
-            policy, pkg_source["Package"], pkg_source["Maintainer"],
-            pkg_source.get("Uploaders", "").split(","))
-
-        if mode == 'skip':
-            trace.note('%s: skipping, per policy', pkg)
-            continue
-
-        command = ["lintian-brush"]
-        if update_changelog == "update":
-            command.append("--update-changelog")
-        elif update_changelog == "leave":
-            command.append("--no-update-changelog")
-        elif update_changelog == "auto":
-            pass
-        else:
-            raise ValueError(
-                "Invalid value %r for update_changelog" % update_changelog)
-        command += list(fixers)
-        yield (
             vcs_url, mode,
-            {'COMMITTER': committer, 'PACKAGE': pkg},
+            {'COMMITTER': committer, 'PACKAGE': package.name},
             command)

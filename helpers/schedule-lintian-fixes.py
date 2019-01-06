@@ -17,7 +17,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from silver_platter.debian.schedule import (
-    schedule,
     schedule_udd,
     schedule_ubuntu,
     )
@@ -29,9 +28,6 @@ from silver_platter.debian.lintian import (
 import argparse
 parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
 parser.add_argument("packages", nargs='*')
-parser.add_argument('--lintian-log',
-                    help="Path to lintian log file.", type=str,
-                    default=None)
 parser.add_argument("--fixers",
                     help="Fixers to run.", type=str, action='append')
 parser.add_argument("--policy",
@@ -43,9 +39,6 @@ parser.add_argument('--propose-addon-only',
                     default=['file-contains-trailing-whitespace'])
 parser.add_argument('--shuffle',
                     help='Shuffle order in which packages are processed.',
-                    action='store_true')
-parser.add_argument('--udd',
-                    help='Query UDD.',
                     action='store_true')
 parser.add_argument('--ubuntu',
                     help='Query Ubuntu.',
@@ -65,13 +58,9 @@ if args.ubuntu:
     schedule_iter = schedule_ubuntu(
             args.policy, args.propose_addon_only, args.packages,
             args.shuffle)
-elif args.udd:
+else:
     schedule_iter = schedule_udd(
             args.policy, args.propose_addon_only, args.packages,
             available_fixers, args.shuffle)
-else:
-    schedule_iter = schedule(
-            args.lintian_log, args.policy, args.propose_addon_only,
-            args.packages, available_fixers, args.shuffle)
 for entry in schedule_iter:
         print(entry)
