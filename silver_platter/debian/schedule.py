@@ -25,7 +25,7 @@ __all__ = [
 from breezy import trace
 
 from . import (
-    vcs_field_to_bzr_url_converters,
+    convert_debian_vcs_url,
     )
 from .policy import (
     read_policy,
@@ -43,11 +43,9 @@ def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
     for package in udd.iter_ubuntu_source_packages(
             packages if packages else None, shuffle=shuffle):
         try:
-            vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
-                package.vcs_url)
-        except KeyError:
-            trace.note('%s: skipping unsupported VCS %s', package.name,
-                       package.vcs_type)
+            vcs_url = convert_debian_vcs_url(package.vcs_type, package.vcs_url)
+        except ValueError as e:
+            trace.note('%s: %s', package.name, e)
             continue
         mode, update_changelog, committer = apply_policy(
             policy, package.name, package.maintainer_email,
@@ -83,11 +81,9 @@ def schedule_udd(policy, propose_addon_only, packages, available_fixers,
     for package, tags in udd.iter_source_packages_by_lintian(
             available_fixers, packages if packages else None, shuffle=shuffle):
         try:
-            vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
-                package.vcs_url)
-        except KeyError:
-            trace.note('%s: skipping unsupported VCS %s', package.name,
-                       package.vcs_type)
+            vcs_url = convert_debian_vcs_url(package.vcs_type, package.vcs_url)
+        except ValueError as e:
+            trace.note('%s: %s', package.name, e)
             continue
 
         mode, update_changelog, committer = apply_policy(

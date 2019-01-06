@@ -37,6 +37,7 @@ from breezy.plugins.debian.directory import (
     source_package_vcs_url,
     vcs_field_to_bzr_url_converters,
     )
+from breezy.urlutils import InvalidURL
 from breezy.plugins.debian.errors import (
     BuildFailedError,
     MissingUpstreamTarball,
@@ -156,4 +157,11 @@ def propose_or_push(main_branch, *args, **kwargs):
     return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)
 
 
-vcs_field_to_bzr_url_converters = dict(vcs_field_to_bzr_url_converters)
+def convert_debian_vcs_url(vcs_type, vcs_url):
+    converters = dict(vcs_field_to_bzr_url_converters)
+    try:
+        return converters[vcs_type](vcs_url)
+    except KeyError:
+        raise ValueError('unknown vcs %s' % vcs_type)
+    except InvalidURL as e:
+        raise ValueError('invalid URL: %s' % e)
