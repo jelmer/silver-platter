@@ -22,6 +22,8 @@ from __future__ import absolute_import
 from email.utils import parseaddr
 import psycopg2
 
+import distro_info
+
 
 class PackageData(object):
 
@@ -70,6 +72,20 @@ class UDD(object):
                 maintainer_email=row[3],
                 uploader_emails=uploader_emails)
 
+    def iter_ubuntu_source_packages(self, packages=None):
+        release = distro_info.UbuntuDistroInfo().devel()
+        cursor = self._conn.cursor()
+        cursor.execute("""\
+            select distinct source, vcs_type, vcs_url, maintainer_email, uploaders FROM ubuntu_sources WHERE vcs_type != '' AND release = %s""" + (" AND source IN %s" if packages is not None else ""), ((release, ) + ((tuple(packages),) if packages is not None else ())))
+        row = cursor.fetchone()
+        while row:
+            uploader_emails = extract_uploader_emails(row[4])
+            yield PackageData(
+                name=row[0], vcs_url=row[2],
+                maintainer_email=row[3],
+                uploader_emails=uploader_emails)
+            row = cursor.fetchone()
+
     def iter_source_packages_by_lintian(self, tags, packages=None):
         """Iterate over all of the packages affected by a set of tags."""
         package_rows = {}
@@ -82,10 +98,10 @@ class UDD(object):
                 package_tags.setdefault(row[0], []).append(row[5])
                 row = cursor.fetchone()
         cursor.execute("""\
-            select distinct sources.source, sources.vcs_type, sources.vcs_url, sources.maintainer_email, sources.uploaders, lintian.tag from lintian full outer join sources on sources.source = lintian.package and sources.version = lintian.package_version where tag in %s and package_type = 'source' and vcs_type != ''""" + (" AND sources.source IN %s" if packages is not None else ""), (tuple(tags), ) + ((tuple(packages),) if packages is not None else ()))
+            select distinct sources.source, sources.vcs_type, sources.vcs_url, sources.maintainer_email, sources.uploaders, lintian.tag from lintian full outer join sources on sources.source = lintian.package and sources.version = lintian.package_version and sources.release = 'sid' where tag in %s and package_type = 'source' and vcs_type != ''""" + (" AND sources.source IN %s" if packages is not None else ""), (tuple(tags), ) + ((tuple(packages),) if packages is not None else ()))
         process(cursor)
         cursor.execute("""\
-select distinct sources.source, sources.vcs_type, sources.vcs_url, sources.maintainer_email, sources.uploaders, lintian.tag from lintian inner join packages on packages.package = lintian.package and packages.version = lintian.package_version inner join sources on sources.version = packages.version and sources.source = packages.source where lintian.tag in %s and lintian.package_type = 'binary' and vcs_type != ''""" + (" AND sources.source IN %s" if packages is not None else ""), (tuple(tags), ) + ((tuple(packages),) if packages is not None else ()))
+select distinct sources.source, sources.vcs_type, sources.vcs_url, sources.maintainer_email, sources.uploaders, lintian.tag from lintian inner join packages on packages.package = lintian.package and packages.version = lintian.package_version inner join sources on sources.version = packages.version and sources.source = packages.source and sources.release = 'sid' where lintian.tag in %s and lintian.package_type = 'binary' and vcs_type != ''""" + (" AND sources.source IN %s" if packages is not None else ""), (tuple(tags), ) + ((tuple(packages),) if packages is not None else ()))
         process(cursor)
         for row in package_rows.values():
             uploader_emails = extract_uploader_emails(row[4])
