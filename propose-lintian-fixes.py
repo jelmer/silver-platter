@@ -155,8 +155,13 @@ for (vcs_url, mode, env, command) in todo:
     except errors.TransportError as e:
         note('%s: %s', pkg, e)
     else:
+        # If it's unknown which fixers are relevant, just try all of them.
+        if args.fixers:
+            fixers = args.fixers
+        else:
+            fixers = available_fixers
         branch_changer = LintianFixer(
-                pkg, fixers=[fixer_scripts[fixer] for fixer in subargs.fixers],
+                pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
                 update_changelog=subargs.update_changelog,
                 compat_release=debian_info.stable(),
                 build_verify=args.build_verify,
