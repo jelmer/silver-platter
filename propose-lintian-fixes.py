@@ -166,7 +166,7 @@ for (vcs_url, mode, env, command) in todo:
                 propose_addon_only=args.propose_addon_only,
                 committer=committer)
         try:
-            proposal, is_new = propose_or_push(
+            result = propose_or_push(
                     main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
                     possible_hosters=possible_hosters,
@@ -190,14 +190,16 @@ for (vcs_url, mode, env, command) in todo:
             note('%s: %s', pkg, e)
             continue
         else:
-            if proposal:
+            if result.merge_proposal:
                 tags = set()
-                for result, unused_summary in branch_changer.applied:
-                    tags.update(result.fixed_lintian_tags)
-                if is_new:
-                    note('%s: Proposed fixes %r: %s', pkg, tags, proposal.url)
+                for brush_result, unused_summary in branch_changer.applied:
+                    tags.update(brush_result.fixed_lintian_tags)
+                if result.is_new:
+                    note('%s: Proposed fixes %r: %s', pkg, tags,
+                         result.merge_proposal.url)
                 elif tags:
                     note('%s: Updated proposal %s with fixes %r', pkg,
-                         proposal.url, tags)
+                         result.merge_proposal.url, tags)
                 else:
-                    note('%s: No new fixes for proposal %s', pkg, proposal.url)
+                    note('%s: No new fixes for proposal %s', pkg,
+                         result.merge_proposal.url)

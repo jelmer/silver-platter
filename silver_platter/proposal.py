@@ -83,6 +83,13 @@ class BranchChanger(object):
         """
 
 
+class BranchChangerResult(object):
+
+    def __init__(self, merge_proposal, is_new):
+        self.merge_proposal = merge_proposal
+        self.is_new = is_new
+
+
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
                     additional_branches=None, refresh=False):
@@ -172,11 +179,11 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 report('closing existing merge proposal - no new revisions')
                 # TODO(jelmer): existing_proposal.close()
-            return None, None
+            return BranchChangerResult(None, is_new=None)
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from
             # main branch.
-            return existing_proposal, False
+            return BranchChangerResult(existing_proposal, is_new=False)
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
@@ -206,7 +213,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     changer.post_land(target_branch)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
-                return None, None
+                return BranchChangerResult(None, is_new=None)
             if not dry_run:
                 if existing_branch is not None:
                     local_branch.push(existing_branch, overwrite=overwrite)
@@ -219,7 +226,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 if not dry_run:
                     existing_proposal.set_description(mp_description)
-                return existing_proposal, False
+                return BranchChangerResult(existing_proposal, is_new=False)
             else:
                 if not dry_run:
                     proposal_builder = hoster.get_proposer(
@@ -231,7 +238,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         report('Permission denied while trying to create '
                                'proposal.')
                         raise
-                    return mp, True
-                return None, True
+                    return BranchChangerResult(mp, is_new=True)
+                return BranchChangerResult(None, is_new=True)
         else:
-            return None, None
+            return BranchChangerResult(None, is_new=False)
