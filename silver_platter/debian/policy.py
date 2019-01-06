@@ -25,29 +25,30 @@ def read_policy(f):
     return text_format.Parse(f.read(), policy_pb2.PolicyConfig())
 
 
-def matches(match, control):
+def matches(match, package_name, maintainer, uploaders):
     for maintainer in match.maintainer:
-        if maintainer != parseaddr(control["Maintainer"])[1]:
+        if maintainer != parseaddr(maintainer)[1]:
             return False
     uploader_emails = [
             parseaddr(uploader)[1]
-            for uploader in control.get("Uploaders", "").split(",")]
+            for uploader in uploaders]
     for uploader in match.uploader:
         if uploader not in uploader_emails:
             return False
     for source_package in match.source_package:
-        if source_package != control["Package"]:
+        if source_package != package_name:
             return False
     return True
 
 
-def apply_policy(config, control):
+def apply_policy(config, package_name, maintainer, uploaders):
     mode = policy_pb2.skip
     update_changelog = 'auto'
     committer = None
     for policy in config.policy:
         if (policy.match and
-                not any([matches(m, control) for m in policy.match])):
+                not any([matches(m, package_name, maintainer, uploaders)
+                         for m in policy.match])):
             continue
         if policy.mode is not None:
             mode = policy.mode
@@ -64,6 +65,6 @@ def apply_policy(config, control):
         {policy_pb2.auto: 'auto',
          policy_pb2.update_changelog: 'update',
          policy_pb2.leave_changelog: 'leave',
-        }[update_changelog],
+         }[update_changelog],
         committer if committer else None)
 

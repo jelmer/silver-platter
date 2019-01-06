@@ -22,7 +22,6 @@ __all__ = [
     ]
 
 import fnmatch
-from io import StringIO
 
 from breezy import trace, urlutils
 
@@ -32,7 +31,6 @@ from . import (
     NoSuchPackage,
     )
 from .lintian import (
-    available_lintian_fixers,
     download_latest_lintian_log,
     read_lintian_log,
     )
@@ -40,6 +38,38 @@ from .policy import (
     read_policy,
     apply_policy,
     )
+from .udd import UDD
+
+
+def schedule_udd(policy, propose_addon_only, packages, available_fixers, shuffle=False):
+    udd = UDD.public_udd_mirror()
+
+    with open(policy, 'r') as f:
+        policy = read_policy(f)
+
+    for package, tags in udd.iter_source_packages_by_lintian(available_fixers, packages if packages else None):
+        mode, update_changelog, committer = apply_policy(
+            policy, package.name, package.maintainer_email, package.uploader_emails)
+
+        if mode == 'skip':
+            trace.note('%s: skipping, per policy', package.name)
+            continue
+
+        command = ["lintian-brush"]
+        if update_changelog == "update":
+            command.append("--update-changelog")
+        elif update_changelog == "leave":
+            command.append("--no-update-changelog")
+        elif update_changelog == "auto":
+            pass
+        else:
+            raise ValueError(
+                "Invalid value %r for update_changelog" % update_changelog)
+        command += list(tags)
+        yield (
+            package.vcs_url, mode,
+            {'COMMITTER': committer, 'PACKAGE': package.name},
+            command)
 
 
 def schedule(lintian_log, policy, propose_addon_only, packages,
@@ -100,7 +130,9 @@ def schedule(lintian_log, policy, propose_addon_only, packages,
             trace.note('%s: no VCS URL found', pkg)
             continue
 
-        mode, update_changelog, committer = apply_policy(policy, pkg_source)
+        mode, update_changelog, committer = apply_policy(
+            policy, pkg_source["Package"], pkg_source["Maintainer"],
+            pkg_source.get("Uploaders", "").split(","))
 
         if mode == 'skip':
             trace.note('%s: skipping, per policy', pkg)

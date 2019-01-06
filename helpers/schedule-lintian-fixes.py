@@ -16,7 +16,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from silver_platter.debian.schedule import schedule
+from silver_platter.debian.schedule import schedule, schedule_udd
 from silver_platter.debian.lintian import (
     available_lintian_fixers,
     )
@@ -40,6 +40,9 @@ parser.add_argument('--propose-addon-only',
 parser.add_argument('--shuffle',
                     help='Shuffle order in which packages are processed.',
                     action='store_true')
+parser.add_argument('--udd',
+                    help='Query UDD.',
+                    action='store_true')
 args = parser.parse_args()
 
 fixer_scripts = {}
@@ -51,7 +54,13 @@ available_fixers = set(fixer_scripts)
 if args.fixers:
     available_fixers = available_fixers.intersection(set(args.fixers))
 
-for entry in schedule(
-        args.lintian_log, args.policy, args.propose_addon_only, args.packages,
-        available_fixers, args.shuffle):
-    print(entry)
+if args.udd:
+    for entry in schedule_udd(
+            args.policy, args.propose_addon_only, args.packages,
+            available_fixers, args.shuffle):
+        print(entry)
+else:
+    for entry in schedule(
+            args.lintian_log, args.policy, args.propose_addon_only, args.packages,
+            available_fixers, args.shuffle):
+        print(entry)
