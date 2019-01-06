@@ -42,8 +42,13 @@ def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
 
     for package in udd.iter_ubuntu_source_packages(
             packages if packages else None, shuffle=shuffle):
-        vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
-            package.vcs_url)
+        try:
+            vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
+                package.vcs_url)
+        except KeyError:
+            trace.note('%s: skipping unsupported VCS %s', package.name,
+                       package.vcs_type)
+            continue
         mode, update_changelog, committer = apply_policy(
             policy, package.name, package.maintainer_email,
             package.uploader_emails)
@@ -77,8 +82,13 @@ def schedule_udd(policy, propose_addon_only, packages, available_fixers,
 
     for package, tags in udd.iter_source_packages_by_lintian(
             available_fixers, packages if packages else None, shuffle=shuffle):
-        vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
-            package.vcs_url)
+        try:
+            vcs_url = vcs_field_to_bzr_url_converters[package.vcs_type](
+                package.vcs_url)
+        except KeyError:
+            trace.note('%s: skipping unsupported VCS %s', package.name,
+                       package.vcs_type)
+            continue
 
         mode, update_changelog, committer = apply_policy(
             policy, package.name, package.maintainer_email,
