@@ -45,5 +45,8 @@ setup(
           'Operating System :: POSIX',
           'Topic :: Software Development :: Version Control',
       ],
+      entry_points={
+          'console_scripts': ['autopropose=silver_platter.autopropose:main'],
+      },
       testsuite='silver_platter.tests.test_suite',
       )

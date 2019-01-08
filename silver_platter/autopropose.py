@@ -19,7 +19,6 @@
 
 from __future__ import absolute_import
 
-import argparse
 import os
 import subprocess
 
@@ -88,24 +87,30 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None):
             description=description, labels=labels)
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('url', help='URL of branch to work on.', type=str)
-parser.add_argument('script', help='Path to script to run.', type=str)
-parser.add_argument('--overwrite', action="store_true",
-                    help='Overwrite changes when publishing')
-parser.add_argument('--label', type=str,
-                    help='Label to attach', action="append", default=[])
-parser.add_argument('--name', type=str,
-                    help='Proposed branch name', default=None)
-args = parser.parse_args()
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', help='URL of branch to work on.', type=str)
+    parser.add_argument('script', help='Path to script to run.', type=str)
+    parser.add_argument('--overwrite', action="store_true",
+                        help='Overwrite changes when publishing')
+    parser.add_argument('--label', type=str,
+                        help='Label to attach', action="append", default=[])
+    parser.add_argument('--name', type=str,
+                        help='Proposed branch name', default=None)
+    args = parser.parse_args()
 
-main_branch = _mod_branch.Branch.open(args.url)
-if args.name is None:
-    name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
-else:
-    name = args.name
-script = os.path.abspath(args.script)
-proposal = autopropose(
-        main_branch, lambda tree: script_runner(tree, script),
-        name=name, overwrite=args.overwrite, labels=args.label)
-note('Merge proposal created: %s', proposal.url)
+    main_branch = _mod_branch.Branch.open(args.url)
+    if args.name is None:
+        name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
+    else:
+        name = args.name
+    script = os.path.abspath(args.script)
+    proposal = autopropose(
+            main_branch, lambda tree: script_runner(tree, script),
+            name=name, overwrite=args.overwrite, labels=args.label)
+    note('Merge proposal created: %s', proposal.url)
+
+
+if __name__ == '__main__':
+    main()
