@@ -17,11 +17,14 @@
 
 """Support for uploading packages."""
 
+import silver_platter   # noqa: F401
+
 import datetime
 import tempfile
 
 from debian.changelog import Version
 
+from breezy.branch import Branch
 from breezy import gpg
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -39,6 +42,12 @@ from breezy.plugins.debian.util import (
 
 from ..proposal import BranchChanger
 from ..utils import TemporarySprout
+
+from . import (
+    get_source_package,
+    source_package_vcs_url,
+    propose_or_push,
+    )
 
 
 def check_revision(rev, min_commit_age):
@@ -133,3 +142,49 @@ class PackageUploader(BranchChanger):
                     local_tree, local_tree.branch, target_dir,
                     builder=self._builder)
         dput_changes(self._target_changes)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(prog='upload-pending-commits')
+    parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        '--acceptable-keys',
+        help='List of acceptable GPG keys',
+        action='append', default=[], type=str)
+    parser.add_argument(
+        '--no-gpg-verification',
+        help='Do not verify GPG signatures', action='store_true')
+    parser.add_argument(
+        '--min-commit-age',
+        help='Minimum age of the last commit, in days',
+        type=int, default=7)
+    # TODO(jelmer): Support requiring that autopkgtest is present and passing
+    args = parser.parse_args()
+
+    for package in args.packages:
+        pkg_source = get_source_package(package)
+        vcs_type, vcs_url = source_package_vcs_url(pkg_source)
+        main_branch = Branch.open(vcs_url)
+        with main_branch.lock_read():
+            branch_config = main_branch.get_config_stack()
+            if args.no_gpg_verification:
+                gpg_strategy = None
+            else:
+                gpg_strategy = gpg.GPGStrategy(branch_config)
+                if args.acceptable_keys:
+                    acceptable_keys = args.acceptable_keys
+                else:
+                    acceptable_keys = list(get_maintainer_keys(
+                        gpg_strategy.context))
+                gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
+
+            branch_changer = PackageUploader(
+                    pkg_source["Package"], pkg_source["Version"], gpg_strategy)
+
+            propose_or_push(
+                main_branch, "new-upload", branch_changer, mode='push')
+
+
+if __name__ == '__main__':
+    main()
