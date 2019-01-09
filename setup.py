@@ -46,7 +46,10 @@ setup(
           'Topic :: Software Development :: Version Control',
       ],
       entry_points={
-          'console_scripts': ['autopropose=silver_platter.autopropose:main'],
+          'console_scripts': [
+              'autopropose=silver_platter.autopropose:main',
+              'propose-new-upstream=silver_platter.debian.upstream:main',
+            ],
       },
       testsuite='silver_platter.tests.test_suite',
       )

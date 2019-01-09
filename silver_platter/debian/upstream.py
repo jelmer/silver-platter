@@ -17,6 +17,8 @@
 
 """Support for merging new upstream versions."""
 
+import silver_platter  # noqa: F401
+
 from debian.changelog import Changelog
 
 from breezy.plugins.debian.cmds import cmd_merge_upstream
@@ -28,7 +30,11 @@ from ..proposal import (
 
 from . import (
     build,
+    open_packaging_branch,
+    propose_or_push,
     )
+
+from breezy.trace import note
 
 
 class NewUpstreamMerger(BranchChanger):
@@ -54,3 +60,46 @@ class NewUpstreamMerger(BranchChanger):
     def should_create_proposal(self):
         # There are no upstream merges too small.
         return True
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(prog='propose-new-upstream')
+    parser.add_argument("packages", nargs='+')
+    parser.add_argument(
+        '--snapshot',
+        help='Merge a new upstream snapshot rather than a release',
+        action='store_true')
+    parser.add_argument(
+        '--no-build-verify',
+        help='Do not build package to verify it.',
+        action='store_true')
+    parser.add_argument(
+        '--pre-check',
+        help='Command to run to check whether to process package.',
+        type=str)
+    parser.add_argument(
+        "--dry-run",
+        help="Create branches but don't push or propose anything.",
+        action="store_true",
+        default=False)
+    args = parser.parse_args()
+
+    for package in args.packages:
+        main_branch = open_packaging_branch(package)
+        # TODO(jelmer): Work out how to propose pristine-tar changes for
+        # merging upstream.
+        result = propose_or_push(
+                main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
+                mode='propose', dry_run=args.dry_run)
+        if result.merge_proposal:
+            if result.is_new:
+                note('%s: Created new merge proposal %s.',
+                     package, result.merge_proposal.url)
+            else:
+                note('%s: Updated merge proposal %s.',
+                     package, result.merge_proposal.url)
+
+
+if __name__ == '__main__':
+    main()
