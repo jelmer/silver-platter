@@ -76,8 +76,6 @@ parser.add_argument('--refresh',
                     action='store_true')
 args = parser.parse_args()
 
-dry_run = args.dry_run
-
 possible_transports = []
 possible_hosters = []
 
@@ -173,7 +171,8 @@ for (vcs_url, mode, env, command) in todo:
                     main_branch, "lintian-fixes", branch_changer, mode,
                     possible_transports=possible_transports,
                     possible_hosters=possible_hosters,
-                    refresh=args.refresh)
+                    refresh=args.refresh,
+                    dry_run=args.dry_run)
         except UnsupportedHoster:
             note('%s: Hoster unsupported', pkg)
             continue
