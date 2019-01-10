@@ -47,9 +47,10 @@ setup(
       ],
       entry_points={
           'console_scripts': [
-              'autopropose=silver_platter.autopropose:main',
-              'propose-new-upstream=silver_platter.debian.upstream:main',
-              'upload-pending=silver_platters.debian.uploader:main',
+#              'autopropose=silver_platter.autopropose:main',
+#              'propose-new-upstream=silver_platter.debian.upstream:main',
+#              'upload-pending=silver_platters.debian.uploader:main',
+              'svp=silver_platter.__main__:main',
             ],
       },
       testsuite='silver_platter.tests.test_suite',

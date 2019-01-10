@@ -4,6 +4,7 @@ Command-line interface
 Example commands:
 
 svp autopropose lp:brz-email ./some-script.py
+svp autopropose --name=blah lp:brz-email ./some-script.py
 
 svp lintian-brush samba
 svp lintian-brush --mode=propose samba

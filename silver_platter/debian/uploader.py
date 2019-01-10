@@ -144,9 +144,7 @@ class PackageUploader(BranchChanger):
         dput_changes(self._target_changes)
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(prog='upload-pending-commits')
+def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
         '--acceptable-keys',
@@ -159,9 +157,9 @@ def main():
         '--min-commit-age',
         help='Minimum age of the last commit, in days',
         type=int, default=7)
-    # TODO(jelmer): Support requiring that autopkgtest is present and passing
-    args = parser.parse_args()
 
+
+def main(args):
     for package in args.packages:
         pkg_source = get_source_package(package)
         vcs_type, vcs_url = source_package_vcs_url(pkg_source)
@@ -187,4 +185,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(prog='upload-pending-commits')
+    setup_parser(parser)
+    # TODO(jelmer): Support requiring that autopkgtest is present and passing
+    args = parser.parse_args()
+    main(args)

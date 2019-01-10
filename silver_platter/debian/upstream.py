@@ -62,9 +62,7 @@ class NewUpstreamMerger(BranchChanger):
         return True
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(prog='propose-new-upstream')
+def setup_parser(parser):
     parser.add_argument("packages", nargs='+')
     parser.add_argument(
         '--snapshot',
@@ -83,8 +81,9 @@ def main():
         help="Create branches but don't push or propose anything.",
         action="store_true",
         default=False)
-    args = parser.parse_args()
 
+
+def main(args):
     for package in args.packages:
         main_branch = open_packaging_branch(package)
         # TODO(jelmer): Work out how to propose pristine-tar changes for
@@ -102,4 +101,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(prog='propose-new-upstream')
+    setup_parser(parser)
+    args = parser.parse_args()
+    main(args)

@@ -87,9 +87,7 @@ def autopropose(main_branch, callback, name, overwrite=False, labels=None):
             description=description, labels=labels)
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
+def setup_parser(parser):
     parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('--overwrite', action="store_true",
@@ -98,8 +96,9 @@ def main():
                         help='Label to attach', action="append", default=[])
     parser.add_argument('--name', type=str,
                         help='Proposed branch name', default=None)
-    args = parser.parse_args()
 
+
+def main(args):
     main_branch = _mod_branch.Branch.open(args.url)
     if args.name is None:
         name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
@@ -113,4 +112,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    setup_parser(parser)
+    args = parser.parse_args()
+    main(args)
