@@ -32,7 +32,6 @@ setup(
       },
       keywords="git bzr vcs github gitlab launchpad",
       packages=['silver_platter'],
-      scripts=['autopropose.py', 'propose-lintian-fixes.py'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'License :: OSI Approved :: GNU General Public License (GPL)',
@@ -47,9 +46,9 @@ setup(
       ],
       entry_points={
           'console_scripts': [
-#              'autopropose=silver_platter.autopropose:main',
-#              'propose-new-upstream=silver_platter.debian.upstream:main',
-#              'upload-pending=silver_platters.debian.uploader:main',
+              # 'autopropose=silver_platter.autopropose:main',
+              # 'propose-new-upstream=silver_platter.debian.upstream:main',
+              # 'upload-pending=silver_platters.debian.uploader:main',
               'svp=silver_platter.__main__:main',
             ],
       },

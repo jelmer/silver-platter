@@ -20,6 +20,7 @@ import silver_platter   # noqa: F401
 import sys
 from . import autopropose
 from .debian import (
+    lintian as debian_lintian,
     upstream as debian_upstream,
     uploader as debian_uploader,
     )
@@ -29,6 +30,7 @@ subcommands = [
     ('autopropose', autopropose),
     ('propose-new-upstream', debian_upstream),
     ('upload-pending', debian_uploader),
+    ('lintian-brush', debian_lintian),
     ]
 
 
