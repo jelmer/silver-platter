@@ -200,6 +200,7 @@ def setup_parser(parser):
 
 
 def main(args):
+    import argparse
     import distro_info
     import socket
     import subprocess
