@@ -15,6 +15,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import datetime
+
 from breezy.branch import Branch
 from breezy.trace import note
 from breezy import (
@@ -85,9 +87,11 @@ class BranchChanger(object):
 
 class BranchChangerResult(object):
 
-    def __init__(self, merge_proposal, is_new):
+    def __init__(self, start_time, merge_proposal, is_new):
         self.merge_proposal = merge_proposal
         self.is_new = is_new
+        self.start_time = start_time
+        self.finish_time = datetime.datetime.now()
 
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
@@ -110,6 +114,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       tuple with create merge proposal (if any), and
       boolean indicating whether the merge proposal is new
     """
+    start_time = datetime.datetime.now()
     if additional_branches is None:
         additional_branches = []
     if mode not in ('push', 'propose', 'attempt-push'):
@@ -179,11 +184,12 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 report('closing existing merge proposal - no new revisions')
                 # TODO(jelmer): existing_proposal.close()
-            return BranchChangerResult(None, is_new=None)
+            return BranchChangerResult(start_time, None, is_new=None)
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from
             # main branch.
-            return BranchChangerResult(existing_proposal, is_new=False)
+            return BranchChangerResult(
+                start_time, existing_proposal, is_new=False)
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
@@ -213,7 +219,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     changer.post_land(target_branch)
         if mode == 'propose':
             if not existing_branch and not changer.should_create_proposal():
-                return BranchChangerResult(None, is_new=None)
+                return BranchChangerResult(start_time, None, is_new=None)
             if not dry_run:
                 if existing_branch is not None:
                     local_branch.push(existing_branch, overwrite=overwrite)
@@ -226,7 +232,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             if existing_proposal is not None:
                 if not dry_run:
                     existing_proposal.set_description(mp_description)
-                return BranchChangerResult(existing_proposal, is_new=False)
+                return BranchChangerResult(
+                    start_time, existing_proposal, is_new=False)
             else:
                 if not dry_run:
                     proposal_builder = hoster.get_proposer(
@@ -238,7 +245,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         report('Permission denied while trying to create '
                                'proposal.')
                         raise
-                    return BranchChangerResult(mp, is_new=True)
-                return BranchChangerResult(None, is_new=True)
+                    return BranchChangerResult(start_time, mp, is_new=True)
+                return BranchChangerResult(start_time, None, is_new=True)
         else:
-            return BranchChangerResult(None, is_new=False)
+            return BranchChangerResult(start_time, None, is_new=False)

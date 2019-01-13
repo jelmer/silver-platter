@@ -107,5 +107,7 @@ def schedule_udd(policy, propose_addon_only, packages, available_fixers,
         command += list(tags)
         yield (
             vcs_url, mode,
-            {'COMMITTER': committer, 'PACKAGE': package.name},
+            {'COMMITTER': committer,
+             'PACKAGE': package.name,
+             'MAINTAINER_EMAIL': package.maintainer_email},
             command)
