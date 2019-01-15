@@ -17,148 +17,12 @@
 
 from __future__ import absolute_import
 
-__all__ = [
-    'available_lintian_fixers',
-    'PostCheckFailed',
-    'LintianFixer',
-    ]
-
-from breezy.errors import BzrError
-from breezy.trace import note
-from lintian_brush import (
+from silver_platter.debian.lintian import (
+    DEFAULT_ADDON_FIXERS,
     available_lintian_fixers,
-    run_lintian_fixers,
+    LintianFixer,
+    PostCheckFailed,
     )
-
-from . import (
-    build,
-    open_packaging_branch,
-    should_update_changelog,
-    )
-from ..proposal import BranchChanger
-
-
-DEFAULT_ADDON_FIXERS = [
-    'file-contains-trailing-whitespace',
-    'package-uses-old-debhelper-compat-version',
-    ]
-
-
-class PostCheckFailed(BzrError):
-    """The post check failed."""
-
-    _fmt = "Running post-check failed."
-
-    def __init__(self):
-        super(PostCheckFailed, self).__init__()
-
-
-def parse_mp_description(description):
-    """Parse a merge proposal description.
-
-    Args:
-      description: The description to parse
-    Returns:
-      list of one-line descriptions of changes
-    """
-    existing_lines = description.splitlines()
-    if len(existing_lines) == 1:
-        return existing_lines
-    else:
-        return [l[2:].rstrip('\n')
-                for l in existing_lines if l.startswith('* ')]
-
-
-def create_mp_description(lines):
-    """Create a merge proposal description.
-
-    Args:
-      lines: List of one-line descriptions of fixes
-    Returns:
-      A string with a merge proposal description
-    """
-    if len(lines) > 1:
-        mp_description = ["Fix some issues reported by lintian\n"]
-        for line in lines:
-            line = "* %s\n" % line
-            if line not in mp_description:
-                mp_description.append(line)
-    else:
-        mp_description = lines[0]
-    return ''.join(mp_description)
-
-
-class LintianFixer(BranchChanger):
-    """BranchChanger that fixes lintian issues."""
-
-    def __init__(self, pkg, fixers, update_changelog, compat_release,
-                 build_verify=False, pre_check=None, post_check=None,
-                 propose_addon_only=None,
-                 committer=None):
-        self._pkg = pkg
-        self._update_changelog = update_changelog
-        self._build_verify = build_verify
-        self._pre_check = pre_check
-        self._post_check = post_check
-        self._fixers = fixers
-        self._propose_addon_only = set(propose_addon_only)
-        self._committer = committer
-        self._compat_release = compat_release
-
-    def __repr__(self):
-        return "LintianFixer(%r)" % (self._pkg, )
-
-    def make_changes(self, local_tree):
-        with local_tree.lock_write():
-            if not local_tree.has_filename('debian/control'):
-                note('%r: missing control file', self)
-                return
-            since_revid = local_tree.last_revision()
-            if self._pre_check:
-                if not self._pre_check(local_tree):
-                    return
-            if self._update_changelog is None:
-                update_changelog = should_update_changelog(local_tree.branch)
-            else:
-                update_changelog = self._update_changelog
-
-            self.applied, failed = run_lintian_fixers(
-                    local_tree, self._fixers,
-                    committer=self._committer,
-                    update_changelog=update_changelog,
-                    compat_release=self._compat_release)
-            if failed:
-                note('%r: some fixers failed to run: %r',
-                     self, failed)
-            if not self.applied:
-                note('%r: no fixers to apply', self)
-                return
-
-        if self._post_check:
-            if not self._post_check(local_tree, since_revid):
-                raise PostCheckFailed()
-
-        if self._build_verify:
-            build(local_tree.basedir)
-
-    def get_proposal_description(self, existing_proposal):
-        if existing_proposal:
-            existing_description = existing_proposal.get_description()
-            existing_lines = parse_mp_description(existing_description)
-        else:
-            existing_lines = []
-        return create_mp_description(
-            existing_lines + [l for r, l in self.applied])
-
-    def should_create_proposal(self):
-        tags = set()
-        for result, unused_summary in self.applied:
-            tags.update(result.fixed_lintian_tags)
-        # Is there enough to create a new merge proposal?
-        if not tags - self._propose_addon_only:
-            note('%r: only add-on fixers found', self)
-            return False
-        return True
 
 
 def setup_parser(parser):
@@ -166,6 +30,10 @@ def setup_parser(parser):
     parser.add_argument(
         "--fixers",
         help="Fixers to run.", type=str, action='append')
+    parser.add_argument(
+        "--policy",
+        help="Policy file to read.", type=str,
+        default='policy.conf')
     parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
@@ -187,26 +55,17 @@ def setup_parser(parser):
         '--build-verify',
         help='Build package to verify it.', action='store_true')
     parser.add_argument(
+        '--shuffle',
+        help='Shuffle order in which packages are processed.',
+        action='store_true')
+    parser.add_argument(
         '--refresh',
         help='Discard old branch and apply fixers from scratch.',
         action='store_true')
-    parser.add_argument(
-        '--committer',
-        help='Committer identity',
-        type=str)
-    parser.add_argument(
-        '--mode',
-        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
-        default="propose", type=str)
-    parser.add_argument(
-        '--no-update-changelog', action="store_false", default=None,
-        dest="update_changelog", help="do not update the changelog")
-    parser.add_argument(
-        '--update-changelog', action="store_true", dest="update_changelog",
-        help="force updating of the changelog", default=None)
 
 
 def main(args):
+    import argparse
     import distro_info
     import socket
     import subprocess
@@ -216,13 +75,14 @@ def main(args):
         propose_or_push,
         BuildFailedError,
         MissingUpstreamTarball,
-        NoSuchPackage,
         )
+    from .schedule import schedule_udd
 
     from breezy import (
         errors,
         )
 
+    from breezy.branch import Branch
     from breezy.trace import note
 
     from breezy.plugins.propose.propose import (
@@ -242,9 +102,26 @@ def main(args):
     if args.fixers:
         available_fixers = available_fixers.intersection(set(args.fixers))
 
+    todo = schedule_udd(
+        args.policy, args.propose_addon_only, args.packages,
+        available_fixers, args.shuffle)
+
+    subparser = argparse.ArgumentParser(prog='lintian-brush')
+    subparser.add_argument("fixers", nargs='*')
+    subparser.add_argument(
+        '--no-update-changelog', action="store_false", default=None,
+        dest="update_changelog", help="do not update the changelog")
+    subparser.add_argument(
+        '--update-changelog', action="store_true", dest="update_changelog",
+        help="force updating of the changelog", default=None)
+
     debian_info = distro_info.DebianDistroInfo()
 
-    for pkg in args.packages:
+    for (vcs_url, mode, env, command) in todo:
+        pkg = env['PACKAGE']
+        committer = env['COMMITTER']
+        subargs = subparser.parse_args(command[1:])
+
         if args.pre_check:
             def pre_check(local_tree):
                 try:
@@ -273,10 +150,8 @@ def main(args):
         note('Processing: %s', pkg)
 
         try:
-            main_branch = open_packaging_branch(
-                pkg, possible_transports=possible_transports)
-        except NoSuchPackage:
-            note('%s: no such package', pkg)
+            main_branch = Branch.open(
+                    vcs_url, possible_transports=possible_transports)
         except socket.error:
             note('%s: ignoring, socket error', pkg)
         except errors.NotBranchError as e:
@@ -293,22 +168,22 @@ def main(args):
             note('%s: %s', pkg, e)
         else:
             # If it's unknown which fixers are relevant, just try all of them.
-            if args.fixers:
-                fixers = args.fixers
+            if subargs.fixers:
+                fixers = subargs.fixers
             else:
                 fixers = available_fixers
             branch_changer = LintianFixer(
                     pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
-                    update_changelog=args.update_changelog,
+                    update_changelog=subargs.update_changelog,
                     compat_release=debian_info.stable(),
                     build_verify=args.build_verify,
                     pre_check=pre_check, post_check=post_check,
                     propose_addon_only=args.propose_addon_only,
-                    committer=args.committer)
+                    committer=committer)
             try:
                 result = propose_or_push(
-                        main_branch, "lintian-fixes", branch_changer,
-                        args.mode, possible_transports=possible_transports,
+                        main_branch, "lintian-fixes", branch_changer, mode,
+                        possible_transports=possible_transports,
                         possible_hosters=possible_hosters,
                         refresh=args.refresh,
                         dry_run=args.dry_run)

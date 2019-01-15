@@ -168,8 +168,8 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('invalid URL: %s' % e)
 
 
-def open_packaging_branch(location):
+def open_packaging_branch(location, possible_transports=None):
     if '/' not in location:
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
-    return Branch.open(location)
+    return Branch.open(location, possible_transports=possible_transports)
