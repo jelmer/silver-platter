@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -62,6 +62,8 @@ def setup_parser(parser):
         '--refresh',
         help='Discard old branch and apply fixers from scratch.',
         action='store_true')
+    parser.add_argument(
+        '--ubuntu', help='Query Ubuntu.', action='store_true')
 
 
 def main(args):
@@ -71,12 +73,15 @@ def main(args):
     import subprocess
 
     import silver_platter   # noqa: F401
-    from . import (
+    from silver_platter.debian import (
         propose_or_push,
         BuildFailedError,
         MissingUpstreamTarball,
         )
-    from .schedule import schedule_udd
+    from silver_platter.debian.schedule import (
+        schedule_udd,
+        schedule_ubuntu,
+        )
 
     from breezy import (
         errors,
@@ -102,9 +107,14 @@ def main(args):
     if args.fixers:
         available_fixers = available_fixers.intersection(set(args.fixers))
 
-    todo = schedule_udd(
-        args.policy, args.propose_addon_only, args.packages,
-        available_fixers, args.shuffle)
+    if args.ubuntu:
+        todo = schedule_ubuntu(
+                args.policy, args.propose_addon_only, args.packages,
+                args.shuffle)
+    else:
+        todo = schedule_udd(
+            args.policy, args.propose_addon_only, args.packages,
+            available_fixers, args.shuffle)
 
     subparser = argparse.ArgumentParser(prog='lintian-brush')
     subparser.add_argument("fixers", nargs='*')

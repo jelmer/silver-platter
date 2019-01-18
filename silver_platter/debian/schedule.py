@@ -34,7 +34,28 @@ from .policy import (
 from .udd import UDD
 
 
+def get_ubuntu_package_url(launchpad, package):
+    ubuntu = launchpad.distributions['ubuntu']
+    lp_repo = launchpad.git_repositories.getDefaultRepository(
+        target=ubuntu.getSourcePackage(name=package))
+    if lp_repo is None:
+        raise ValueError('No git repository for %s' % package)
+    return lp_repo.git_ssh_url
+
+
+
 def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
+    from breezy.plugins.launchpad.lp_api import (
+        Launchpad,
+        get_cache_directory,
+        httplib2,
+        )
+    proxy_info = httplib2.proxy_info_from_environment('https')
+    cache_directory = get_cache_directory()
+    launchpad = Launchpad.login_with(
+        'bzr', 'production', cache_directory, proxy_info=proxy_info,
+        version='devel')
+
     udd = UDD.public_udd_mirror()
 
     with open(policy, 'r') as f:
@@ -42,17 +63,18 @@ def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
 
     for package in udd.iter_ubuntu_source_packages(
             packages if packages else None, shuffle=shuffle):
-        try:
-            vcs_url = convert_debian_vcs_url(package.vcs_type, package.vcs_url)
-        except ValueError as e:
-            trace.note('%s: %s', package.name, e)
-            continue
         mode, update_changelog, committer = apply_policy(
             policy, package.name, package.maintainer_email,
             package.uploader_emails)
 
         if mode == 'skip':
             trace.note('%s: skipping, per policy', package.name)
+            continue
+
+        try:
+            vcs_url = get_ubuntu_package_url(launchpad, package.name)
+        except ValueError as e:
+            trace.note('%s: %s', package.name, e)
             continue
 
         command = ["lintian-brush"]
