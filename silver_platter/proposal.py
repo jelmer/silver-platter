@@ -15,6 +15,13 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+__all__ = [
+    'UnsupportedHoster',
+    'BranchChanger',
+    'BranchChangerResult',
+    'propose_or_push',
+    ]
+
 import datetime
 
 from breezy.branch import Branch
@@ -25,6 +32,7 @@ from breezy import (
     )
 from breezy.plugins.propose.propose import (
     get_hoster,
+    UnsupportedHoster,
     )
 
 
@@ -169,7 +177,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         with local_tree.branch.lock_write():
             if (mode == 'propose' and
                     existing_branch is not None and
-                    (refresh or merge_conflicts(main_branch, local_tree.branch))):
+                    (refresh or
+                        merge_conflicts(main_branch, local_tree.branch))):
                 report('restarting branch')
                 main_branch_revid = main_branch.last_revision()
                 local_tree.update(revision=main_branch_revid)

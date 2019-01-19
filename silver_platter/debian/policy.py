@@ -67,4 +67,3 @@ def apply_policy(config, package_name, maintainer, uploaders):
          policy_pb2.leave_changelog: 'leave',
          }[update_changelog],
         committer if committer else None)
-

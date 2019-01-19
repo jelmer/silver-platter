@@ -31,7 +31,7 @@ from breezy import (
     errors,
     )
 from breezy.commit import PointlessCommit
-from breezy.trace import note
+from breezy.trace import note, show_error
 from breezy.plugins.propose import (
     propose as _mod_propose,
     )
@@ -105,9 +105,14 @@ def main(args):
     else:
         name = args.name
     script = os.path.abspath(args.script)
-    proposal = autopropose(
-            main_branch, lambda tree: script_runner(tree, script),
-            name=name, overwrite=args.overwrite, labels=args.label)
+    try:
+        proposal = autopropose(
+                main_branch, lambda tree: script_runner(tree, script),
+                name=name, overwrite=args.overwrite, labels=args.label)
+    except _mod_propose.UnsupportedHoster as e:
+        show_error('No known supported hoster for %s. Run \'svp login\'?',
+                   e.branch.user_url)
+        return 1
     note('Merge proposal created: %s', proposal.url)
 
 

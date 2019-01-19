@@ -17,8 +17,6 @@
 
 import unittest
 
-from io import StringIO
-
 from ..debian.lintian import (
     parse_mp_description,
     create_mp_description,

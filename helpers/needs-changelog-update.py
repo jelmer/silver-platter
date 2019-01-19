@@ -17,7 +17,6 @@
 
 import silver_platter   # noqa: F401
 from silver_platter.debian import (
-    should_update_changelog,
     _changelog_stats,
     )
 
@@ -26,7 +25,8 @@ from breezy.branch import Branch
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('location', help='Branch location to check.', type=str, default='.')
+parser.add_argument('location', help='Branch location to check.', type=str,
+                    default='.')
 args = parser.parse_args()
 
 branch = Branch.open(args.location)

@@ -43,7 +43,6 @@ def get_ubuntu_package_url(launchpad, package):
     return lp_repo.git_ssh_url
 
 
-
 def schedule_ubuntu(policy, propose_addon_only, packages, shuffle=False):
     from breezy.plugins.launchpad.lp_api import (
         Launchpad,
