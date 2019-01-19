@@ -77,7 +77,7 @@ class UDD(object):
         release = distro_info.UbuntuDistroInfo().devel()
         cursor = self._conn.cursor()
         cursor.execute("""\
-            select distinct source, vcs_type, vcs_url, maintainer_email, uploaders FROM ubuntu_sources WHERE vcs_type != '' AND release = %s AND version LIKE '%%ubuntu%%'""" + (" AND source IN %s" if packages is not None else ""), ((release, ) + ((tuple(packages),) if packages is not None else ())))
+            select distinct source, vcs_type, vcs_url, maintainer_email, uploaders FROM ubuntu_sources WHERE vcs_type != '' AND release = %s AND version LIKE '%%ubuntu%%' AND NOT EXISTS (SELECT * FROM sources WHERE source = ubuntu_sources.source)""" + (" AND source IN %s" if packages is not None else ""), ((release, ) + ((tuple(packages),) if packages is not None else ())))
         row = cursor.fetchone()
         while row:
             uploader_emails = extract_uploader_emails(row[4])
