@@ -33,6 +33,7 @@ from . import (
     open_packaging_branch,
     propose_or_push,
     )
+from breezy.plugins.debian.errors import UpstreamAlreadyImported
 
 from breezy.trace import note
 
@@ -88,9 +89,13 @@ def main(args):
         main_branch = open_packaging_branch(package)
         # TODO(jelmer): Work out how to propose pristine-tar changes for
         # merging upstream.
-        result = propose_or_push(
-                main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
-                mode='propose', dry_run=args.dry_run)
+        try:
+            result = propose_or_push(
+                    main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
+                    mode='propose', dry_run=args.dry_run)
+        except UpstreamAlreadyImported as e:
+            note('Last upstream version %s already imported', e.version)
+            return 1
         if result.merge_proposal:
             if result.is_new:
                 note('%s: Created new merge proposal %s.',
