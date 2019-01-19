@@ -150,7 +150,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     'There is a proposal that has already been merged at %s.',
                     merged_proposal.url)
                 changer.post_land(main_branch)
-            base_branch = main_branch
+                base_branch = main_branch
+                overwrite = True
     with TemporarySprout(base_branch) as local_tree:
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_branches:
