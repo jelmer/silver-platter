@@ -156,7 +156,7 @@ def setup_parser(parser):
     parser.add_argument(
         '--min-commit-age',
         help='Minimum age of the last commit, in days',
-        type=int, default=7)
+        type=int, default=0)
 
 
 def main(args):
