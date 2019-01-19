@@ -28,7 +28,7 @@ from .debian import (
 
 subcommands = [
     ('autopropose', autopropose),
-    ('propose-new-upstream', debian_upstream),
+    ('new-upstream', debian_upstream),
     ('upload-pending', debian_uploader),
     ('lintian-brush', debian_lintian),
     ]
