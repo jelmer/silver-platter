@@ -178,7 +178,8 @@ def main(args):
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
             branch_changer = PackageUploader(
-                    pkg_source["Package"], pkg_source["Version"], gpg_strategy)
+                    pkg_source["Package"], pkg_source["Version"], gpg_strategy,
+                    args.min_commit_age)
 
             propose_or_push(
                 main_branch, "new-upload", branch_changer, mode='push')
