@@ -50,6 +50,7 @@ setup(
               # 'propose-new-upstream=silver_platter.debian.upstream:main',
               # 'upload-pending=silver_platters.debian.uploader:main',
               'svp=silver_platter.__main__:main',
+              'debian-svp=silver_platter.debian.__main__:main',
             ],
       },
       testsuite='silver_platter.tests.test_suite',
