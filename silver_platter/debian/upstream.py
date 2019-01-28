@@ -91,8 +91,8 @@ def main(args):
         # merging upstream.
         try:
             result = propose_or_push(
-                    main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
-                    mode='propose', dry_run=args.dry_run)
+                main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
+                mode='propose', dry_run=args.dry_run)
         except UpstreamAlreadyImported as e:
             note('Last upstream version %s already imported', e.version)
             return 1
