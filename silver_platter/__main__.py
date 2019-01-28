@@ -18,19 +18,13 @@
 import argparse
 import silver_platter   # noqa: F401
 import sys
-from . import autopropose
-from .debian import (
-    lintian as debian_lintian,
-    upstream as debian_upstream,
-    uploader as debian_uploader,
+from . import (
+    autopropose,
     )
 
 
 subcommands = [
-    ('autopropose', autopropose),
-    ('new-upstream', debian_upstream),
-    ('upload-pending', debian_uploader),
-    ('lintian-brush', debian_lintian),
+    ('autopropose', autopropose.setup_parser, autopropose.main),
     ]
 
 
@@ -38,9 +32,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog='svp')
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
-    for name, mod in subcommands:
-        getattr(mod, 'setup_parser')(subparsers.add_parser(name))
-        callbacks[name] = getattr(mod, 'main')
+    for name, setup_parser, run in subcommands:
+        setup_parser(subparsers.add_parser(name))
+        callbacks[name] = run
     args = parser.parse_args(argv)
     if args.subcommand is None:
         parser.print_usage()
