@@ -41,6 +41,10 @@ def script_runner(local_tree, script):
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
+
+    :param local_tree: Local tree to run script in
+    :param script: Script to run
+    :return: Description as reported by script
     """
     p = subprocess.Popen(script, cwd=local_tree.basedir,
                          stdout=subprocess.PIPE)

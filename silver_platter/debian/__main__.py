@@ -24,7 +24,8 @@ import sys
 
 
 def autopropose_setup_parser(parser):
-    parser.add_argument('url', help='URL of branch to work on.', type=str)
+    parser.add_argument(
+        'package', help='Package name or URL of branch to work on.', type=str)
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('--overwrite', action="store_true",
                         help='Overwrite changes when publishing')
@@ -46,7 +47,7 @@ def autopropose_main(args):
     from . import (
         open_packaging_branch,
         )
-    main_branch = open_packaging_branch(args.url)
+    main_branch = open_packaging_branch(args.package)
     if args.name is None:
         name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
     else:

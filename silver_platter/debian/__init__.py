@@ -169,6 +169,10 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
 
 
 def open_packaging_branch(location, possible_transports=None):
+    """Open a packaging branch from a location string.
+
+    location can either be a package name or a full URL
+    """
     if '/' not in location:
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
