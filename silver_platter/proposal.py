@@ -193,7 +193,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         if local_branch.last_revision() == main_branch.last_revision():
             if existing_proposal is not None:
                 report('closing existing merge proposal - no new revisions')
-                # TODO(jelmer): existing_proposal.close()
+                existing_proposal.close()
             return BranchChangerResult(start_time, None, is_new=None)
         if orig_revid == local_branch.last_revision():
             # No new revisions added on this iteration, but still diverged from
