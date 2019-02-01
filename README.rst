@@ -29,17 +29,17 @@ Working with Debian packages
 Several common operations for Debian packages have dedicated subcommands
 in silver-platter.
 
-See ``svp COMMAND --help`` for more details.
+See ``debian-svp COMMAND --help`` for more details.
 
 Examples::
 
-    svp lintian-brush samba
-    svp lintian-brush --mode=propose samba
-    svp lintian-brush --mode=push samba
+    debian-svp lintian-brush samba
+    debian-svp lintian-brush --mode=propose samba
+    debian-svp lintian-brush --mode=push samba
 
-    svp upload-pending tdb
+    debian-svp upload-pending tdb
 
-    svp merge-upstream --no-build-verify tdb
+    debian-svp merge-upstream --no-build-verify tdb
 
 Credentials
 ~~~~~~~~~~~
