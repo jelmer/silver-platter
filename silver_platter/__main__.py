@@ -23,8 +23,17 @@ from . import (
     )
 
 
+def credentials_main(args):
+    from breezy.plugins.propose.propose import hosters
+
+    for name, hoster_cls in hosters.items():
+        for instance in hoster_cls.iter_instances():
+            print('%s (%s)' % (instance.base_url, name))
+
+
 subcommands = [
     ('autopropose', autopropose.setup_parser, autopropose.main),
+    ('credentials', None, credentials_main),
     ]
 
 
@@ -33,7 +42,9 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
     for name, setup_parser, run in subcommands:
-        setup_parser(subparsers.add_parser(name))
+        subparser = subparsers.add_parser(name)
+        if setup_parser is not None:
+            setup_parser(subparser)
         callbacks[name] = run
     args = parser.parse_args(argv)
     if args.subcommand is None:
