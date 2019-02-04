@@ -22,7 +22,7 @@ setup(
       author="Jelmer Vernooij",
       author_email="jelmer@jelmer.uk",
       url="https://jelmer.uk/code/silver-platter",
-      description="Automatic merge version control updater",
+      description="Automatic merge proposal creeator",
       version='0.0.1',
       license='GNU GPL v2 or later',
       project_urls={
