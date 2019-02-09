@@ -79,6 +79,9 @@ def main(argv=None):
         ]
 
     parser = argparse.ArgumentParser(prog='debian-svp')
+    parser.add_argument(
+        '--version', action='version',
+        version='%(prog)s ' + silver_platter.version_string)
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
     for name, setup_parser, run in subcommands:

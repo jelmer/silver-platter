@@ -20,6 +20,7 @@ import silver_platter   # noqa: F401
 import sys
 from . import (
     autopropose,
+    version_string,
     )
 
 
@@ -39,6 +40,8 @@ subcommands = [
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='svp')
+    parser.add_argument(
+        '--version', action='version', version='%(prog)s ' + version_string)
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
     for name, setup_parser, run in subcommands:
