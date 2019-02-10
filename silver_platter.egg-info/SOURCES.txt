@@ -1,6 +1,12 @@
+AUTHORS
+LICENSE
+MANIFEST.in
 README.rst
+TODO
 setup.cfg
 setup.py
+man/debian-svp.1
+man/svp.1
 silver_platter/__init__.py
 silver_platter/__main__.py
 silver_platter/autopropose.py

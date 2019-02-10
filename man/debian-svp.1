@@ -1,0 +1,31 @@
+.TH DEBIAN-SVP "1" "February 2019" "debian-svp 0.0.1" "User Commands"
+.SH NAME
+debian-svp \- create and manage merge proposals against Debian packaging branches
+.SH DESCRIPTION
+usage: debian\-svp [\-h] [\-\-version]
+.IP
+{autopropose,new\-upstream,upload\-pending,lintian\-brush} ...
+.SS "COMMAND OVERVIEW"
+.TP
+.B "debian-svp autopropose"
+Create a merge proposal from a script.
+.TP
+.B "debian-svp new-upstream"
+Create a merge proposal merging a new upstream version.
+.TP
+.B "debian-svp upload-pending"
+Upload pending commits in a packaging branch.
+.TP
+.B "debian-svp lintian-brush"
+Create a merge proposal fixing lintian issues.
+.SS "optional arguments:"
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+show this help message and exit
+.TP
+\fB\-\-version\fR
+show program's version number and exit
+.SH "SEE ALSO"
+\&\fIdebian-svp\fR\|(1)
+.SH AUTHORS
+Jelmer Vernooij <jelmer@jelmer.uk>
