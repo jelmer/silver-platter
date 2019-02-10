@@ -14,6 +14,8 @@ have conflicts due to upstream changes.
 
 In the simplest form, this could be running::
 
+    svp login https://github.com/
+
     svp autopropose https://github.com/jelmer/dulwich ./some-script.py
 
 At the moment, the following code hosters are supported:
@@ -22,6 +24,9 @@ At the moment, the following code hosters are supported:
  * `Launchpad <https://launchpad.net/>`_
  * `GitLab <https://gitlab.com/>`_ instances, such as Debian's
    `Salsa <https://salsa.debian.org>`_
+
+Getting started
+~~~~~~~~~~~~~~~
 
 Working with Debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,5 +49,11 @@ Examples::
 Credentials
 ~~~~~~~~~~~
 
-Silver-Platter is built on top of `Breezy <https://www.breezy-vcs.org/>`_, and
-uses Breezy for credential management.
+The ``svp hosters`` subcommand can be used to display the hosting sites that
+silver-platter is aware of::
+
+    svp hosters
+
+And to log into a new hosting site, simply run ``svp login BASE-URL``, e.g.::
+
+    svp login https://launchpad.net/
