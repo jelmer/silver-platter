@@ -23,6 +23,8 @@ from . import (
     version_string,
     )
 
+from breezy.trace import show_error
+
 
 def hosters_main(args):
     from breezy.plugins.propose.propose import hosters
@@ -32,9 +34,49 @@ def hosters_main(args):
             print('%s (%s)' % (instance.base_url, name))
 
 
+def login_setup_parser(parser):
+    parser.add_argument('url', help='URL of branch to work on.', type=str)
+
+
+def login_main(args):
+    from launchpadlib import uris as lp_uris
+
+    hoster = None
+    # TODO(jelmer): Don't special case various hosters here
+    if args.url.startswith('https://github.com'):
+        hoster = 'github'
+    for key, root in lp_uris.web_roots.items():
+        if args.url.startswith(root) or args.url == root.rstrip('/'):
+            hoster = 'launchpad'
+            lp_service_root = lp_uris.service_roots[key]
+    if hoster is None:
+        hoster = 'gitlab'
+
+    from breezy.plugins.propose.cmds import cmd_github_login, cmd_gitlab_login
+    if hoster == 'gitlab':
+        cmd = cmd_gitlab_login()
+        cmd._setup_outf()
+        return cmd.run(args.url)
+    elif hoster == 'github':
+        cmd = cmd_github_login()
+        cmd._setup_outf()
+        return cmd.run()
+    elif hoster == 'launchpad':
+        from breezy.plugins.launchpad.cmds import cmd_launchpad_login
+        cmd = cmd_launchpad_login()
+        cmd._setup_outf()
+        cmd.run()
+        from breezy.plugins.launchpad import lp_api
+        lp_api.connect_launchpad(lp_service_root, version='devel')
+    else:
+        show_error('Unknown hoster %r.', hoster)
+        return 1
+
+
 subcommands = [
     ('autopropose', autopropose.setup_parser, autopropose.main),
     ('hosters', None, hosters_main),
+    ('login', login_setup_parser, login_main),
     ]
 
 
