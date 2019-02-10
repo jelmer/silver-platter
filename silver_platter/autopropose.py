@@ -37,6 +37,11 @@ from breezy.plugins.propose import (
     )
 
 
+class ScriptMadeNoChanges(errors.BzrError):
+
+    _fmt = "Script made no changes."
+
+
 def script_runner(local_tree, script):
     """Run a script in a tree and commit the result.
 
@@ -56,8 +61,7 @@ def script_runner(local_tree, script):
     try:
         local_tree.commit(description, allow_pointless=False)
     except PointlessCommit:
-        raise errors.BzrCommandError(
-            "Script didn't make any changes")
+        raise ScriptMadeNoChanges()
     return description
 
 
@@ -116,6 +120,14 @@ def main(args):
     except _mod_propose.UnsupportedHoster as e:
         show_error('No known supported hoster for %s. Run \'svp login\'?',
                    e.branch.user_url)
+        return 1
+    except _mod_propose.HosterLoginRequired as e:
+        show_error(
+            'Credentials for hosting site at %r missing. Run \'svp login\'?',
+            e.hoster.base_url)
+        return 1
+    except ScriptMadeNoChanges:
+        show_error('Script did not make any changes.')
         return 1
     note('Merge proposal created: %s', proposal.url)
 
