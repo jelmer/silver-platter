@@ -31,7 +31,11 @@ setup(
           "GitHub": "https://github.com/jelmer/silver-platter",
       },
       keywords="git bzr vcs github gitlab launchpad",
-      packages=['silver_platter'],
+      packages=[
+          'silver_platter',
+          'silver_platter.debian',
+          'silver_platter.tests',
+      ],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'License :: OSI Approved :: GNU General Public License (GPL)',
