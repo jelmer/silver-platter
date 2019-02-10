@@ -24,7 +24,7 @@ from . import (
     )
 
 
-def credentials_main(args):
+def hosters_main(args):
     from breezy.plugins.propose.propose import hosters
 
     for name, hoster_cls in hosters.items():
@@ -34,7 +34,7 @@ def credentials_main(args):
 
 subcommands = [
     ('autopropose', autopropose.setup_parser, autopropose.main),
-    ('credentials', None, credentials_main),
+    ('hosters', None, hosters_main),
     ]
 
 
