@@ -73,10 +73,26 @@ def login_main(args):
         return 1
 
 
+def proposals_setup_parser(parser):
+    parser.add_argument(
+        '--status', default='open', choices=['open', 'merged', 'closed'],
+        type=str, help='Only display proposals with this status.')
+
+
+def proposals_main(args):
+    from breezy.plugins.propose.propose import hosters
+    proposals = []
+    for name, hoster_cls in hosters.items():
+        for instance in hoster_cls.iter_instances():
+            for proposal in instance.iter_my_proposals(status=args.status):
+                print(proposal.url)
+
+
 subcommands = [
     ('autopropose', autopropose.setup_parser, autopropose.main),
     ('hosters', None, hosters_main),
     ('login', login_setup_parser, login_main),
+    ('proposals', proposals_setup_parser, proposals_main),
     ]
 
 
