@@ -119,8 +119,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       refresh: Start over fresh when updating an existing branch for a merge
         proposal
     Returns:
-      tuple with create merge proposal (if any), and
-      boolean indicating whether the merge proposal is new
+      A BranchChangerResult
     """
     start_time = datetime.datetime.now()
     if additional_branches is None:
