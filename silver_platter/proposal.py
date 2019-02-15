@@ -200,6 +200,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False)
 
+        stack = local_branch.get_config()
+        stack.set_user_option('branch.fetch_tags', True)
+
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
             report('pushing to %s', push_url)
