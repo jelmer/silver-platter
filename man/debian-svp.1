@@ -1,22 +1,30 @@
 .TH DEBIAN-SVP "1" "February 2019" "debian-svp 0.0.1" "User Commands"
 .SH NAME
-debian-svp \- create and manage merge proposals against Debian packaging branches
+debian-svp \- create and manage changes against Debian packaging branches
+.SH SYNOPSIS
+debian\-svp [\-h] [\-\-version] {run,new-upstream,upload-pending,lintian\-brush} ...
 .SH DESCRIPTION
-usage: debian\-svp [\-h] [\-\-version]
-.IP
-{run,new\-upstream,upload\-pending,lintian\-brush} ...
+debian-svp is a specialized version of \&\fIsvp\fR\|(1) that automatically
+resolves Debian package names to the URLs of packaging branches. It also
+provides support for a couple of Debian-specific operations.
 .SS "COMMAND OVERVIEW"
 .TP
-.B "debian-svp run"
-Create a merge proposal from a script.
+.B debian\-svp run [\-h] [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-dry\-run] package script
+Make a change by running a script. \fBURL\fR should be the URL of a repository
+to make changes to. Script will be run in a checkout of the URL, with the
+opportunity to make changes. Depending on the specified mode, the changes will
+be committed and pushed back the the repository at the original URL or proposed
+as a change to the repository at the original URL.
 .TP
-.B "debian-svp new-upstream"
-Create a merge proposal merging a new upstream version.
+.B debian\-svp new\-upstream [\-h] [\-\-snapshot] [\-\-no\-build\-verify] [\-\-pre\-check PRE_CHECK] [\-\-dry\-run] [\-\-mode {push,attempt\-push,propose}] packages [packages ...]
+Create a merge proposal merging a new upstream version. The location of the
+upstream repository is retrieved from the \fBdebian/upstream/metadata\fR file,
+and the tarball is fetched using \&\fIuscan\fR\|(1).
 .TP
 .B "debian-svp upload-pending"
 Upload pending commits in a packaging branch.
 .TP
-.B "debian-svp lintian-brush"
+.B debian\-svp lintian\-brush [\-\-fixers FIXERS] [\-\-dry\-run] [\-\-propose\-addon\-only PROPOSE_ADDON_ONLY] [\-\-pre\-check PRE_CHECK] [\-\-post\-check POST_CHECK] [\-\-build\-verify] [\-\-refresh] [\-\-committer COMMITTER] [\-\-mode {push,attempt\-push,propose}] [\-\-no\-update\-changelog] [\-\-update\-changelog] [packages [packages ...]]
 Create a merge proposal fixing lintian issues.
 .SS "optional arguments:"
 .TP
@@ -25,7 +33,22 @@ show this help message and exit
 .TP
 \fB\-\-version\fR
 show program's version number and exit
+.SH EXAMPLES
+.TP
+.B  debian\-svp lintian\-brush \fBhttps://salsa.debian.org/jelmer/lintian-brush\fR
+Run \&\fIlintian\-brush\fR\|(1) on the \fBdulwich\fR package and create a merge
+proposal with the resulting changes.
+.TP
+.B  debian\-svp lintian\-brush \fBdulwich\fR
+Run \&\fIlintian\-brush\fR\|(1) on the \fBdulwich\fR package and create a merge
+proposal with the resulting changes.
+.TP
+.B  debian\-svp new\-upstream \fBdulwich\fR
+Create a new merge proposal merging the latest upstream version of
+\fBdulwich\fR into the packaging branch.
 .SH "SEE ALSO"
-\&\fIdebian-svp\fR\|(1)
+\&\fIsvp\fR\|(1), \&\fIgit\fR\|(1), \&\fIbrz\fR\|(1), \&\fIlintian-brush\fR\|(1)
+.SH "LICENSE"
+GNU General Public License, version 2 or later.
 .SH AUTHORS
 Jelmer Vernooij <jelmer@jelmer.uk>

@@ -1,12 +1,28 @@
 .TH SVP "1" "February 2019" "svp 0.0.1" "User Commands"
 .SH NAME
-svp \- create and manage merge proposals
+svp \- create and manage changes to VCS repositories
+.SH SYNOPSIS
+svp [\-h] [\-\-version] {run,hosters,login,proposals} ...
 .SH DESCRIPTION
-usage: svp [\-h] [\-\-version] {run,hosters,login,proposals} ...
+Silver-Platter makes it possible to contribute automatable changes to source
+code in a version control system.
+
+It automatically creates a local checkout of a remote repository,
+make user-specified changes, publish those changes on the remote hosting
+site and then creates pull request.
+
+In addition to that, it can also perform basic maintenance on branches
+that have been proposed for merging - such as restarting them if they
+have conflicts due to upstream changes.
+
 .SS "COMMAND OVERVIEW"
 .TP
-.B svp run
-Make a change by running a script.
+.B svp run [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-dry\-run] url script
+Make a change by running a script. \fBURL\fR should be the URL of a repository
+to make changes to. Script will be run in a checkout of the URL, with the
+opportunity to make changes. Depending on the specified mode, the changes will
+be committed and pushed back the the repository at the original URL or proposed
+as a change to the repository at the original URL.
 .TP
 .B svp hosters
 Display known hosting sites.
@@ -14,8 +30,8 @@ Display known hosting sites.
 .B svp login BASE-URL
 Log into a new hosting site.
 .TP
-.B svp proposals [--status=open|close|merged]
-Print URLs of all proposals of a specified status.
+.B svp proposals [\-\-status {open,merged,closed}]
+Print URLs of all proposals of a specified status that are owned by the current user.
 .SS "optional arguments:"
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -23,7 +39,28 @@ show this help message and exit
 .TP
 \fB\-\-version\fR
 show program's version number and exit
+.SH "SUPPORTED HOSTERS"
+At the moment \fBGitHub\fR, \fBLaunchpad\fR and any instances of \fBGitLab\fR
+are supported.
+.SH "EXAMPLES"
+.TP
+.B  svp login \fBhttps://github.com/\fR
+Log in to GitHub
+.TP
+.B  svp hosters
+List all known hosting sites
+.TP
+.B  svp proposals --status merged
+List all merged proposals owned by the current user.
+.TP
+.B  svp run --mode=attempt-push \fBgit://github.com/dulwich/dulwich\fR \fB./fix-typo.py\fR
+Run the script \fB./fix-typo.py\fR in a checkout of the Dulwich repository.
+Any changes the script makes will be pushed back to the main repository
+if the current user has the right permissions, and otherwise they
+will be proposed as a pull request.
 .SH "SEE ALSO"
-\&\fIdebian-svp\fR\|(1)
+\&\fIdebian-svp\fR\|(1), \&\fIgit\fR\|(1), \&\fIbrz\fR\|(1)
+.SH "LICENSE"
+GNU General Public License, version 2 or later.
 .SH AUTHORS
 Jelmer Vernooij <jelmer@jelmer.uk>
