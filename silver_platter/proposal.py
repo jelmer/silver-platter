@@ -104,7 +104,8 @@ class BranchChangerResult(object):
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
-                    additional_branches=None, refresh=False):
+                    additional_branches=None, refresh=False,
+                    labels=None):
     """Create/update a merge proposal into a branch or push directly.
 
     Args:
@@ -118,6 +119,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       additional_branches: Additional branches to fetch, if present
       refresh: Start over fresh when updating an existing branch for a merge
         proposal
+      labels: Optional list of labels to set on merge proposal
     Returns:
       A BranchChangerResult
     """
@@ -138,7 +140,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         existing_branch = None
         existing_proposal = None
     else:
-        report('Already proposed: %s (branch at %s)', name,
+        report('Branch %s already exists (branch at %s)', name,
                existing_branch.user_url)
         # If there is an open or rejected merge proposal, resume that.
         base_branch = existing_branch
@@ -194,7 +196,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 report('closing existing merge proposal - no new revisions')
                 existing_proposal.close()
             return BranchChangerResult(start_time, None, is_new=None)
-        if orig_revid == local_branch.last_revision():
+        if (orig_revid == local_branch.last_revision()
+                and existing_proposal is not None):
             # No new revisions added on this iteration, but still diverged from
             # main branch.
             return BranchChangerResult(
@@ -252,12 +255,13 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                             remote_branch, main_branch)
                     try:
                         mp = proposal_builder.create_proposal(
-                            description=mp_description, labels=[])
+                            description=mp_description, labels=labels)
                     except errors.PermissionDenied:
                         report('Permission denied while trying to create '
                                'proposal.')
                         raise
-                    return BranchChangerResult(start_time, mp, is_new=True)
-                return BranchChangerResult(start_time, None, is_new=True)
+                else:
+                    mp = None
+                return BranchChangerResult(start_time, mp, is_new=True)
         else:
             return BranchChangerResult(start_time, None, is_new=False)
