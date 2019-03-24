@@ -5,7 +5,7 @@ Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system.
 
 It automatically creates a local checkout of a remote repository,
-make user-specified changes, publish those changes on the remote hosting
+makes user-specified changes, publishes those changes on the remote hosting
 site and then creates pull request.
 
 In addition to that, it can also perform basic maintenance on branches
