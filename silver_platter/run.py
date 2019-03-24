@@ -20,7 +20,6 @@
 from __future__ import absolute_import
 
 import os
-import shlex
 import subprocess
 
 import silver_platter  # noqa: F401
@@ -68,13 +67,6 @@ def script_runner(local_tree, script):
     except PointlessCommit:
         raise ScriptMadeNoChanges()
     return description
-
-
-def fixup_relpath(script):
-    args = shlex.split(script)
-    if args[0].startswith('./'):
-        args[0] = os.path.abspath(args[0])
-    return script
 
 
 class ScriptBranchChanger(BranchChanger):
