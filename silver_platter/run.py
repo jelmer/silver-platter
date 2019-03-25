@@ -45,14 +45,16 @@ class ScriptMadeNoChanges(errors.BzrError):
     _fmt = "Script made no changes."
 
 
-def script_runner(local_tree, script, commit=None):
+def script_runner(local_tree, script, commit_pending=None):
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
 
     :param local_tree: Local tree to run script in
     :param script: Script to run
-    :param commit: Whether to commit pending changes
+    :param commit_pending: Whether to commit pending changes
+        (True, False or None: only commit if there were no commits by the
+         script)
     :return: Description as reported by script
     """
     last_revision = local_tree.last_revision()
@@ -65,11 +67,11 @@ def script_runner(local_tree, script, commit=None):
                 script, p.returncode))
     new_revision = local_tree.last_revision()
     description = description.decode()
-    if last_revision == new_revision and commit is None:
+    if last_revision == new_revision and commit_pending is None:
         # Automatically commit pending changes if the script did not
         # touch the branch.
-        commit = True
-    if commit:
+        commit_pending = True
+    if commit_pending:
         try:
             new_revision = local_tree.commit(
                 description, allow_pointless=False)
@@ -82,14 +84,16 @@ def script_runner(local_tree, script, commit=None):
 
 class ScriptBranchChanger(BranchChanger):
 
-    def __init__(self, script):
+    def __init__(self, script, commit_pending=None):
         self._script = script
         self._description = None
         self._create_proposal = None
+        self._commit_pending = commit_pending
 
     def make_changes(self, local_tree):
         try:
-            self._description = script_runner(local_tree, self._script)
+            self._description = script_runner(
+                local_tree, self._script, self._commit_pending)
         except ScriptMadeNoChanges:
             self._create_proposal = False
         else:
@@ -120,6 +124,11 @@ def setup_parser(parser):
         help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
         default="propose", type=str)
     parser.add_argument(
+        '--commit-pending',
+        help='Commit pending changes after script.',
+        choices=['yes', 'no', 'auto'],
+        default='auto', type=str)
+    parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
@@ -131,9 +140,12 @@ def main(args):
         name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
     else:
         name = args.name
+    commit_pending = {'auto': None, 'yes': True, 'no': False}[
+        args.commit_pending]
     try:
         result = propose_or_push(
-                main_branch, name, ScriptBranchChanger(args.script),
+                main_branch, name,
+                ScriptBranchChanger(args.script, commit_pending),
                 refresh=args.refresh, labels=args.label,
                 mode=args.mode, dry_run=args.dry_run)
     except _mod_propose.UnsupportedHoster as e:

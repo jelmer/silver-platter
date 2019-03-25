@@ -9,7 +9,7 @@ resolves Debian package names to the URLs of packaging branches. It also
 provides support for a couple of Debian-specific operations.
 .SS "COMMAND OVERVIEW"
 .TP
-.B debian\-svp run [\-h] [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-dry\-run] package script
+.B debian\-svp run [\-h] [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-dry\-run] [\-\-commit-pending {auto,yes,no}] package script
 Make a change by running a script. \fBURL\fR should be the URL of a repository
 to make changes to. Script will be run in a checkout of the URL, with the
 opportunity to make changes. Depending on the specified mode, the changes will

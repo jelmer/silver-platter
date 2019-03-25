@@ -44,7 +44,7 @@ brz add --quiet bar
 
     def test_simple_with_commit(self):
         description = script_runner(
-            self.tree, os.path.abspath('foo.sh'), commit=True)
+            self.tree, os.path.abspath('foo.sh'), commit_pending=True)
         self.assertEqual(description, 'Some message\n')
 
     def test_simple_with_autocommit(self):
@@ -76,7 +76,7 @@ brz commit --quiet -m blah
     def test_simple_without_commit(self):
         self.assertRaises(
             ScriptMadeNoChanges, script_runner, self.tree,
-            os.path.abspath('foo.sh'), commit=False)
+            os.path.abspath('foo.sh'), commit_pending=False)
 
     def test_no_changes(self):
         with open('foo.sh', 'w') as f:
@@ -86,4 +86,4 @@ echo "Some message"
 """)
         self.assertRaises(
             ScriptMadeNoChanges, script_runner, self.tree,
-            os.path.abspath('foo.sh'), commit=True)
+            os.path.abspath('foo.sh'), commit_pending=True)

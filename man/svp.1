@@ -17,7 +17,7 @@ have conflicts due to upstream changes.
 
 .SS "COMMAND OVERVIEW"
 .TP
-.B svp run [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-dry\-run] url script
+.B svp run [\-\-refresh] [\-\-label LABEL] [\-\-name NAME] [\-\-mode {push,attempt\-push,propose}] [\-\-commit-pending {auto,yes,no}] [\-\-dry\-run] url script
 Make a change by running a script. \fBURL\fR should be the URL of a repository
 to make changes to. Script will be run in a checkout of the URL, with the
 opportunity to make changes. Depending on the specified mode, the changes will
