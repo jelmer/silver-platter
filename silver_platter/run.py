@@ -45,15 +45,17 @@ class ScriptMadeNoChanges(errors.BzrError):
     _fmt = "Script made no changes."
 
 
-def script_runner(local_tree, script):
+def script_runner(local_tree, script, commit=None):
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
 
     :param local_tree: Local tree to run script in
     :param script: Script to run
+    :param commit: Whether to commit pending changes
     :return: Description as reported by script
     """
+    last_revision = local_tree.last_revision()
     p = subprocess.Popen(script, cwd=local_tree.basedir,
                          stdout=subprocess.PIPE, shell=True)
     (description, err) = p.communicate("")
@@ -61,10 +63,19 @@ def script_runner(local_tree, script):
         raise errors.BzrCommandError(
             "Script %s failed with error code %d" % (
                 script, p.returncode))
+    new_revision = local_tree.last_revision()
     description = description.decode()
-    try:
-        local_tree.commit(description, allow_pointless=False)
-    except PointlessCommit:
+    if last_revision == new_revision and commit is None:
+        # Automatically commit pending changes if the script did not
+        # touch the branch.
+        commit = True
+    if commit:
+        try:
+            new_revision = local_tree.commit(
+                description, allow_pointless=False)
+        except PointlessCommit:
+            pass
+    if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     return description
 

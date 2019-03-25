@@ -44,7 +44,9 @@ Working with Debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Several common operations for Debian packages have dedicated subcommands
-under the ``debian-svp`` command.
+under the ``debian-svp`` command. These will also automatically look up
+packaging repository location for any Debian package names that are
+specified.
 
 Subcommands that are available include:
 
@@ -53,6 +55,9 @@ Subcommands that are available include:
  * *upload-pending*: Build and upload a package and push/propose the
    changelog updates.
  * *new-upstream*: Merge in a new upstream release or snapshot.
+
+*debian-svp run* takes package name arguments that will be resolved
+to repository locations from the *Vcs-Git* field in the package.
 
 See ``debian-svp COMMAND --help`` for more details.
 
