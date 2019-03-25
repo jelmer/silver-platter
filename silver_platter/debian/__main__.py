@@ -82,6 +82,7 @@ def main(argv=None):
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
+    from ..__main__ import subcommands as main_subcommands
 
     subcommands = [
         ('run', run_setup_parser, run_main),
@@ -90,6 +91,10 @@ def main(argv=None):
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
         ]
 
+    for cmd in main_subcommands:
+        if cmd[0] not in [subcmd[0] for subcmd in subcommands]:
+            subcommands.append(cmd)
+
     parser = argparse.ArgumentParser(prog='debian-svp')
     parser.add_argument(
         '--version', action='version',
@@ -97,7 +102,9 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
     for name, setup_parser, run in subcommands:
-        setup_parser(subparsers.add_parser(name))
+        subparser = subparsers.add_parser(name)
+        if setup_parser is not None:
+            setup_parser(subparser)
         callbacks[name] = run
     args = parser.parse_args(argv)
     if args.subcommand is None:
