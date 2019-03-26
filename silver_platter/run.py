@@ -111,8 +111,8 @@ class ScriptBranchChanger(BranchChanger):
 
 
 def setup_parser(parser):
-    parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('script', help='Path to script to run.', type=str)
+    parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('--refresh', action="store_true",
                         help='Refresh changes if branch already exists')
     parser.add_argument('--label', type=str,
