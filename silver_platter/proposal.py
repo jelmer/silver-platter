@@ -204,20 +204,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 changer.post_land(main_branch)
                 base_branch = main_branch
                 overwrite = True
-    with TemporarySprout(base_branch) as local_tree:
-        # TODO(jelmer): Fetch these during the initial clone
-        for branch_name in additional_branches:
-            try:
-                add_branch = main_branch.controldir.open_branch(
-                        name=branch_name)
-            except (errors.NotBranchError, errors.NoColocatedBranchSupport):
-                pass
-            else:
-                local_add_branch = local_tree.controldir.create_branch(
-                        name=branch_name)
-                add_branch.push(local_add_branch)
-                assert (add_branch.last_revision() ==
-                        local_add_branch.last_revision())
+    with TemporarySprout(base_branch, additional_branches) as local_tree:
         with local_tree.branch.lock_write():
             if (mode == 'propose' and
                     existing_branch is not None and
