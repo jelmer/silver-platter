@@ -23,7 +23,7 @@ setup(
       author_email="jelmer@jelmer.uk",
       url="https://jelmer.uk/code/silver-platter",
       description="Automatic merge proposal creeator",
-      version='0.1.0',
+      version='0.1.1',
       license='GNU GPL v2 or later',
       project_urls={
           "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",

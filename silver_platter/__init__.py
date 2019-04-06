@@ -35,5 +35,5 @@ import breezy.bzr  # For bzr support   # noqa: E402
 import breezy.plugins.launchpad  # For lp: URL support  # noqa: E402
 import breezy.plugins.debian  # For apt: URL support  # noqa: E402
 
-__version__ = (0, 1, 0)
+__version__ = (0, 1, 1)
 version_string = '.'.join(map(str, __version__))
