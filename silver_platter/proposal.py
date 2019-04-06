@@ -25,6 +25,7 @@ __all__ = [
 import datetime
 
 from breezy.branch import Branch
+from breezy.diff import show_diff_trees
 from breezy.trace import note
 from breezy import (
     errors,
@@ -37,7 +38,7 @@ from breezy.plugins.propose.propose import (
     )
 
 
-from .utils import TemporarySprout
+from .utils import create_temp_sprout
 
 
 def merge_conflicts(main_branch, other_branch):
@@ -104,10 +105,11 @@ class BranchChangerResult(object):
     :ivar main_branch_revid: Original revision id of the main branch
     :ivar base_branch_revid: Base branch revision id
     :ivar result_revid: Revision id for applied changes
+    :ivar local_repository: Local repository for accessing revids
     """
 
     def __init__(self, start_time, merge_proposal, is_new, main_branch_revid,
-                 base_branch_revid, result_revid):
+                 base_branch_revid, result_revid, local_branch, destroy):
         self.merge_proposal = merge_proposal
         self.is_new = is_new
         self.start_time = start_time
@@ -115,6 +117,33 @@ class BranchChangerResult(object):
         self.main_branch_revid = main_branch_revid
         self.base_branch_revid = base_branch_revid
         self.result_revid = result_revid
+        self.local_repository = local_branch.repository
+        self._destroy = destroy
+
+    def base_tree(self):
+        return self.local_repository.revision_tree(self.base_branch_revid)
+
+    def tree(self):
+        if self.result_revid is None:
+            return None
+        return self.local_repository.revision_tree(self.result_revid)
+
+    def cleanup(self):
+        if self._destroy:
+            self._destroy()
+
+    def show_base_diff(self, outf):
+        base_tree = self.base_tree()
+        result_tree = self.tree()
+        if result_tree:
+            show_diff_trees(
+                base_tree, result_tree, outf,
+                old_label='upstream/',
+                new_label=(
+                    'proposed/' if self.merge_proposal else 'pushed/'))
+
+    def __del__(self):
+        self.cleanup()
 
 
 class DryRunProposal(MergeProposal):
@@ -123,8 +152,9 @@ class DryRunProposal(MergeProposal):
     :ivar url: URL for the merge proposal
     """
 
-    def __init__(self, source_branch, target_branch, labels=None):
-        self.description = None
+    def __init__(self, source_branch, target_branch, labels=None,
+                 description=None):
+        self.description = description
         self.closed = False
         self.labels = (labels or [])
         self.source_branch = source_branch
@@ -247,7 +277,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
     overwrite = (existing_branch and existing_branch != base_branch)
     main_branch_revid = main_branch.last_revision()
     base_branch_revid = base_branch.last_revision()
-    with TemporarySprout(base_branch, additional_branches) as local_tree:
+    local_tree, destroy = create_temp_sprout(base_branch, additional_branches)
+    try:
         with local_tree.branch.lock_write():
             if (mode == 'propose' and
                     existing_branch is not None and
@@ -271,7 +302,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     start_time, existing_proposal,
                     is_new=None, main_branch_revid=main_branch_revid,
                     base_branch_revid=base_branch_revid,
-                    result_revid=local_branch.last_revision())
+                    result_revid=local_branch.last_revision(),
+                    local_branch=local_branch, destroy=destroy)
         if (orig_revid == local_branch.last_revision()
                 and existing_proposal is not None):
             # No new revisions added on this iteration, but still diverged from
@@ -280,7 +312,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 start_time, existing_proposal, is_new=False,
                 main_branch_revid=main_branch_revid,
                 base_branch_revid=base_branch_revid,
-                result_revid=local_branch.last_revision())
+                result_revid=local_branch.last_revision(),
+                local_branch=local_branch, destroy=destroy)
 
         stack = local_branch.get_config()
         stack.set_user_option('branch.fetch_tags', True)
@@ -308,7 +341,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         start_time, existing_proposal, is_new=False,
                         main_branch_revid=main_branch_revid,
                         base_branch_revid=base_branch_revid,
-                        result_revid=local_branch.last_revision())
+                        result_revid=local_branch.last_revision(),
+                        local_branch=local_branch, destroy=destroy)
             else:
                 # If mode == 'attempt-push', then we're not 100% sure that this
                 # would have happened or if we would have fallen back to
@@ -317,7 +351,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     start_time, None, is_new=False,
                     main_branch_revid=main_branch_revid,
                     base_branch_revid=base_branch_revid,
-                    result_revid=local_branch.last_revision())
+                    result_revid=local_branch.last_revision(),
+                    local_branch=local_branch, destroy=destroy)
 
         assert mode == 'propose'
         if not existing_branch and not changer.should_create_proposal():
@@ -325,7 +360,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 start_time, None, is_new=None,
                 main_branch_revid=main_branch_revid,
                 base_branch_revid=base_branch_revid,
-                result_revid=None)
+                result_revid=None, local_branch=local_branch, destroy=destroy)
 
         mp_description = changer.get_proposal_description(existing_proposal)
         # TODO(jelmer): Do the same for additional branches that have changed?
@@ -339,7 +374,11 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             start_time, proposal, is_new=is_new,
             main_branch_revid=main_branch_revid,
             base_branch_revid=base_branch_revid,
-            result_revid=local_branch.last_revision())
+            result_revid=local_branch.last_revision(),
+            local_branch=local_branch, destroy=destroy)
+    except BaseException:
+        destroy()
+        raise
 
 
 def create_or_update_proposal(
@@ -385,5 +424,6 @@ def create_or_update_proposal(
                 raise
         else:
             mp = DryRunProposal(
-                local_branch, main_branch, labels=labels)
+                local_branch, main_branch, labels=labels,
+                description=mp_description)
         return (mp, True)
