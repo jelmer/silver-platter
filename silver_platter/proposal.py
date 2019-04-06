@@ -173,6 +173,43 @@ def push_result(local_branch, remote_branch,
                 add_branch, name=branch_name)
 
 
+def find_existing_proposed(main_branch, hoster, name):
+    """Find an existing derived branch with the specified name, and proposal.
+
+    Args:
+      main_branch: Main branch
+      hoster: The hoster
+      name: Name of the derived branch
+    Returns:
+      Tuple with (base_branch, existing_branch, existing_proposal)
+      Base branch won't be None; The existing_branch and existing_proposal can
+      be None.
+    """
+    try:
+        existing_branch = hoster.get_derived_branch(main_branch, name=name)
+    except errors.NotBranchError:
+        return (main_branch, None, None)
+    else:
+        note('Branch %s already exists (branch at %s)', name,
+             existing_branch.user_url)
+        # If there is an open or rejected merge proposal, resume that.
+        merged_proposal = None
+        for mp in hoster.iter_proposals(
+                existing_branch, main_branch, status='all'):
+            if not mp.is_merged():
+                return (existing_branch, existing_branch, mp)
+            else:
+                merged_proposal = mp
+        else:
+            if merged_proposal is not None:
+                note('There is a proposal that has already been merged at %s.',
+                     merged_proposal.url)
+                return (main_branch, existing_branch, None)
+            else:
+                # No related merge proposals found
+                return (main_branch, None, None)
+
+
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
                     additional_branches=None, refresh=False,
@@ -202,36 +239,12 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
 
     def report(text, *args, **kwargs):
         note('%r: ' + text, *((changer,)+args), **kwargs)
-    overwrite = False
     hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-    try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name)
-    except errors.NotBranchError:
-        base_branch = main_branch
-        existing_branch = None
-        existing_proposal = None
-    else:
-        report('Branch %s already exists (branch at %s)', name,
-               existing_branch.user_url)
-        # If there is an open or rejected merge proposal, resume that.
-        base_branch = existing_branch
-        existing_proposal = None
-        merged_proposal = None
-        for mp in hoster.iter_proposals(
-                existing_branch, main_branch, status='all'):
-            if not mp.is_merged():
-                existing_proposal = mp
-                break
-            else:
-                merged_proposal = mp
-        else:
-            if merged_proposal is not None:
-                report(
-                    'There is a proposal that has already been merged at %s.',
-                    merged_proposal.url)
-                changer.post_land(main_branch)
-                base_branch = main_branch
-                overwrite = True
+    (base_branch, existing_branch, existing_proposal) = find_existing_proposed(
+        main_branch, name)
+    # Need to overwrite if there is an existing branch in place that we're not
+    # using as base.
+    overwrite = (existing_branch and existing_branch != base_branch)
     main_branch_revid = main_branch.last_revision()
     base_branch_revid = base_branch.last_revision()
     with TemporarySprout(base_branch, additional_branches) as local_tree:
