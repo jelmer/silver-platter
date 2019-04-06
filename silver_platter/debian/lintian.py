@@ -23,6 +23,8 @@ __all__ = [
     'LintianFixer',
     ]
 
+import sys
+
 from breezy.errors import BzrError
 from breezy.trace import note
 from lintian_brush import (
@@ -205,6 +207,9 @@ def setup_parser(parser):
     parser.add_argument(
         '--update-changelog', action="store_true", dest="update_changelog",
         help="force updating of the changelog", default=None)
+    parser.add_argument(
+        '--diff', action="store_true",
+        help="Output diff of created merge proposal.")
 
 
 def main(args):
@@ -345,6 +350,8 @@ def main(args):
                     else:
                         note('%s: No new fixes for proposal %s', pkg,
                              result.merge_proposal.url)
+                if args.diff:
+                    result.show_base_diff(sys.stdout.buffer)
 
 
 if __name__ == '__main__':
