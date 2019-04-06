@@ -23,7 +23,7 @@ setup(
       author_email="jelmer@jelmer.uk",
       url="https://jelmer.uk/code/silver-platter",
       description="Automatic merge proposal creeator",
-      version='0.0.3',
+      version='0.0.4',
       license='GNU GPL v2 or later',
       project_urls={
           "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
@@ -50,12 +50,9 @@ setup(
       ],
       entry_points={
           'console_scripts': [
-              # 'autopropose=silver_platter.autopropose:main',
-              # 'propose-new-upstream=silver_platter.debian.upstream:main',
-              # 'upload-pending=silver_platters.debian.uploader:main',
               'svp=silver_platter.__main__:main',
               'debian-svp=silver_platter.debian.__main__:main',
             ],
       },
-      testsuite='silver_platter.tests.test_suite',
+      test_suite='silver_platter.tests.test_suite',
       )

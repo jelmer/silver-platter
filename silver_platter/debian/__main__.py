@@ -23,26 +23,37 @@ import argparse
 import sys
 
 
-def autopropose_setup_parser(parser):
+def run_setup_parser(parser):
+    parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument(
         'package', help='Package name or URL of branch to work on.', type=str)
-    parser.add_argument('script', help='Path to script to run.', type=str)
-    parser.add_argument('--overwrite', action="store_true",
-                        help='Overwrite changes when publishing')
+    parser.add_argument('--refresh', action="store_true",
+                        help='Refresh branch (discard current branch) and '
+                        'create from scratch')
     parser.add_argument('--label', type=str,
                         help='Label to attach', action="append", default=[])
     parser.add_argument('--name', type=str,
                         help='Proposed branch name', default=None)
+    parser.add_argument(
+        '--mode',
+        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        default="propose", type=str)
+    parser.add_argument(
+        "--dry-run",
+        help="Create branches but don't push or propose anything.",
+        action="store_true", default=False)
 
 
-def autopropose_main(args):
+def run_main(args):
     import os
     from breezy import osutils
     from breezy.plugins.propose import propose as _mod_propose
     from breezy.trace import note, show_error
-    from ..autopropose import (
-        autopropose,
-        script_runner,
+    from ..proposal import (
+        propose_or_push,
+        )
+    from ..run import (
+        ScriptBranchChanger,
         )
     from . import (
         open_packaging_branch,
@@ -52,16 +63,17 @@ def autopropose_main(args):
         name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
     else:
         name = args.name
-    script = os.path.abspath(args.script)
     try:
-        proposal = autopropose(
-                main_branch, lambda tree: script_runner(tree, script),
-                name=name, overwrite=args.overwrite, labels=args.label)
+        result = propose_or_push(
+                main_branch, name, ScriptBranchChanger(args.script),
+                refresh=args.refresh, labels=args.label,
+                dry_run=args.dry_run, mode=args.mode)
     except _mod_propose.UnsupportedHoster as e:
         show_error('No known supported hoster for %s. Run \'svp login\'?',
                    e.branch.user_url)
         return 1
-    note('Merge proposal created: %s', proposal.url)
+    if result.merge_proposal is not None:
+        note('Merge proposal created: %s', result.merge_proposal.url)
 
 
 def main(argv=None):
@@ -70,13 +82,18 @@ def main(argv=None):
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
+    from ..__main__ import subcommands as main_subcommands
 
     subcommands = [
-        ('autopropose', autopropose_setup_parser, autopropose_main),
+        ('run', run_setup_parser, run_main),
         ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
         ]
+
+    for cmd in main_subcommands:
+        if cmd[0] not in [subcmd[0] for subcmd in subcommands]:
+            subcommands.append(cmd)
 
     parser = argparse.ArgumentParser(prog='debian-svp')
     parser.add_argument(
@@ -85,7 +102,9 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
     for name, setup_parser, run in subcommands:
-        setup_parser(subparsers.add_parser(name))
+        subparser = subparsers.add_parser(name)
+        if setup_parser is not None:
+            setup_parser(subparser)
         callbacks[name] = run
     args = parser.parse_args(argv)
     if args.subcommand is None:

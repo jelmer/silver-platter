@@ -1,5 +1,5 @@
-#!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+#!/usr/bin/python3
+# Copyright (C) 2018 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,17 +15,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from __future__ import absolute_import
-
-import unittest
-
-
-def test_suite():
-    names = [
-        'debian',
-        'debian_lintian',
-        'run',
-        ]
-    module_names = [__name__ + '.test_' + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+from silver_platter.debian.__main__ import main
+sys.exit(main())

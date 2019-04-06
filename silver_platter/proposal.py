@@ -32,6 +32,7 @@ from breezy import (
     )
 from breezy.plugins.propose.propose import (
     get_hoster,
+    MergeProposal,
     UnsupportedHoster,
     )
 
@@ -102,9 +103,52 @@ class BranchChangerResult(object):
         self.finish_time = datetime.datetime.now()
 
 
+class DryRunProposal(MergeProposal):
+    """A merge proposal that is not actually created.
+
+    :ivar url: URL for the merge proposal
+    """
+
+    def __init__(self, source_branch, target_branch, labels=None):
+        self.description = None
+        self.closed = False
+        self.labels = (labels or [])
+        self.source_branch = source_branch
+        self.target_branch = target_branch
+        self.url = None
+
+    def __repr__(self):
+        return "%s(%r, %r)" % (
+            self.__class__.__name__, self.source_branch, self.target_branch)
+
+    def get_description(self):
+        """Get the description of the merge proposal."""
+        return self.description
+
+    def set_description(self, description):
+        self.description = description
+
+    def get_source_branch_url(self):
+        """Return the source branch."""
+        return self.source_branch.user_url
+
+    def get_target_branch_url(self):
+        """Return the target branch."""
+        return self.target_branch.user_url
+
+    def close(self):
+        """Close the merge proposal (without merging it)."""
+        self.closed = True
+
+    def is_merged(self):
+        """Check whether this merge proposal has been merged."""
+        return False
+
+
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
-                    additional_branches=None, refresh=False):
+                    additional_branches=None, refresh=False,
+                    labels=None):
     """Create/update a merge proposal into a branch or push directly.
 
     Args:
@@ -118,9 +162,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       additional_branches: Additional branches to fetch, if present
       refresh: Start over fresh when updating an existing branch for a merge
         proposal
+      labels: Optional list of labels to set on merge proposal
     Returns:
-      tuple with create merge proposal (if any), and
-      boolean indicating whether the merge proposal is new
+      A BranchChangerResult
     """
     start_time = datetime.datetime.now()
     if additional_branches is None:
@@ -139,7 +183,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         existing_branch = None
         existing_proposal = None
     else:
-        report('Already proposed: %s (branch at %s)', name,
+        report('Branch %s already exists (branch at %s)', name,
                existing_branch.user_url)
         # If there is an open or rejected merge proposal, resume that.
         base_branch = existing_branch
@@ -195,11 +239,15 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 report('closing existing merge proposal - no new revisions')
                 existing_proposal.close()
             return BranchChangerResult(start_time, None, is_new=None)
-        if orig_revid == local_branch.last_revision():
+        if (orig_revid == local_branch.last_revision()
+                and existing_proposal is not None):
             # No new revisions added on this iteration, but still diverged from
             # main branch.
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False)
+
+        stack = local_branch.get_config()
+        stack.set_user_option('branch.fetch_tags', True)
 
         if mode in ('push', 'attempt-push'):
             push_url = hoster.get_push_url(main_branch)
@@ -240,8 +288,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             mp_description = changer.get_proposal_description(
                     existing_proposal)
             if existing_proposal is not None:
-                if not dry_run:
-                    existing_proposal.set_description(mp_description)
+                existing_proposal.set_description(mp_description)
                 return BranchChangerResult(
                     start_time, existing_proposal, is_new=False)
             else:
@@ -250,12 +297,14 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                             remote_branch, main_branch)
                     try:
                         mp = proposal_builder.create_proposal(
-                            description=mp_description, labels=[])
+                            description=mp_description, labels=labels)
                     except errors.PermissionDenied:
                         report('Permission denied while trying to create '
                                'proposal.')
                         raise
-                    return BranchChangerResult(start_time, mp, is_new=True)
-                return BranchChangerResult(start_time, None, is_new=True)
+                else:
+                    mp = DryRunProposal(
+                        local_branch, main_branch, labels=labels)
+                return BranchChangerResult(start_time, mp, is_new=True)
         else:
             return BranchChangerResult(start_time, None, is_new=False)

@@ -82,6 +82,10 @@ def setup_parser(parser):
         help="Create branches but don't push or propose anything.",
         action="store_true",
         default=False)
+    parser.add_argument(
+        '--mode',
+        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        default="propose", type=str)
 
 
 def main(args):
@@ -92,7 +96,7 @@ def main(args):
         try:
             result = propose_or_push(
                 main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
-                mode='propose', dry_run=args.dry_run)
+                mode=args.mode, dry_run=args.dry_run)
         except UpstreamAlreadyImported as e:
             note('Last upstream version %s already imported', e.version)
             return 1

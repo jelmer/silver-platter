@@ -5,18 +5,33 @@ Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system.
 
 It automatically creates a local checkout of a remote repository,
-make user-specified changes, publish those changes on the remote hosting
+makes user-specified changes, publishes those changes on the remote hosting
 site and then creates pull request.
 
 In addition to that, it can also perform basic maintenance on branches
 that have been proposed for merging - such as restarting them if they
 have conflicts due to upstream changes.
 
-In the simplest form, this could be running::
+Getting started
+~~~~~~~~~~~~~~~
+
+To log in to a code-hosting site, use ``svp login``::
 
     svp login https://github.com/
 
-    svp autopropose https://github.com/jelmer/dulwich ./some-script.py
+The simplest way to create a change as a merge proposal is to run something like::
+
+    svp run --mode propose https://github.com/jelmer/dulwich ./some-script.sh
+
+where ``some-script.sh`` makes some modifications to a working copy and prints the
+body for the pull request to standard out. For example::
+
+    #!/bin/sh
+    sed -i 's/framwork/framework/' README.rst
+    echo "Fix common typo: framwork => framework"
+
+Supported hosters
+~~~~~~~~~~~~~~~~~
 
 At the moment, the following code hosters are supported:
 
@@ -25,18 +40,28 @@ At the moment, the following code hosters are supported:
  * `GitLab <https://gitlab.com/>`_ instances, such as Debian's
    `Salsa <https://salsa.debian.org>`_
 
-Getting started
-~~~~~~~~~~~~~~~
-
 Working with Debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Several common operations for Debian packages have dedicated subcommands
-in silver-platter.
+under the ``debian-svp`` command. These will also automatically look up
+packaging repository location for any Debian package names that are
+specified.
+
+Subcommands that are available include:
+
+ * *lintian-brush*: Run the `lintian-brush
+   <https://packages.debian.org/lintian-brush>`_ command on the branch.
+ * *upload-pending*: Build and upload a package and push/propose the
+   changelog updates.
+ * *new-upstream*: Merge in a new upstream release or snapshot.
+
+*debian-svp run* takes package name arguments that will be resolved
+to repository locations from the *Vcs-Git* field in the package.
 
 See ``debian-svp COMMAND --help`` for more details.
 
-Examples::
+Examples running ``debian-svp``::
 
     debian-svp lintian-brush samba
     debian-svp lintian-brush --mode=propose samba
@@ -44,7 +69,7 @@ Examples::
 
     debian-svp upload-pending tdb
 
-    debian-svp merge-upstream --no-build-verify tdb
+    debian-svp new-upstream --no-build-verify tdb
 
 Credentials
 ~~~~~~~~~~~

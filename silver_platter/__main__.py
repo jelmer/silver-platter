@@ -19,7 +19,7 @@ import argparse
 import silver_platter   # noqa: F401
 import sys
 from . import (
-    autopropose,
+    run,
     version_string,
     )
 
@@ -81,7 +81,6 @@ def proposals_setup_parser(parser):
 
 def proposals_main(args):
     from breezy.plugins.propose.propose import hosters
-    proposals = []
     for name, hoster_cls in hosters.items():
         for instance in hoster_cls.iter_instances():
             for proposal in instance.iter_my_proposals(status=args.status):
@@ -89,10 +88,10 @@ def proposals_main(args):
 
 
 subcommands = [
-    ('autopropose', autopropose.setup_parser, autopropose.main),
     ('hosters', None, hosters_main),
     ('login', login_setup_parser, login_main),
     ('proposals', proposals_setup_parser, proposals_main),
+    ('run', run.setup_parser, run.main),
     ]
 
 
@@ -102,11 +101,11 @@ def main(argv=None):
         '--version', action='version', version='%(prog)s ' + version_string)
     subparsers = parser.add_subparsers(dest='subcommand')
     callbacks = {}
-    for name, setup_parser, run in subcommands:
+    for name, setup_parser, run_fn in subcommands:
         subparser = subparsers.add_parser(name)
         if setup_parser is not None:
             setup_parser(subparser)
-        callbacks[name] = run
+        callbacks[name] = run_fn
     args = parser.parse_args(argv)
     if args.subcommand is None:
         parser.print_usage()
