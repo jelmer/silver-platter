@@ -16,9 +16,8 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import shutil
-import tempfile
 
-from breezy import errors
+from breezy import errors, osutils
 
 
 class TemporarySprout(object):
@@ -27,12 +26,13 @@ class TemporarySprout(object):
     This attempts to fetch the least amount of history as possible.
     """
 
-    def __init__(self, branch, additional_colocated_branches):
+    def __init__(self, branch, additional_colocated_branches=None, dir=None):
         self.branch = branch
         self.additional_colocated_branches = additional_colocated_branches
+        self.dir = dir
 
     def __enter__(self):
-        self._td = tempfile.mkdtemp()
+        self._td = osutils.mkdtemp(dir=self.dir)
         try:
             # preserve whatever source format we have.
             to_dir = self.branch.controldir.sprout(
@@ -40,11 +40,12 @@ class TemporarySprout(object):
                 source_branch=self.branch,
                 stacked=self.branch._format.supports_stacking())
             # TODO(jelmer): Fetch these during the initial clone
-            for branch_name in self.additional_colocated_branches:
+            for branch_name in self.additional_colocated_branches or []:
                 try:
                     add_branch = self.branch.controldir.open_branch(
                         name=branch_name)
-                except (errors.NotBranchError, errors.NoColocatedBranchSupport):
+                except (errors.NotBranchError,
+                        errors.NoColocatedBranchSupport):
                     pass
                 else:
                     local_add_branch = to_dir.create_branch(
