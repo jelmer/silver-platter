@@ -20,6 +20,41 @@ import shutil
 from breezy import errors, osutils
 
 
+def create_temp_sprout(branch, additional_colocated_branches=None, dir=None):
+    """Create a temporary sprout of a branch.
+
+    This attempts to fetch the least amount of history as possible.
+    """
+    td = osutils.mkdtemp(dir=dir)
+
+    def destroy():
+        shutil.rmtree(td)
+    try:
+        # preserve whatever source format we have.
+        to_dir = branch.controldir.sprout(
+            td, None, create_tree_if_local=True,
+            source_branch=branch,
+            stacked=branch._format.supports_stacking())
+        # TODO(jelmer): Fetch these during the initial clone
+        for branch_name in additional_colocated_branches or []:
+            try:
+                add_branch = branch.controldir.open_branch(
+                    name=branch_name)
+            except (errors.NotBranchError,
+                    errors.NoColocatedBranchSupport):
+                pass
+            else:
+                local_add_branch = to_dir.create_branch(
+                        name=branch_name)
+                add_branch.push(local_add_branch)
+                assert (add_branch.last_revision() ==
+                        local_add_branch.last_revision())
+        return to_dir.open_workingtree(), destroy
+    except BaseException as e:
+        shutil.rmtree(td)
+        raise e
+
+
 class TemporarySprout(object):
     """Create a temporary sprout of a branch.
 
@@ -32,32 +67,12 @@ class TemporarySprout(object):
         self.dir = dir
 
     def __enter__(self):
-        self._td = osutils.mkdtemp(dir=self.dir)
-        try:
-            # preserve whatever source format we have.
-            to_dir = self.branch.controldir.sprout(
-                self._td, None, create_tree_if_local=True,
-                source_branch=self.branch,
-                stacked=self.branch._format.supports_stacking())
-            # TODO(jelmer): Fetch these during the initial clone
-            for branch_name in self.additional_colocated_branches or []:
-                try:
-                    add_branch = self.branch.controldir.open_branch(
-                        name=branch_name)
-                except (errors.NotBranchError,
-                        errors.NoColocatedBranchSupport):
-                    pass
-                else:
-                    local_add_branch = to_dir.create_branch(
-                            name=branch_name)
-                    add_branch.push(local_add_branch)
-                    assert (add_branch.last_revision() ==
-                            local_add_branch.last_revision())
-            return to_dir.open_workingtree()
-        except BaseException as e:
-            shutil.rmtree(self._td)
-            raise e
+        tree, self._destroy = create_temp_sprout(
+            self.branch,
+            additional_colocated_branches=self.additional_colocated_branches,
+            dir=self.dir)
+        return tree
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        shutil.rmtree(self._td)
+        self._destroy()
         return False
