@@ -102,14 +102,17 @@ class BranchChangerResult(object):
     :ivar start_time: Time at which processing began
     :ivar finish_time: Time at which processing ended
     :ivar main_branch_revid: Original revision id of the main branch
+    :ivar result_revid: Revision id for applied changes
     """
 
-    def __init__(self, start_time, merge_proposal, is_new, main_branch_revid):
+    def __init__(self, start_time, merge_proposal, is_new, main_branch_revid,
+                 result_revid):
         self.merge_proposal = merge_proposal
         self.is_new = is_new
         self.start_time = start_time
         self.finish_time = datetime.datetime.now()
         self.main_branch_revid = main_branch_revid
+        self.result_revid = result_revid
 
 
 class DryRunProposal(MergeProposal):
@@ -250,14 +253,16 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 existing_proposal.close()
             return BranchChangerResult(
                     start_time, existing_proposal,
-                    is_new=None, main_branch_revid=main_branch_revid)
+                    is_new=None, main_branch_revid=main_branch_revid,
+                    result_revid=local_branch.last_revision())
         if (orig_revid == local_branch.last_revision()
                 and existing_proposal is not None):
             # No new revisions added on this iteration, but still diverged from
             # main branch.
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False,
-                main_branch_revid=main_branch_revid)
+                main_branch_revid=main_branch_revid,
+                result_revid=local_branch.last_revision())
 
         stack = local_branch.get_config()
         stack.set_user_option('branch.fetch_tags', True)
@@ -283,20 +288,23 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     changer.post_land(target_branch)
                     return BranchChangerResult(
                         start_time, existing_proposal, is_new=False,
-                        main_branch_revid=main_branch_revid)
+                        main_branch_revid=main_branch_revid,
+                        result_revid=local_branch.last_revision())
             else:
                 # If mode == 'attempt-push', then we're not 100% sure that this
                 # would have happened or if we would have fallen back to
                 # propose.
                 return BranchChangerResult(
                     start_time, None, is_new=False,
-                    main_branch_revid=main_branch_revid)
+                    main_branch_revid=main_branch_revid,
+                    result_revid=local_branch.last_revision())
 
         assert mode == 'propose'
         if not existing_branch and not changer.should_create_proposal():
             return BranchChangerResult(
                 start_time, None, is_new=None,
-                main_branch_revid=main_branch_revid)
+                main_branch_revid=main_branch_revid,
+                result_revid=None)
         if not dry_run:
             if existing_branch is not None:
                 local_branch.push(existing_branch, overwrite=overwrite)
@@ -310,7 +318,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             existing_proposal.set_description(mp_description)
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False,
-                main_branch_revid=main_branch_revid)
+                main_branch_revid=main_branch_revid,
+                result_revid=local_branch.last_revision())
         else:
             if not dry_run:
                 proposal_builder = hoster.get_proposer(
@@ -327,4 +336,5 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     local_branch, main_branch, labels=labels)
             return BranchChangerResult(
                 start_time, mp, is_new=True,
-                main_branch_revid=main_branch_revid)
+                main_branch_revid=main_branch_revid,
+                result_revid=local_branch.last_revision())
