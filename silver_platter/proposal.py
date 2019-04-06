@@ -101,13 +101,15 @@ class BranchChangerResult(object):
     :ivar is_new: Whether the merge proposal is new
     :ivar start_time: Time at which processing began
     :ivar finish_time: Time at which processing ended
+    :ivar main_branch_revid: Original revision id of the main branch
     """
 
-    def __init__(self, start_time, merge_proposal, is_new):
+    def __init__(self, start_time, merge_proposal, is_new, main_branch_revid):
         self.merge_proposal = merge_proposal
         self.is_new = is_new
         self.start_time = start_time
         self.finish_time = datetime.datetime.now()
+        self.main_branch_revid = main_branch_revid
 
 
 class DryRunProposal(MergeProposal):
@@ -225,6 +227,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 changer.post_land(main_branch)
                 base_branch = main_branch
                 overwrite = True
+    main_branch_revid = main_branch.last_revision()
     with TemporarySprout(base_branch, additional_branches) as local_tree:
         with local_tree.branch.lock_write():
             if (mode == 'propose' and
@@ -232,7 +235,6 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     (refresh or
                         merge_conflicts(main_branch, local_tree.branch))):
                 report('restarting branch')
-                main_branch_revid = main_branch.last_revision()
                 local_tree.update(revision=main_branch_revid)
                 local_tree.branch.generate_revision_history(main_branch_revid)
                 overwrite = True
@@ -242,17 +244,20 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
 
         changer.make_changes(local_tree)
 
-        if local_branch.last_revision() == main_branch.last_revision():
+        if local_branch.last_revision() == main_branch_revid:
             if existing_proposal is not None:
                 report('closing existing merge proposal - no new revisions')
                 existing_proposal.close()
-            return BranchChangerResult(start_time, None, is_new=None)
+            return BranchChangerResult(
+                    start_time, existing_proposal,
+                    is_new=None, main_branch_revid=main_branch_revid)
         if (orig_revid == local_branch.last_revision()
                 and existing_proposal is not None):
             # No new revisions added on this iteration, but still diverged from
             # main branch.
             return BranchChangerResult(
-                start_time, existing_proposal, is_new=False)
+                start_time, existing_proposal, is_new=False,
+                main_branch_revid=main_branch_revid)
 
         stack = local_branch.get_config()
         stack.set_user_option('branch.fetch_tags', True)
@@ -276,16 +281,22 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         raise
                 else:
                     changer.post_land(target_branch)
-                    return BranchChangerResult(start_time, None, is_new=False)
+                    return BranchChangerResult(
+                        start_time, existing_proposal, is_new=False,
+                        main_branch_revid=main_branch_revid)
             else:
                 # If mode == 'attempt-push', then we're not 100% sure that this
                 # would have happened or if we would have fallen back to
                 # propose.
-                return BranchChangerResult(start_time, None, is_new=False)
+                return BranchChangerResult(
+                    start_time, None, is_new=False,
+                    main_branch_revid=main_branch_revid)
 
         assert mode == 'propose'
         if not existing_branch and not changer.should_create_proposal():
-            return BranchChangerResult(start_time, None, is_new=None)
+            return BranchChangerResult(
+                start_time, None, is_new=None,
+                main_branch_revid=main_branch_revid)
         if not dry_run:
             if existing_branch is not None:
                 local_branch.push(existing_branch, overwrite=overwrite)
@@ -298,7 +309,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         if existing_proposal is not None:
             existing_proposal.set_description(mp_description)
             return BranchChangerResult(
-                start_time, existing_proposal, is_new=False)
+                start_time, existing_proposal, is_new=False,
+                main_branch_revid=main_branch_revid)
         else:
             if not dry_run:
                 proposal_builder = hoster.get_proposer(
@@ -313,4 +325,6 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             else:
                 mp = DryRunProposal(
                     local_branch, main_branch, labels=labels)
-            return BranchChangerResult(start_time, mp, is_new=True)
+            return BranchChangerResult(
+                start_time, mp, is_new=True,
+                main_branch_revid=main_branch_revid)
