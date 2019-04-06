@@ -152,6 +152,20 @@ class DryRunProposal(MergeProposal):
         return False
 
 
+def push_result(local_branch, remote_branch,
+                additional_colocated_branches=None):
+    local_branch.push(remote_branch)
+    for branch_name in additional_colocated_branches:
+        try:
+            add_branch = local_branch.controldir.open_branch(
+                name=branch_name)
+        except errors.NotBranchError:
+            pass
+        else:
+            remote_branch.controldir.push_branch(
+                add_branch, name=branch_name)
+
+
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     possible_transports=None, possible_hosters=None,
                     additional_branches=None, refresh=False,
@@ -250,7 +264,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     push_url, possible_transports=possible_transports)
             if not dry_run:
                 try:
-                    local_branch.push(target_branch)
+                    push_result(
+                        local_branch, target_branch,
+                        additional_colocated_branches=additional_branches)
                 except (errors.PermissionDenied, errors.LockFailed):
                     if mode == 'attempt-push':
                         report('push access denied, falling back to propose')
@@ -259,15 +275,6 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                         report('permission denied during push')
                         raise
                 else:
-                    for branch_name in additional_branches:
-                        try:
-                            add_branch = local_branch.controldir.open_branch(
-                                name=branch_name)
-                        except errors.NotBranchError:
-                            pass
-                        else:
-                            target_branch.controldir.push_branch(
-                                add_branch, name=branch_name)
                     changer.post_land(target_branch)
                     return BranchChangerResult(start_time, None, is_new=False)
             else:
