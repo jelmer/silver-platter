@@ -104,6 +104,7 @@ class LintianFixer(BranchChanger):
         self._propose_addon_only = set(propose_addon_only)
         self._committer = committer
         self._compat_release = compat_release
+        self.applied = []
 
     def __repr__(self):
         return "LintianFixer(%r)" % (self._pkg, )

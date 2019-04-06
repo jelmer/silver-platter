@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -15,17 +15,19 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from __future__ import absolute_import
+import silver_platter   # noqa: F401
+from silver_platter.debian import (
+    _changelog_stats,
+    )
 
-import unittest
+from breezy.branch import Branch
 
+import argparse
 
-def test_suite():
-    names = [
-        'debian',
-        'debian_lintian',
-        'run',
-        ]
-    module_names = [__name__ + '.test_' + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+parser = argparse.ArgumentParser()
+parser.add_argument('location', help='Branch location to check.', type=str,
+                    default='.')
+args = parser.parse_args()
+
+branch = Branch.open(args.location)
+print(_changelog_stats(branch, 200))
