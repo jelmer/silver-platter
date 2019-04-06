@@ -56,6 +56,7 @@ def run_main(args):
         )
     from ..run import (
         ScriptBranchChanger,
+        ScriptMadeNoChanges,
         )
     from . import (
         open_packaging_branch,
@@ -66,8 +67,8 @@ def run_main(args):
     else:
         name = args.name
 
-    # TODO(jelmer): Check that ScriptBranchChanger updates upstream version if it touches
-    # anything outside of debian/.
+    # TODO(jelmer): Check that ScriptBranchChanger updates upstream version if
+    # it touches anything outside of debian/.
 
     try:
         result = propose_or_push(
