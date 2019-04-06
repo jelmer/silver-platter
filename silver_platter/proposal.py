@@ -328,6 +328,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 result_revid=None)
 
         mp_description = changer.get_proposal_description(existing_proposal)
+        # TODO(jelmer): Do the same for additional branches that have changed?
         (proposal, is_new) = create_or_update_proposal(
             local_branch, main_branch, hoster, name, mp_description,
             existing_branch=existing_branch,
@@ -366,7 +367,7 @@ def create_or_update_proposal(
             remote_branch = existing_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
-                local_branch, main_branch, name=name, overwrite=False)
+                local_branch, main_branch, name=name, overwrite=overwrite)
     if existing_proposal is not None:
         if not dry_run:
             existing_proposal.set_description(mp_description)
