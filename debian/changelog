@@ -1,7 +1,6 @@
-silver-platter (0.1.0-1) UNRELEASED; urgency=medium
+silver-platter (0.1.0-1) unstable; urgency=medium
 
   * debian/copyright: Fix copyright year.
-  * New upstream snapshot.
   * New upstream release.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Sat, 06 Apr 2019 23:25:28 +0000
