@@ -269,36 +269,41 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                             target_branch.controldir.push_branch(
                                 add_branch, name=branch_name)
                     changer.post_land(target_branch)
-        if mode == 'propose':
-            if not existing_branch and not changer.should_create_proposal():
-                return BranchChangerResult(start_time, None, is_new=None)
-            if not dry_run:
-                if existing_branch is not None:
-                    local_branch.push(existing_branch, overwrite=overwrite)
-                    remote_branch = existing_branch
-                else:
-                    remote_branch, public_branch_url = hoster.publish_derived(
-                        local_branch, main_branch, name=name, overwrite=False)
-            mp_description = changer.get_proposal_description(
-                    existing_proposal)
-            if existing_proposal is not None:
-                existing_proposal.set_description(mp_description)
-                return BranchChangerResult(
-                    start_time, existing_proposal, is_new=False)
+                    return BranchChangerResult(start_time, None, is_new=False)
             else:
-                if not dry_run:
-                    proposal_builder = hoster.get_proposer(
-                            remote_branch, main_branch)
-                    try:
-                        mp = proposal_builder.create_proposal(
-                            description=mp_description, labels=labels)
-                    except errors.PermissionDenied:
-                        report('Permission denied while trying to create '
-                               'proposal.')
-                        raise
-                else:
-                    mp = DryRunProposal(
-                        local_branch, main_branch, labels=labels)
-                return BranchChangerResult(start_time, mp, is_new=True)
+                # If mode == 'attempt-push', then we're not 100% sure that this
+                # would have happened or if we would have fallen back to
+                # propose.
+                return BranchChangerResult(start_time, None, is_new=False)
+
+        assert mode == 'propose'
+        if not existing_branch and not changer.should_create_proposal():
+            return BranchChangerResult(start_time, None, is_new=None)
+        if not dry_run:
+            if existing_branch is not None:
+                local_branch.push(existing_branch, overwrite=overwrite)
+                remote_branch = existing_branch
+            else:
+                remote_branch, public_branch_url = hoster.publish_derived(
+                    local_branch, main_branch, name=name, overwrite=False)
+        mp_description = changer.get_proposal_description(
+                existing_proposal)
+        if existing_proposal is not None:
+            existing_proposal.set_description(mp_description)
+            return BranchChangerResult(
+                start_time, existing_proposal, is_new=False)
         else:
-            return BranchChangerResult(start_time, None, is_new=False)
+            if not dry_run:
+                proposal_builder = hoster.get_proposer(
+                        remote_branch, main_branch)
+                try:
+                    mp = proposal_builder.create_proposal(
+                        description=mp_description, labels=labels)
+                except errors.PermissionDenied:
+                    report('Permission denied while trying to create '
+                           'proposal.')
+                    raise
+            else:
+                mp = DryRunProposal(
+                    local_branch, main_branch, labels=labels)
+            return BranchChangerResult(start_time, mp, is_new=True)
