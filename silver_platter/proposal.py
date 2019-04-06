@@ -95,6 +95,13 @@ class BranchChanger(object):
 
 
 class BranchChangerResult(object):
+    """Result of a branch change action.
+
+    :ivar merge_proposal: Relevant merge proposal, if one was created/updated.
+    :ivar is_new: Whether the merge proposal is new
+    :ivar start_time: Time at which processing began
+    :ivar finish_time: Time at which processing ended
+    """
 
     def __init__(self, start_time, merge_proposal, is_new):
         self.merge_proposal = merge_proposal
