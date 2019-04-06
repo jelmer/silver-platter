@@ -21,6 +21,7 @@ from __future__ import absolute_import
 
 import os
 import subprocess
+import sys
 
 import silver_platter  # noqa: F401
 
@@ -119,6 +120,8 @@ def setup_parser(parser):
                         help='Label to attach', action="append", default=[])
     parser.add_argument('--name', type=str,
                         help='Proposed branch name', default=None)
+    parser.add_argument('--diff', action="store_true",
+                        help="Show diff of generated changes.")
     parser.add_argument(
         '--mode',
         help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
@@ -160,8 +163,18 @@ def main(args):
     except ScriptMadeNoChanges:
         show_error('Script did not make any changes.')
         return 1
+
     if result.merge_proposal:
-        note('Merge proposal created: %s', result.merge_proposal.url)
+        if result.is_new:
+            note('Merge proposal created.')
+        else:
+            note('Merge proposal updated.')
+        if result.merge_proposal.url:
+            note('URL: %s', result.merge_proposal.url)
+        note('Description: %s', result.merge_proposal.get_description())
+
+    if args.diff:
+        result.show_base_diff(sys.stdout.buffer)
 
 
 if __name__ == '__main__':

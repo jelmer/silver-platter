@@ -34,6 +34,8 @@ def run_setup_parser(parser):
                         help='Label to attach', action="append", default=[])
     parser.add_argument('--name', type=str,
                         help='Proposed branch name', default=None)
+    parser.add_argument('--diff', action="store_true",
+                        help="Show diff of generated changes.")
     parser.add_argument(
         '--mode',
         help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
@@ -63,6 +65,10 @@ def run_main(args):
         name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
     else:
         name = args.name
+
+    # TODO(jelmer): Check that ScriptBranchChanger updates upstream version if it touches
+    # anything outside of debian/.
+
     try:
         result = propose_or_push(
                 main_branch, name, ScriptBranchChanger(args.script),
@@ -72,8 +78,26 @@ def run_main(args):
         show_error('No known supported hoster for %s. Run \'svp login\'?',
                    e.branch.user_url)
         return 1
-    if result.merge_proposal is not None:
-        note('Merge proposal created: %s', result.merge_proposal.url)
+    except _mod_propose.HosterLoginRequired as e:
+        show_error(
+            'Credentials for hosting site at %r missing. Run \'svp login\'?',
+            e.hoster.base_url)
+        return 1
+    except ScriptMadeNoChanges:
+        show_error('Script did not make any changes.')
+        return 1
+
+    if result.merge_proposal:
+        if result.is_new:
+            note('Merge proposal created.')
+        else:
+            note('Merge proposal updated.')
+        if result.merge_proposal.url:
+            note('URL: %s', result.merge_proposal.url)
+        note('Description: %s', result.merge_proposal.get_description())
+
+    if args.diff:
+        result.show_base_diff(sys.stdout.buffer)
 
 
 def main(argv=None):
