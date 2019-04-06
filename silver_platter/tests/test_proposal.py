@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2019 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,19 +15,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from __future__ import absolute_import
+from breezy.tests import TestCaseWithTransport
 
-import unittest
+from ..proposal import (
+    push_result,
+    )
 
 
-def test_suite():
-    names = [
-        'debian',
-        'debian_lintian',
-        'proposal',
-        'run',
-        'utils',
-        ]
-    module_names = [__name__ + '.test_' + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+class PushResultTests(TestCaseWithTransport):
+
+    def test_simple(self):
+        target = self.make_branch('target')
+        source = self.make_branch_and_tree('source')
+        revid = source.commit('Some change')
+        push_result(source.branch, target)
+        self.assertEqual(target.last_revision(), revid)

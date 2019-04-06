@@ -102,16 +102,18 @@ class BranchChangerResult(object):
     :ivar start_time: Time at which processing began
     :ivar finish_time: Time at which processing ended
     :ivar main_branch_revid: Original revision id of the main branch
+    :ivar base_branch_revid: Base branch revision id
     :ivar result_revid: Revision id for applied changes
     """
 
     def __init__(self, start_time, merge_proposal, is_new, main_branch_revid,
-                 result_revid):
+                 base_branch_revid, result_revid):
         self.merge_proposal = merge_proposal
         self.is_new = is_new
         self.start_time = start_time
         self.finish_time = datetime.datetime.now()
         self.main_branch_revid = main_branch_revid
+        self.base_branch_revid = base_branch_revid
         self.result_revid = result_revid
 
 
@@ -160,7 +162,7 @@ class DryRunProposal(MergeProposal):
 def push_result(local_branch, remote_branch,
                 additional_colocated_branches=None):
     local_branch.push(remote_branch)
-    for branch_name in additional_colocated_branches:
+    for branch_name in additional_colocated_branches or []:
         try:
             add_branch = local_branch.controldir.open_branch(
                 name=branch_name)
@@ -231,6 +233,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 base_branch = main_branch
                 overwrite = True
     main_branch_revid = main_branch.last_revision()
+    base_branch_revid = base_branch.last_revision()
     with TemporarySprout(base_branch, additional_branches) as local_tree:
         with local_tree.branch.lock_write():
             if (mode == 'propose' and
@@ -254,6 +257,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                     start_time, existing_proposal,
                     is_new=None, main_branch_revid=main_branch_revid,
+                    base_branch_revid=base_branch_revid,
                     result_revid=local_branch.last_revision())
         if (orig_revid == local_branch.last_revision()
                 and existing_proposal is not None):
@@ -262,6 +266,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False,
                 main_branch_revid=main_branch_revid,
+                base_branch_revid=base_branch_revid,
                 result_revid=local_branch.last_revision())
 
         stack = local_branch.get_config()
@@ -289,6 +294,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     return BranchChangerResult(
                         start_time, existing_proposal, is_new=False,
                         main_branch_revid=main_branch_revid,
+                        base_branch_revid=base_branch_revid,
                         result_revid=local_branch.last_revision())
             else:
                 # If mode == 'attempt-push', then we're not 100% sure that this
@@ -297,6 +303,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 return BranchChangerResult(
                     start_time, None, is_new=False,
                     main_branch_revid=main_branch_revid,
+                    base_branch_revid=base_branch_revid,
                     result_revid=local_branch.last_revision())
 
         assert mode == 'propose'
@@ -304,6 +311,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                 start_time, None, is_new=None,
                 main_branch_revid=main_branch_revid,
+                base_branch_revid=base_branch_revid,
                 result_revid=None)
         if not dry_run:
             if existing_branch is not None:
@@ -319,6 +327,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                 start_time, existing_proposal, is_new=False,
                 main_branch_revid=main_branch_revid,
+                base_branch_revid=base_branch_revid,
                 result_revid=local_branch.last_revision())
         else:
             if not dry_run:
@@ -337,4 +346,5 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
             return BranchChangerResult(
                 start_time, mp, is_new=True,
                 main_branch_revid=main_branch_revid,
+                base_branch_revid=base_branch_revid,
                 result_revid=local_branch.last_revision())
