@@ -241,7 +241,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         note('%r: ' + text, *((changer,)+args), **kwargs)
     hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
     (base_branch, existing_branch, existing_proposal) = find_existing_proposed(
-        main_branch, name)
+        main_branch, hoster, name)
     # Need to overwrite if there is an existing branch in place that we're not
     # using as base.
     overwrite = (existing_branch and existing_branch != base_branch)
@@ -326,38 +326,63 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 main_branch_revid=main_branch_revid,
                 base_branch_revid=base_branch_revid,
                 result_revid=None)
-        if not dry_run:
-            if existing_branch is not None:
-                local_branch.push(existing_branch, overwrite=overwrite)
-                remote_branch = existing_branch
-            else:
-                remote_branch, public_branch_url = hoster.publish_derived(
-                    local_branch, main_branch, name=name, overwrite=False)
-        mp_description = changer.get_proposal_description(
-                existing_proposal)
-        if existing_proposal is not None:
-            existing_proposal.set_description(mp_description)
-            return BranchChangerResult(
-                start_time, existing_proposal, is_new=False,
-                main_branch_revid=main_branch_revid,
-                base_branch_revid=base_branch_revid,
-                result_revid=local_branch.last_revision())
+
+        mp_description = changer.get_proposal_description(existing_proposal)
+        (proposal, is_new) = create_or_update_proposal(
+            local_branch, main_branch, hoster, name, mp_description,
+            existing_branch=existing_branch,
+            existing_proposal=existing_proposal, overwrite=overwrite,
+            labels=labels, dry_run=dry_run)
+
+        return BranchChangerResult(
+            start_time, proposal, is_new=is_new,
+            main_branch_revid=main_branch_revid,
+            base_branch_revid=base_branch_revid,
+            result_revid=local_branch.last_revision())
+
+
+def create_or_update_proposal(
+        local_branch, main_branch, hoster, name,
+        mp_description, existing_branch=None, existing_proposal=None,
+        overwrite=False, labels=None, dry_run=False):
+    """Create or update a merge proposal.
+
+    Args:
+      local_branch: Local branch with changes to propose
+      main_branch: Target branch to propose against
+      hoster: Associated hoster for main branch
+      mp_description: Merge proposal description
+      existing_branch: Existing derived branch
+      existing_proposal: Existing merge proposal
+      overwrite: Whether to overwrite changes
+      labels: Labels to add
+      dry_run: Whether to just dry-run the change
+    Returns:
+      Tuple with (proposal, is_new)
+    """
+    if not dry_run:
+        if existing_branch is not None:
+            local_branch.push(existing_branch, overwrite=overwrite)
+            remote_branch = existing_branch
         else:
-            if not dry_run:
-                proposal_builder = hoster.get_proposer(
-                        remote_branch, main_branch)
-                try:
-                    mp = proposal_builder.create_proposal(
-                        description=mp_description, labels=labels)
-                except errors.PermissionDenied:
-                    report('Permission denied while trying to create '
-                           'proposal.')
-                    raise
-            else:
-                mp = DryRunProposal(
-                    local_branch, main_branch, labels=labels)
-            return BranchChangerResult(
-                start_time, mp, is_new=True,
-                main_branch_revid=main_branch_revid,
-                base_branch_revid=base_branch_revid,
-                result_revid=local_branch.last_revision())
+            remote_branch, public_branch_url = hoster.publish_derived(
+                local_branch, main_branch, name=name, overwrite=False)
+    if existing_proposal is not None:
+        if not dry_run:
+            existing_proposal.set_description(mp_description)
+        return (existing_proposal, False)
+    else:
+        if not dry_run:
+            proposal_builder = hoster.get_proposer(
+                    remote_branch, main_branch)
+            try:
+                mp = proposal_builder.create_proposal(
+                    description=mp_description, labels=labels)
+            except errors.PermissionDenied:
+                note('Permission denied while trying to create '
+                     'proposal.')
+                raise
+        else:
+            mp = DryRunProposal(
+                local_branch, main_branch, labels=labels)
+        return (mp, True)
