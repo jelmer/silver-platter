@@ -49,7 +49,7 @@ class NewUpstreamMerger(BranchChanger):
         cmd_merge_upstream().run(directory=local_tree.basedir,
                                  snapshot=self._snapshot)
         if self._build_verify:
-            build(local_tree.basedir)
+            build(local_tree)
         with local_tree.get_file('debian/changelog') as f:
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version

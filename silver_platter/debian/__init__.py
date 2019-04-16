@@ -39,8 +39,11 @@ from breezy.plugins.debian.directory import (
     vcs_field_to_bzr_url_converters,
     )
 from breezy.urlutils import InvalidURL
+try:
+    from breezy.plugins.debian.builder import BuildFailedError
+except ImportError:
+    from breezy.plugins.debian.errors import BuildFailedError
 from breezy.plugins.debian.errors import (
-    BuildFailedError,
     MissingUpstreamTarball,
     )
 
@@ -51,17 +54,18 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(directory, builder='sbuild'):
+def build(tree, builder='sbuild', result_dir=None):
     """Build a debian package in a directory.
 
     Args:
-      directory: Directory to build in
+      tree: Working tree
       builder: Builder command (e.g. 'sbuild', 'debuild')
+      result_dir: Directory to copy results to
     """
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([directory], builder=builder)
+    cmd_builddeb().run([tree.basedir], builder=builder, result_dir=result_dir)
 
 
 def get_source_package(name):

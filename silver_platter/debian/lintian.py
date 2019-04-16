@@ -142,7 +142,7 @@ class LintianFixer(BranchChanger):
                 raise PostCheckFailed()
 
         if self._build_verify:
-            build(local_tree.basedir)
+            build(local_tree)
 
     def get_proposal_description(self, existing_proposal):
         if existing_proposal:
