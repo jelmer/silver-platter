@@ -19,6 +19,18 @@
 
 import sys
 
+from ..run import (
+    ScriptBranchChanger,
+    ScriptMadeNoChanges,
+    derived_branch_name,
+    )
+
+from . import (
+    build,
+    open_packaging_branch,
+    propose_or_push,
+    )
+
 
 def setup_parser(parser):
     parser.add_argument('script', help='Path to script to run.', type=str)
@@ -41,22 +53,26 @@ def setup_parser(parser):
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
+    parser.add_argument(
+        '--build-verify',
+        help='Build package to verify it.', action='store_true')
+
+
+class DebianScriptBranchChanger(ScriptBranchChanger):
+
+    def __init__(self, script, build_verify):
+        super(DebianScriptBranchChanger, self).__init__(script)
+        self._build_verify = build_verify
+
+    def make_changes(self, local_tree):
+        super(DebianScriptBranchChanger, self).make_changes(local_tree)
+        if self._build_verify:
+            build(local_tree)
 
 
 def run_main(args):
     from breezy.plugins.propose import propose as _mod_propose
     from breezy.trace import note, show_error
-    from ..proposal import (
-        propose_or_push,
-        )
-    from ..run import (
-        ScriptBranchChanger,
-        ScriptMadeNoChanges,
-        derived_branch_name,
-        )
-    from . import (
-        open_packaging_branch,
-        )
     main_branch = open_packaging_branch(args.package)
 
     if args.name is None:
@@ -69,7 +85,9 @@ def run_main(args):
 
     try:
         result = propose_or_push(
-                main_branch, name, ScriptBranchChanger(args.script),
+                main_branch, name,
+                DebianScriptBranchChanger(
+                    args.script, build_verify=args.build_verify),
                 refresh=args.refresh, labels=args.label,
                 dry_run=args.dry_run, mode=args.mode)
     except _mod_propose.UnsupportedHoster as e:

@@ -38,6 +38,11 @@ from breezy.plugins.debian.errors import UpstreamAlreadyImported
 from breezy.trace import note
 
 
+def merge_upstream(tree, snapshot=False):
+    # TODO(jelmer): Don't call UI implementation, refactor brz-debian
+    cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
+
+
 class NewUpstreamMerger(BranchChanger):
 
     def __init__(self, snapshot=False, build_verify=False):
@@ -45,9 +50,7 @@ class NewUpstreamMerger(BranchChanger):
         self._build_verify = build_verify
 
     def make_changes(self, local_tree):
-        # TODO(jelmer): Don't call UI implementation, refactor brz-debian
-        cmd_merge_upstream().run(directory=local_tree.basedir,
-                                 snapshot=self._snapshot)
+        merge_upstream(tree=local_tree, snapshto=self._snapshot)
         if self._build_verify:
             build(local_tree)
         with local_tree.get_file('debian/changelog') as f:
@@ -72,7 +75,8 @@ def setup_parser(parser):
     parser.add_argument(
         '--no-build-verify',
         help='Do not build package to verify it.',
-        action='store_true')
+        dest='build_verify',
+        action='store_false')
     parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
@@ -95,7 +99,9 @@ def main(args):
         # merging upstream.
         try:
             result = propose_or_push(
-                main_branch, "new-upstream", NewUpstreamMerger(args.snapshot),
+                main_branch, "new-upstream",
+                NewUpstreamMerger(
+                    args.snapshot, build_verify=args.build_verify),
                 mode=args.mode, dry_run=args.dry_run)
         except UpstreamAlreadyImported as e:
             note('Last upstream version %s already imported', e.version)
