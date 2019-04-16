@@ -44,8 +44,6 @@ def setup_parser(parser):
 
 
 def run_main(args):
-    import os
-    from breezy import osutils
     from breezy.plugins.propose import propose as _mod_propose
     from breezy.trace import note, show_error
     from ..proposal import (
@@ -54,13 +52,15 @@ def run_main(args):
     from ..run import (
         ScriptBranchChanger,
         ScriptMadeNoChanges,
+        derived_branch_name,
         )
     from . import (
         open_packaging_branch,
         )
     main_branch = open_packaging_branch(args.package)
+
     if args.name is None:
-        name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
+        name = derived_branch_name(args.script)
     else:
         name = args.name
 

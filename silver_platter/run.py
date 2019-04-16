@@ -111,6 +111,10 @@ class ScriptBranchChanger(BranchChanger):
         return self._create_proposal
 
 
+def derived_branch_name(script):
+    return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
+
+
 def setup_parser(parser):
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('url', help='URL of branch to work on.', type=str)
@@ -140,7 +144,7 @@ def setup_parser(parser):
 def main(args):
     main_branch = _mod_branch.Branch.open(args.url)
     if args.name is None:
-        name = os.path.splitext(osutils.basename(args.script.split(' ')[0]))[0]
+        name = derived_branch_name(args.script)
     else:
         name = args.name
     commit_pending = {'auto': None, 'yes': True, 'no': False}[
