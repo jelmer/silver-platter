@@ -200,6 +200,8 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
         return self._actual.post_land(main_branch)
 
     def make_changes(self, local_tree):
+        # TODO(jelmer): Check that actual updates upstream version if
+        # it touches anything outside of debian/.
         self._actual.make_changes(local_tree)
         if self._build_verify:
             build(local_tree)

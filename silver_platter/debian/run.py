@@ -68,9 +68,6 @@ def run_main(args):
     else:
         name = args.name
 
-    # TODO(jelmer): Check that ScriptBranchChanger updates upstream version if
-    # it touches anything outside of debian/.
-
     branch_changer = DebuildingBranchChanger(
         ScriptBranchChanger(args.script),
         build_verify=args.build_verify)
