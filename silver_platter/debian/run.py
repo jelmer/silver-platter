@@ -26,9 +26,9 @@ from ..run import (
     )
 
 from . import (
-    build,
     open_packaging_branch,
     propose_or_push,
+    DebuildingBranchChanger,
     )
 
 
@@ -58,18 +58,6 @@ def setup_parser(parser):
         help='Build package to verify it.', action='store_true')
 
 
-class DebianScriptBranchChanger(ScriptBranchChanger):
-
-    def __init__(self, script, build_verify):
-        super(DebianScriptBranchChanger, self).__init__(script)
-        self._build_verify = build_verify
-
-    def make_changes(self, local_tree):
-        super(DebianScriptBranchChanger, self).make_changes(local_tree)
-        if self._build_verify:
-            build(local_tree)
-
-
 def run_main(args):
     from breezy.plugins.propose import propose as _mod_propose
     from breezy.trace import note, show_error
@@ -83,13 +71,16 @@ def run_main(args):
     # TODO(jelmer): Check that ScriptBranchChanger updates upstream version if
     # it touches anything outside of debian/.
 
+    branch_changer = DebuildingBranchChanger(
+        ScriptBranchChanger(args.script),
+        build_verify=args.build_verify)
+
     try:
         result = propose_or_push(
-                main_branch, name,
-                DebianScriptBranchChanger(
-                    args.script, build_verify=args.build_verify),
-                refresh=args.refresh, labels=args.label,
-                dry_run=args.dry_run, mode=args.mode)
+            main_branch, name,
+            branch_changer,
+            refresh=args.refresh, labels=args.label,
+            dry_run=args.dry_run, mode=args.mode)
     except _mod_propose.UnsupportedHoster as e:
         show_error('No known supported hoster for %s. Run \'svp login\'?',
                    e.branch.user_url)

@@ -181,3 +181,25 @@ def open_packaging_branch(location, possible_transports=None):
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
     return Branch.open(location, possible_transports=possible_transports)
+
+
+class DebuildingBranchChanger(_mod_proposal.BranchChanger):
+    """Wrapper for BranchChanger; builds result as a debian package."""
+
+    def __init__(self, actual, build_verify=False):
+        self._actual = actual
+        self._build_verify = build_verify
+
+    def get_proposal_description(self, existing_proposal):
+        return self._actual.get_proposal_description(existing_proposal)
+
+    def should_create_proposal(self):
+        return self._actual.should_create_proposal()
+
+    def post_land(self, main_branch):
+        return self._actual.post_land(main_branch)
+
+    def make_changes(self, local_tree):
+        self._actual.make_changes(local_tree)
+        if self._build_verify:
+            build(local_tree)

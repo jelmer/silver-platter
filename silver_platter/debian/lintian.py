@@ -33,9 +33,9 @@ from lintian_brush import (
     )
 
 from . import (
-    build,
     open_packaging_branch,
     should_update_changelog,
+    DebuildingBranchChanger,
     )
 from ..proposal import BranchChanger
 
@@ -94,12 +94,10 @@ class LintianFixer(BranchChanger):
     """BranchChanger that fixes lintian issues."""
 
     def __init__(self, pkg, fixers, update_changelog, compat_release,
-                 build_verify=False, pre_check=None, post_check=None,
-                 propose_addon_only=None,
-                 committer=None):
+                 pre_check=None, post_check=None,
+                 propose_addon_only=None, committer=None):
         self._pkg = pkg
         self._update_changelog = update_changelog
-        self._build_verify = build_verify
         self._pre_check = pre_check
         self._post_check = post_check
         self._fixers = fixers
@@ -140,9 +138,6 @@ class LintianFixer(BranchChanger):
         if self._post_check:
             if not self._post_check(local_tree, since_revid):
                 raise PostCheckFailed()
-
-        if self._build_verify:
-            build(local_tree)
 
     def get_proposal_description(self, existing_proposal):
         if existing_proposal:
@@ -307,10 +302,11 @@ def main(args):
                     pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
                     update_changelog=args.update_changelog,
                     compat_release=debian_info.stable(),
-                    build_verify=args.build_verify,
                     pre_check=pre_check, post_check=post_check,
                     propose_addon_only=args.propose_addon_only,
                     committer=args.committer)
+            branch_changer = DebuildingBranchChanger(
+                branch_changer, build_verify=args.build_verify)
             try:
                 result = propose_or_push(
                         main_branch, "lintian-fixes", branch_changer,

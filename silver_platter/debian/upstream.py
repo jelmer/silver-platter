@@ -29,9 +29,9 @@ from ..proposal import (
     )
 
 from . import (
-    build,
     open_packaging_branch,
     propose_or_push,
+    DebuildingBranchChanger,
     )
 from breezy.plugins.debian.errors import UpstreamAlreadyImported
 
@@ -45,14 +45,11 @@ def merge_upstream(tree, snapshot=False):
 
 class NewUpstreamMerger(BranchChanger):
 
-    def __init__(self, snapshot=False, build_verify=False):
+    def __init__(self, snapshot=False):
         self._snapshot = snapshot
-        self._build_verify = build_verify
 
     def make_changes(self, local_tree):
         merge_upstream(tree=local_tree, snapshto=self._snapshot)
-        if self._build_verify:
-            build(local_tree)
         with local_tree.get_file('debian/changelog') as f:
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version
@@ -97,11 +94,13 @@ def main(args):
         main_branch = open_packaging_branch(package)
         # TODO(jelmer): Work out how to propose pristine-tar changes for
         # merging upstream.
+        branch_changer = DebuildingBranchChanger(
+            NewUpstreamMerger(args.snapshot),
+            build_verify=args.build_verify)
         try:
             result = propose_or_push(
                 main_branch, "new-upstream",
-                NewUpstreamMerger(
-                    args.snapshot, build_verify=args.build_verify),
+                branch_changer,
                 mode=args.mode, dry_run=args.dry_run)
         except UpstreamAlreadyImported as e:
             note('Last upstream version %s already imported', e.version)
