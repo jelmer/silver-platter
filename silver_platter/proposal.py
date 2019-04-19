@@ -165,6 +165,15 @@ class DryRunProposal(MergeProposal):
         self.target_branch = target_branch
         self.url = None
 
+    @classmethod
+    def from_existing(cls, mp, source_branch=None):
+        if source_branch is None:
+            source_branch = Branch.open(mp.get_source_branch_url())
+        return cls(
+            source_branch=source_branch,
+            target_branch=Branch.open(mp.get_target_branch_url()),
+            description=mp.get_description())
+
     def __repr__(self):
         return "%s(%r, %r)" % (
             self.__class__.__name__, self.source_branch, self.target_branch)
@@ -191,20 +200,6 @@ class DryRunProposal(MergeProposal):
     def is_merged(self):
         """Check whether this merge proposal has been merged."""
         return False
-
-
-def push_result(local_branch, remote_branch,
-                additional_colocated_branches=None):
-    local_branch.push(remote_branch)
-    for branch_name in additional_colocated_branches or []:
-        try:
-            add_branch = local_branch.controldir.open_branch(
-                name=branch_name)
-        except errors.NotBranchError:
-            pass
-        else:
-            remote_branch.controldir.push_branch(
-                add_branch, name=branch_name)
 
 
 def find_existing_proposed(main_branch, hoster, name):
@@ -333,36 +328,25 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         stack.set_user_option('branch.fetch_tags', True)
 
         if mode in ('push', 'attempt-push'):
-            push_url = hoster.get_push_url(main_branch)
-            report('pushing to %s', push_url)
-            target_branch = Branch.open(
-                    push_url, possible_transports=possible_transports)
-            if not dry_run:
-                try:
-                    push_result(
-                        local_branch, target_branch,
-                        additional_colocated_branches=additional_branches)
-                except (errors.PermissionDenied, errors.LockFailed):
-                    if mode == 'attempt-push':
-                        report('push access denied, falling back to propose')
-                        mode = 'propose'
-                    else:
-                        report('permission denied during push')
-                        raise
+            try:
+                push_changes(
+                    local_branch, main_branch, hoster,
+                    additional_colocated_branches=additional_branches,
+                    dry_run=dry_run)
+            except (errors.PermissionDenied, errors.LockFailed):
+                if mode == 'attempt-push':
+                    report('push access denied, falling back to propose')
+                    mode = 'propose'
                 else:
-                    changer.post_land(target_branch)
-                    return BranchChangerResult(
-                        start_time, existing_proposal, is_new=False,
-                        main_branch_revid=main_branch_revid,
-                        base_branch_revid=base_branch_revid,
-                        result_revid=local_branch.last_revision(),
-                        local_branch=local_branch, destroy=destroy)
+                    report('permission denied during push')
+                    raise
             else:
                 # If mode == 'attempt-push', then we're not 100% sure that this
                 # would have happened or if we would have fallen back to
                 # propose.
+                changer.post_land(main_branch)
                 return BranchChangerResult(
-                    start_time, None, is_new=False,
+                    start_time, existing_proposal, is_new=False,
                     main_branch_revid=main_branch_revid,
                     base_branch_revid=base_branch_revid,
                     result_revid=local_branch.last_revision(),
@@ -378,7 +362,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
 
         mp_description = changer.get_proposal_description(existing_proposal)
         # TODO(jelmer): Do the same for additional branches that have changed?
-        (proposal, is_new) = create_or_update_proposal(
+        (proposal, is_new) = propose_changes(
             local_branch, main_branch, hoster, name, mp_description,
             existing_branch=existing_branch,
             existing_proposal=existing_proposal, overwrite=overwrite,
@@ -395,9 +379,29 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         raise
 
 
-def create_or_update_proposal(
+def push_changes(local_branch, main_branch, hoster, possible_transports=None,
+                 additional_colocated_branches=None, dry_run=False):
+    """Push changes to a branch."""
+    push_url = hoster.get_push_url(main_branch)
+    note('pushing to %s', push_url)
+    target_branch = Branch.open(
+        push_url, possible_transports=possible_transports)
+    if not dry_run:
+        local_branch.push(target_branch)
+        for branch_name in additional_colocated_branches or []:
+            try:
+                add_branch = local_branch.controldir.open_branch(
+                    name=branch_name)
+            except errors.NotBranchError:
+                pass
+            else:
+                target_branch.controldir.push_branch(
+                    add_branch, name=branch_name)
+
+
+def propose_changes(
         local_branch, main_branch, hoster, name,
-        mp_description, existing_branch=None, existing_proposal=None,
+        mp_description, existing_branch=None, resume_proposal=None,
         overwrite=False, labels=None, dry_run=False):
     """Create or update a merge proposal.
 
@@ -407,7 +411,7 @@ def create_or_update_proposal(
       hoster: Associated hoster for main branch
       mp_description: Merge proposal description
       existing_branch: Existing derived branch
-      existing_proposal: Existing merge proposal
+      resume_proposal: Existing merge proposal to resume
       overwrite: Whether to overwrite changes
       labels: Labels to add
       dry_run: Whether to just dry-run the change
@@ -421,10 +425,12 @@ def create_or_update_proposal(
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name, overwrite=overwrite)
-    if existing_proposal is not None:
-        if not dry_run:
-            existing_proposal.set_description(mp_description)
-        return (existing_proposal, False)
+    if resume_proposal is not None:
+        if dry_run:
+            resume_propose = DryRunProposal.from_existing(
+                resume_proposal, source_branch=local_branch)
+        resume_proposal.set_description(mp_description)
+        return (resume_proposal, False)
     else:
         if not dry_run:
             proposal_builder = hoster.get_proposer(
