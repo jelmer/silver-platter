@@ -55,6 +55,15 @@ class PostCheckFailed(BzrError):
         super(PostCheckFailed, self).__init__()
 
 
+class UnknownFixer(BzrError):
+    """The specified fixer is unknown."""
+
+    _fmt = "No such fixer: %s."
+
+    def __init__(self, fixer):
+        super(UnknownFixer, self).__init__(fixer=fixer)
+
+
 def parse_mp_description(description):
     """Parse a merge proposal description.
 
@@ -210,6 +219,26 @@ def setup_parser(parser):
         help="Output diff of created merge proposal.")
 
 
+def get_fixers(available_fixers, names=None):
+    """Get the set of fixers to try.
+
+    Args:
+      available_fixers: Dictionary mapping fixer names to objects
+      names: Optional set of fixers to restrict to
+    Returns:
+      List of fixer objects
+    """
+    # If it's unknown which fixers are relevant, just try all of them.
+    if names:
+        fixers = names
+    else:
+        fixers = available_fixers.keys()
+    try:
+        return [available_fixers[fixer] for fixer in fixers]
+    except KeyError as e:
+        raise UnknownFixer(e.args[0])
+
+
 def main(args):
     import distro_info
     import socket
@@ -242,9 +271,11 @@ def main(args):
         for tag in fixer.lintian_tags:
             fixer_scripts[tag] = fixer
 
-    available_fixers = set(fixer_scripts)
-    if args.fixers:
-        available_fixers = available_fixers.intersection(set(args.fixers))
+    try:
+        fixers = get_fixers(fixer_scripts, args.fixers)
+    except UnknownFixer as e:
+        note('Unknown fixer: %s', e.fixer)
+        return 1
 
     debian_info = distro_info.DebianDistroInfo()
 
@@ -296,13 +327,8 @@ def main(args):
         except errors.TransportError as e:
             note('%s: %s', pkg, e)
         else:
-            # If it's unknown which fixers are relevant, just try all of them.
-            if args.fixers:
-                fixers = args.fixers
-            else:
-                fixers = available_fixers
             branch_changer = LintianFixer(
-                    pkg, fixers=[fixer_scripts[fixer] for fixer in fixers],
+                    pkg, fixers=fixers,
                     update_changelog=args.update_changelog,
                     compat_release=debian_info.stable(),
                     pre_check=pre_check, post_check=post_check,
@@ -339,7 +365,7 @@ def main(args):
             else:
                 if result.merge_proposal:
                     tags = set()
-                    for brush_result, unused_summary in branch_changer.applied:
+                    for brush_result, unused_summary in branch_changer.actual.applied:
                         tags.update(brush_result.fixed_lintian_tags)
                     if result.is_new:
                         note('%s: Proposed fixes %r: %s', pkg, tags,

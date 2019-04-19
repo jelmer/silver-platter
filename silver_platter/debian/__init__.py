@@ -189,22 +189,22 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
     """Wrapper for BranchChanger; builds result as a debian package."""
 
     def __init__(self, actual, build_verify=False, builder=None):
-        self._actual = actual
+        self.actual = actual
         self._build_verify = build_verify
         self._builder = builder
 
     def get_proposal_description(self, existing_proposal):
-        return self._actual.get_proposal_description(existing_proposal)
+        return self.actual.get_proposal_description(existing_proposal)
 
     def should_create_proposal(self):
-        return self._actual.should_create_proposal()
+        return self.actual.should_create_proposal()
 
     def post_land(self, main_branch):
-        return self._actual.post_land(main_branch)
+        return self.actual.post_land(main_branch)
 
     def make_changes(self, local_tree):
         # TODO(jelmer): Check that actual updates upstream version if
         # it touches anything outside of debian/.
-        self._actual.make_changes(local_tree)
+        self.actual.make_changes(local_tree)
         if self._build_verify:
             build(local_tree, builder=self._builder)

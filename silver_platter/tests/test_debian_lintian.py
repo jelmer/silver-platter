@@ -20,6 +20,8 @@ import unittest
 from ..debian.lintian import (
     parse_mp_description,
     create_mp_description,
+    get_fixers,
+    UnknownFixer,
     )
 
 
@@ -48,3 +50,18 @@ Fix some issues reported by lintian
 * some change
 * some other change
 """, create_mp_description(['some change', 'some other change']))
+
+
+class GetFixersTests(unittest.TestCase):
+
+    def test_get_all(self):
+        available = {'foo': 'bar'}
+        self.assertEqual(['bar'], get_fixers(available))
+
+    def test_get_specified(self):
+        available = {'foo': 'bar'}
+        self.assertEqual(['bar'], get_fixers(available, ['foo']))
+
+    def test_get_unknown(self):
+        available = {'foo': 'bar'}
+        self.assertRaises(UnknownFixer, get_fixers, available, 'bar')
