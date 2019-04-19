@@ -109,7 +109,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.subcommand is None:
         parser.print_usage()
-        sys.exit(1)
+        return 1
     return callbacks[args.subcommand](args)
 
 

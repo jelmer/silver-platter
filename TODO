@@ -21,3 +21,5 @@ Debian
 
 upload-pending-commits.py:
  * Improve speed of verifying signatures
+
+- support --mode=merge-directive

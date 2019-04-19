@@ -17,6 +17,8 @@
 
 import unittest
 
+from lintian_brush import Fixer
+
 from ..debian.lintian import (
     parse_mp_description,
     create_mp_description,
@@ -54,14 +56,20 @@ Fix some issues reported by lintian
 
 class GetFixersTests(unittest.TestCase):
 
+    def setUp(self):
+        super(GetFixersTests, self).setUp()
+        self.fixers = [Fixer('foo', ['atag'])]
+
     def test_get_all(self):
-        available = {'foo': 'bar'}
-        self.assertEqual(['bar'], get_fixers(available))
+        self.assertEqual([self.fixers[0]], list(get_fixers(self.fixers)))
 
     def test_get_specified(self):
-        available = {'foo': 'bar'}
-        self.assertEqual(['bar'], get_fixers(available, ['foo']))
+        self.assertEqual(
+            [self.fixers[0]], list(get_fixers(self.fixers, names=['foo'])))
+
+    def test_get_specified_tag(self):
+        self.assertEqual(
+            [self.fixers[0]], list(get_fixers(self.fixers, tags=['atag'])))
 
     def test_get_unknown(self):
-        available = {'foo': 'bar'}
-        self.assertRaises(UnknownFixer, get_fixers, available, 'bar')
+        self.assertRaises(UnknownFixer, get_fixers, self.fixers, names=['bar'])

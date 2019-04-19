@@ -219,24 +219,33 @@ def setup_parser(parser):
         help="Output diff of created merge proposal.")
 
 
-def get_fixers(available_fixers, names=None):
+def get_fixers(available_fixers, names=None, tags=None):
     """Get the set of fixers to try.
 
     Args:
       available_fixers: Dictionary mapping fixer names to objects
       names: Optional set of fixers to restrict to
+      tags: Optional set of tags to restrict to
     Returns:
       List of fixer objects
     """
+    by_tag = {}
+    by_name = {}
+    for fixer in available_fixers:
+        for tag in fixer.lintian_tags:
+            by_tag[tag] = fixer
+        by_name[fixer.name] = fixer
+
     # If it's unknown which fixers are relevant, just try all of them.
     if names:
-        fixers = names
+        try:
+            return [by_name[name] for name in names]
+        except KeyError as e:
+            raise UnknownFixer(e.args[0])
+    elif tags:
+        return [by_tag[tag] for tag in tags]
     else:
-        fixers = available_fixers.keys()
-    try:
-        return [available_fixers[fixer] for fixer in fixers]
-    except KeyError as e:
-        raise UnknownFixer(e.args[0])
+        return by_name.values()
 
 
 def main(args):
@@ -266,13 +275,8 @@ def main(args):
     possible_transports = []
     possible_hosters = []
 
-    fixer_scripts = {}
-    for fixer in available_lintian_fixers():
-        for tag in fixer.lintian_tags:
-            fixer_scripts[tag] = fixer
-
     try:
-        fixers = get_fixers(fixer_scripts, args.fixers)
+        fixers = get_fixers(available_lintian_fixers(), names=args.fixers)
     except UnknownFixer as e:
         note('Unknown fixer: %s', e.fixer)
         return 1
@@ -365,7 +369,8 @@ def main(args):
             else:
                 if result.merge_proposal:
                     tags = set()
-                    for brush_result, unused_summary in branch_changer.actual.applied:
+                    for brush_result, unused_summary in (
+                            branch_changer.actual.applied):
                         tags.update(brush_result.fixed_lintian_tags)
                     if result.is_new:
                         note('%s: Proposed fixes %r: %s', pkg, tags,
