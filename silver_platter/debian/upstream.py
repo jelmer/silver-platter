@@ -49,7 +49,7 @@ class NewUpstreamMerger(BranchChanger):
         self._snapshot = snapshot
 
     def make_changes(self, local_tree):
-        merge_upstream(tree=local_tree, snapshto=self._snapshot)
+        merge_upstream(tree=local_tree, snapshot=self._snapshot)
         with local_tree.get_file('debian/changelog') as f:
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version
