@@ -185,6 +185,9 @@ def setup_parser(parser):
         '--build-verify',
         help='Build package to verify it.', action='store_true')
     parser.add_argument(
+        '--builder', default='sbuild', type=str,
+        help='Build command to use when verifying build.')
+    parser.add_argument(
         '--refresh',
         help='Discard old branch and apply fixers from scratch.',
         action='store_true')
@@ -306,7 +309,8 @@ def main(args):
                     propose_addon_only=args.propose_addon_only,
                     committer=args.committer)
             branch_changer = DebuildingBranchChanger(
-                branch_changer, build_verify=args.build_verify)
+                branch_changer, build_verify=args.build_verify,
+                builder=args.builder)
             try:
                 result = propose_or_push(
                         main_branch, "lintian-fixes", branch_changer,

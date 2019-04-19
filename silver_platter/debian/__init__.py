@@ -54,7 +54,7 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree, builder='sbuild', result_dir=None):
+def build(tree, builder=None, result_dir=None):
     """Build a debian package in a directory.
 
     Args:
@@ -62,6 +62,8 @@ def build(tree, builder='sbuild', result_dir=None):
       builder: Builder command (e.g. 'sbuild', 'debuild')
       result_dir: Directory to copy results to
     """
+    if builder is None:
+        builder = 'sbuild'
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
@@ -186,9 +188,10 @@ def open_packaging_branch(location, possible_transports=None):
 class DebuildingBranchChanger(_mod_proposal.BranchChanger):
     """Wrapper for BranchChanger; builds result as a debian package."""
 
-    def __init__(self, actual, build_verify=False):
+    def __init__(self, actual, build_verify=False, builder=None):
         self._actual = actual
         self._build_verify = build_verify
+        self._builder = builder
 
     def get_proposal_description(self, existing_proposal):
         return self._actual.get_proposal_description(existing_proposal)
@@ -204,4 +207,4 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
         # it touches anything outside of debian/.
         self._actual.make_changes(local_tree)
         if self._build_verify:
-            build(local_tree)
+            build(local_tree, builder=self._builder)

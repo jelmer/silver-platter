@@ -56,6 +56,9 @@ def setup_parser(parser):
     parser.add_argument(
         '--build-verify',
         help='Build package to verify it.', action='store_true')
+    parser.add_argument(
+        '--builder', type=str, default='sbuild',
+        help='Build command to run.')
 
 
 def main(args):
@@ -70,7 +73,7 @@ def main(args):
 
     branch_changer = DebuildingBranchChanger(
         ScriptBranchChanger(args.script),
-        build_verify=args.build_verify)
+        build_verify=args.build_verify, builder=args.builder)
 
     try:
         result = propose_or_push(

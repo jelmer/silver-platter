@@ -75,6 +75,8 @@ def setup_parser(parser):
         dest='build_verify',
         action='store_false')
     parser.add_argument(
+        '--builder', type=str, default='sbuild', help='Build command.')
+    parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
         type=str)
@@ -96,7 +98,7 @@ def main(args):
         # merging upstream.
         branch_changer = DebuildingBranchChanger(
             NewUpstreamMerger(args.snapshot),
-            build_verify=args.build_verify)
+            build_verify=args.build_verify, builder=args.builder)
         try:
             result = propose_or_push(
                 main_branch, "new-upstream",
