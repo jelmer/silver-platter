@@ -58,7 +58,7 @@ def setup_parser(parser):
         help='Build package to verify it.', action='store_true')
 
 
-def run_main(args):
+def main(args):
     from breezy.plugins.propose import propose as _mod_propose
     from breezy.trace import note, show_error
     main_branch = open_packaging_branch(args.package)
