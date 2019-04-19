@@ -32,6 +32,7 @@ from . import (
     open_packaging_branch,
     propose_or_push,
     DebuildingBranchChanger,
+    PostCheckFailed,
     )
 from breezy.plugins.debian.errors import UpstreamAlreadyImported
 
@@ -45,15 +46,24 @@ def merge_upstream(tree, snapshot=False):
 
 class NewUpstreamMerger(BranchChanger):
 
-    def __init__(self, snapshot=False):
+    def __init__(self, snapshot=False, pre_check=None, post_check=None):
         self._snapshot = snapshot
+        self._pre_check = pre_check
+        self._post_check = post_check
 
     def make_changes(self, local_tree):
+        since_revid = local_tree.last_revision()
+        if self._pre_check:
+            if not self._pre_check(local_tree):
+                return
         merge_upstream(tree=local_tree, snapshot=self._snapshot)
         with local_tree.get_file('debian/changelog') as f:
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version
         subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
+        if self._post_check:
+            if not self._post_check(local_tree, since_revid):
+                raise PostCheckFailed()
 
     def get_proposal_description(self, existing_proposal):
         return "Merge new upstream release %s" % self._upstream_version

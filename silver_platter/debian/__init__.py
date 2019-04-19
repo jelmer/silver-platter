@@ -54,6 +54,10 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
+class PostCheckFailed(Exception):
+    """The post check failed."""
+
+
 def build(tree, builder=None, result_dir=None):
     """Build a debian package in a directory.
 

@@ -36,6 +36,7 @@ from . import (
     open_packaging_branch,
     should_update_changelog,
     DebuildingBranchChanger,
+    PostCheckFailed,
     )
 from ..proposal import BranchChanger
 
@@ -44,15 +45,6 @@ DEFAULT_ADDON_FIXERS = [
     'file-contains-trailing-whitespace',
     'package-uses-old-debhelper-compat-version',
     ]
-
-
-class PostCheckFailed(BzrError):
-    """The post check failed."""
-
-    _fmt = "Running post-check failed."
-
-    def __init__(self):
-        super(PostCheckFailed, self).__init__()
 
 
 class UnknownFixer(BzrError):
