@@ -26,7 +26,10 @@ import datetime
 
 from breezy.branch import Branch
 from breezy.diff import show_diff_trees
-from breezy.trace import note
+from breezy.trace import (
+    note,
+    warning,
+    )
 from breezy import (
     errors,
     merge as _mod_merge,
@@ -269,9 +272,19 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
 
     def report(text, *args, **kwargs):
         note('%r: ' + text, *((changer,)+args), **kwargs)
-    hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-    (base_branch, existing_branch, existing_proposal) = find_existing_proposed(
-        main_branch, hoster, name)
+    try:
+        hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
+    except UnsupportedHoster as e:
+        if mode != 'push':
+            raise
+        base_branch = main_branch
+        existing_branch = None
+        existing_proposal = None
+        warning('Unsupported hoster (%s), will attempt to push to %s',
+                e, main_branch.user_url)
+    else:
+        (base_branch, existing_branch, existing_proposal) = find_existing_proposed(
+            main_branch, hoster, name)
     # Need to overwrite if there is an existing branch in place that we're not
     # using as base.
     overwrite = (existing_branch and existing_branch != base_branch)
