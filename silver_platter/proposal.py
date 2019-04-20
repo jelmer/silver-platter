@@ -263,20 +263,26 @@ class Workspace(object):
     main_branch: The upstream branch
     resume_branch: Optional in-progress branch that we previously made changes
         on, and should ideally continue from.
+    local_tree: The tree the user can work in
     """
 
     def __init__(self, main_branch, resume_branch=None,
-                 additional_branches=None):
+                 additional_colocated_branches=None,
+                 dir=None):
         self.main_branch = main_branch
         self.main_branch_revid = main_branch.last_revision()
         self.resume_branch = resume_branch
-        self.additional_branches = additional_branches or []
+        self.additional_colocated_branches = (
+            additional_colocated_branches or [])
         self._destroy = None
         self.local_tree = None
+        self._dir = dir
 
     def __enter__(self):
         self.local_tree, self._destroy = create_temp_sprout(
-            self.resume_branch or self.main_branch, self.additional_branches)
+            self.resume_branch or self.main_branch,
+            self.additional_colocated_branches,
+            dir=self._dir)
         self.refreshed = False
         with self.local_tree.branch.lock_write():
             if (self.resume_branch is not None and
@@ -356,9 +362,6 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       A BranchChangerResult
     """
     start_time = datetime.datetime.now()
-    if mode not in ('push', 'propose', 'attempt-push'):
-        raise ValueError("invalid mode %r" % mode)
-
     overwrite = False
 
     try:
@@ -411,6 +414,9 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
 def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
                     overwrite_existing=True, existing_proposal=None):
+    if mode not in ('push', 'propose', 'attempt-push'):
+        raise ValueError("invalid mode %r" % mode)
+
     if not ws.changes_since_main():
         if existing_proposal is not None:
             note('closing existing merge proposal - no new revisions')

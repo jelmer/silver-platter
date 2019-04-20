@@ -19,6 +19,7 @@ from breezy.tests import TestCaseWithTransport
 
 from ..proposal import (
     push_result,
+    Workspace,
     )
 
 
@@ -30,3 +31,27 @@ class PushResultTests(TestCaseWithTransport):
         revid = source.commit('Some change')
         push_result(source.branch, target)
         self.assertEqual(target.last_revision(), revid)
+
+
+class WorkspaceTests(TestCaseWithTransport):
+
+    def test_simple(self):
+        b = self.make_branch('target')
+        with Workspace(b, dir=self.test_dir) as ws:
+            self.assertFalse(ws.changes_since_main())
+            self.assertFalse(ws.changes_since_resume())
+            ws.local_tree.commit('foo')
+            self.assertTrue(ws.changes_since_main())
+            self.assertTrue(ws.changes_since_main())
+
+    def test_with_resume(self):
+        b = self.make_branch_and_tree('target')
+        c = b.controldir.sprout('resume').open_workingtree()
+        c.commit('some change')
+        with Workspace(b.branch, resume_branch=c.branch,
+                       dir=self.test_dir) as ws:
+            self.assertTrue(ws.changes_since_main())
+            self.assertFalse(ws.changes_since_resume())
+            ws.local_tree.commit('foo')
+            self.assertTrue(ws.changes_since_main())
+            self.assertTrue(ws.changes_since_resume())
