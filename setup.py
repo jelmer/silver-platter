@@ -55,4 +55,10 @@ setup(
             ],
       },
       test_suite='silver_platter.tests.test_suite',
-      )
+      install_requires=[
+          'breezy',
+          'dulwich',
+          'launchpadlib',
+          'gitlab',
+      ],
+)
