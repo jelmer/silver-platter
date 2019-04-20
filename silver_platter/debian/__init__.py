@@ -209,3 +209,11 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
         self.actual.make_changes(local_tree)
         if self._build_verify:
             build(local_tree, builder=self._builder)
+
+
+class Workspace(_mod_proposal.Workspace):
+
+    def __init__(self, *args, **args):
+        super(Workspace, self).__init__(
+            self, *args, **kwargs,
+            additional_colocated_branches=['pristine-tar', 'upstream'])
