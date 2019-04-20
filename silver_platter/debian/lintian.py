@@ -91,6 +91,24 @@ def create_mp_description(lines):
     return ''.join(mp_description)
 
 
+def update_proposal_description(existing_proposal, applied):
+    if existing_proposal:
+        existing_description = existing_proposal.get_description()
+        existing_lines = parse_mp_description(existing_description)
+    else:
+        existing_lines = []
+    return create_mp_description(
+        existing_lines + [l for r, l in applied])
+
+
+def has_nontrivial_changes(applied, propose_addon_only):
+    tags = set()
+    for result, unused_summary in applied:
+        tags.update(result.fixed_lintian_tags)
+    # Is there enough to create a new merge proposal?
+    return bool(tags - propose_addon_only)
+
+
 class LintianFixer(BranchChanger):
     """BranchChanger that fixes lintian issues."""
 
@@ -141,20 +159,10 @@ class LintianFixer(BranchChanger):
                 raise PostCheckFailed()
 
     def get_proposal_description(self, existing_proposal):
-        if existing_proposal:
-            existing_description = existing_proposal.get_description()
-            existing_lines = parse_mp_description(existing_description)
-        else:
-            existing_lines = []
-        return create_mp_description(
-            existing_lines + [l for r, l in self.applied])
+        return update_proposal_description(existing_proposal, self.applied)
 
     def should_create_proposal(self):
-        tags = set()
-        for result, unused_summary in self.applied:
-            tags.update(result.fixed_lintian_tags)
-        # Is there enough to create a new merge proposal?
-        if not tags - self._propose_addon_only:
+        if not has_nontrivial_changes(self.applied, self._propose_addon_only):
             note('%r: only add-on fixers found', self)
             return False
         return True

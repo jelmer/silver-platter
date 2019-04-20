@@ -283,8 +283,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
         warning('Unsupported hoster (%s), will attempt to push to %s',
                 e, main_branch.user_url)
     else:
-        (base_branch, existing_branch, existing_proposal) = find_existing_proposed(
-            main_branch, hoster, name)
+        (base_branch, existing_branch, existing_proposal) = (
+            find_existing_proposed(main_branch, hoster, name))
     # Need to overwrite if there is an existing branch in place that we're not
     # using as base.
     overwrite = (existing_branch and existing_branch != base_branch)
