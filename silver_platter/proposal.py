@@ -328,6 +328,15 @@ class Workspace(object):
             labels=labels, dry_run=dry_run,
             additional_colocated_branches=self.additional_colocated_branches)
 
+    def orig_tree(self):
+        return self.local_tree.branch.repository.revision_tree(self.orig_revid)
+
+    def show_diff(self, outf, old_label='old/', new_label='new/'):
+        orig_tree = self.orig_tree()
+        show_diff_trees(
+            orig_tree, self.local_tree.basis_tree(), outf,
+            old_label=old_label, new_label=new_label)
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._destroy:
             self._destroy()
