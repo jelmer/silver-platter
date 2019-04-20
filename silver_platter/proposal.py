@@ -202,6 +202,24 @@ class DryRunProposal(MergeProposal):
         return False
 
 
+def push_result(local_branch, remote_branch,
+                additional_colocated_branches=None):
+    try:
+        local_branch.push(remote_branch)
+    except errors.LockFailed as e:
+        # Almost certainly actually a PermissionDenied error..
+        raise errors.PermissionDenied(path=remote_branch.user_url, extra=e)
+    for branch_name in additional_colocated_branches or []:
+        try:
+            add_branch = local_branch.controldir.open_branch(
+                name=branch_name)
+        except errors.NotBranchError:
+            pass
+        else:
+            remote_branch.controldir.push_branch(
+                add_branch, name=branch_name)
+
+
 def find_existing_proposed(main_branch, hoster, name):
     """Find an existing derived branch with the specified name, and proposal.
 
@@ -210,9 +228,9 @@ def find_existing_proposed(main_branch, hoster, name):
       hoster: The hoster
       name: Name of the derived branch
     Returns:
-      Tuple with (base_branch, existing_branch, existing_proposal)
-      Base branch won't be None; The existing_branch and existing_proposal can
-      be None.
+      Tuple with (resume_branch, overwrite_existing, existing_proposal)
+      The resume_branch is the branch to continue from; overwrite_existing
+      means there is an existing branch in place that should be overwritten.
     """
     try:
         existing_branch = hoster.get_derived_branch(main_branch, name=name)
@@ -226,17 +244,94 @@ def find_existing_proposed(main_branch, hoster, name):
         for mp in hoster.iter_proposals(
                 existing_branch, main_branch, status='all'):
             if not mp.is_merged():
-                return (existing_branch, existing_branch, mp)
+                return (existing_branch, False, mp)
             else:
                 merged_proposal = mp
         else:
             if merged_proposal is not None:
                 note('There is a proposal that has already been merged at %s.',
                      merged_proposal.url)
-                return (main_branch, existing_branch, None)
+                return (None, True, None)
             else:
                 # No related merge proposals found
-                return (main_branch, None, None)
+                return (None, False, None)
+
+
+class Workspace(object):
+    """Workspace for creating changes to a branch.
+
+    main_branch: The upstream branch
+    resume_branch: Optional in-progress branch that we previously made changes
+        on, and should ideally continue from.
+    """
+
+    def __init__(self, main_branch, resume_branch=None,
+                 additional_branches=None):
+        self.main_branch = main_branch
+        self.main_branch_revid = main_branch.last_revision()
+        self.resume_branch = resume_branch
+        self.additional_branches = additional_branches or []
+        self._destroy = None
+        self.local_tree = None
+
+    def __enter__(self):
+        self.local_tree, self._destroy = create_temp_sprout(
+            self.resume_branch or self.main_branch, self.additional_branches)
+        self.refreshed = False
+        with self.local_tree.branch.lock_write():
+            if (self.resume_branch is not None and
+                    merge_conflicts(
+                        self.main_branch, self.local_tree.branch)):
+                note('restarting branch')
+                self.local_tree.update(revision=self.main_branch_revid)
+                self.local_tree.branch.generate_revision_history(
+                    self.main_branch_revid)
+                self.resume_branch = None
+            self.orig_revid = self.local_tree.last_revision()
+        return self
+
+    def defer_destroy(self):
+        ret = self._destroy
+        self._destroy = None
+        return ret
+
+    def changes_since_main(self):
+        return self.local_tree.branch.last_revision() != self.main_branch_revid
+
+    def changes_since_resume(self):
+        return self.orig_revid != self.local_tree.branch.last_revision()
+
+    def push(self, hoster=None, dry_run=False):
+        if hoster is None:
+            hoster = get_hoster(self.main_branch)
+        return push_changes(
+            self.local_tree.branch, self.main_branch, hoster=hoster,
+            additional_colocated_branches=self.additional_colocated_branches,
+            dry_run=dry_run)
+
+    def propose(self, name, description, hoster=None, existing_proposal=None,
+                overwrite_resume=None, labels=None, dry_run=False):
+        if hoster is None:
+            hoster = get_hoster(self.main_branch)
+        return propose_changes(
+            self.local_tree.branch, self.main_branch,
+            hoster=hoster, name=name, description=description,
+            resume_branch=self.resume_branch,
+            existing_proposal=existing_proposal,
+            overwrite_resume=overwrite_resume,
+            labels=labels, dry_run=dry_run,
+            additional_colocated_branches=self.additional_colocated_branches)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._destroy:
+            self._destroy()
+            self._destroy = None
+        return False
+
+
+def enable_tag_pushing(branch):
+    stack = branch.get_config()
+    stack.set_user_option('branch.fetch_tags', True)
 
 
 def propose_or_push(main_branch, name, changer, mode, dry_run=False,
@@ -261,122 +356,101 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
       A BranchChangerResult
     """
     start_time = datetime.datetime.now()
-    if additional_branches is None:
-        additional_branches = []
     if mode not in ('push', 'propose', 'attempt-push'):
         raise ValueError("invalid mode %r" % mode)
 
-    def report(text, *args, **kwargs):
-        note('%r: ' + text, *((changer,)+args), **kwargs)
+    overwrite = False
+
     try:
         hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
     except UnsupportedHoster as e:
         if mode != 'push':
             raise
-        base_branch = main_branch
-        existing_branch = None
+        # We can't figure out what branch to resume from when there's no hoster
+        # that can tell us.
+        resume_branch = None
         existing_proposal = None
         warning('Unsupported hoster (%s), will attempt to push to %s',
                 e, main_branch.user_url)
     else:
-        (base_branch, existing_branch, existing_proposal) = (
-            find_existing_proposed(main_branch, hoster, name))
-    # Need to overwrite if there is an existing branch in place that we're not
-    # using as base.
-    overwrite = (existing_branch and existing_branch != base_branch)
-    main_branch_revid = main_branch.last_revision()
-    base_branch_revid = base_branch.last_revision()
-    local_tree, destroy = create_temp_sprout(base_branch, additional_branches)
-    try:
-        with local_tree.branch.lock_write():
-            if (mode == 'propose' and
-                    existing_branch is not None and
-                    (refresh or
-                        merge_conflicts(main_branch, local_tree.branch))):
-                report('restarting branch')
-                local_tree.update(revision=main_branch_revid)
-                local_tree.branch.generate_revision_history(main_branch_revid)
-                overwrite = True
+        (resume_branch, overwrite, existing_proposal) = (
+            find_existing_proposed(main_branch, name))
+    if refresh:
+        resume_branch = None
+    base_branch_revid = (resume_branch or main_branch).last_revision()
+    with Workspace(
+            main_branch,
+            resume_branch=resume_branch,
+            additional_branches=additional_branches) as ws:
+        local_branch = ws.local_tree.branch
 
-        local_branch = local_tree.branch
-        orig_revid = local_branch.last_revision()
+        changer.make_changes(ws.local_tree)
 
-        changer.make_changes(local_tree)
+        enable_tag_pushing(local_branch)
 
-        if local_branch.last_revision() == main_branch_revid:
-            if existing_proposal is not None:
-                report('closing existing merge proposal - no new revisions')
-                existing_proposal.close()
-            return BranchChangerResult(
-                    start_time, existing_proposal,
-                    is_new=None, main_branch_revid=main_branch_revid,
-                    base_branch_revid=base_branch_revid,
-                    result_revid=local_branch.last_revision(),
-                    local_branch=local_branch, destroy=destroy)
-        if orig_revid == local_branch.last_revision() \
-                and existing_proposal is not None:
-            # No new revisions added on this iteration, but still diverged from
-            # main branch.
-            return BranchChangerResult(
-                start_time, existing_proposal, is_new=False,
-                main_branch_revid=main_branch_revid,
-                base_branch_revid=base_branch_revid,
-                result_revid=local_branch.last_revision(),
-                local_branch=local_branch, destroy=destroy)
+        (proposal, is_new) = publish_changes(
+            ws, mode, name,
+            get_proposal_description=changer.get_proposal_description,
+            dry_run=dry_run, hoster=hoster,
+            allow_create_proposal=changer.should_create_proposal(),
+            labels=labels, overwrite_existing=overwrite,
+            existing_proposal=existing_proposal)
 
-        stack = local_branch.get_config()
-        stack.set_user_option('branch.fetch_tags', True)
-
-        if mode in ('push', 'attempt-push'):
-            try:
-                push_changes(
-                    local_branch, main_branch, hoster,
-                    additional_colocated_branches=additional_branches,
-                    dry_run=dry_run)
-            except (errors.PermissionDenied, errors.LockFailed):
-                if mode == 'attempt-push':
-                    report('push access denied, falling back to propose')
-                    mode = 'propose'
-                else:
-                    report('permission denied during push')
-                    raise
-            else:
-                # If mode == 'attempt-push', then we're not 100% sure that this
-                # would have happened or if we would have fallen back to
-                # propose.
-                changer.post_land(main_branch)
-                return BranchChangerResult(
-                    start_time, existing_proposal, is_new=False,
-                    main_branch_revid=main_branch_revid,
-                    base_branch_revid=base_branch_revid,
-                    result_revid=local_branch.last_revision(),
-                    local_branch=local_branch, destroy=destroy)
-
-        assert mode == 'propose'
-        if not existing_branch and not changer.should_create_proposal():
-            return BranchChangerResult(
-                start_time, None, is_new=None,
-                main_branch_revid=main_branch_revid,
-                base_branch_revid=base_branch_revid,
-                result_revid=None, local_branch=local_branch, destroy=destroy)
-
-        mp_description = changer.get_proposal_description(existing_proposal)
-        # TODO(jelmer): Do the same for additional branches that have changed?
-        (proposal, is_new) = propose_changes(
-            local_branch, main_branch, hoster, name, mp_description,
-            existing_branch=existing_branch,
-            existing_proposal=existing_proposal, overwrite=overwrite,
-            labels=labels, dry_run=dry_run)
-
+        if proposal is None:
+            # TODO(jelmer): Is it safe to assume that if there is no
+            # proposal that this was a push?
+            changer.post_land(main_branch)
         return BranchChangerResult(
             start_time, proposal, is_new=is_new,
-            main_branch_revid=main_branch_revid,
+            main_branch_revid=ws.main_branch_revid,
             base_branch_revid=base_branch_revid,
             result_revid=local_branch.last_revision(),
-            local_branch=local_branch, destroy=destroy)
-    except BaseException:
-        destroy()
-        raise
+            local_branch=local_branch, destroy=ws.defer_destroy())
+
+
+def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
+                    hoster=None, allow_create_proposal=True, labels=None,
+                    overwrite_existing=True, existing_proposal=None):
+    if not ws.changes_since_main():
+        if existing_proposal is not None:
+            note('closing existing merge proposal - no new revisions')
+            existing_proposal.close()
+        return (None, None)
+
+    if not ws.changes_since_resume():
+        # No new revisions added on this iteration, but changes since main
+        # branch. We may not have gotten round to updating/creating the
+        # merge proposal last time.
+        note('No changes added; making sure merge proposal is up to date.')
+
+    if hoster is None:
+        hoster = get_hoster(ws.main_branch)
+    if mode in ('push', 'attempt-push'):
+        try:
+            ws.push(hoster, dry_run=dry_run)
+        except errors.PermissionDenied:
+            if mode == 'attempt-push':
+                note('push access denied, falling back to propose')
+                mode = 'propose'
+            else:
+                note('permission denied during push')
+                raise
+        else:
+            return (None, False)
+
+    assert mode == 'propose'
+    if not ws.resume_branch and not allow_create_proposal:
+        # TODO(jelmer): Raise an exception of some sort here?
+        return (None, False)
+
+    mp_description = get_proposal_description(
+        existing_proposal if ws.resume_branch else None)
+    (proposal, is_new) = ws.propose(
+        hoster, name, mp_description,
+        existing_proposal=existing_proposal,
+        labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing)
+
+    return (proposal, is_new)
 
 
 def push_changes(local_branch, main_branch, hoster, possible_transports=None,
@@ -387,22 +461,14 @@ def push_changes(local_branch, main_branch, hoster, possible_transports=None,
     target_branch = Branch.open(
         push_url, possible_transports=possible_transports)
     if not dry_run:
-        local_branch.push(target_branch)
-        for branch_name in additional_colocated_branches or []:
-            try:
-                add_branch = local_branch.controldir.open_branch(
-                    name=branch_name)
-            except errors.NotBranchError:
-                pass
-            else:
-                target_branch.controldir.push_branch(
-                    add_branch, name=branch_name)
+        push_result(local_branch, target_branch, additional_colocated_branches)
 
 
 def propose_changes(
         local_branch, main_branch, hoster, name,
-        mp_description, existing_branch=None, resume_proposal=None,
-        overwrite=False, labels=None, dry_run=False):
+        mp_description, resume_branch=None, resume_proposal=None,
+        overwrite_existing=True,
+        labels=None, dry_run=False, additional_colocated_branches=None):
     """Create or update a merge proposal.
 
     Args:
@@ -410,24 +476,27 @@ def propose_changes(
       main_branch: Target branch to propose against
       hoster: Associated hoster for main branch
       mp_description: Merge proposal description
-      existing_branch: Existing derived branch
+      resume_branch: Existing derived branch
       resume_proposal: Existing merge proposal to resume
-      overwrite: Whether to overwrite changes
+      overwrite_existing: Whether to overwrite any other existing branch
       labels: Labels to add
       dry_run: Whether to just dry-run the change
+      additional_colocated_branches: Additional colocated branches to propose
     Returns:
       Tuple with (proposal, is_new)
     """
+    # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
-        if existing_branch is not None:
-            local_branch.push(existing_branch, overwrite=overwrite)
-            remote_branch = existing_branch
+        if resume_branch is not None:
+            local_branch.push(resume_branch)
+            remote_branch = resume_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
-                local_branch, main_branch, name=name, overwrite=overwrite)
+                local_branch, main_branch, name=name,
+                overwrite=overwrite_existing)
     if resume_proposal is not None:
         if dry_run:
-            resume_propose = DryRunProposal.from_existing(
+            resume_proposal = DryRunProposal.from_existing(
                 resume_proposal, source_branch=local_branch)
         resume_proposal.set_description(mp_description)
         return (resume_proposal, False)
