@@ -17,16 +17,6 @@
 
 from __future__ import absolute_import
 
-__all__ = [
-    'get_source_package',
-    'propose_or_push',
-    'should_update_changelog',
-    'source_package_vcs_url',
-    'build',
-    'BuildFailedError',
-    'MissingUpstreamTarball',
-    ]
-
 import apt_pkg
 from debian.deb822 import Deb822
 from debian.changelog import Version
@@ -48,6 +38,17 @@ from breezy.plugins.debian.errors import (
     )
 
 from .. import proposal as _mod_proposal
+
+
+__all__ = [
+    'get_source_package',
+    'propose_or_push',
+    'should_update_changelog',
+    'source_package_vcs_url',
+    'build',
+    'BuildFailedError',
+    'MissingUpstreamTarball',
+    ]
 
 
 class NoSuchPackage(Exception):

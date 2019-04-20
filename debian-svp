@@ -18,5 +18,5 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-from silver_platter.debian.__main__ import main
+from silver_platter.debian.__main__ import main  # noqa: E402
 sys.exit(main())

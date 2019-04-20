@@ -17,12 +17,6 @@
 
 from __future__ import absolute_import
 
-__all__ = [
-    'available_lintian_fixers',
-    'PostCheckFailed',
-    'LintianFixer',
-    ]
-
 import sys
 
 from breezy.errors import BzrError
@@ -39,6 +33,13 @@ from . import (
     PostCheckFailed,
     )
 from ..proposal import BranchChanger
+
+
+__all__ = [
+    'available_lintian_fixers',
+    'PostCheckFailed',
+    'LintianFixer',
+    ]
 
 
 DEFAULT_ADDON_FIXERS = [

@@ -15,13 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-__all__ = [
-    'UnsupportedHoster',
-    'BranchChanger',
-    'BranchChangerResult',
-    'propose_or_push',
-    ]
-
 import datetime
 
 from breezy.branch import Branch
@@ -42,6 +35,14 @@ from breezy.plugins.propose.propose import (
 
 
 from .utils import create_temp_sprout
+
+
+__all__ = [
+    'UnsupportedHoster',
+    'BranchChanger',
+    'BranchChangerResult',
+    'propose_or_push',
+    ]
 
 
 def merge_conflicts(main_branch, other_branch):
@@ -317,8 +318,8 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                     base_branch_revid=base_branch_revid,
                     result_revid=local_branch.last_revision(),
                     local_branch=local_branch, destroy=destroy)
-        if (orig_revid == local_branch.last_revision()
-                and existing_proposal is not None):
+        if orig_revid == local_branch.last_revision() \
+                and existing_proposal is not None:
             # No new revisions added on this iteration, but still diverged from
             # main branch.
             return BranchChangerResult(
