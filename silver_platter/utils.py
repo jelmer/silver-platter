@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import shutil
+import subprocess
 
 from breezy import errors, osutils
 
@@ -76,3 +77,48 @@ class TemporarySprout(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._destroy()
         return False
+
+
+class PreCheckFailed(Exception):
+    """The post check failed."""
+
+
+def run_pre_check(tree, script):
+    """Run a script ahead of making any changes to a tree.
+
+    Args:
+      tree: The working tree to operate in
+      script: Command to run
+    Raises:
+      PreCheckFailed: If the pre-check failed
+    """
+    if not script:
+        return
+    try:
+        subprocess.check_call(script, shell=True, cwd=tree.basedir)
+    except subprocess.CalledProcessError:
+        raise PreCheckFailed()
+
+
+class PostCheckFailed(Exception):
+    """The post check failed."""
+
+
+def run_post_check(tree, script, since_revid):
+    """Run a script after making any changes to a tree.
+
+    Args:
+      tree: The working tree to operate in
+      script: Command to run
+      since_revid: Revision id since which changes were made
+    Raises:
+      PostCheckFailed: If the pre-check failed
+    """
+    if not script:
+        return
+    try:
+        subprocess.check_call(
+            script, shell=True, cwd=tree.basedir,
+            env={'SINCE_REVID': since_revid})
+    except subprocess.CalledProcessError:
+        raise PostCheckFailed()

@@ -27,12 +27,14 @@ import subprocess
 from ..proposal import (
     BranchChanger,
     )
+from ..utils import (
+    run_post_check,
+    )
 
 from . import (
     open_packaging_branch,
     propose_or_push,
     DebuildingBranchChanger,
-    PostCheckFailed,
     )
 from breezy.plugins.debian.errors import UpstreamAlreadyImported
 
@@ -65,9 +67,7 @@ class NewUpstreamMerger(BranchChanger):
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version
         subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
-        if self._post_check:
-            if not self._post_check(local_tree, since_revid):
-                raise PostCheckFailed()
+        run_post_check(local_tree, self._post_check, since_revid)
 
     def get_proposal_description(self, existing_proposal):
         return "Merge new upstream release %s" % self._upstream_version

@@ -30,14 +30,17 @@ from . import (
     open_packaging_branch,
     should_update_changelog,
     DebuildingBranchChanger,
-    PostCheckFailed,
     )
 from ..proposal import BranchChanger
+from ..utils import (
+    run_pre_check,
+    run_post_check,
+    PostCheckFailed,
+    )
 
 
 __all__ = [
     'available_lintian_fixers',
-    'PostCheckFailed',
     'LintianFixer',
     ]
 
@@ -135,9 +138,7 @@ class LintianFixer(BranchChanger):
                 note('%r: missing control file', self)
                 return
             since_revid = local_tree.last_revision()
-            if self._pre_check:
-                if not self._pre_check(local_tree):
-                    return
+            run_pre_check(local_tree, self._pre_check)
             if self._update_changelog is None:
                 update_changelog = should_update_changelog(local_tree.branch)
             else:
@@ -155,9 +156,7 @@ class LintianFixer(BranchChanger):
                 note('%r: no fixers to apply', self)
                 return
 
-        if self._post_check:
-            if not self._post_check(local_tree, since_revid):
-                raise PostCheckFailed()
+        run_post_check(local_tree, self._post_check, since_revid)
 
     def get_proposal_description(self, existing_proposal):
         return update_proposal_description(existing_proposal, self.applied)
