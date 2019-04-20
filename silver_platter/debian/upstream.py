@@ -56,7 +56,11 @@ class NewUpstreamMerger(BranchChanger):
         if self._pre_check:
             if not self._pre_check(local_tree):
                 return
-        merge_upstream(tree=local_tree, snapshot=self._snapshot)
+        try:
+            merge_upstream(tree=local_tree, snapshot=self._snapshot)
+        except UpstreamAlreadyImported as e:
+            note('Last upstream version %s already imported', e.version)
+            return
         with local_tree.get_file('debian/changelog') as f:
             cl = Changelog(f.read())
             self._upstream_version = cl.version.upstream_version
@@ -109,14 +113,10 @@ def main(args):
         branch_changer = DebuildingBranchChanger(
             NewUpstreamMerger(args.snapshot),
             build_verify=args.build_verify, builder=args.builder)
-        try:
-            result = propose_or_push(
-                main_branch, "new-upstream",
-                branch_changer,
-                mode=args.mode, dry_run=args.dry_run)
-        except UpstreamAlreadyImported as e:
-            note('Last upstream version %s already imported', e.version)
-            return 1
+        result = propose_or_push(
+            main_branch, "new-upstream",
+            branch_changer,
+            mode=args.mode, dry_run=args.dry_run)
         if result.merge_proposal:
             if result.is_new:
                 note('%s: Created new merge proposal %s.',
