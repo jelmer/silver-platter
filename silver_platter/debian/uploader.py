@@ -22,8 +22,6 @@ import silver_platter   # noqa: F401
 import datetime
 import tempfile
 
-from debian.changelog import Version
-
 from breezy.branch import Branch
 from breezy import gpg
 from breezy.plugins.debian.cmds import _build_helper
@@ -40,13 +38,10 @@ from breezy.plugins.debian.util import (
     debsign,
     )
 
-from ..proposal import BranchChanger
-from ..utils import TemporarySprout
-
 from . import (
     get_source_package,
     source_package_vcs_url,
-    propose_or_push,
+    Workspace,
     )
 
 
@@ -122,36 +117,6 @@ def prepare_upload_package(
     return target_changes
 
 
-class PackageUploader(BranchChanger):
-
-    def __init__(self, pkg, last_uploaded_version, gpg_strategy,
-                 min_commit_age):
-        self._pkg = pkg
-        self._gpg_strategy = gpg_strategy
-        self._last_uploaded_version = Version(last_uploaded_version)
-        self._target_changes = None
-        self._builder = ('sbuild --source --source-only-changes '
-                         '--debbuildopt=-v%s' % self._last_uploaded_version)
-        self._min_commit_age = min_commit_age
-
-    def __repr__(self):
-        return "PackageUploader(%r)" % (self._pkg, )
-
-    def make_changes(self, local_tree):
-        self._target_changes = prepare_upload_package(
-            local_tree, self._pkg, self._last_uploaded_version,
-            self._gpg_strategy, self._min_commit_age, self._builder)
-
-    def post_land(self, main_branch):
-        if not self._target_changes:
-            target_dir = tempfile.mkdtemp()
-            with TemporarySprout(main_branch) as local_tree:
-                self._target_changes = _build_helper(
-                    local_tree, local_tree.branch, target_dir,
-                    builder=self._builder)
-        dput_changes(self._target_changes)
-
-
 def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
@@ -165,15 +130,23 @@ def setup_parser(parser):
         '--min-commit-age',
         help='Minimum age of the last commit, in days',
         type=int, default=0)
+    parser.add_argument(
+        '--builder',
+        type=str,
+        help='Build command',
+        default=('sbuild --source --source-only-changes '
+                 '--debbuildopt=-v${LAST_VERSION}'))
 
 
 def main(args):
     for package in args.packages:
+        # Can't use open_packaging_branch here, since we want to use pkg_source
+        # later on.
         pkg_source = get_source_package(package)
         vcs_type, vcs_url = source_package_vcs_url(pkg_source)
         main_branch = Branch.open(vcs_url)
-        with main_branch.lock_read():
-            branch_config = main_branch.get_config_stack()
+        with Workspace(main_branch) as ws:
+            branch_config = ws.local_tree.branch.get_config_stack()
             if args.no_gpg_verification:
                 gpg_strategy = None
             else:
@@ -185,12 +158,14 @@ def main(args):
                         gpg_strategy.context))
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
-            branch_changer = PackageUploader(
-                    pkg_source["Package"], pkg_source["Version"], gpg_strategy,
-                    args.min_commit_age)
+            target_changes = prepare_upload_package(
+                ws.local_tree,
+                pkg_source["Package"], pkg_source["Version"], gpg_strategy,
+                args.min_commit_age, args.builder)
 
-            propose_or_push(
-                main_branch, "new-upload", branch_changer, mode='push')
+            ws.push(dry_run=args.dry_run)
+            if not args.dry_run:
+                dput_changes(target_changes)
 
 
 if __name__ == '__main__':
