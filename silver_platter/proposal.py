@@ -235,7 +235,7 @@ def find_existing_proposed(main_branch, hoster, name):
     try:
         existing_branch = hoster.get_derived_branch(main_branch, name=name)
     except errors.NotBranchError:
-        return (main_branch, None, None)
+        return (None, None, None)
     else:
         note('Branch %s already exists (branch at %s)', name,
              existing_branch.user_url)
