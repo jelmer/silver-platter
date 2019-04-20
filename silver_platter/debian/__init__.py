@@ -215,5 +215,5 @@ class Workspace(_mod_proposal.Workspace):
 
     def __init__(self, *args, **kwargs):
         super(Workspace, self).__init__(
-            self, *args, **kwargs,
+            *args, **kwargs,
             additional_colocated_branches=['pristine-tar', 'upstream'])

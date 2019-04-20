@@ -386,7 +386,7 @@ def propose_or_push(main_branch, name, changer, mode, dry_run=False,
                 e, main_branch.user_url)
     else:
         (resume_branch, overwrite, existing_proposal) = (
-            find_existing_proposed(main_branch, name))
+            find_existing_proposed(main_branch, hoster, name))
     if refresh:
         resume_branch = None
     base_branch_revid = (resume_branch or main_branch).last_revision()
