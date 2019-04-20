@@ -1,7 +1,7 @@
 language: python
 sudo: false
 cache: pip
-
+sudo: true
 
 python:
   - 3.4
@@ -12,11 +12,10 @@ python:
 matrix:
   include:
     - python: 3.7
-      env: TEST_REQUIRE=fastimport
       dist: xenial
 
 install:
-  - apt install devscripts brz-debian python3-breezy python3-dulwich python3-github python3-gitlab python3-launchpadlib python3-flake8
+  - sudo apt install devscripts brz-debian python3-breezy python3-dulwich python3-github python3-gitlab python3-launchpadlib python3-flake8
 
 script:
   - make check
