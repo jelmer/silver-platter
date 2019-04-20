@@ -73,6 +73,55 @@ def get_maintainer_keys(context):
             yield subkey.keyid
 
 
+def prepare_upload_package(
+        local_tree, pkg, last_uploaded_version, gpg_strategy, min_commit_age,
+        builder):
+    cl, top_level = find_changelog(
+            local_tree, merge=False, max_blocks=None)
+    if cl.version == last_uploaded_version:
+        raise Exception(
+                "nothing to upload, latest version is in archive: %s" %
+                cl.version)
+    previous_version_in_branch = changelog_find_previous_upload(cl)
+    if last_uploaded_version > previous_version_in_branch:
+        raise Exception(
+            "last uploaded version more recent than previous "
+            "version in branch: %r > %r" % (
+                last_uploaded_version, previous_version_in_branch))
+
+    print("Checking revisions since %s" % last_uploaded_version)
+    with local_tree.lock_read():
+        last_release_revid = find_last_release_revid(
+                local_tree.branch, last_uploaded_version)
+        graph = local_tree.branch.repository.get_graph()
+        revids = list(graph.iter_lefthand_ancestry(
+            local_tree.branch.last_revision(), [last_release_revid]))
+        if not revids:
+            print("No pending changes")
+            return
+        if gpg_strategy:
+            count, result, all_verifiables = gpg.bulk_verify_signatures(
+                    local_tree.branch.repository, revids,
+                    gpg_strategy)
+            for revid, code, key in result:
+                if code != gpg.SIGNATURE_VALID:
+                    raise Exception(
+                        "No valid GPG signature on %r: %d" %
+                        (revid, code))
+        for revid, rev in local_tree.branch.repository.iter_revisions(
+                revids):
+            check_revision(rev, min_commit_age)
+
+        if cl.distributions != "UNRELEASED":
+            raise Exception("Nothing left to release")
+    release(local_tree)
+    target_dir = tempfile.mkdtemp()
+    target_changes = _build_helper(
+        local_tree, local_tree.branch, target_dir, builder=builder)
+    debsign(target_changes)
+    return target_changes
+
+
 class PackageUploader(BranchChanger):
 
     def __init__(self, pkg, last_uploaded_version, gpg_strategy,
@@ -89,50 +138,9 @@ class PackageUploader(BranchChanger):
         return "PackageUploader(%r)" % (self._pkg, )
 
     def make_changes(self, local_tree):
-        cl, top_level = find_changelog(
-                local_tree, merge=False, max_blocks=None)
-        if cl.version == self._last_uploaded_version:
-            raise Exception(
-                    "nothing to upload, latest version is in archive: %s" %
-                    cl.version)
-        previous_version_in_branch = changelog_find_previous_upload(cl)
-        if self._last_uploaded_version > previous_version_in_branch:
-            raise Exception(
-                "last uploaded version more recent than previous "
-                "version in branch: %r > %r" % (
-                    self._last_uploaded_version, previous_version_in_branch))
-
-        print("Checking revisions since %s" % self._last_uploaded_version)
-        with local_tree.lock_read():
-            last_release_revid = find_last_release_revid(
-                    local_tree.branch, self._last_uploaded_version)
-            graph = local_tree.branch.repository.get_graph()
-            revids = list(graph.iter_lefthand_ancestry(
-                local_tree.branch.last_revision(), [last_release_revid]))
-            if not revids:
-                print("No pending changes")
-                return
-            if self._gpg_strategy:
-                count, result, all_verifiables = gpg.bulk_verify_signatures(
-                        local_tree.branch.repository, revids,
-                        self._gpg_strategy)
-                for revid, code, key in result:
-                    if code != gpg.SIGNATURE_VALID:
-                        raise Exception(
-                            "No valid GPG signature on %r: %d" %
-                            (revid, code))
-            for revid, rev in local_tree.branch.repository.iter_revisions(
-                    revids):
-                check_revision(rev, self._min_commit_age)
-
-            if cl.distributions != "UNRELEASED":
-                raise Exception("Nothing left to release")
-        release(local_tree)
-        target_dir = tempfile.mkdtemp()
-        self._target_changes = _build_helper(
-                local_tree, local_tree.branch, target_dir,
-                builder=self._builder)
-        debsign(self._target_changes)
+        self._target_changes = prepare_upload_package(
+            local_tree, self._pkg, self._last_uploaded_version,
+            self._gpg_strategy, self._min_commit_age, self._builder)
 
     def post_land(self, main_branch):
         if not self._target_changes:

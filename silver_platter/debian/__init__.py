@@ -213,7 +213,7 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
 
 class Workspace(_mod_proposal.Workspace):
 
-    def __init__(self, *args, **args):
+    def __init__(self, *args, **kwargs):
         super(Workspace, self).__init__(
             self, *args, **kwargs,
             additional_colocated_branches=['pristine-tar', 'upstream'])
