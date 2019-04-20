@@ -531,3 +531,21 @@ def propose_changes(
                 local_branch, main_branch, labels=labels,
                 description=mp_description)
         return (mp, True)
+
+
+def merge_directive_changes(
+        local_branch, main_branch, hoster, name, message, include_patch=False,
+        include_bundle=False, overwrite_existing=False):
+    from breezy import merge_directive, osutils
+    import time
+    remote_branch, public_branch_url = hoster.publish_derived(
+        local_branch, main_branch, name=name,
+        overwrite=overwrite_existing)
+    public_branch = Branch.open(public_branch_url)
+    directive = merge_directive.MergeDirective2.from_objects(
+        local_branch.repository, local_branch.last_revision(), time.time(),
+        osutils.local_time_offset(), main_branch,
+        public_branch=public_branch, include_patch=include_patch,
+        include_bundle=include_bundle, message=message,
+        base_revision_id=main_branch.last_revision())
+    return directive
