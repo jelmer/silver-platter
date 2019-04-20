@@ -60,5 +60,7 @@ setup(
           'dulwich',
           'launchpadlib',
           'gitlab',
+          'testtools',
+          'lintian-brush'
       ],
 )
