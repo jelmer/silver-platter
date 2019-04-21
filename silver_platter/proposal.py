@@ -322,7 +322,7 @@ class Workspace(object):
             hoster = get_hoster(self.main_branch)
         return propose_changes(
             self.local_tree.branch, self.main_branch,
-            hoster=hoster, name=name, description=description,
+            hoster=hoster, name=name, mp_description=description,
             resume_branch=self.resume_branch,
             existing_proposal=existing_proposal,
             overwrite_existing=overwrite_existing,
