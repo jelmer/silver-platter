@@ -189,10 +189,11 @@ def open_packaging_branch(location, possible_transports=None):
 class DebuildingBranchChanger(_mod_proposal.BranchChanger):
     """Wrapper for BranchChanger; builds result as a debian package."""
 
-    def __init__(self, actual, build_verify=False, builder=None):
+    def __init__(self, actual, build_verify=False, builder=None, result_dir=None):
         self.actual = actual
         self._build_verify = build_verify
         self._builder = builder
+        self._result_dir = result_dir
 
     def get_proposal_description(self, existing_proposal):
         return self.actual.get_proposal_description(existing_proposal)
@@ -208,7 +209,8 @@ class DebuildingBranchChanger(_mod_proposal.BranchChanger):
         # it touches anything outside of debian/.
         self.actual.make_changes(local_tree)
         if self._build_verify:
-            build(local_tree, builder=self._builder)
+            build(local_tree, builder=self._builder,
+                  result_dir=self._result_dir)
 
 
 class Workspace(_mod_proposal.Workspace):

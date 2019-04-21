@@ -81,6 +81,10 @@ def setup_parser(parser):
         '--mode',
         help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
         default="propose", type=str)
+    parser.add_argument(
+        '--build-target-dir', type=str,
+        help=("Store built Debian files in specified directory "
+              "(with --build-verify)"))
 
 
 def main(args):
@@ -108,7 +112,8 @@ def main(args):
                 continue
 
             if args.build_verify:
-                ws.build(builder=args.builder)
+                ws.build(builder=args.builder,
+                         result_dir=args.build_target_dir)
 
             def get_proposal_description(existing_proposal):
                 return "Merge new upstream release %s" % upstream_version

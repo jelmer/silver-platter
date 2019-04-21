@@ -165,6 +165,10 @@ def setup_parser(parser):
     parser.add_argument(
         '--diff', action="store_true",
         help="Output diff of created merge proposal.")
+    parser.add_argument(
+        '--build-target-dir', type=str,
+        help=("Store built Debian files in specified directory "
+              "(with --build-verify)"))
 
 
 def get_fixers(available_fixers, names=None, tags=None):
@@ -311,7 +315,8 @@ def main(args):
                 continue
             if args.build_verify:
                 try:
-                    ws.build(builder=args.builder)
+                    ws.build(builder=args.builder,
+                             result_dir=args.build_target_dir)
                 except BuildFailedError:
                     note('%s: build failed', pkg)
                     continue

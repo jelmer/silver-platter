@@ -59,6 +59,10 @@ def setup_parser(parser):
     parser.add_argument(
         '--builder', type=str, default='sbuild',
         help='Build command to run.')
+    parser.add_argument(
+        '--build-target-dir', type=str,
+        help=("Store built Debian files in specified directory "
+              "(with --build-verify)"))
 
 
 def main(args):
@@ -73,7 +77,8 @@ def main(args):
 
     branch_changer = DebuildingBranchChanger(
         ScriptBranchChanger(args.script),
-        build_verify=args.build_verify, builder=args.builder)
+        build_verify=args.build_verify, builder=args.builder,
+        result_dir=args.build_target_dir)
 
     try:
         result = propose_or_push(
