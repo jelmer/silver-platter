@@ -25,56 +25,29 @@ from breezy.plugins.debian.cmds import cmd_merge_upstream
 import subprocess
 
 from ..proposal import (
-    BranchChanger,
+    get_hoster,
+    publish_changes,
+    UnsupportedHoster,
     )
 from ..utils import (
-    run_post_check,
+    run_pre_check,
     )
 
 from . import (
     open_packaging_branch,
-    propose_or_push,
-    DebuildingBranchChanger,
+    Workspace,
     )
 from breezy.plugins.debian.errors import UpstreamAlreadyImported
 
-from breezy.trace import note
+from breezy.trace import note, warning
+
+
+BRANCH_NAME = "new-upstream-release"
 
 
 def merge_upstream(tree, snapshot=False):
     # TODO(jelmer): Don't call UI implementation, refactor brz-debian
     cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
-
-
-class NewUpstreamMerger(BranchChanger):
-
-    def __init__(self, snapshot=False, pre_check=None, post_check=None):
-        self._snapshot = snapshot
-        self._pre_check = pre_check
-        self._post_check = post_check
-
-    def make_changes(self, local_tree):
-        since_revid = local_tree.last_revision()
-        if self._pre_check:
-            if not self._pre_check(local_tree):
-                return
-        try:
-            merge_upstream(tree=local_tree, snapshot=self._snapshot)
-        except UpstreamAlreadyImported as e:
-            note('Last upstream version %s already imported', e.version)
-            return
-        with local_tree.get_file('debian/changelog') as f:
-            cl = Changelog(f.read())
-            self._upstream_version = cl.version.upstream_version
-        subprocess.check_call(["debcommit", "-a"], cwd=local_tree.basedir)
-        run_post_check(local_tree, self._post_check, since_revid)
-
-    def get_proposal_description(self, existing_proposal):
-        return "Merge new upstream release %s" % self._upstream_version
-
-    def should_create_proposal(self):
-        # There are no upstream merges too small.
-        return True
 
 
 def setup_parser(parser):
@@ -106,24 +79,52 @@ def setup_parser(parser):
 
 
 def main(args):
+    possible_hosters = []
     for package in args.packages:
         main_branch = open_packaging_branch(package)
-        # TODO(jelmer): Work out how to propose pristine-tar changes for
-        # merging upstream.
-        branch_changer = DebuildingBranchChanger(
-            NewUpstreamMerger(args.snapshot),
-            build_verify=args.build_verify, builder=args.builder)
-        result = propose_or_push(
-            main_branch, "new-upstream",
-            branch_changer,
-            mode=args.mode, dry_run=args.dry_run)
-        if result.merge_proposal:
-            if result.is_new:
-                note('%s: Created new merge proposal %s.',
-                     package, result.merge_proposal.url)
-            else:
-                note('%s: Updated merge proposal %s.',
-                     package, result.merge_proposal.url)
+        overwrite = False
+
+        try:
+            hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
+        except UnsupportedHoster as e:
+            if args.mode != 'push':
+                raise
+            # We can't figure out what branch to resume from when there's no
+            # hoster that can tell us.
+            warning('Unsupported hoster (%s), will attempt to push to %s',
+                    e, main_branch.user_url)
+        with Workspace(main_branch) as ws:
+            run_pre_check(ws.local_tree, args.pre_check)
+            try:
+                merge_upstream(tree=ws.local_tree, snapshot=args.snapshot)
+            except UpstreamAlreadyImported as e:
+                note('Last upstream version %s already imported', e.version)
+                continue
+            with ws.local_tree.get_file('debian/changelog') as f:
+                cl = Changelog(f.read())
+                upstream_version = cl.version.upstream_version
+            subprocess.check_call(
+                ["debcommit", "-a"], cwd=ws.local_tree.basedir)
+
+            if args.build_verify:
+                ws.build(builder=args.builder)
+
+            def get_proposal_description(existing_proposal):
+                return "Merge new upstream release %s" % upstream_version
+
+            (proposal, is_new) = publish_changes(
+                ws, args.mode, BRANCH_NAME,
+                get_proposal_description=get_proposal_description,
+                dry_run=args.dry_run, hoster=hoster,
+                overwrite_existing=overwrite)
+
+            if proposal:
+                if is_new:
+                    note('%s: Created new merge proposal %s.',
+                         package, proposal.url)
+                else:
+                    note('%s: Updated merge proposal %s.',
+                         package, proposal.url)
 
 
 if __name__ == '__main__':
