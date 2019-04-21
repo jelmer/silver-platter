@@ -324,7 +324,7 @@ def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
     mp_description = get_proposal_description(
         existing_proposal if ws.resume_branch else None)
     (proposal, is_new) = ws.propose(
-        hoster, name, mp_description,
+        name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing)
 
