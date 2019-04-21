@@ -19,6 +19,7 @@ import datetime
 
 from breezy.branch import Branch
 from breezy.diff import show_diff_trees
+from breezy.errors import PermissionDenied
 from breezy.trace import (
     note,
     warning,
@@ -43,6 +44,7 @@ __all__ = [
     'UnsupportedHoster',
     'BranchChanger',
     'BranchChangerResult',
+    'PermissionDenied',
     'propose_or_push',
     'NoSuchProject',
     'get_hoster',
@@ -213,7 +215,7 @@ def push_result(local_branch, remote_branch,
         local_branch.push(remote_branch)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
-        raise errors.PermissionDenied(path=remote_branch.user_url, extra=e)
+        raise PermissionDenied(path=remote_branch.user_url, extra=e)
     for branch_name in additional_colocated_branches or []:
         try:
             add_branch = local_branch.controldir.open_branch(
@@ -449,7 +451,7 @@ def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
     if mode in ('push', 'attempt-push'):
         try:
             ws.push(hoster, dry_run=dry_run)
-        except errors.PermissionDenied:
+        except PermissionDenied:
             if mode == 'attempt-push':
                 note('push access denied, falling back to propose')
                 mode = 'propose'
@@ -528,7 +530,7 @@ def propose_changes(
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels)
-            except errors.PermissionDenied:
+            except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
                 raise
