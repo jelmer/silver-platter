@@ -376,7 +376,11 @@ def propose_changes(
         if dry_run:
             resume_proposal = DryRunProposal.from_existing(
                 resume_proposal, source_branch=local_branch)
-        resume_proposal.set_description(mp_description)
+        # Check that the proposal doesn't already has this description.
+        # Setting the description (regardless of whether it changes)
+        # causes Launchpad to send emails.
+        if resume_proposal.get_description() != mp_description:
+            resume_proposal.set_description(mp_description)
         return (resume_proposal, False)
     else:
         if not dry_run:
