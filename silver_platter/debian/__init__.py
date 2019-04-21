@@ -43,7 +43,6 @@ from .. import proposal as _mod_proposal
 
 __all__ = [
     'get_source_package',
-    'propose_or_push',
     'should_update_changelog',
     'source_package_vcs_url',
     'build',
@@ -157,16 +156,6 @@ def should_update_changelog(branch, history=200):
     return True
 
 
-def propose_or_push(main_branch, *args, **kwargs):
-    """Wrapper for propose_or_push that includes debian-specific branches.
-    """
-    if getattr(main_branch.repository, '_git', None):
-        kwargs['additional_branches'] = (
-            kwargs.get('additional_branches', []) +
-            ["pristine-tar", "upstream"])
-    return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)
-
-
 def convert_debian_vcs_url(vcs_type, vcs_url):
     converters = dict(vcs_field_to_bzr_url_converters)
     try:
@@ -188,40 +177,14 @@ def open_packaging_branch(location, possible_transports=None):
     return Branch.open(location, possible_transports=possible_transports)
 
 
-class DebuildingBranchChanger(_mod_proposal.BranchChanger):
-    """Wrapper for BranchChanger; builds result as a debian package."""
-
-    def __init__(self, actual, build_verify=False, builder=None,
-                 result_dir=None):
-        self.actual = actual
-        self._build_verify = build_verify
-        self._builder = builder
-        self._result_dir = result_dir
-
-    def get_proposal_description(self, existing_proposal):
-        return self.actual.get_proposal_description(existing_proposal)
-
-    def should_create_proposal(self):
-        return self.actual.should_create_proposal()
-
-    def post_land(self, main_branch):
-        return self.actual.post_land(main_branch)
-
-    def make_changes(self, local_tree):
-        # TODO(jelmer): Check that actual updates upstream version if
-        # it touches anything outside of debian/.
-        self.actual.make_changes(local_tree)
-        if self._build_verify:
-            build(local_tree, builder=self._builder,
-                  result_dir=self._result_dir)
-
-
 class Workspace(_mod_proposal.Workspace):
 
-    def __init__(self, *args, **kwargs):
-        super(Workspace, self).__init__(
-            *args, **kwargs,
-            additional_colocated_branches=['pristine-tar', 'upstream'])
+    def __init__(self, main_branch, *args, **kwargs):
+        if getattr(main_branch.repository, '_git', None):
+            kwargs['additional_branches'] = (
+                kwargs.get('additional_branches', []) +
+                ["pristine-tar", "upstream"])
+        super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
     def build(self, builder=None, result_dir=None):
         return build(tree=self.local_tree, builder=builder,

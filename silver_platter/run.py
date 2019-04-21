@@ -31,13 +31,17 @@ from breezy import (
     errors,
     )
 from breezy.commit import PointlessCommit
-from breezy.trace import note, show_error
+from breezy.trace import note, warning, show_error
 from breezy.plugins.propose import (
     propose as _mod_propose,
     )
 from .proposal import (
-    BranchChanger,
-    propose_or_push,
+    UnsupportedHoster,
+    enable_tag_pushing,
+    find_existing_proposed,
+    get_hoster,
+    publish_changes,
+    Workspace,
     )
 
 
@@ -83,34 +87,6 @@ def script_runner(local_tree, script, commit_pending=None):
     return description
 
 
-class ScriptBranchChanger(BranchChanger):
-
-    def __init__(self, script, commit_pending=None):
-        self._script = script
-        self._description = None
-        self._create_proposal = None
-        self._commit_pending = commit_pending
-
-    def make_changes(self, local_tree):
-        try:
-            self._description = script_runner(
-                local_tree, self._script, self._commit_pending)
-        except ScriptMadeNoChanges:
-            self._create_proposal = False
-        else:
-            self._create_proposal = True
-
-    def get_proposal_description(self, existing_proposal):
-        if self._description is not None:
-            return self._description
-        if existing_proposal is not None:
-            return existing_proposal.get_description()
-        raise ValueError("No description available")
-
-    def should_create_proposal(self):
-        return self._create_proposal
-
-
 def derived_branch_name(script):
     return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
 
@@ -149,36 +125,70 @@ def main(args):
         name = args.name
     commit_pending = {'auto': None, 'yes': True, 'no': False}[
         args.commit_pending]
+
+    overwrite = False
+
     try:
-        result = propose_or_push(
-                main_branch, name,
-                ScriptBranchChanger(args.script, commit_pending),
-                refresh=args.refresh, labels=args.label,
-                mode=args.mode, dry_run=args.dry_run)
-    except _mod_propose.UnsupportedHoster as e:
-        show_error('No known supported hoster for %s. Run \'svp login\'?',
-                   e.branch.user_url)
-        return 1
-    except _mod_propose.HosterLoginRequired as e:
-        show_error(
-            'Credentials for hosting site at %r missing. Run \'svp login\'?',
-            e.hoster.base_url)
-        return 1
-    except ScriptMadeNoChanges:
-        show_error('Script did not make any changes.')
-        return 1
+        hoster = get_hoster(main_branch)
+    except UnsupportedHoster as e:
+        if args.mode != 'push':
+            raise
+        # We can't figure out what branch to resume from when there's no hoster
+        # that can tell us.
+        resume_branch = None
+        existing_proposal = None
+        warning('Unsupported hoster (%s), will attempt to push to %s',
+                e, main_branch.user_url)
+    else:
+        (resume_branch, overwrite, existing_proposal) = (
+            find_existing_proposed(main_branch, hoster, name))
+    if args.refresh:
+        resume_branch = None
+    with Workspace(main_branch, resume_branch=resume_branch) as ws:
+        try:
+            description = script_runner(
+                ws.local_tree, args.script, commit_pending)
+        except ScriptMadeNoChanges:
+            show_error('Script did not make any changes.')
+            return 1
 
-    if result.merge_proposal:
-        if result.is_new:
-            note('Merge proposal created.')
-        else:
-            note('Merge proposal updated.')
-        if result.merge_proposal.url:
-            note('URL: %s', result.merge_proposal.url)
-        note('Description: %s', result.merge_proposal.get_description())
+        def get_description(existing_proposal):
+            if description is not None:
+                return description
+            if existing_proposal is not None:
+                return existing_proposal.get_description()
+            raise ValueError("No description available")
 
-    if args.diff:
-        result.show_base_diff(sys.stdout.buffer)
+        enable_tag_pushing(ws.local_tree.branch)
+
+        try:
+            (proposal, is_new) = publish_changes(
+                ws, args.mode, name,
+                get_proposal_description=get_description,
+                dry_run=args.dry_run, hoster=hoster,
+                labels=args.label, overwrite_existing=overwrite,
+                existing_proposal=existing_proposal)
+        except UnsupportedHoster as e:
+            show_error('No known supported hoster for %s. Run \'svp login\'?',
+                       e.branch.user_url)
+            return 1
+        except _mod_propose.HosterLoginRequired as e:
+            show_error(
+                'Credentials for hosting site at %r missing. '
+                'Run \'svp login\'?', e.hoster.base_url)
+            return 1
+
+        if proposal:
+            if is_new:
+                note('Merge proposal created.')
+            else:
+                note('Merge proposal updated.')
+            if proposal.url:
+                note('URL: %s', proposal.url)
+            note('Description: %s', proposal.get_description())
+
+        if args.diff:
+            ws.show_diff(sys.stdout.buffer)
 
 
 if __name__ == '__main__':

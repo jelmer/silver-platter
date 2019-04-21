@@ -15,14 +15,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import datetime
-
 from breezy.branch import Branch
 from breezy.diff import show_diff_trees
 from breezy.errors import PermissionDenied
 from breezy.trace import (
     note,
-    warning,
     )
 from breezy import (
     errors,
@@ -42,10 +39,7 @@ from .utils import create_temp_sprout
 
 __all__ = [
     'UnsupportedHoster',
-    'BranchChanger',
-    'BranchChangerResult',
     'PermissionDenied',
-    'propose_or_push',
     'NoSuchProject',
     'get_hoster',
     'hosters',
@@ -85,76 +79,6 @@ def merge_conflicts(main_branch, other_branch):
     finally:
         _mod_merge.Merger.hooks['merge_file_content'] = (
                 old_file_content_mergers)
-
-
-class BranchChanger(object):
-
-    def make_changes(self, local_tree):
-        raise NotImplementedError(self.make_changes)
-
-    def get_proposal_description(self, existing_proposal):
-        raise NotImplementedError(self.get_proposal_description)
-
-    def should_create_proposal(self):
-        raise NotImplementedError(self.should_create_proposal)
-
-    def post_land(self, main_branch):
-        """Called when changes land on the main branch.
-
-        (either because they were directly pushed, or because a merge
-         proposal was merged).
-        """
-
-
-class BranchChangerResult(object):
-    """Result of a branch change action.
-
-    :ivar merge_proposal: Relevant merge proposal, if one was created/updated.
-    :ivar is_new: Whether the merge proposal is new
-    :ivar start_time: Time at which processing began
-    :ivar finish_time: Time at which processing ended
-    :ivar main_branch_revid: Original revision id of the main branch
-    :ivar base_branch_revid: Base branch revision id
-    :ivar result_revid: Revision id for applied changes
-    :ivar local_repository: Local repository for accessing revids
-    """
-
-    def __init__(self, start_time, merge_proposal, is_new, main_branch_revid,
-                 base_branch_revid, result_revid, local_branch, destroy):
-        self.merge_proposal = merge_proposal
-        self.is_new = is_new
-        self.start_time = start_time
-        self.finish_time = datetime.datetime.now()
-        self.main_branch_revid = main_branch_revid
-        self.base_branch_revid = base_branch_revid
-        self.result_revid = result_revid
-        self.local_repository = local_branch.repository
-        self._destroy = destroy
-
-    def base_tree(self):
-        return self.local_repository.revision_tree(self.base_branch_revid)
-
-    def tree(self):
-        if self.result_revid is None:
-            return None
-        return self.local_repository.revision_tree(self.result_revid)
-
-    def cleanup(self):
-        if self._destroy:
-            self._destroy()
-
-    def show_base_diff(self, outf):
-        base_tree = self.base_tree()
-        result_tree = self.tree()
-        if result_tree:
-            show_diff_trees(
-                base_tree, result_tree, outf,
-                old_label='upstream/',
-                new_label=(
-                    'proposed/' if self.merge_proposal else 'pushed/'))
-
-    def __del__(self):
-        self.cleanup()
 
 
 class DryRunProposal(MergeProposal):
@@ -355,77 +279,6 @@ class Workspace(object):
 def enable_tag_pushing(branch):
     stack = branch.get_config()
     stack.set_user_option('branch.fetch_tags', True)
-
-
-def propose_or_push(main_branch, name, changer, mode, dry_run=False,
-                    possible_transports=None, possible_hosters=None,
-                    additional_branches=None, refresh=False,
-                    labels=None):
-    """Create/update a merge proposal into a branch or push directly.
-
-    Args:
-      main_branch: Branch to create proposal for or push to
-      name: Branch name (if creating a proposal)
-      changer: An instance of `BranchChanger`
-      mode: Mode (one of 'push', 'propose', 'attempt-push')
-      dry_run: Whether to actually make remote changes
-      possible_transports: Possible transports to reuse
-      possible_hosters: Possible hosters to reuse
-      additional_branches: Additional branches to fetch, if present
-      refresh: Start over fresh when updating an existing branch for a merge
-        proposal
-      labels: Optional list of labels to set on merge proposal
-    Returns:
-      A BranchChangerResult
-    """
-    start_time = datetime.datetime.now()
-    overwrite = False
-
-    try:
-        hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-    except UnsupportedHoster as e:
-        if mode != 'push':
-            raise
-        # We can't figure out what branch to resume from when there's no hoster
-        # that can tell us.
-        resume_branch = None
-        existing_proposal = None
-        warning('Unsupported hoster (%s), will attempt to push to %s',
-                e, main_branch.user_url)
-    else:
-        (resume_branch, overwrite, existing_proposal) = (
-            find_existing_proposed(main_branch, hoster, name))
-    if refresh:
-        resume_branch = None
-    base_branch_revid = (resume_branch or main_branch).last_revision()
-    with Workspace(
-            main_branch,
-            resume_branch=resume_branch,
-            additional_branches=additional_branches) as ws:
-        local_branch = ws.local_tree.branch
-
-        changer.make_changes(ws.local_tree)
-
-        enable_tag_pushing(local_branch)
-
-        (proposal, is_new) = publish_changes(
-            ws, mode, name,
-            get_proposal_description=changer.get_proposal_description,
-            dry_run=dry_run, hoster=hoster,
-            allow_create_proposal=changer.should_create_proposal(),
-            labels=labels, overwrite_existing=overwrite,
-            existing_proposal=existing_proposal)
-
-        if proposal is None:
-            # TODO(jelmer): Is it safe to assume that if there is no
-            # proposal that this was a push?
-            changer.post_land(main_branch)
-        return BranchChangerResult(
-            start_time, proposal, is_new=is_new,
-            main_branch_revid=ws.main_branch_revid,
-            base_branch_revid=base_branch_revid,
-            result_revid=local_branch.last_revision(),
-            local_branch=local_branch, destroy=ws.defer_destroy())
 
 
 def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
