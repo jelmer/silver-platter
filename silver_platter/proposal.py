@@ -29,7 +29,9 @@ from breezy import (
     )
 from breezy.plugins.propose.propose import (
     get_hoster,
+    hosters,
     MergeProposal,
+    NoSuchProject,
     UnsupportedHoster,
     )
 
@@ -42,6 +44,9 @@ __all__ = [
     'BranchChanger',
     'BranchChangerResult',
     'propose_or_push',
+    'NoSuchProject',
+    'get_hoster',
+    'hosters',
     ]
 
 

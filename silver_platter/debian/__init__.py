@@ -28,6 +28,7 @@ from breezy.plugins.debian.directory import (
     source_package_vcs_url,
     vcs_field_to_bzr_url_converters,
     )
+
 from breezy.urlutils import InvalidURL
 try:
     from breezy.plugins.debian.builder import BuildFailedError
@@ -48,6 +49,7 @@ __all__ = [
     'build',
     'BuildFailedError',
     'MissingUpstreamTarball',
+    'vcs_field_to_bzr_url_converters',
     ]
 
 
@@ -189,7 +191,8 @@ def open_packaging_branch(location, possible_transports=None):
 class DebuildingBranchChanger(_mod_proposal.BranchChanger):
     """Wrapper for BranchChanger; builds result as a debian package."""
 
-    def __init__(self, actual, build_verify=False, builder=None, result_dir=None):
+    def __init__(self, actual, build_verify=False, builder=None,
+                 result_dir=None):
         self.actual = actual
         self._build_verify = build_verify
         self._builder = builder
