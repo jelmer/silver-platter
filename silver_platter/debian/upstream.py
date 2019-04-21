@@ -48,6 +48,11 @@ BRANCH_NAME = "new-upstream-release"
 def merge_upstream(tree, snapshot=False):
     # TODO(jelmer): Don't call UI implementation, refactor brz-debian
     cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
+    with tree.get_file('debian/changelog') as f:
+        cl = Changelog(f.read())
+        return cl.version.upstream_version
+    subprocess.check_call(
+        ["debcommit", "-a"], cwd=tree.basedir)
 
 
 def setup_parser(parser):
@@ -96,15 +101,11 @@ def main(args):
         with Workspace(main_branch) as ws:
             run_pre_check(ws.local_tree, args.pre_check)
             try:
-                merge_upstream(tree=ws.local_tree, snapshot=args.snapshot)
+                upstream_version = merge_upstream(
+                    tree=ws.local_tree, snapshot=args.snapshot)
             except UpstreamAlreadyImported as e:
                 note('Last upstream version %s already imported', e.version)
                 continue
-            with ws.local_tree.get_file('debian/changelog') as f:
-                cl = Changelog(f.read())
-                upstream_version = cl.version.upstream_version
-            subprocess.check_call(
-                ["debcommit", "-a"], cwd=ws.local_tree.basedir)
 
             if args.build_verify:
                 ws.build(builder=args.builder)
