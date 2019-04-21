@@ -15,7 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.branch import Branch
 from breezy.diff import show_diff_trees
 from breezy.errors import PermissionDenied
 from breezy.trace import (
@@ -34,7 +33,10 @@ from breezy.plugins.propose.propose import (
     )
 
 
-from .utils import create_temp_sprout
+from .utils import (
+    create_temp_sprout,
+    open_branch,
+    )
 
 
 __all__ = [
@@ -99,10 +101,10 @@ class DryRunProposal(MergeProposal):
     @classmethod
     def from_existing(cls, mp, source_branch=None):
         if source_branch is None:
-            source_branch = Branch.open(mp.get_source_branch_url())
+            source_branch = open_branch(mp.get_source_branch_url())
         return cls(
             source_branch=source_branch,
-            target_branch=Branch.open(mp.get_target_branch_url()),
+            target_branch=open_branch(mp.get_target_branch_url()),
             description=mp.get_description())
 
     def __repr__(self):
@@ -334,7 +336,7 @@ def push_changes(local_branch, main_branch, hoster, possible_transports=None,
     """Push changes to a branch."""
     push_url = hoster.get_push_url(main_branch)
     note('pushing to %s', push_url)
-    target_branch = Branch.open(
+    target_branch = open_branch(
         push_url, possible_transports=possible_transports)
     if not dry_run:
         push_result(local_branch, target_branch, additional_colocated_branches)
@@ -402,7 +404,7 @@ def merge_directive_changes(
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name,
         overwrite=overwrite_existing)
-    public_branch = Branch.open(public_branch_url)
+    public_branch = open_branch(public_branch_url)
     directive = merge_directive.MergeDirective2.from_objects(
         local_branch.repository, local_branch.last_revision(), time.time(),
         osutils.local_time_offset(), main_branch,

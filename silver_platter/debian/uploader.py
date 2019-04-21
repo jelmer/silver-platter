@@ -22,7 +22,6 @@ import silver_platter   # noqa: F401
 import datetime
 import tempfile
 
-from breezy.branch import Branch
 from breezy import gpg
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -37,11 +36,16 @@ from breezy.plugins.debian.util import (
     find_changelog,
     debsign,
     )
+from breezy.trace import show_error
 
 from . import (
     get_source_package,
     source_package_vcs_url,
     Workspace,
+    )
+from ..utils import (
+    open_branch,
+    BranchUnavailable,
     )
 
 
@@ -139,12 +143,18 @@ def setup_parser(parser):
 
 
 def main(args):
+    ret = 0
     for package in args.packages:
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)
         vcs_type, vcs_url = source_package_vcs_url(pkg_source)
-        main_branch = Branch.open(vcs_url)
+        try:
+            main_branch = open_branch(vcs_url)
+        except BranchUnavailable as e:
+            show_error('%s: %s', vcs_url, e)
+            ret = 1
+            continue
         with Workspace(main_branch) as ws:
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.no_gpg_verification:
@@ -166,12 +176,14 @@ def main(args):
             ws.push(dry_run=args.dry_run)
             if not args.dry_run:
                 dput_changes(target_changes)
+    return ret
 
 
 if __name__ == '__main__':
     import argparse
+    import sys
     parser = argparse.ArgumentParser(prog='upload-pending-commits')
     setup_parser(parser)
     # TODO(jelmer): Support requiring that autopkgtest is present and passing
     args = parser.parse_args()
-    main(args)
+    sys.exit(main(args))

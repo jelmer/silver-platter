@@ -22,7 +22,6 @@ from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
 
-from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs_url,
@@ -39,6 +38,9 @@ from breezy.plugins.debian.errors import (
     )
 
 from .. import proposal as _mod_proposal
+from ..utils import (
+    open_branch,
+    )
 
 
 __all__ = [
@@ -174,7 +176,7 @@ def open_packaging_branch(location, possible_transports=None):
     if '/' not in location:
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
-    return Branch.open(location, possible_transports=possible_transports)
+    return open_branch(location, possible_transports=possible_transports)
 
 
 class Workspace(_mod_proposal.Workspace):

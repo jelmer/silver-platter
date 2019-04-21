@@ -26,10 +26,7 @@ import sys
 import silver_platter  # noqa: F401
 
 from breezy import osutils
-from breezy import (
-    branch as _mod_branch,
-    errors,
-    )
+from breezy import errors
 from breezy.commit import PointlessCommit
 from breezy.trace import note, warning, show_error
 from breezy.plugins.propose import (
@@ -43,6 +40,10 @@ from .proposal import (
     publish_changes,
     Workspace,
     )
+from .utils import (
+    open_branch,
+    BranchUnavailable,
+)
 
 
 class ScriptMadeNoChanges(errors.BzrError):
@@ -118,7 +119,12 @@ def setup_parser(parser):
 
 
 def main(args):
-    main_branch = _mod_branch.Branch.open(args.url)
+    try:
+        main_branch = open_branch.open(args.url)
+    except BranchUnavailable as e:
+        show_error('%s: %s', args.url, e)
+        return 1
+
     if args.name is None:
         name = derived_branch_name(args.script)
     else:
