@@ -217,3 +217,7 @@ class Workspace(_mod_proposal.Workspace):
         super(Workspace, self).__init__(
             *args, **kwargs,
             additional_colocated_branches=['pristine-tar', 'upstream'])
+
+    def build(self, builder=None, result_dir=None):
+        return build(tree=self.local_tree, builder=builder,
+                     result_dir=result_dir)

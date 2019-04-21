@@ -324,7 +324,7 @@ class Workspace(object):
             self.local_tree.branch, self.main_branch,
             hoster=hoster, name=name, mp_description=description,
             resume_branch=self.resume_branch,
-            existing_proposal=existing_proposal,
+            resume_proposal=existing_proposal,
             overwrite_existing=overwrite_existing,
             labels=labels, dry_run=dry_run,
             additional_colocated_branches=self.additional_colocated_branches)

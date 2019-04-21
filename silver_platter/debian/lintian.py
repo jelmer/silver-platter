@@ -20,7 +20,6 @@ from __future__ import absolute_import
 import sys
 
 from breezy.errors import BzrError
-from breezy.trace import note
 from lintian_brush import (
     available_lintian_fixers,
     run_lintian_fixers,
@@ -29,9 +28,13 @@ from lintian_brush import (
 from . import (
     open_packaging_branch,
     should_update_changelog,
-    DebuildingBranchChanger,
     )
-from ..proposal import BranchChanger
+from ..proposal import (
+    get_hoster,
+    find_existing_proposed,
+    enable_tag_pushing,
+    publish_changes,
+    )
 from ..utils import (
     run_pre_check,
     run_post_check,
@@ -41,7 +44,6 @@ from ..utils import (
 
 __all__ = [
     'available_lintian_fixers',
-    'LintianFixer',
     ]
 
 
@@ -49,6 +51,7 @@ DEFAULT_ADDON_FIXERS = [
     'file-contains-trailing-whitespace',
     'package-uses-old-debhelper-compat-version',
     ]
+BRANCH_NAME = "lintian-fixes"
 
 
 class UnknownFixer(BzrError):
@@ -110,62 +113,7 @@ def has_nontrivial_changes(applied, propose_addon_only):
     for result, unused_summary in applied:
         tags.update(result.fixed_lintian_tags)
     # Is there enough to create a new merge proposal?
-    return bool(tags - propose_addon_only)
-
-
-class LintianFixer(BranchChanger):
-    """BranchChanger that fixes lintian issues."""
-
-    def __init__(self, pkg, fixers, update_changelog, compat_release,
-                 pre_check=None, post_check=None,
-                 propose_addon_only=None, committer=None):
-        self._pkg = pkg
-        self._update_changelog = update_changelog
-        self._pre_check = pre_check
-        self._post_check = post_check
-        self._fixers = fixers
-        self._propose_addon_only = set(propose_addon_only)
-        self._committer = committer
-        self._compat_release = compat_release
-        self.applied = []
-
-    def __repr__(self):
-        return "LintianFixer(%r)" % (self._pkg, )
-
-    def make_changes(self, local_tree):
-        with local_tree.lock_write():
-            if not local_tree.has_filename('debian/control'):
-                note('%r: missing control file', self)
-                return
-            since_revid = local_tree.last_revision()
-            run_pre_check(local_tree, self._pre_check)
-            if self._update_changelog is None:
-                update_changelog = should_update_changelog(local_tree.branch)
-            else:
-                update_changelog = self._update_changelog
-
-            self.applied, failed = run_lintian_fixers(
-                    local_tree, self._fixers,
-                    committer=self._committer,
-                    update_changelog=update_changelog,
-                    compat_release=self._compat_release)
-            if failed:
-                note('%r: some fixers failed to run: %r',
-                     self, failed)
-            if not self.applied:
-                note('%r: no fixers to apply', self)
-                return
-
-        run_post_check(local_tree, self._post_check, since_revid)
-
-    def get_proposal_description(self, existing_proposal):
-        return update_proposal_description(existing_proposal, self.applied)
-
-    def should_create_proposal(self):
-        if not has_nontrivial_changes(self.applied, self._propose_addon_only):
-            note('%r: only add-on fixers found', self)
-            return False
-        return True
+    return bool(tags - set(propose_addon_only))
 
 
 def setup_parser(parser):
@@ -251,21 +199,20 @@ def get_fixers(available_fixers, names=None, tags=None):
 def main(args):
     import distro_info
     import socket
-    import subprocess
 
     import silver_platter   # noqa: F401
     from . import (
-        propose_or_push,
         BuildFailedError,
         MissingUpstreamTarball,
         NoSuchPackage,
+        Workspace,
         )
 
     from breezy import (
         errors,
         )
 
-    from breezy.trace import note
+    from breezy.trace import note, warning
 
     from breezy.plugins.propose.propose import (
         NoSuchProject,
@@ -284,31 +231,6 @@ def main(args):
     debian_info = distro_info.DebianDistroInfo()
 
     for pkg in args.packages:
-        if args.pre_check:
-            def pre_check(local_tree):
-                try:
-                    subprocess.check_call(
-                            args.pre_check, shell=True, cwd=local_tree.basedir)
-                except subprocess.CalledProcessError:
-                    note('%r: pre-check failed, skipping', pkg)
-                    return False
-                return True
-        else:
-            pre_check = None
-
-        if args.post_check:
-            def post_check(local_tree, since_revid):
-                try:
-                    subprocess.check_call(
-                        args.post_check, shell=True, cwd=local_tree.basedir,
-                        env={'SINCE_REVID': since_revid})
-                except subprocess.CalledProcessError:
-                    note('%r: post-check failed, skipping', pkg)
-                    return False
-                return True
-        else:
-            post_check = None
-
         note('Processing: %s', pkg)
 
         try:
@@ -316,73 +238,132 @@ def main(args):
                 pkg, possible_transports=possible_transports)
         except NoSuchPackage:
             note('%s: no such package', pkg)
+            continue
         except socket.error:
             note('%s: ignoring, socket error', pkg)
+            continue
         except errors.NotBranchError as e:
             note('%s: Branch does not exist: %s', pkg, e)
+            continue
         except errors.UnsupportedProtocol:
             note('%s: Branch available over unsupported protocol', pkg)
+            continue
         except errors.ConnectionError as e:
             note('%s: %s', pkg, e)
+            continue
         except errors.PermissionDenied as e:
             note('%s: %s', pkg, e)
+            continue
         except errors.InvalidHttpResponse as e:
             note('%s: %s', pkg, e)
+            continue
         except errors.TransportError as e:
             note('%s: %s', pkg, e)
+            continue
+
+        overwrite = False
+
+        try:
+            hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
+        except UnsupportedHoster as e:
+            if args.mode != 'push':
+                raise
+            # We can't figure out what branch to resume from when there's no
+            # hoster that can tell us.
+            resume_branch = None
+            existing_proposal = None
+            warning('Unsupported hoster (%s), will attempt to push to %s',
+                    e, main_branch.user_url)
         else:
-            branch_changer = LintianFixer(
-                    pkg, fixers=fixers,
-                    update_changelog=args.update_changelog,
-                    compat_release=debian_info.stable(),
-                    pre_check=pre_check, post_check=post_check,
-                    propose_addon_only=args.propose_addon_only,
-                    committer=args.committer)
-            branch_changer = DebuildingBranchChanger(
-                branch_changer, build_verify=args.build_verify,
-                builder=args.builder)
+            (resume_branch, overwrite, existing_proposal) = (
+                find_existing_proposed(main_branch, hoster, BRANCH_NAME))
+        if args.refresh:
+            resume_branch = None
+
+        with Workspace(main_branch, resume_branch=resume_branch) as ws:
+            with ws.local_tree.lock_write():
+                if not ws.local_tree.has_filename('debian/control'):
+                    note('%s: missing control file', pkg)
+                    continue
+                run_pre_check(ws.local_tree, args.pre_check)
+                if args.update_changelog is None:
+                    update_changelog = should_update_changelog(
+                        ws.local_tree.branch)
+                else:
+                    update_changelog = args.update_changelog
+
+                applied, failed = run_lintian_fixers(
+                        ws.local_tree, fixers,
+                        committer=args.committer,
+                        update_changelog=update_changelog,
+                        compat_release=debian_info.stable())
+                if failed:
+                    note('%s: some fixers failed to run: %r',
+                         pkg, failed)
+                if not applied:
+                    note('%s: no fixers to apply', pkg)
+                    continue
+
             try:
-                result = propose_or_push(
-                        main_branch, "lintian-fixes", branch_changer,
-                        args.mode, possible_transports=possible_transports,
-                        possible_hosters=possible_hosters,
-                        refresh=args.refresh,
-                        dry_run=args.dry_run)
+                run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
+            except PostCheckFailed as e:
+                note('%s: %s', pkg, e)
+                continue
+            if args.build_verify:
+                try:
+                    ws.build(builder=args.builder)
+                except BuildFailedError:
+                    note('%s: build failed', pkg)
+                    continue
+                except MissingUpstreamTarball:
+                    note('%s: unable to find upstream source', pkg)
+                    continue
+
+            enable_tag_pushing(ws.local_tree.branch)
+
+            def get_proposal_description(existing_proposal):
+                return update_proposal_description(
+                    existing_proposal, applied)
+
+            if not has_nontrivial_changes(applied, args.propose_addon_only):
+                note('%s: only add-on fixers found', pkg)
+                allow_create_proposal = False
+            else:
+                allow_create_proposal = True
+
+            try:
+                (proposal, is_new) = publish_changes(
+                    ws, args.mode, BRANCH_NAME,
+                    get_proposal_description=get_proposal_description,
+                    dry_run=args.dry_run, hoster=hoster,
+                    allow_create_proposal=allow_create_proposal,
+                    overwrite_existing=overwrite,
+                    existing_proposal=existing_proposal)
             except UnsupportedHoster:
                 note('%s: Hoster unsupported', pkg)
                 continue
             except NoSuchProject as e:
                 note('%s: project %s was not found', pkg, e.project)
                 continue
-            except BuildFailedError:
-                note('%s: build failed', pkg)
-                continue
-            except MissingUpstreamTarball:
-                note('%s: unable to find upstream source', pkg)
-                continue
             except errors.PermissionDenied as e:
                 note('%s: %s', pkg, e)
                 continue
-            except PostCheckFailed as e:
-                note('%s: %s', pkg, e)
-                continue
-            else:
-                if result.merge_proposal:
-                    tags = set()
-                    for brush_result, unused_summary in (
-                            branch_changer.actual.applied):
-                        tags.update(brush_result.fixed_lintian_tags)
-                    if result.is_new:
-                        note('%s: Proposed fixes %r: %s', pkg, tags,
-                             result.merge_proposal.url)
-                    elif tags:
-                        note('%s: Updated proposal %s with fixes %r', pkg,
-                             result.merge_proposal.url, tags)
-                    else:
-                        note('%s: No new fixes for proposal %s', pkg,
-                             result.merge_proposal.url)
-                if args.diff:
-                    result.show_base_diff(sys.stdout.buffer)
+
+            if proposal:
+                tags = set()
+                for brush_result, unused_summary in applied:
+                    tags.update(brush_result.fixed_lintian_tags)
+                if is_new:
+                    note('%s: Proposed fixes %r: %s', pkg, tags,
+                         proposal.url)
+                elif tags:
+                    note('%s: Updated proposal %s with fixes %r', pkg,
+                         proposal.url, tags)
+                else:
+                    note('%s: No new fixes for proposal %s', pkg,
+                         proposal.url)
+            if args.diff:
+                ws.show_diff(sys.stdout.buffer)
 
 
 if __name__ == '__main__':
