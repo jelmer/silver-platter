@@ -28,6 +28,7 @@ from ..proposal import (
     get_hoster,
     publish_changes,
     UnsupportedHoster,
+    SUPPORTED_MODES,
     )
 from ..utils import (
     run_pre_check,
@@ -79,7 +80,7 @@ def setup_parser(parser):
         default=False)
     parser.add_argument(
         '--mode',
-        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
         '--build-target-dir', type=str,

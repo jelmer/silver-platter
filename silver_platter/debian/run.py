@@ -27,6 +27,7 @@ from ..proposal import (
     publish_changes,
     get_hoster,
     UnsupportedHoster,
+    SUPPORTED_MODES,
     )
 from ..run import (
     ScriptMadeNoChanges,
@@ -55,7 +56,7 @@ def setup_parser(parser):
                         help="Show diff of generated changes.")
     parser.add_argument(
         '--mode',
-        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
         "--dry-run",

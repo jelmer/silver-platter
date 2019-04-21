@@ -39,6 +39,7 @@ from .proposal import (
     get_hoster,
     publish_changes,
     Workspace,
+    SUPPORTED_MODES,
     )
 from .utils import (
     open_branch,
@@ -105,7 +106,7 @@ def setup_parser(parser):
                         help="Show diff of generated changes.")
     parser.add_argument(
         '--mode',
-        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
         '--commit-pending',
@@ -120,7 +121,7 @@ def setup_parser(parser):
 
 def main(args):
     try:
-        main_branch = open_branch.open(args.url)
+        main_branch = open_branch(args.url)
     except BranchUnavailable as e:
         show_error('%s: %s', args.url, e)
         return 1

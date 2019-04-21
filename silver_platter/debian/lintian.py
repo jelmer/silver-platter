@@ -34,6 +34,7 @@ from ..proposal import (
     find_existing_proposed,
     enable_tag_pushing,
     publish_changes,
+    SUPPORTED_MODES,
     )
 from ..utils import (
     run_pre_check,
@@ -154,7 +155,7 @@ def setup_parser(parser):
         type=str)
     parser.add_argument(
         '--mode',
-        help='Mode for pushing', choices=['push', 'attempt-push', 'propose'],
+        help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
         '--no-update-changelog', action="store_false", default=None,

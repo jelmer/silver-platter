@@ -48,6 +48,9 @@ __all__ = [
     ]
 
 
+SUPPORTED_MODES = ['push', 'attempt-push', 'propose', 'push-derived']
+
+
 def merge_conflicts(main_branch, other_branch):
     """Check whether two branches are conflicted when merged.
 
@@ -262,6 +265,14 @@ class Workspace(object):
             labels=labels, dry_run=dry_run,
             additional_colocated_branches=self.additional_colocated_branches)
 
+    def push_derived(self, name, hoster=None, overwrite_existing=False):
+        if hoster is None:
+            hoster = get_hoster(self.main_branch)
+        return push_derived_changes(
+            self.local_tree.branch,
+            self.main_branch, hoster, name,
+            overwrite_existing=overwrite_existing)
+
     def orig_tree(self):
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
 
@@ -286,7 +297,7 @@ def enable_tag_pushing(branch):
 def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
                     overwrite_existing=True, existing_proposal=None):
-    if mode not in ('push', 'propose', 'attempt-push'):
+    if mode not in SUPPORTED_MODES:
         raise ValueError("invalid mode %r" % mode)
 
     if not ws.changes_since_main():
@@ -303,6 +314,11 @@ def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
 
     if hoster is None:
         hoster = get_hoster(ws.main_branch)
+
+    if mode == 'push-derived':
+        ws.push_derived(name=name, overwrite_existing=overwrite_existing)
+        return (None, False)
+
     if mode in ('push', 'attempt-push'):
         try:
             ws.push(hoster, dry_run=dry_run)
@@ -416,3 +432,10 @@ def merge_directive_changes(
         include_bundle=include_bundle, message=message,
         base_revision_id=main_branch.last_revision())
     return directive
+
+
+def push_derived_changes(
+        local_branch, main_branch, hoster, name, overwrite_existing=False):
+    remote_branch, public_branch_url = hoster.publish_derived(
+        local_branch, main_branch, name=name, overwrite=overwrite_existing)
+    return remote_branch, public_branch_url
