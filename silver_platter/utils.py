@@ -15,18 +15,24 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import os
 import shutil
 import subprocess
 
 from breezy import errors, osutils
 
 
-def create_temp_sprout(branch, additional_colocated_branches=None, dir=None):
+def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
+                       path=None):
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.
     """
-    td = osutils.mkdtemp(dir=dir)
+    if path is None:
+        td = osutils.mkdtemp(dir=dir)
+    else:
+        td = path
+        os.mkdir(path)
 
     def destroy():
         shutil.rmtree(td)
@@ -52,7 +58,7 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None):
                         local_add_branch.last_revision())
         return to_dir.open_workingtree(), destroy
     except BaseException as e:
-        shutil.rmtree(td)
+        destroy()
         raise e
 
 
