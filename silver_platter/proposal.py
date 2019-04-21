@@ -317,7 +317,7 @@ class Workspace(object):
             dry_run=dry_run)
 
     def propose(self, name, description, hoster=None, existing_proposal=None,
-                overwrite_resume=None, labels=None, dry_run=False):
+                overwrite_existing=None, labels=None, dry_run=False):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
@@ -325,7 +325,7 @@ class Workspace(object):
             hoster=hoster, name=name, description=description,
             resume_branch=self.resume_branch,
             existing_proposal=existing_proposal,
-            overwrite_resume=overwrite_resume,
+            overwrite_existing=overwrite_existing,
             labels=labels, dry_run=dry_run,
             additional_colocated_branches=self.additional_colocated_branches)
 
