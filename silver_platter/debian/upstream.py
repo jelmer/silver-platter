@@ -48,11 +48,11 @@ BRANCH_NAME = "new-upstream-release"
 def merge_upstream(tree, snapshot=False):
     # TODO(jelmer): Don't call UI implementation, refactor brz-debian
     cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
+    subprocess.check_call(
+        ["debcommit", "-a"], cwd=tree.basedir)
     with tree.get_file('debian/changelog') as f:
         cl = Changelog(f.read())
         return cl.version.upstream_version
-    subprocess.check_call(
-        ["debcommit", "-a"], cwd=tree.basedir)
 
 
 def setup_parser(parser):
