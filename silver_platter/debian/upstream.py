@@ -19,10 +19,10 @@
 
 import silver_platter  # noqa: F401
 
-from debian.changelog import Changelog
-
-from breezy.plugins.debian.cmds import cmd_merge_upstream
+from debian.changelog import Version
 import subprocess
+import sys
+import tempfile
 
 from ..proposal import (
     get_hoster,
@@ -31,29 +31,198 @@ from ..proposal import (
     SUPPORTED_MODES,
     )
 from ..utils import (
+    open_branch,
     run_pre_check,
+    BranchUnavailable,
     )
 
 from . import (
     open_packaging_branch,
     Workspace,
     )
-from breezy.plugins.debian.errors import UpstreamAlreadyImported
+from breezy.errors import FileExists
+from breezy.plugins.debian.errors import (
+    UpstreamAlreadyImported,
+    PackageVersionNotPresent,
+    )
 
-from breezy.trace import note, warning
+from breezy.trace import note, show_error, warning
+
+from breezy.plugins.debian.merge_upstream import (
+    changelog_add_new_version,
+    do_merge,
+    get_tarballs,
+    )
+
+from breezy.plugins.debian.util import (
+    debuild_config,
+    guess_build_type,
+    tree_contains_upstream_source,
+    BUILD_TYPE_MERGE,
+    BUILD_TYPE_NATIVE,
+    find_changelog,
+    )
+
+from breezy.plugins.debian.upstream import (
+    UScanSource,
+    TarfileSource,
+    )
+from breezy.plugins.debian.upstream.branch import (
+    UpstreamBranchSource,
+    )
 
 
-BRANCH_NAME = "new-upstream-release"
+class NewUpstreamMissing(Exception):
+    """Unable to find upstream version to merge."""
 
 
-def merge_upstream(tree, snapshot=False):
-    # TODO(jelmer): Don't call UI implementation, refactor brz-debian
-    cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
+class UpstreamBranchUnavailable(Exception):
+    """Snapshot merging was requested by upstream branch is unavailable."""
+
+
+class UpstreamAlreadyMerged(Exception):
+    """Upstream release (or later version) has already been merged."""
+
+    def __init__(self, upstream_version):
+        self.version = upstream_version
+
+
+RELEASE_BRANCH_NAME = "new-upstream-release"
+SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
+ORIG_DIR = '..'
+DEFAULT_DISTRIBUTION = 'unstable'
+
+
+def merge_upstream(tree, snapshot=False, location=None,
+                   new_upstream_version=None, force=False,
+                   distribution_name=DEFAULT_DISTRIBUTION,
+                   allow_ignore_upstream_branch=True):
+    """Merge a new upstream version into a tree.
+
+    Raises:
+      PreviousVersionTagMissing
+      MissingChangelogError
+      NewUpstreamMissing
+      UpstreamBranchUnavailable
+      UpstreamAlreadyMerged
+      UpstreamAlreadyImported
+    """
+    config = debuild_config(tree)
+    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    old_upstream_version = changelog.version.upstream_version
+    package = changelog.package
+    contains_upstream_source = tree_contains_upstream_source(tree)
+    build_type = config.build_type
+    if build_type is None:
+        build_type = guess_build_type(
+            tree, changelog.version, contains_upstream_source)
+    need_upstream_tarball = (build_type != BUILD_TYPE_MERGE)
+    if build_type == BUILD_TYPE_NATIVE:
+        raise AssertionError('Native packages do not have an upstream.')
+
+    if config.upstream_branch is not None:
+        note("Using upstream branch %s (from configuration)",
+             config.upstream_branch)
+        try:
+            upstream_branch = open_branch(config.upstream_branch)
+        except BranchUnavailable as e:
+            if not snapshot and allow_ignore_upstream_branch:
+                warning('Upstream branch %s inaccessible; ignoring. %s',
+                        config.upstream_branch, e)
+            else:
+                raise UpstreamBranchUnavailable(e)
+            upstream_branch = None
+    else:
+        upstream_branch = None
+
+    if upstream_branch is not None:
+        upstream_branch_source = UpstreamBranchSource.from_branch(
+            upstream_branch, config=config, local_dir=tree.controldir)
+    else:
+        upstream_branch_source = None
+
+    if location is not None:
+        try:
+            primary_upstream_source = UpstreamBranchSource.from_branch(
+                open_branch(location), config=config,
+                local_dir=tree.controldir)
+        except BranchUnavailable:
+            primary_upstream_source = TarfileSource(
+                location, new_upstream_version)
+    else:
+        if snapshot:
+            if upstream_branch_source is None:
+                raise AssertionError(
+                    "--snapshot requires an upstream branch source")
+            primary_upstream_source = upstream_branch_source
+        else:
+            primary_upstream_source = UScanSource(tree, top_level)
+
+    if new_upstream_version is None and primary_upstream_source is not None:
+        new_upstream_version = primary_upstream_source.get_latest_version(
+            package, old_upstream_version)
+    if new_upstream_version is None:
+        raise NewUpstreamMissing()
+    note("Using version string %s.", new_upstream_version)
+    # Look up the revision id from the version string
+    if upstream_branch_source is not None:
+        try:
+            upstream_revisions = upstream_branch_source.version_as_revisions(
+                package, new_upstream_version)
+        except PackageVersionNotPresent:
+            raise AssertionError(
+                "Version %s can not be found in upstream branch %r. "
+                "Specify the revision manually using --revision or adjust "
+                "'export-upstream-revision' in the configuration." %
+                (new_upstream_version, upstream_branch_source))
+    else:
+        upstream_revisions = None
+    if need_upstream_tarball:
+        with tempfile.TemporaryDirectory() as target_dir:
+            try:
+                locations = primary_upstream_source.fetch_tarballs(
+                    package, new_upstream_version, target_dir,
+                    components=[None])
+            except PackageVersionNotPresent:
+                if upstream_revisions is not None:
+                    locations = upstream_branch_source.fetch_tarballs(
+                        package, new_upstream_version, target_dir,
+                        components=[None], revisions=upstream_revisions)
+                else:
+                    raise
+            try:
+                tarball_filenames = get_tarballs(
+                    ORIG_DIR, tree, package, new_upstream_version,
+                    upstream_branch, upstream_revisions, locations)
+            except FileExists as e:
+                raise AssertionError(
+                    "The target file %s already exists, and is either "
+                    "different to the new upstream tarball, or they "
+                    "are of different formats. Either delete the target "
+                    "file, or use it as the argument to import."
+                    % e.path)
+            conflicts = do_merge(
+                tree, tarball_filenames, package,
+                new_upstream_version, old_upstream_version, upstream_branch,
+                upstream_revisions, merge_type=None, force=force)
+    if Version(old_upstream_version) >= Version(new_upstream_version):
+        raise UpstreamAlreadyMerged(new_upstream_version)
+    changelog_add_new_version(
+        tree, new_upstream_version, distribution_name, changelog, package)
+    if not need_upstream_tarball:
+        note("An entry for the new upstream version has been "
+             "added to the changelog.")
+    else:
+        note("The new upstream version has been imported.")
+        if conflicts:
+            note("You should now resolve the conflicts, review "
+                 "the changes, and then commit.")
+        else:
+            note("You should now review the changes and then commit.")
+
     subprocess.check_call(
         ["debcommit", "-a"], cwd=tree.basedir)
-    with tree.get_file('debian/changelog') as f:
-        cl = Changelog(f.read())
-        return cl.version.upstream_version
+    return (old_upstream_version, new_upstream_version)
 
 
 def setup_parser(parser):
@@ -109,21 +278,35 @@ def main(args):
         with Workspace(main_branch) as ws:
             run_pre_check(ws.local_tree, args.pre_check)
             try:
-                upstream_version = merge_upstream(
+                old_upstream_version, new_upstream_version = merge_upstream(
                     tree=ws.local_tree, snapshot=args.snapshot)
             except UpstreamAlreadyImported as e:
-                note('Last upstream version %s already imported', e.version)
+                note('Last upstream version %s already imported.', e.version)
                 continue
+            except NewUpstreamMissing:
+                show_error('Unable to find new upstream for %s.', package)
+                continue
+            except UpstreamAlreadyMerged as e:
+                note('Last upstream version %s already merged.', e.version)
+                continue
+            else:
+                note('Merged new upstream version %s (previous: %s)',
+                     new_upstream_version, old_upstream_version)
 
             if args.build_verify:
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
 
             def get_proposal_description(existing_proposal):
-                return "Merge new upstream release %s" % upstream_version
+                return "Merge new upstream release %s" % new_upstream_version
+
+            if args.snapshot:
+                branch_name = SNAPSHOT_BRANCH_NAME
+            else:
+                branch_name = RELEASE_BRANCH_NAME
 
             (proposal, is_new) = publish_changes(
-                ws, args.mode, BRANCH_NAME,
+                ws, args.mode, branch_name,
                 get_proposal_description=get_proposal_description,
                 dry_run=args.dry_run, hoster=hoster,
                 overwrite_existing=overwrite)
