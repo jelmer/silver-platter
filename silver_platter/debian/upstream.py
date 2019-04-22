@@ -21,6 +21,7 @@ import silver_platter  # noqa: F401
 
 from debian.changelog import Version
 import subprocess
+import sys
 import tempfile
 
 from ..proposal import (
@@ -45,7 +46,7 @@ from breezy.plugins.debian.errors import (
     PackageVersionNotPresent,
     )
 
-from breezy.trace import note, warning
+from breezy.trace import note, show_error, warning
 
 from breezy.plugins.debian.merge_upstream import (
     changelog_add_new_version,
@@ -71,6 +72,21 @@ from breezy.plugins.debian.upstream.branch import (
     )
 
 
+class NewUpstreamMissing(Exception):
+    """Unable to find upstream version to merge."""
+
+
+class UpstreamBranchUnavailable(Exception):
+    """Snapshot merging was requested by upstream branch is unavailable."""
+
+
+class UpstreamAlreadyMerged(Exception):
+    """Upstream release (or later version) has already been merged."""
+
+    def __init__(self, upstream_version):
+        self.version = upstream_version
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
@@ -78,13 +94,18 @@ DEFAULT_DISTRIBUTION = 'unstable'
 
 
 def merge_upstream(tree, snapshot=False, location=None,
-                   new_upstream_revision=None, new_upstream_version=None,
-                   force=False, distribution_name=DEFAULT_DISTRIBUTION):
+                   new_upstream_version=None, force=False,
+                   distribution_name=DEFAULT_DISTRIBUTION,
+                   allow_ignore_upstream_branch=True):
     """Merge a new upstream version into a tree.
 
     Raises:
       PreviousVersionTagMissing
       MissingChangelogError
+      NewUpstreamMissing
+      UpstreamBranchUnavailable
+      UpstreamAlreadyMerged
+      UpstreamAlreadyImported
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -104,10 +125,13 @@ def merge_upstream(tree, snapshot=False, location=None,
              config.upstream_branch)
         try:
             upstream_branch = open_branch(config.upstream_branch)
-        except BranchUnavailable:
-            if not snapshot:
-                warning('Upstream branch %s inaccessible; ignoring.',
-                        config.upstream_branch)
+        except BranchUnavailable as e:
+            if not snapshot and allow_ignore_upstream_branch:
+                warning('Upstream branch %s inaccessible; ignoring. %s',
+                        config.upstream_branch, e)
+            else:
+                raise UpstreamBranchUnavailable(e)
+            upstream_branch = None
     else:
         upstream_branch = None
 
@@ -134,33 +158,14 @@ def merge_upstream(tree, snapshot=False, location=None,
         else:
             primary_upstream_source = UScanSource(tree, top_level)
 
-    if new_upstream_revision is not None:
-        if upstream_branch is None:
-            raise AssertionError(
-                "--revision can only be used with a valid upstream branch")
-        upstream_revisions = {None: new_upstream_revision}
-    else:
-        upstream_revisions = None
-
-    if new_upstream_version is None and upstream_revisions is not None:
-        # Look up the version from the upstream revision
-        new_upstream_version = upstream_branch_source.get_version(
-            package, old_upstream_version, upstream_revisions[None])
-    elif new_upstream_version is None and primary_upstream_source is not None:
+    if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version)
     if new_upstream_version is None:
-        if upstream_branch_source is not None:
-            raise AssertionError(
-                "You must specify the version number using --version or "
-                "specify --snapshot to merge a snapshot from the upstream "
-                "branch.")
-        else:
-            raise AssertionError(
-                "You must specify the version number using --version.")
+        raise NewUpstreamMissing()
     note("Using version string %s.", new_upstream_version)
     # Look up the revision id from the version string
-    if upstream_revisions is None and upstream_branch_source is not None:
+    if upstream_branch_source is not None:
         try:
             upstream_revisions = upstream_branch_source.version_as_revisions(
                 package, new_upstream_version)
@@ -170,6 +175,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                 "Specify the revision manually using --revision or adjust "
                 "'export-upstream-revision' in the configuration." %
                 (new_upstream_version, upstream_branch_source))
+    else:
+        upstream_revisions = None
     if need_upstream_tarball:
         with tempfile.TemporaryDirectory() as target_dir:
             try:
@@ -199,9 +206,7 @@ def merge_upstream(tree, snapshot=False, location=None,
                 new_upstream_version, old_upstream_version, upstream_branch,
                 upstream_revisions, merge_type=None, force=force)
     if Version(old_upstream_version) >= Version(new_upstream_version):
-        raise AssertionError(
-            "Upstream version %s has already been merged." %
-            new_upstream_version)
+        raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
         tree, new_upstream_version, distribution_name, changelog, package)
     if not need_upstream_tarball:
@@ -276,7 +281,13 @@ def main(args):
                 old_upstream_version, new_upstream_version = merge_upstream(
                     tree=ws.local_tree, snapshot=args.snapshot)
             except UpstreamAlreadyImported as e:
-                note('Last upstream version %s already imported', e.version)
+                note('Last upstream version %s already imported.', e.version)
+                continue
+            except NewUpstreamMissing:
+                show_error('Unable to find new upstream for %s.', package)
+                continue
+            except UpstreamAlreadyMerged as e:
+                note('Last upstream version %s already merged.', e.version)
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
