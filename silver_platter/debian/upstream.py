@@ -86,6 +86,9 @@ def setup_parser(parser):
         '--build-target-dir', type=str,
         help=("Store built Debian files in specified directory "
               "(with --build-verify)"))
+    parser.add_argument(
+        '--diff', action="store_true",
+        help="Output diff of created merge proposal.")
 
 
 def main(args):
@@ -132,6 +135,8 @@ def main(args):
                 else:
                     note('%s: Updated merge proposal %s.',
                          package, proposal.url)
+            if args.diff:
+                ws.show_diff(sys.stdout.buffer)
 
 
 if __name__ == '__main__':
