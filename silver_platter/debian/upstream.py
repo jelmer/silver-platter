@@ -38,7 +38,10 @@ from . import (
     open_packaging_branch,
     Workspace,
     )
-from breezy.plugins.debian.errors import UpstreamAlreadyImported
+from breezy.plugins.debian.errors import (
+    UpstreamAlreadyImported,
+    PackageVersionNotPresent,
+    )
 
 from breezy.trace import note, warning
 
@@ -46,14 +49,172 @@ from breezy.trace import note, warning
 BRANCH_NAME = "new-upstream-release"
 
 
-def merge_upstream(tree, snapshot=False):
-    # TODO(jelmer): Don't call UI implementation, refactor brz-debian
-    cmd_merge_upstream().run(directory=tree.basedir, snapshot=snapshot)
+from breezy.trace import note
+from debian.changelog import Version
+
+from breezy.plugins.debian.errors import 
+from breezy.plugins.debian.hooks import run_hook
+from breezy.plugins.debian.merge_upstream import (
+    do_merge,
+    get_tarballs,
+    )
+from breezy.plugins.debian.upstream import (
+    TarfileSource,
+    UScanSource,
+    )
+from breezy.plugins.debian.upstream.branch import (
+    UpstreamBranchSource,
+    )
+from breezy.plugins.debian.util import (
+    guess_build_type,
+    tree_contains_upstream_source,
+    )
+
+def _add_changelog_entry(self, tree, package, version, distribution_name,
+        changelog):
+    from .merge_upstream import (
+        changelog_add_new_version)
+    from .errors import (
+        DchError,
+        )
+    try:
+        changelog_add_new_version(tree, version, distribution_name,
+            changelog, package)
+    except DchError as e:
+        note(e)
+        raise BzrCommandError('Adding a new changelog stanza after the '
+                'merge had completed failed. Add the new changelog '
+                'entry yourself, review the merge, and then commit.')
+
+
+def merge_upstream(tree, snapshot=False, location=None):
+    """
+
+    Raises:
+      PreviousVersionTagMissing
+    """
+    config = debuild_config(tree, tree)
+    (current_version, package, distribution, distribution_name,
+     changelog, top_level) = _get_changelog_info(tree, last_version,
+         package, distribution)
+    if package is None:
+        raise AssertionError("You did not specify --package, and "
+                "there is no changelog from which to determine the "
+                "package name, which is needed to know the name to "
+                "give the .orig.tar.gz. Please specify --package.")
+
+    contains_upstream_source = tree_contains_upstream_source(tree)
+    if changelog is None:
+        changelog_version = None
+    else:
+        changelog_version = changelog.version
+    build_type = config.build_type
+    if build_type is None:
+        build_type = guess_build_type(tree, changelog_version,
+            contains_upstream_source)
+    need_upstream_tarball = (build_type != BUILD_TYPE_MERGE)
+    if build_type == BUILD_TYPE_NATIVE:
+        raise AssertionError('Native packages do not have an upstream.')
+
+    if config.upstream_branch is not None:
+        note("Using upstream branch %s (from configuration)",
+             config.upstream_branch)
+        upstream_branch = Branch.open(config.upstream_branch)
+    else:
+        upstream_branch = None
+
+    if snapshot:
+        if upstream_branch_source is None:
+            raise BzrCommandError("--snapshot requires "
+                "an upstream branch source")
+        primary_upstream_source = UpstreamBranchSource.from_branch(
+            upstream_branch, config=config, local_dir=tree.controldir)
+    else:
+        primary_upstream_source = UScanSource(tree, top_level)
+
+    if upstream_revision is not None:
+        upstream_revisions = { None: upstream_revision }
+    else:
+        upstream_revisions = None
+
+    if version is None and upstream_revisions is not None:
+        # Look up the version from the upstream revision
+        version = upstream_branch_source.get_version(package,
+            current_version, upstream_revisions[None])
+    elif version is None and primary_upstream_source is not None:
+        version = primary_upstream_source.get_latest_version(
+            package, current_version)
+    if version is None:
+        if upstream_branch_source is not None:
+            raise BzrCommandError("You must specify "
+                "the version number using --version or specify "
+                "--snapshot to merge a snapshot from the upstream "
+                "branch.")
+        else:
+            raise BzrCommandError("You must specify the "
+                "version number using --version.")
+    note("Using version string %s.", version)
+    # Look up the revision id from the version string
+    if upstream_revisions is None and upstream_branch_source is not None:
+        try:
+            upstream_revisions = upstream_branch_source.version_as_revisions(
+                package, version)
+        except PackageVersionNotPresent:
+            raise BzrCommandError(
+                "Version %s can not be found in upstream branch %r. "
+                "Specify the revision manually using --revision or adjust "
+                "'export-upstream-revision' in the configuration." %
+                (version, upstream_branch_source))
+    if need_upstream_tarball:
+        with tempfile.TemporaryDirectory() as target_dir:
+            try:
+                locations = primary_upstream_source.fetch_tarballs(
+                    package, version, target_dir, components=[None])
+            except PackageVersionNotPresent:
+                if upstream_revisions is not None:
+                    locations = upstream_branch_source.fetch_tarballs(
+                        package, version, target_dir, components=[None],
+                        revisions=upstream_revisions)
+                else:
+                    raise
+            orig_dir = config.orig_dir or default_orig_dir
+            try:
+                tarball_filenames = get_tarballs(orig_dir, tree, package,
+                    version, upstream_branch, upstream_revisions,
+                    locations)
+            except FileExists:
+                raise BzrCommandError(
+                    "The target file %s already exists, and is either "
+                    "different to the new upstream tarball, or they "
+                    "are of different formats. Either delete the target "
+                    "file, or use it as the argument to import."
+                    % dest_name)
+            conflicts = do_merge(tree, tarball_filenames, package,
+                version, current_version, upstream_branch, upstream_revisions,
+                merge_type, force)
+    if (current_version is not None and
+        Version(current_version) >= Version(version)):
+        raise BzrCommandError(
+            "Upstream version %s has already been merged." %
+            version)
+    if not tree.has_filename("debian"):
+        tree.mkdir("debian")
+    add_changelog_entry(tree, package, version,
+        distribution_name, changelog)
+    if not need_upstream_tarball:
+        note("An entry for the new upstream version has been "
+             "added to the changelog.")
+    else:
+        note("The new upstream version has been imported.")
+        if conflicts:
+            note("You should now resolve the conflicts, review "
+                 "the changes, and then commit.")
+        else:
+            note("You should now review the changes and then commit.")
+
     subprocess.check_call(
         ["debcommit", "-a"], cwd=tree.basedir)
-    with tree.get_file('debian/changelog') as f:
-        cl = Changelog(f.read())
-        return cl.version.upstream_version
+    return version.upstream_version
 
 
 def setup_parser(parser):
