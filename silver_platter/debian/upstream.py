@@ -102,7 +102,12 @@ def merge_upstream(tree, snapshot=False, location=None,
     if config.upstream_branch is not None:
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
-        upstream_branch = open_branch(config.upstream_branch)
+        try:
+            upstream_branch = open_branch(config.upstream_branch)
+        except BranchUnavailable:
+            if not snapshot:
+                warning('Upstream branch %s inaccessible; ignoring.',
+                        config.upstream_branch)
     else:
         upstream_branch = None
 
