@@ -222,7 +222,7 @@ def merge_upstream(tree, snapshot=False, location=None,
              "added to the changelog.")
     else:
         if conflicts:
-            raise UpstreamMergeConflicted()
+            raise UpstreamMergeConflicted(new_upstream_version)
 
     subprocess.check_call(
         ["debcommit", "-a"], cwd=tree.basedir)
