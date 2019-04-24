@@ -52,6 +52,7 @@ from breezy.plugins.debian.merge_upstream import (
     changelog_add_new_version,
     do_merge,
     get_tarballs,
+    PreviousVersionTagMissing,
     )
 
 from breezy.plugins.debian.util import (
@@ -61,7 +62,8 @@ from breezy.plugins.debian.util import (
     BUILD_TYPE_MERGE,
     BUILD_TYPE_NATIVE,
     find_changelog,
-    )
+    MissingChangelogError,
+)
 
 from breezy.plugins.debian.upstream import (
     UScanSource,
@@ -70,6 +72,18 @@ from breezy.plugins.debian.upstream import (
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
     )
+
+
+__all__ = [
+    'PreviousVersionTagMissing',
+    'merge_upstream',
+    'MissingChangelogError',
+    'NewUpstreamMissing',
+    'UpstreamBranchUnavailable',
+    'UpstreamAlreadyMerged',
+    'UpstreamAlreadyImported',
+    'UpstreamMergeConflicted',
+]
 
 
 class NewUpstreamMissing(Exception):
@@ -292,6 +306,11 @@ def main(args):
                 continue
             except UpstreamAlreadyMerged as e:
                 note('Last upstream version %s already merged.', e.version)
+                continue
+            except PreviousVersionTagMissing as e:
+                note(
+                    'Unable to find tag %s for previous upstream version %s.',
+                    e.tag_name, e.version)
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
