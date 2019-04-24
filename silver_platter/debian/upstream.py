@@ -80,6 +80,13 @@ class UpstreamBranchUnavailable(Exception):
     """Snapshot merging was requested by upstream branch is unavailable."""
 
 
+class UpstreamMergeConflicted(Exception):
+    """The upstream merge resulted in conflicts."""
+
+    def __init__(self, upstream_version):
+        self.version = upstream_version
+
+
 class UpstreamAlreadyMerged(Exception):
     """Upstream release (or later version) has already been merged."""
 
@@ -106,6 +113,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamBranchUnavailable
       UpstreamAlreadyMerged
       UpstreamAlreadyImported
+      UpstreamMergeConflicted
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -213,12 +221,8 @@ def merge_upstream(tree, snapshot=False, location=None,
         note("An entry for the new upstream version has been "
              "added to the changelog.")
     else:
-        note("The new upstream version has been imported.")
         if conflicts:
-            note("You should now resolve the conflicts, review "
-                 "the changes, and then commit.")
-        else:
-            note("You should now review the changes and then commit.")
+            raise UpstreamMergeConflicted()
 
     subprocess.check_call(
         ["debcommit", "-a"], cwd=tree.basedir)
