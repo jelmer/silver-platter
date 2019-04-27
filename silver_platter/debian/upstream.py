@@ -92,6 +92,8 @@ __all__ = [
     'UpstreamAlreadyMerged',
     'UpstreamAlreadyImported',
     'UpstreamMergeConflicted',
+    'QuiltError',
+    'UpstreamVersionMissingInUpstreamBranch',
 ]
 
 
@@ -114,6 +116,14 @@ class UpstreamAlreadyMerged(Exception):
     """Upstream release (or later version) has already been merged."""
 
     def __init__(self, upstream_version):
+        self.version = upstream_version
+
+
+class UpstreamVersionMissingInUpstreamBranch(Exception):
+    """The upstream version is missing in the upstream branch."""
+
+    def __init__(self, upstream_branch, upstream_version):
+        self.branch = upstream_branch
         self.version = upstream_version
 
 
@@ -144,6 +154,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamAlreadyImported
       UpstreamMergeConflicted
       QuiltError
+      UpstreamVersionMissingInUpstreamBranch
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -208,11 +219,24 @@ def merge_upstream(tree, snapshot=False, location=None,
             upstream_revisions = upstream_branch_source.version_as_revisions(
                 package, new_upstream_version)
         except PackageVersionNotPresent:
-            raise AssertionError(
-                "Version %s can not be found in upstream branch %r. "
-                "Specify the revision manually using --revision or adjust "
-                "'export-upstream-revision' in the configuration." %
-                (new_upstream_version, upstream_branch_source))
+            if upstream_branch_source is primary_upstream_source:
+                # The branch is our primary upstream source, so if it can't
+                # find the version then there's nothing we can do.
+                raise AssertionError(
+                    "Version %s can not be found in upstream branch %r. "
+                    "Specify the revision manually using --revision or adjust "
+                    "'export-upstream-revision' in the configuration." %
+                    (new_upstream_version, upstream_branch_source))
+            elif not allow_ignore_upstream_branch:
+                raise UpstreamVersionMissingInUpstreamBranch(
+                    upstream_branch, new_upstream_version)
+            else:
+                warning(
+                    'Upstream version %s is not in upstream branch %s. '
+                    'Not merging from upstream branch. ',
+                    new_upstream_version, upstream_branch)
+                upstream_revisions = None
+                upstream_branch_source = None
     else:
         upstream_revisions = None
     if need_upstream_tarball:
