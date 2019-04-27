@@ -54,6 +54,9 @@ from breezy.plugins.debian.merge_upstream import (
     get_tarballs,
     PreviousVersionTagMissing,
     )
+from breezy.plugins.debian.upstream.pristinetar import (
+    PristineTarError,
+    )
 
 from breezy.plugins.debian.util import (
     debuild_config,
@@ -311,6 +314,9 @@ def main(args):
                 note(
                     'Unable to find tag %s for previous upstream version %s.',
                     e.tag_name, e.version)
+                continue
+            except PristineTarError as e:
+                note('Pristine tar error: %s', e)
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
