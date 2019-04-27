@@ -143,6 +143,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamAlreadyMerged
       UpstreamAlreadyImported
       UpstreamMergeConflicted
+      QuiltError
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -252,6 +253,8 @@ def merge_upstream(tree, snapshot=False, location=None,
     else:
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version)
+
+    check_quilt_patches_apply(tree)
 
     subprocess.check_call(
         ["debcommit", "-a"], cwd=tree.basedir)
