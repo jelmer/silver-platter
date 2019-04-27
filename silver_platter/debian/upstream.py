@@ -388,6 +388,7 @@ def main(args):
             (proposal, is_new) = publish_changes(
                 ws, args.mode, branch_name,
                 get_proposal_description=get_proposal_description,
+                get_proposal_commit_message=get_proposal_description,
                 dry_run=args.dry_run, hoster=hoster,
                 overwrite_existing=overwrite)
 

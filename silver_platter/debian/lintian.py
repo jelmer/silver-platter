@@ -109,6 +109,21 @@ def update_proposal_description(existing_proposal, applied):
         existing_lines + [l for r, l in applied])
 
 
+def update_proposal_commit_message(existing_proposal, applied):
+    existing_commit_message = existing_proposal.get_commit_message()
+    if existing_commit_message and not existing_commit_message.startswith(
+            'Fix lintian issues: '):
+        # The commit message is something we haven't set - let's leave it
+        # alone.
+        return
+    if existing_commit_message:
+        existing_applied = existing_commit_message.split(':', 1)[1]
+    else:
+        existing_applied = []
+    return "Fix lintian issues: " + (
+        ', '.join(sorted(existing_applied + list(applied))))
+
+
 def has_nontrivial_changes(applied, propose_addon_only):
     tags = set()
     for result, unused_summary in applied:
@@ -331,6 +346,10 @@ def main(args):
                 return update_proposal_description(
                     existing_proposal, applied)
 
+            def get_proposal_commit_message(existing_proposal):
+                return update_proposal_commit_message(
+                    existing_proposal, applied)
+
             if not has_nontrivial_changes(applied, args.propose_addon_only):
                 note('%s: only add-on fixers found', pkg)
                 allow_create_proposal = False
@@ -341,6 +360,7 @@ def main(args):
                 (proposal, is_new) = publish_changes(
                     ws, args.mode, BRANCH_NAME,
                     get_proposal_description=get_proposal_description,
+                    get_proposal_commit_message=get_proposal_commit_message,
                     dry_run=args.dry_run, hoster=hoster,
                     allow_create_proposal=allow_create_proposal,
                     overwrite_existing=overwrite,

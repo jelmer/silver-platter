@@ -131,7 +131,7 @@ class DryRunProposal(MergeProposal):
         return self.commit_message
 
     def set_commit_message(self, commit_message):
-        self.commit_message = message
+        self.commit_message = commit_message
 
     def get_source_branch_url(self):
         """Return the source branch."""
@@ -308,7 +308,8 @@ def enable_tag_pushing(branch):
     stack.set_user_option('branch.fetch_tags', True)
 
 
-def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
+def publish_changes(ws, mode, name, get_proposal_description,
+                    get_proposal_commit_message=None, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
                     overwrite_existing=True, existing_proposal=None):
     if mode not in SUPPORTED_MODES:
@@ -353,10 +354,14 @@ def publish_changes(ws, mode, name, get_proposal_description, dry_run=False,
 
     mp_description = get_proposal_description(
         existing_proposal if ws.resume_branch else None)
+    if get_proposal_commit_message is not None:
+        commit_message = get_proposal_commit_message(
+            existing_proposal if ws.resume_branch else None)
     (proposal, is_new) = ws.propose(
         name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
-        labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing)
+        labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
+        commit_message=commit_message)
 
     return (proposal, is_new)
 
@@ -376,7 +381,8 @@ def propose_changes(
         local_branch, main_branch, hoster, name,
         mp_description, resume_branch=None, resume_proposal=None,
         overwrite_existing=True,
-        labels=None, dry_run=False, additional_colocated_branches=None):
+        labels=None, dry_run=False, commit_message=None,
+        additional_colocated_branches=None):
     """Create or update a merge proposal.
 
     Args:
@@ -389,6 +395,7 @@ def propose_changes(
       overwrite_existing: Whether to overwrite any other existing branch
       labels: Labels to add
       dry_run: Whether to just dry-run the change
+      commit_message: Optional commit message
       additional_colocated_branches: Additional colocated branches to propose
     Returns:
       Tuple with (proposal, is_new)
@@ -422,7 +429,7 @@ def propose_changes(
                     remote_branch, main_branch)
             kwargs = {}
             if getattr(
-                hoster, 'supports_merge_proposal_commit_message', False):
+                    hoster, 'supports_merge_proposal_commit_message', False):
                 # brz >= 3.1 only
                 kwargs['commit_message'] = commit_message
             try:
