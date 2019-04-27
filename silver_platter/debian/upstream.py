@@ -57,6 +57,12 @@ from breezy.plugins.debian.merge_upstream import (
 from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     )
+from breezy.plugins.debian.quilt import (
+    QuiltError,
+    quilt_push_all,
+    quilt_pop_all,
+    )
+
 
 from breezy.plugins.debian.util import (
     debuild_config,
@@ -115,6 +121,12 @@ RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
+
+
+def check_quilt_patches_apply(local_tree):
+    if local_tree.has_filename('debian/patches/series'):
+        quilt_push_all(local_tree.basedir)
+        quilt_pop_all(local_tree.basedir)
 
 
 def merge_upstream(tree, snapshot=False, location=None,
@@ -317,6 +329,9 @@ def main(args):
                 continue
             except PristineTarError as e:
                 note('Pristine tar error: %s', e)
+                continue
+            except QuiltError as e:
+                note('Quilt error: %s', e)
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
