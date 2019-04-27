@@ -295,6 +295,7 @@ def setup_parser(parser):
 
 def main(args):
     possible_hosters = []
+    ret = 0
     for package in args.packages:
         main_branch = open_packaging_branch(package)
         overwrite = False
@@ -314,24 +315,32 @@ def main(args):
                 old_upstream_version, new_upstream_version = merge_upstream(
                     tree=ws.local_tree, snapshot=args.snapshot)
             except UpstreamAlreadyImported as e:
-                note('Last upstream version %s already imported.', e.version)
+                show_error(
+                    'Last upstream version %s already imported.', e.version)
+                ret = 1
                 continue
             except NewUpstreamMissing:
                 show_error('Unable to find new upstream for %s.', package)
+                ret = 1
                 continue
             except UpstreamAlreadyMerged as e:
-                note('Last upstream version %s already merged.', e.version)
+                show_error('Last upstream version %s already merged.',
+                           e.version)
+                ret = 1
                 continue
             except PreviousVersionTagMissing as e:
-                note(
+                show_error(
                     'Unable to find tag %s for previous upstream version %s.',
                     e.tag_name, e.version)
+                ret = 1
                 continue
             except PristineTarError as e:
-                note('Pristine tar error: %s', e)
+                show_error('Pristine tar error: %s', e)
+                ret = 1
                 continue
             except QuiltError as e:
-                note('Quilt error: %s', e)
+                show_error('Quilt error: %s', e)
+                ret = 1
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
@@ -364,6 +373,7 @@ def main(args):
                          package, proposal.url)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
+    return ret
 
 
 if __name__ == '__main__':
