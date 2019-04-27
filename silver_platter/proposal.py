@@ -93,22 +93,28 @@ class DryRunProposal(MergeProposal):
     """
 
     def __init__(self, source_branch, target_branch, labels=None,
-                 description=None):
+                 description=None, commit_message=None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
         self.source_branch = source_branch
         self.target_branch = target_branch
+        self.commit_message = commit_message
         self.url = None
 
     @classmethod
     def from_existing(cls, mp, source_branch=None):
         if source_branch is None:
             source_branch = open_branch(mp.get_source_branch_url())
+        commit_message = None
+        if getattr(mp, 'get_commit_message', None):
+            # brz >= 3.1 only
+            commit_message = mp.get_commit_message()
         return cls(
             source_branch=source_branch,
             target_branch=open_branch(mp.get_target_branch_url()),
-            description=mp.get_description())
+            description=mp.get_description(),
+            commit_message=commit_message)
 
     def __repr__(self):
         return "%s(%r, %r)" % (
@@ -120,6 +126,12 @@ class DryRunProposal(MergeProposal):
 
     def set_description(self, description):
         self.description = description
+
+    def get_commit_message(self):
+        return self.commit_message
+
+    def set_commit_message(self, commit_message):
+        self.commit_message = message
 
     def get_source_branch_url(self):
         """Return the source branch."""
@@ -253,7 +265,8 @@ class Workspace(object):
             dry_run=dry_run)
 
     def propose(self, name, description, hoster=None, existing_proposal=None,
-                overwrite_existing=None, labels=None, dry_run=False):
+                overwrite_existing=None, labels=None, dry_run=False,
+                commit_message=None):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
@@ -263,6 +276,7 @@ class Workspace(object):
             resume_proposal=existing_proposal,
             overwrite_existing=overwrite_existing,
             labels=labels, dry_run=dry_run,
+            commit_message=commit_message,
             additional_colocated_branches=self.additional_colocated_branches)
 
     def push_derived(self, name, hoster=None, overwrite_existing=False):
@@ -397,14 +411,24 @@ def propose_changes(
         # causes Launchpad to send emails.
         if resume_proposal.get_description() != mp_description:
             resume_proposal.set_description(mp_description)
+        if getattr(resume_proposal, 'get_commit_message', None):
+            # brz >= 3.1 only
+            if resume_proposal.get_commit_message() != commit_message:
+                resume_proposal.set_commit_message(commit_message)
         return (resume_proposal, False)
     else:
         if not dry_run:
             proposal_builder = hoster.get_proposer(
                     remote_branch, main_branch)
+            kwargs = {}
+            if getattr(
+                hoster, 'supports_merge_proposal_commit_message', False):
+                # brz >= 3.1 only
+                kwargs['commit_message'] = commit_message
             try:
                 mp = proposal_builder.create_proposal(
-                    description=mp_description, labels=labels)
+                    description=mp_description, labels=labels,
+                    **kwargs)
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
@@ -412,7 +436,7 @@ def propose_changes(
         else:
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
-                description=mp_description)
+                description=mp_description, commit_message=commit_message)
         return (mp, True)
 
 
