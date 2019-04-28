@@ -94,6 +94,7 @@ __all__ = [
     'UpstreamMergeConflicted',
     'QuiltError',
     'UpstreamVersionMissingInUpstreamBranch',
+    'UpstreamBranchUnknown',
 ]
 
 
@@ -127,6 +128,10 @@ class UpstreamVersionMissingInUpstreamBranch(Exception):
         self.version = upstream_version
 
 
+class UpstreamBranchUnknown(Exception):
+    """The location of the upstream branch is unknown."""
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
@@ -155,6 +160,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamMergeConflicted
       QuiltError
       UpstreamVersionMissingInUpstreamBranch
+      UpstreamBranchUnknown
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -201,8 +207,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     else:
         if snapshot:
             if upstream_branch_source is None:
-                raise AssertionError(
-                    "--snapshot requires an upstream branch source")
+                raise UpstreamBranchUnknown()
             primary_upstream_source = upstream_branch_source
         else:
             primary_upstream_source = UScanSource(tree, top_level)
@@ -367,6 +372,12 @@ def main(args):
                 continue
             except QuiltError as e:
                 show_error('Quilt error: %s', e)
+                ret = 1
+                continue
+            except UpstreamBranchUnavailable as e:
+                show_error(
+                    'Upstream branch location unknown. '
+                    'Set \'Repository\' field in debian/upstream/metadata?')
                 ret = 1
                 continue
             else:
