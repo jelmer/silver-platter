@@ -110,7 +110,8 @@ def update_proposal_description(existing_proposal, applied):
 
 
 def update_proposal_commit_message(existing_proposal, applied):
-    existing_commit_message = existing_proposal.get_commit_message()
+    existing_commit_message = getattr(
+        existing_proposal, 'get_commit_message', lambda: None)()
     if existing_commit_message and not existing_commit_message.startswith(
             'Fix lintian issues: '):
         # The commit message is something we haven't set - let's leave it
