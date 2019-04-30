@@ -20,7 +20,6 @@
 import silver_platter  # noqa: F401
 
 from debian.changelog import Version
-import subprocess
 import sys
 import tempfile
 
@@ -41,6 +40,9 @@ from . import (
     Workspace,
     )
 from breezy.errors import FileExists
+from breezy.plugins.debian.changelog import (
+    changelog_commit_message,
+    )
 from breezy.plugins.debian.errors import (
     UpstreamAlreadyImported,
     PackageVersionNotPresent,
@@ -147,7 +149,8 @@ def check_quilt_patches_apply(local_tree):
 def merge_upstream(tree, snapshot=False, location=None,
                    new_upstream_version=None, force=False,
                    distribution_name=DEFAULT_DISTRIBUTION,
-                   allow_ignore_upstream_branch=True):
+                   allow_ignore_upstream_branch=True,
+                   committer=None):
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -271,7 +274,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             conflicts = do_merge(
                 tree, tarball_filenames, package,
                 new_upstream_version, old_upstream_version, upstream_branch,
-                upstream_revisions, merge_type=None, force=force)
+                upstream_revisions, merge_type=None, force=force,
+                committer=committer)
     if Version(old_upstream_version) >= Version(new_upstream_version):
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
@@ -285,8 +289,10 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     check_quilt_patches_apply(tree)
 
-    subprocess.check_call(
-        ["debcommit", "-a"], cwd=tree.basedir)
+    tree.commit(
+        committer=committer,
+        message=changelog_commit_message(tree, tree.basis_tree()))
+
     return (old_upstream_version, new_upstream_version)
 
 
