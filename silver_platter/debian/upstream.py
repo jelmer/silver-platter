@@ -381,6 +381,10 @@ def main(args):
                 ret = 1
                 continue
             except UpstreamBranchUnavailable as e:
+                show_error('Upstream branch unavailable: %s. ', e)
+                ret = 1
+                continue
+            except UpstreamBranchUnknown:
                 show_error(
                     'Upstream branch location unknown. '
                     'Set \'Repository\' field in debian/upstream/metadata?')
