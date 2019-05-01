@@ -97,6 +97,7 @@ __all__ = [
     'QuiltError',
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
+    'PackageIsNative',
 ]
 
 
@@ -134,6 +135,14 @@ class UpstreamBranchUnknown(Exception):
     """The location of the upstream branch is unknown."""
 
 
+class PackageIsNative(Exception):
+    """Unable to merge upstream version."""
+
+    def __init__(self, package, version):
+        self.package = package
+        self.version = version
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
@@ -164,6 +173,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       QuiltError
       UpstreamVersionMissingInUpstreamBranch
       UpstreamBranchUnknown
+      PackageIsNative
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -176,7 +186,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             tree, changelog.version, contains_upstream_source)
     need_upstream_tarball = (build_type != BUILD_TYPE_MERGE)
     if build_type == BUILD_TYPE_NATIVE:
-        raise AssertionError('Native packages do not have an upstream.')
+        raise PackageIsNative(changelog.package, changelog.version)
 
     if config.upstream_branch is not None:
         note("Using upstream branch %s (from configuration)",
@@ -388,6 +398,12 @@ def main(args):
                 show_error(
                     'Upstream branch location unknown. '
                     'Set \'Repository\' field in debian/upstream/metadata?')
+                ret = 1
+                continue
+            except PackageIsNative as e:
+                show_error(
+                    'Package %s is native; unable to merge new upstream.',
+                    e.package)
                 ret = 1
                 continue
             else:
