@@ -47,6 +47,7 @@ from breezy.plugins.debian.changelog import (
 from breezy.plugins.debian.errors import (
     UpstreamAlreadyImported,
     PackageVersionNotPresent,
+    UpstreamBranchAlreadyMerged,
     )
 
 from breezy.trace import note, show_error, warning
@@ -282,11 +283,15 @@ def merge_upstream(tree, snapshot=False, location=None,
                     "are of different formats. Either delete the target "
                     "file, or use it as the argument to import."
                     % e.path)
-            conflicts = do_merge(
-                tree, tarball_filenames, package,
-                new_upstream_version, old_upstream_version, upstream_branch,
-                upstream_revisions, merge_type=None, force=force,
-                committer=committer)
+            try:
+                conflicts = do_merge(
+                    tree, tarball_filenames, package,
+                    new_upstream_version, old_upstream_version,
+                    upstream_branch, upstream_revisions, merge_type=None,
+                    force=force, committer=committer)
+            except UpstreamBranchAlreadyMerged:
+                # TODO(jelmer): Perhaps reconcile these two exceptions?
+                raise UpstreamAlreadyMerged(new_upstream_version)
     if Version(old_upstream_version) >= Version(new_upstream_version):
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
