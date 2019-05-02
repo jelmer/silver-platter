@@ -357,7 +357,7 @@ def main(args):
             # hoster that can tell us.
             warning('Unsupported hoster (%s), will attempt to push to %s',
                     e, main_branch.user_url)
-        with Workspace(main_branch) as ws:
+        with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
             try:
                 old_upstream_version, new_upstream_version = merge_upstream(
