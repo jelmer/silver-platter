@@ -38,6 +38,7 @@ from ..run import (
 from . import (
     open_packaging_branch,
     Workspace,
+    DEFAULT_BUILDER,
     )
 
 
@@ -66,7 +67,7 @@ def setup_parser(parser):
         '--build-verify',
         help='Build package to verify it.', action='store_true')
     parser.add_argument(
-        '--builder', type=str, default='sbuild',
+        '--builder', type=str, default=DEFAULT_BUILDER,
         help='Build command to run.')
     parser.add_argument(
         '--build-target-dir', type=str,

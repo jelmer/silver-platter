@@ -54,6 +54,9 @@ __all__ = [
     ]
 
 
+DEFAULT_BUILDER = 'sbuild --no-clean-source'
+
+
 class NoSuchPackage(Exception):
     """No such package."""
 
@@ -67,7 +70,7 @@ def build(tree, builder=None, result_dir=None):
       result_dir: Directory to copy results to
     """
     if builder is None:
-        builder = 'sbuild'
+        builder = DEFAULT_BUILDER
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.

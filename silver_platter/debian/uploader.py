@@ -42,6 +42,7 @@ from . import (
     get_source_package,
     source_package_vcs_url,
     Workspace,
+    DEFAULT_BUILDER,
     )
 from ..utils import (
     open_branch,
@@ -138,7 +139,7 @@ def setup_parser(parser):
         '--builder',
         type=str,
         help='Build command',
-        default=('sbuild --source --source-only-changes '
+        default=(DEFAULT_BUILDER + ' --source --source-only-changes '
                  '--debbuildopt=-v${LAST_VERSION}'))
 
 

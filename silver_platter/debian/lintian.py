@@ -28,6 +28,7 @@ from lintian_brush import (
 from . import (
     open_packaging_branch,
     should_update_changelog,
+    DEFAULT_BUILDER,
     )
 from ..proposal import (
     get_hoster,
@@ -159,7 +160,7 @@ def setup_parser(parser):
         '--build-verify',
         help='Build package to verify it.', action='store_true')
     parser.add_argument(
-        '--builder', default='sbuild', type=str,
+        '--builder', default=DEFAULT_BUILDER, type=str,
         help='Build command to use when verifying build.')
     parser.add_argument(
         '--refresh',
