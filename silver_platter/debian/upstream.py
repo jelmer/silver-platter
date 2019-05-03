@@ -38,7 +38,7 @@ from ..utils import (
 from . import (
     open_packaging_branch,
     Workspace,
-    DEFAUL_BUILDER,
+    DEFAULT_BUILDER,
     )
 from breezy.errors import FileExists
 from breezy.plugins.debian.changelog import (
@@ -324,7 +324,7 @@ def setup_parser(parser):
         dest='build_verify',
         action='store_false')
     parser.add_argument(
-        '--builder', type=str, default=DEFAUL_BUILDER, help='Build command.')
+        '--builder', type=str, default=DEFAULT_BUILDER, help='Build command.')
     parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
