@@ -123,7 +123,7 @@ def update_proposal_commit_message(existing_proposal, applied):
     else:
         existing_applied = []
     return "Fix lintian issues: " + (
-        ', '.join(sorted(existing_applied + list(applied))))
+        ', '.join(sorted(existing_applied + [l for r, l in applied])))
 
 
 def has_nontrivial_changes(applied, propose_addon_only):
