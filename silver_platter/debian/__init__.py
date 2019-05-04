@@ -186,8 +186,8 @@ class Workspace(_mod_proposal.Workspace):
 
     def __init__(self, main_branch, *args, **kwargs):
         if getattr(main_branch.repository, '_git', None):
-            kwargs['additional_branches'] = (
-                kwargs.get('additional_branches', []) +
+            kwargs['additional_colocated_branches'] = (
+                kwargs.get('additional_colocated_branches', []) +
                 ["pristine-tar", "upstream"])
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
