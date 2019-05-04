@@ -40,7 +40,10 @@ from . import (
     Workspace,
     DEFAULT_BUILDER,
     )
-from breezy.errors import FileExists
+from breezy.errors import (
+    FileExists,
+    PointlessMerge,
+    )
 from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
@@ -60,6 +63,7 @@ from breezy.plugins.debian.merge_upstream import (
     )
 from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
+    PristineTarSource,
     )
 from breezy.plugins.debian.quilt import (
     QuiltError,
@@ -292,6 +296,15 @@ def merge_upstream(tree, snapshot=False, location=None,
             except UpstreamBranchAlreadyMerged:
                 # TODO(jelmer): Perhaps reconcile these two exceptions?
                 raise UpstreamAlreadyMerged(new_upstream_version)
+            except UpstreamAlreadyImported:
+                pristine_tar_source = PristineTarSource.from_tree(tree.branch, tree)
+                try:
+                    conflicts = tree.merge_from_branch(
+                        pristine_tar_source.branch,
+                        to_revision=pristine_tar_source.version_as_revisions(
+                            package, new_upstream_version)[None])
+                except PointlessMerge:
+                    raise UpstreamAlreadyMerged(new_upstream_version)
     if Version(old_upstream_version) >= Version(new_upstream_version):
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
