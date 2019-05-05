@@ -388,6 +388,9 @@ def setup_parser(parser):
     parser.add_argument(
         '--diff', action="store_true",
         help="Output diff of created merge proposal.")
+    parser.add_argument(
+        '--refresh-patches', action="store_true",
+        help="Refresh quilt patches after upstream merge.")
 
 
 def main(args):
@@ -458,6 +461,15 @@ def main(args):
             else:
                 note('Merged new upstream version %s (previous: %s)',
                      new_upstream_version, old_upstream_version)
+
+            if args.refresh_patches:
+                note('Refresh quilt patches.')
+                try:
+                    refresh_quilt_patches(ws.local_tree)
+                except QuiltError as e:
+                    show_error('Quilt error while refreshing patches: %s', e)
+                    ret = 1
+                    continue
 
             if args.build_verify:
                 ws.build(builder=args.builder,
