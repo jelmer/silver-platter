@@ -90,7 +90,6 @@ from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
     )
 
-from lintian_brush.upstream_metadata import guess_upstream_metadata
 
 
 __all__ = [
@@ -201,10 +200,16 @@ def merge_upstream(tree, snapshot=False, location=None,
              config.upstream_branch)
         upstream_branch_location = config.upstream_branch
     else:
-        guessed_upstream_metadata = guess_upstream_metadata(
-            tree.basedir)
-        upstream_branch_location = guessed_upstream_metadata.get(
-            'Repository')
+        try:
+            from lintian_brush.upstream_metadata import guess_upstream_metadata
+        except ImportError:
+            # Version of lintian-brush is too old..
+            upstream_branch_location = None
+        else:
+            guessed_upstream_metadata = guess_upstream_metadata(
+                tree.basedir)
+            upstream_branch_location = guessed_upstream_metadata.get(
+                'Repository')
         if upstream_branch_location:
             note("Using upstream branch %s (guessed)",
                  upstream_branch_location)
