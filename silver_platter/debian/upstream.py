@@ -169,6 +169,8 @@ def check_quilt_patches_apply(local_tree):
 
 
 def refresh_quilt_patches(local_tree, committer=None):
+    from breezy.plugins.debian.quilt import quilt_upgrade
+    quilt_upgrade(local_tree.basedir)
     quilt_push_all(local_tree.basedir, refresh=True)
     quilt_pop_all(local_tree.basedir)
     try:
