@@ -96,7 +96,6 @@ from breezy.plugins.debian.upstream.branch import (
     )
 
 
-
 __all__ = [
     'PreviousVersionTagMissing',
     'merge_upstream',
@@ -331,7 +330,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                 # TODO(jelmer): Perhaps reconcile these two exceptions?
                 raise UpstreamAlreadyMerged(new_upstream_version)
             except UpstreamAlreadyImported:
-                pristine_tar_source = PristineTarSource.from_tree(tree.branch, tree)
+                pristine_tar_source = PristineTarSource.from_tree(
+                    tree.branch, tree)
                 try:
                     conflicts = tree.merge_from_branch(
                         pristine_tar_source.branch,
@@ -349,8 +349,6 @@ def merge_upstream(tree, snapshot=False, location=None,
     else:
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version)
-
-    check_quilt_patches_apply(tree)
 
     tree.commit(
         committer=committer,
@@ -442,10 +440,6 @@ def main(args):
                 show_error('Pristine tar error: %s', e)
                 ret = 1
                 continue
-            except QuiltError as e:
-                show_error('Quilt error: %s', e)
-                ret = 1
-                continue
             except UpstreamBranchUnavailable as e:
                 show_error('Upstream branch unavailable: %s. ', e)
                 ret = 1
@@ -466,7 +460,8 @@ def main(args):
                 note('Merged new upstream version %s (previous: %s)',
                      new_upstream_version, old_upstream_version)
 
-            if args.refresh_patches:
+            if args.refresh_patches and \
+                    ws.local_tree.has_filename('debian/patches/series'):
                 note('Refresh quilt patches.')
                 try:
                     refresh_quilt_patches(ws.local_tree)
