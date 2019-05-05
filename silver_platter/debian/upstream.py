@@ -40,6 +40,9 @@ from . import (
     Workspace,
     DEFAULT_BUILDER,
     )
+from breezy.commit import (
+    PointlessCommit,
+    )
 from breezy.errors import (
     FileExists,
     PointlessMerge,
@@ -160,6 +163,15 @@ def check_quilt_patches_apply(local_tree):
     if local_tree.has_filename('debian/patches/series'):
         quilt_push_all(local_tree.basedir)
         quilt_pop_all(local_tree.basedir)
+
+
+def refresh_quilt_patches(local_tree, committer=None):
+    quilt_push_all(local_tree.basedir, refresh=True)
+    quilt_pop_all(local_tree.basedir)
+    try:
+        local_tree.commit('Refresh patches.', committer=committer)
+    except PointlessCommit:
+        pass
 
 
 def merge_upstream(tree, snapshot=False, location=None,
