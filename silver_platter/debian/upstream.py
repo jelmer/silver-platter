@@ -41,6 +41,7 @@ from . import (
     open_packaging_branch,
     Workspace,
     DEFAULT_BUILDER,
+    debcommit,
     )
 from breezy.commit import (
     PointlessCommit,
@@ -48,9 +49,6 @@ from breezy.commit import (
 from breezy.errors import (
     FileExists,
     PointlessMerge,
-    )
-from breezy.plugins.debian.changelog import (
-    changelog_commit_message,
     )
 from breezy.plugins.debian.errors import (
     UpstreamAlreadyImported,
@@ -352,9 +350,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version)
 
-    tree.commit(
-        committer=committer,
-        message=changelog_commit_message(tree, tree.basis_tree()))
+    debcommit(tree, committer=committer)
 
     return (old_upstream_version, new_upstream_version)
 

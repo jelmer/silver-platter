@@ -29,6 +29,9 @@ from breezy.plugins.debian.directory import (
     )
 
 from breezy.urlutils import InvalidURL
+from breezy.plugins.debian.changelog import (
+    changelog_commit_message,
+    )
 try:
     from breezy.plugins.debian.builder import BuildFailedError
 except ImportError:
@@ -194,3 +197,9 @@ class Workspace(_mod_proposal.Workspace):
     def build(self, builder=None, result_dir=None):
         return build(tree=self.local_tree, builder=builder,
                      result_dir=result_dir)
+
+
+def debcommit(tree, committer=None):
+    tree.commit(
+        committer=committer,
+        message=changelog_commit_message(tree, tree.basis_tree()))
