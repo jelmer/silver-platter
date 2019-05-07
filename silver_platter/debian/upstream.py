@@ -35,8 +35,6 @@ from ..utils import (
     BranchUnavailable,
     )
 
-from lintian_brush import reset_tree
-
 from . import (
     open_packaging_branch,
     Workspace,
@@ -159,6 +157,7 @@ DEFAULT_DISTRIBUTION = 'unstable'
 
 
 def check_quilt_patches_apply(local_tree):
+    from lintian_brush import reset_tree  # lintian-brush < 0.16.
     assert not local_tree.has_changes()
     if local_tree.has_filename('debian/patches/series'):
         quilt_push_all(local_tree.basedir)
