@@ -214,14 +214,17 @@ class Workspace(object):
     main_branch: The upstream branch
     resume_branch: Optional in-progress branch that we previously made changes
         on, and should ideally continue from.
+    cached_branch: Branch to copy revisions from, if possible.
     local_tree: The tree the user can work in
     """
 
     def __init__(self, main_branch, resume_branch=None,
+                 cached_branch=None,
                  additional_colocated_branches=None,
                  dir=None, path=None):
         self.main_branch = main_branch
         self.main_branch_revid = main_branch.last_revision()
+        self.cached_branch = cached_branch
         self.resume_branch = resume_branch
         self.additional_colocated_branches = (
             additional_colocated_branches or [])
@@ -232,11 +235,14 @@ class Workspace(object):
 
     def __enter__(self):
         self.local_tree, self._destroy = create_temp_sprout(
-            self.resume_branch or self.main_branch,
+            self.cached_branch or self.resume_branch or self.main_branch,
             self.additional_colocated_branches,
             dir=self._dir, path=self._path)
         self.refreshed = False
         with self.local_tree.branch.lock_write():
+            if self.cached_branch:
+                self.local_tree.pull(
+                    self.resume_branch or self.main_branch, overwrite=True)
             if self.resume_branch:
                 try:
                     self.local_tree.pull(self.main_branch, overwrite=False)
