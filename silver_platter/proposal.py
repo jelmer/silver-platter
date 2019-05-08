@@ -16,7 +16,10 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from breezy.diff import show_diff_trees
-from breezy.errors import PermissionDenied
+from breezy.errors import (
+    DivergedBranches,
+    PermissionDenied,
+    )
 from breezy.trace import (
     note,
     )
@@ -234,14 +237,18 @@ class Workspace(object):
             dir=self._dir, path=self._path)
         self.refreshed = False
         with self.local_tree.branch.lock_write():
-            if (self.resume_branch is not None and
-                    merge_conflicts(
-                        self.main_branch, self.local_tree.branch)):
-                note('restarting branch')
-                self.local_tree.update(revision=self.main_branch_revid)
-                self.local_tree.branch.generate_revision_history(
-                    self.main_branch_revid)
-                self.resume_branch = None
+            if self.resume_branch:
+                try:
+                    self.local_tree.pull(self.main_branch, overwrite=False)
+                except DivergedBranches:
+                    pass
+                if merge_conflicts(
+                        self.main_branch, self.local_tree.branch):
+                    note('restarting branch')
+                    self.local_tree.update(revision=self.main_branch_revid)
+                    self.local_tree.branch.generate_revision_history(
+                        self.main_branch_revid)
+                    self.resume_branch = None
             self.orig_revid = self.local_tree.last_revision()
         return self
 
