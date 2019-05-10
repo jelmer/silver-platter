@@ -180,7 +180,7 @@ def merge_upstream(tree, snapshot=False, location=None,
                    new_upstream_version=None, force=False,
                    distribution_name=DEFAULT_DISTRIBUTION,
                    allow_ignore_upstream_branch=True,
-                   committer=None):
+                   trust_package=False, committer=None):
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -221,7 +221,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             upstream_branch_location = None
         else:
             guessed_upstream_metadata = guess_upstream_metadata(
-                tree.basedir)
+                tree.basedir, trust_package=trust_package)
             upstream_branch_location = guessed_upstream_metadata.get(
                 'Repository')
         if upstream_branch_location:
@@ -355,6 +355,7 @@ def merge_upstream(tree, snapshot=False, location=None,
 
 
 def setup_parser(parser):
+    import argparse
     parser.add_argument("packages", nargs='+')
     parser.add_argument(
         '--snapshot',
@@ -390,6 +391,10 @@ def setup_parser(parser):
     parser.add_argument(
         '--refresh-patches', action="store_true",
         help="Refresh quilt patches after upstream merge.")
+    parser.add_argument(
+        '--trust-package', action='store_true',
+        default=False,
+        help=argparse.SUPPRESS)
 
 
 def main(args):
@@ -412,7 +417,8 @@ def main(args):
             run_pre_check(ws.local_tree, args.pre_check)
             try:
                 old_upstream_version, new_upstream_version = merge_upstream(
-                    tree=ws.local_tree, snapshot=args.snapshot)
+                    tree=ws.local_tree, snapshot=args.snapshot,
+                    trust_package=args.trust_package)
             except UpstreamAlreadyImported as e:
                 show_error(
                     'Last upstream version %s already imported.', e.version)
