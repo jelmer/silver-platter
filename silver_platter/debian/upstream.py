@@ -66,10 +66,9 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     PristineTarSource,
     )
-from breezy.plugins.debian.quilt import (
+from breezy.plugins.debian.quilt.quilt import (
     QuiltError,
-    quilt_push_all,
-    quilt_pop_all,
+    QuiltPatches,
     )
 
 
@@ -160,16 +159,17 @@ def check_quilt_patches_apply(local_tree):
     from lintian_brush import reset_tree  # lintian-brush < 0.16.
     assert not local_tree.has_changes()
     if local_tree.has_filename('debian/patches/series'):
-        quilt_push_all(local_tree.basedir)
-        quilt_pop_all(local_tree.basedir)
+        patches = QuiltPatches(local_tree, 'debian/patches')
+        patches.push_all()
+        patches.pop_all()
         reset_tree(local_tree)
 
 
 def refresh_quilt_patches(local_tree, committer=None):
-    from breezy.plugins.debian.quilt import quilt_upgrade
-    quilt_upgrade(local_tree.basedir)
-    quilt_push_all(local_tree.basedir, refresh=True)
-    quilt_pop_all(local_tree.basedir)
+    patches = QuiltPatches(local_tree, 'debian/patches')
+    patches.upgrade()
+    patches.push_all(refresh=True)
+    patches.pop_all()
     try:
         local_tree.commit('Refresh patches.', committer=committer)
     except PointlessCommit:
