@@ -147,8 +147,8 @@ def open_branch(url, possible_transports=None):
     """Open a branch by URL."""
     try:
         return Branch.open(url, possible_transports=possible_transports)
-    except socket.error:
-        raise BranchUnavailable(url, 'ignoring, socket error')
+    except socket.error as e:
+        raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
     except errors.NotBranchError as e:
         raise BranchUnavailable(url, 'Branch does not exist: %s' % e)
     except errors.UnsupportedProtocol as e:
