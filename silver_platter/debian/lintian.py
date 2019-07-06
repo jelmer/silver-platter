@@ -336,7 +336,7 @@ def main(args):
 
                 if failed:
                     note('%s: some fixers failed to run: %r',
-                         pkg, failed)
+                         pkg, set(failed))
                 if not applied:
                     note('%s: no fixers to apply', pkg)
                     continue
