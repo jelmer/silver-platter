@@ -176,6 +176,20 @@ def refresh_quilt_patches(local_tree, committer=None):
         pass
 
 
+class MergeUpstreamResult(object):
+    """Object representing the result of a merge_upstream operation."""
+
+    __slots__ = ['old_upstream_version', 'new_upstream_version']
+
+    def __init__(self, old_upstream_version, new_upstream_version):
+        self.old_upstream_version = old_upstream_version
+        self.new_upstream_version = new_upstream_version
+
+    def __tuple__(self):
+        # Backwards compatibility
+        return (self.old_upstream_version, self.new_upstream_version)
+
+
 def merge_upstream(tree, snapshot=False, location=None,
                    new_upstream_version=None, force=False,
                    distribution_name=DEFAULT_DISTRIBUTION,
@@ -195,6 +209,8 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamVersionMissingInUpstreamBranch
       UpstreamBranchUnknown
       PackageIsNative
+    Returns:
+      MergeUpstreamResult object
     """
     config = debuild_config(tree)
     (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
@@ -351,7 +367,9 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     debcommit(tree, committer=committer)
 
-    return (old_upstream_version, new_upstream_version)
+    return MergeUpstreamResult(
+        old_upstream_version=old_upstream_version,
+        new_upstream_version=new_upstream_version)
 
 
 def setup_parser(parser):
@@ -416,7 +434,7 @@ def main(args):
         with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
             try:
-                old_upstream_version, new_upstream_version = merge_upstream(
+                merge_upstream_result = merge_upstream(
                     tree=ws.local_tree, snapshot=args.snapshot,
                     trust_package=args.trust_package)
             except UpstreamAlreadyImported as e:
@@ -461,7 +479,8 @@ def main(args):
                 continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
-                     new_upstream_version, old_upstream_version)
+                     merge_upstream_result.new_upstream_version,
+                     merge_upstream_result.old_upstream_version)
 
             if args.refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
@@ -478,7 +497,8 @@ def main(args):
                          result_dir=args.build_target_dir)
 
             def get_proposal_description(existing_proposal):
-                return "Merge new upstream release %s" % new_upstream_version
+                return ("Merge new upstream release %s" %
+                        merge_upstream_result.new_upstream_version)
 
             if args.snapshot:
                 branch_name = SNAPSHOT_BRANCH_NAME
