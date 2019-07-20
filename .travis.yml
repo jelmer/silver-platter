@@ -1,0 +1,24 @@
+language: python
+sudo: false
+cache: pip
+sudo: true
+dist: xenial
+addons:
+  apt:
+    update: true
+
+python:
+  - 3.4
+  - 3.5
+  - 3.6
+  - pypy3.5
+  - 3.7
+
+install:
+  - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt
+  - mkdir $HOME/.config/breezy/plugins -p
+  - bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
+  - python setup.py develop
+
+script:
+  - make check

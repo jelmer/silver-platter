@@ -19,6 +19,10 @@ from breezy.tests import TestCaseWithTransport
 
 from ..utils import (
     TemporarySprout,
+    run_pre_check,
+    run_post_check,
+    PreCheckFailed,
+    PostCheckFailed,
     )
 
 
@@ -55,3 +59,37 @@ class TemporarySproutTests(TestCaseWithTransport):
             tree.commit('blah')
             # Commits in the temporary sprout don't affect the original branch.
             self.assertEqual(branch.last_revision(), orig_revid)
+
+
+class RunPreCheckTests(TestCaseWithTransport):
+
+    def test_none(self):
+        tree = self.make_branch_and_tree('tree')
+        self.assertIs(run_pre_check(tree, None), None)
+
+    def test_false(self):
+        tree = self.make_branch_and_tree('tree')
+        self.assertRaises(PreCheckFailed, run_pre_check, tree, "/bin/false")
+
+    def test_true(self):
+        tree = self.make_branch_and_tree('tree')
+        self.assertIs(run_pre_check(tree, "/bin/true"), None)
+
+
+class RunPostCheckTests(TestCaseWithTransport):
+
+    def test_none(self):
+        tree = self.make_branch_and_tree('tree')
+        self.assertIs(run_post_check(tree, None, None), None)
+
+    def test_false(self):
+        tree = self.make_branch_and_tree('tree')
+        cid = tree.commit('a')
+        self.assertRaises(
+            PostCheckFailed, run_post_check, tree, "/bin/false",
+            since_revid=cid)
+
+    def test_true(self):
+        tree = self.make_branch_and_tree('tree')
+        cid = tree.commit('a')
+        self.assertIs(run_post_check(tree, "/bin/true", since_revid=cid), None)

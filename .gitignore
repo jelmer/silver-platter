@@ -1,0 +1,5 @@
+silver_platter.egg-info/*
+__pycache__
+*~
+.eggs/
+silver_platter.dist-info
