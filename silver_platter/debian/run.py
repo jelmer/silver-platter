@@ -15,89 +15,40 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-"""Automatic proposal/push creation."""
+"""Support for updating with a script."""
 
-from __future__ import absolute_import
-
-import os
-import subprocess
 import sys
 
-import silver_platter  # noqa: F401
+from breezy.trace import warning
 
-from breezy import osutils
-from breezy import errors
-from breezy.commit import PointlessCommit
-from breezy.trace import note, warning, show_error
-from breezy.plugins.propose import (
-    propose as _mod_propose,
-    )
-from .proposal import (
-    UnsupportedHoster,
+from ..proposal import (
     enable_tag_pushing,
     find_existing_proposed,
-    get_hoster,
     publish_changes,
-    Workspace,
+    get_hoster,
+    UnsupportedHoster,
     SUPPORTED_MODES,
     )
-from .utils import (
-    open_branch,
-    BranchUnavailable,
-)
+from ..run import (
+    ScriptMadeNoChanges,
+    derived_branch_name,
+    script_runner,
+    )
 
-
-class ScriptMadeNoChanges(errors.BzrError):
-
-    _fmt = "Script made no changes."
-
-
-def script_runner(local_tree, script, commit_pending=None):
-    """Run a script in a tree and commit the result.
-
-    This ignores newly added files.
-
-    :param local_tree: Local tree to run script in
-    :param script: Script to run
-    :param commit_pending: Whether to commit pending changes
-        (True, False or None: only commit if there were no commits by the
-         script)
-    :return: Description as reported by script
-    """
-    last_revision = local_tree.last_revision()
-    p = subprocess.Popen(script, cwd=local_tree.basedir,
-                         stdout=subprocess.PIPE, shell=True)
-    (description, err) = p.communicate("")
-    if p.returncode != 0:
-        raise errors.BzrCommandError(
-            "Script %s failed with error code %d" % (
-                script, p.returncode))
-    new_revision = local_tree.last_revision()
-    description = description.decode()
-    if last_revision == new_revision and commit_pending is None:
-        # Automatically commit pending changes if the script did not
-        # touch the branch.
-        commit_pending = True
-    if commit_pending:
-        try:
-            new_revision = local_tree.commit(
-                description, allow_pointless=False)
-        except PointlessCommit:
-            pass
-    if new_revision == last_revision:
-        raise ScriptMadeNoChanges()
-    return description
-
-
-def derived_branch_name(script):
-    return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
+from . import (
+    open_packaging_branch,
+    Workspace,
+    DEFAULT_BUILDER,
+    )
 
 
 def setup_parser(parser):
     parser.add_argument('script', help='Path to script to run.', type=str)
-    parser.add_argument('url', help='URL of branch to work on.', type=str)
+    parser.add_argument(
+        'package', help='Package name or URL of branch to work on.', type=str)
     parser.add_argument('--refresh', action="store_true",
-                        help='Refresh changes if branch already exists')
+                        help='Refresh branch (discard current branch) and '
+                        'create from scratch')
     parser.add_argument('--label', type=str,
                         help='Label to attach', action="append", default=[])
     parser.add_argument('--name', type=str,
@@ -109,27 +60,36 @@ def setup_parser(parser):
         help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
+        "--dry-run",
+        help="Create branches but don't push or propose anything.",
+        action="store_true", default=False)
+    parser.add_argument(
+        '--build-verify',
+        help='Build package to verify it.', action='store_true')
+    parser.add_argument(
+        '--builder', type=str, default=DEFAULT_BUILDER,
+        help='Build command to run.')
+    parser.add_argument(
+        '--build-target-dir', type=str,
+        help=("Store built Debian files in specified directory "
+              "(with --build-verify)"))
+    parser.add_argument(
         '--commit-pending',
         help='Commit pending changes after script.',
         choices=['yes', 'no', 'auto'],
         default='auto', type=str)
-    parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true", default=False)
 
 
 def main(args):
-    try:
-        main_branch = open_branch(args.url)
-    except BranchUnavailable as e:
-        show_error('%s: %s', args.url, e)
-        return 1
+    from breezy.plugins.propose import propose as _mod_propose
+    from breezy.trace import note, show_error
+    main_branch = open_packaging_branch(args.package)
 
     if args.name is None:
         name = derived_branch_name(args.script)
     else:
         name = args.name
+
     commit_pending = {'auto': None, 'yes': True, 'no': False}[
         args.commit_pending]
 
@@ -158,6 +118,9 @@ def main(args):
         except ScriptMadeNoChanges:
             show_error('Script did not make any changes.')
             return 1
+
+        if args.build_verify:
+            ws.build(builder=args.builder, result_dir=args.build_target_dir)
 
         def get_description(existing_proposal):
             if description is not None:
@@ -196,11 +159,3 @@ def main(args):
 
         if args.diff:
             ws.show_diff(sys.stdout.buffer)
-
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)

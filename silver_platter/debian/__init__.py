@@ -17,51 +17,67 @@
 
 from __future__ import absolute_import
 
-__all__ = [
-    'get_source_package',
-    'propose_or_push',
-    'should_update_changelog',
-    'source_package_vcs_url',
-    'build',
-    'BuildFailedError',
-    'MissingUpstreamTarball',
-    ]
-
 import apt_pkg
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
 
-from breezy.branch import Branch
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs_url,
     vcs_field_to_bzr_url_converters,
     )
+
 from breezy.urlutils import InvalidURL
+from breezy.plugins.debian.changelog import (
+    changelog_commit_message,
+    )
+try:
+    from breezy.plugins.debian.builder import BuildFailedError
+except ImportError:
+    from breezy.plugins.debian.errors import BuildFailedError
 from breezy.plugins.debian.errors import (
-    BuildFailedError,
     MissingUpstreamTarball,
     )
 
 from .. import proposal as _mod_proposal
+from ..utils import (
+    open_branch,
+    )
+
+
+__all__ = [
+    'get_source_package',
+    'should_update_changelog',
+    'source_package_vcs_url',
+    'build',
+    'BuildFailedError',
+    'MissingUpstreamTarball',
+    'vcs_field_to_bzr_url_converters',
+    ]
+
+
+DEFAULT_BUILDER = 'sbuild --no-clean-source'
 
 
 class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(directory, builder='sbuild'):
+def build(tree, builder=None, result_dir=None):
     """Build a debian package in a directory.
 
     Args:
-      directory: Directory to build in
+      tree: Working tree
       builder: Builder command (e.g. 'sbuild', 'debuild')
+      result_dir: Directory to copy results to
     """
+    if builder is None:
+        builder = DEFAULT_BUILDER
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([directory], builder=builder)
+    cmd_builddeb().run([tree.basedir], builder=builder, result_dir=result_dir)
 
 
 def get_source_package(name):
@@ -148,16 +164,6 @@ def should_update_changelog(branch, history=200):
     return True
 
 
-def propose_or_push(main_branch, *args, **kwargs):
-    """Wrapper for propose_or_push that includes debian-specific branches.
-    """
-    if getattr(main_branch.repository, '_git', None):
-        kwargs['additional_branches'] = (
-            kwargs.get('additional_branches', []) +
-            ["pristine-tar", "upstream"])
-    return _mod_proposal.propose_or_push(main_branch, *args, **kwargs)
-
-
 def convert_debian_vcs_url(vcs_type, vcs_url):
     converters = dict(vcs_field_to_bzr_url_converters)
     try:
@@ -176,4 +182,24 @@ def open_packaging_branch(location, possible_transports=None):
     if '/' not in location:
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
-    return Branch.open(location, possible_transports=possible_transports)
+    return open_branch(location, possible_transports=possible_transports)
+
+
+class Workspace(_mod_proposal.Workspace):
+
+    def __init__(self, main_branch, *args, **kwargs):
+        if getattr(main_branch.repository, '_git', None):
+            kwargs['additional_colocated_branches'] = (
+                kwargs.get('additional_colocated_branches', []) +
+                ["pristine-tar", "upstream"])
+        super(Workspace, self).__init__(main_branch, *args, **kwargs)
+
+    def build(self, builder=None, result_dir=None):
+        return build(tree=self.local_tree, builder=builder,
+                     result_dir=result_dir)
+
+
+def debcommit(tree, committer=None):
+    tree.commit(
+        committer=committer,
+        message=changelog_commit_message(tree, tree.basis_tree()))

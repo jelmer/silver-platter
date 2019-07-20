@@ -27,6 +27,7 @@ def test_suite():
         'proposal',
         'run',
         'utils',
+        'version',
         ]
     module_names = [__name__ + '.test_' + name for name in names]
     loader = unittest.TestLoader()
