@@ -23,7 +23,7 @@ setup(
       author_email="jelmer@jelmer.uk",
       url="https://jelmer.uk/code/silver-platter",
       description="Automatic merge proposal creeator",
-      version='0.1.1',
+      version="0.2.0",
       license='GNU GPL v2 or later',
       project_urls={
           "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
@@ -43,6 +43,7 @@ setup(
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
           'Programming Language :: Python :: Implementation :: CPython',
           'Programming Language :: Python :: Implementation :: PyPy',
           'Operating System :: POSIX',
@@ -58,9 +59,7 @@ setup(
       install_requires=[
           'breezy',
           'dulwich',
-          'launchpadlib',
-          'gitlab',
           'testtools',
-          'lintian-brush'
+          'lintian-brush>=0.16'
       ],
 )
