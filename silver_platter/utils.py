@@ -38,12 +38,17 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
 
     def destroy():
         shutil.rmtree(td)
+    # Only use stacking if the remote repository supports chks because of
+    # https://bugs.launchpad.net/bzr/+bug/375013
+    use_stacking = (
+        branch._format.supports_stacking() and
+        branch.repository._format.supports_chks)
     try:
         # preserve whatever source format we have.
         to_dir = branch.controldir.sprout(
             td, None, create_tree_if_local=True,
             source_branch=branch,
-            stacked=branch._format.supports_stacking())
+            stacked=use_stacking)
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_colocated_branches or []:
             try:
