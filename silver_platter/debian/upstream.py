@@ -25,6 +25,7 @@ import tempfile
 
 from ..proposal import (
     get_hoster,
+    find_existing_proposed,
     publish_changes,
     UnsupportedHoster,
     SUPPORTED_MODES,
@@ -420,7 +421,11 @@ def main(args):
     ret = 0
     for package in args.packages:
         main_branch = open_packaging_branch(package)
-        overwrite = False
+
+        if args.snapshot:
+            branch_name = SNAPSHOT_BRANCH_NAME
+        else:
+            branch_name = RELEASE_BRANCH_NAME
 
         try:
             hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
@@ -431,6 +436,12 @@ def main(args):
             # hoster that can tell us.
             warning('Unsupported hoster (%s), will attempt to push to %s',
                     e, main_branch.user_url)
+            overwrite_existing = False
+        else:
+            (resume_branch, overwrite_existing,
+             existing_proposal) = find_existing_proposed(
+                 main_branch, hoster, branch_name)
+
         with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
             try:
@@ -450,7 +461,10 @@ def main(args):
                 show_error('Last upstream version %s already merged.',
                            e.version)
                 ret = 1
-                continue
+                # Continue, since we may want to close the existing merge
+                # proposal.
+                build_verify = False
+                refresh_patches = False
             except PreviousVersionTagMissing as e:
                 show_error(
                     'Unable to find tag %s for previous upstream version %s.',
@@ -481,8 +495,10 @@ def main(args):
                 note('Merged new upstream version %s (previous: %s)',
                      merge_upstream_result.new_upstream_version,
                      merge_upstream_result.old_upstream_version)
+                build_verify = args.build_verify
+                refresh_patches = args.refresh_patches
 
-            if args.refresh_patches and \
+            if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
                 note('Refresh quilt patches.')
                 try:
@@ -492,25 +508,21 @@ def main(args):
                     ret = 1
                     continue
 
-            if args.build_verify:
+            if build_verify:
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
 
-            def get_proposal_description(existing_proposal):
+            def get_proposal_description(unused_proposal):
                 return ("Merge new upstream release %s" %
                         merge_upstream_result.new_upstream_version)
-
-            if args.snapshot:
-                branch_name = SNAPSHOT_BRANCH_NAME
-            else:
-                branch_name = RELEASE_BRANCH_NAME
 
             (proposal, is_new) = publish_changes(
                 ws, args.mode, branch_name,
                 get_proposal_description=get_proposal_description,
                 get_proposal_commit_message=get_proposal_description,
                 dry_run=args.dry_run, hoster=hoster,
-                overwrite_existing=overwrite)
+                existing_proposal=existing_proposal,
+                overwrite_existing=overwrite_existing)
 
             if proposal:
                 if is_new:
@@ -519,6 +531,9 @@ def main(args):
                 else:
                     note('%s: Updated merge proposal %s.',
                          package, proposal.url)
+            elif existing_proposal:
+                note('%s: Closed merge proposal %s',
+                     package, existing_proposal.url)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
     return ret
