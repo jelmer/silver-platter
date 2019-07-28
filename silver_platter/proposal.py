@@ -416,7 +416,7 @@ def propose_changes(
     # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:
-            local_branch.push(resume_branch)
+            local_branch.push(resume_branch, overwrite=overwrite_existing)
             remote_branch = resume_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
