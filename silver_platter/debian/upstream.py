@@ -180,11 +180,21 @@ def refresh_quilt_patches(local_tree, committer=None):
 class MergeUpstreamResult(object):
     """Object representing the result of a merge_upstream operation."""
 
-    __slots__ = ['old_upstream_version', 'new_upstream_version']
+    __slots__ = [
+            'old_upstream_version',
+            'new_upstream_version',
+            'upstream_branch',
+            'upstream_branch_browse',
+            'upstream_revisions']
 
-    def __init__(self, old_upstream_version, new_upstream_version):
+    def __init__(self, old_upstream_version, new_upstream_version,
+                 upstream_branch, upstream_branch_browse,
+                 upstream_revision):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
+        self.upstream_branch = upstream_branch
+        self.upstream_branch_browse = upstream_branch_browse
+        self.upstream_revisions = upstream_revisions
 
     def __tuple__(self):
         # Backwards compatibility
@@ -230,6 +240,8 @@ def merge_upstream(tree, snapshot=False, location=None,
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
         upstream_branch_location = config.upstream_branch
+        upstream_branch_browse = getattr(
+            config, 'upstream_branch_browse', None)
     else:
         try:
             from lintian_brush.upstream_metadata import guess_upstream_metadata
@@ -241,6 +253,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                 tree.basedir, trust_package=trust_package)
             upstream_branch_location = guessed_upstream_metadata.get(
                 'Repository')
+            upstream_branch_browse = guessed_upstream_metadata.get(
+                'Repository-Browse')
         if upstream_branch_location:
             note("Using upstream branch %s (guessed)",
                  upstream_branch_location)
@@ -255,6 +269,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             else:
                 raise UpstreamBranchUnavailable(e)
             upstream_branch = None
+            upstream_branch_browse = None
     else:
         upstream_branch = None
 
@@ -370,7 +385,10 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
-        new_upstream_version=new_upstream_version)
+        new_upstream_version=new_upstream_version,
+        upstream_branch=upstream_branch,
+        upstream_branch_browse=upstream_branch_browse,
+        upstream_revisions=upstream_revisions)
 
 
 def setup_parser(parser):
