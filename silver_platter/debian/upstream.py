@@ -189,7 +189,7 @@ class MergeUpstreamResult(object):
 
     def __init__(self, old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
-                 upstream_revision):
+                 upstream_revisions):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
