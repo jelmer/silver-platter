@@ -244,13 +244,17 @@ def merge_upstream(tree, snapshot=False, location=None,
             config, 'upstream_branch_browse', None)
     else:
         try:
-            from lintian_brush.upstream_metadata import guess_upstream_metadata
+            from lintian_brush.upstream_metadata import (
+                guess_upstream_metadata,
+                extend_upstream_metadata,
+                )
         except ImportError:
             # Version of lintian-brush is too old..
             upstream_branch_location = None
         else:
             guessed_upstream_metadata = guess_upstream_metadata(
                 tree.basedir, trust_package=trust_package)
+            extend_upstream_metadata(guessed_upstream_metadata)
             upstream_branch_location = guessed_upstream_metadata.get(
                 'Repository')
             upstream_branch_browse = guessed_upstream_metadata.get(
