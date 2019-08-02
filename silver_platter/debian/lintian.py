@@ -25,13 +25,7 @@ from lintian_brush import (
     run_lintian_fixers,
     )
 
-try:
-    from lintian_brush import GeneratedControlFile
-except ImportError:  # Only available in lintian_brush >= 0.16
-    class GeneratedControlFile(Exception):
-
-        def __init__(self, path):
-            self.path = path
+from lintian_brush import GeneratedControlFile
 
 from . import (
     open_packaging_branch,
@@ -54,7 +48,6 @@ from ..utils import (
 
 __all__ = [
     'available_lintian_fixers',
-    'GeneratedControlFile',
     ]
 
 
