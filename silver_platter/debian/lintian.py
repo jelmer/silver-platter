@@ -25,8 +25,6 @@ from lintian_brush import (
     run_lintian_fixers,
     )
 
-from lintian_brush import GeneratedControlFile
-
 from . import (
     open_packaging_branch,
     should_update_changelog,
@@ -316,16 +314,11 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
-                try:
-                    applied, failed = run_lintian_fixers(
-                            ws.local_tree, fixers,
-                            committer=args.committer,
-                            update_changelog=update_changelog,
-                            compat_release=debian_info.stable())
-                except GeneratedControlFile as e:
-                    note('%s: control file is generated: %s',
-                         pkg, e.path)
-                    return
+                applied, failed = run_lintian_fixers(
+                        ws.local_tree, fixers,
+                        committer=args.committer,
+                        update_changelog=update_changelog,
+                        compat_release=debian_info.stable())
 
                 if failed:
                     note('%s: some fixers failed to run: %r',
