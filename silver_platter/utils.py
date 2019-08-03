@@ -148,6 +148,17 @@ class BranchUnavailable(Exception):
         return self.description
 
 
+class BranchMissing(Exception):
+    """Branch did not exist."""
+
+    def __init__(self, url, description):
+        self.url = url
+        self.description = description
+
+    def __str__(self):
+        return self.description
+
+
 def open_branch(url, possible_transports=None):
     """Open a branch by URL."""
     try:
@@ -155,7 +166,7 @@ def open_branch(url, possible_transports=None):
     except socket.error as e:
         raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
     except errors.NotBranchError as e:
-        raise BranchUnavailable(url, 'Branch does not exist: %s' % e)
+        raise BranchMissing(url, 'Branch does not exist: %s' % e)
     except errors.UnsupportedProtocol as e:
         raise BranchUnavailable(url, str(e))
     except errors.ConnectionError as e:

@@ -47,6 +47,7 @@ from . import (
 from ..utils import (
     open_branch,
     BranchUnavailable,
+    BranchMissing,
     )
 
 
@@ -152,7 +153,7 @@ def main(args):
         vcs_type, vcs_url = source_package_vcs_url(pkg_source)
         try:
             main_branch = open_branch(vcs_url)
-        except BranchUnavailable as e:
+        except (BranchUnavailable, BranchMissing) as e:
             show_error('%s: %s', vcs_url, e)
             ret = 1
             continue
