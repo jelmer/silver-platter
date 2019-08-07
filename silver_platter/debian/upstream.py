@@ -51,8 +51,9 @@ from breezy.errors import (
     PointlessMerge,
     )
 from breezy.plugins.debian.errors import (
-    UpstreamAlreadyImported,
+    InconsistentSourceFormatError,
     PackageVersionNotPresent,
+    UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
     )
 
@@ -221,6 +222,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamVersionMissingInUpstreamBranch
       UpstreamBranchUnknown
       PackageIsNative
+      InconsistentSourceFormatError
     Returns:
       MergeUpstreamResult object
     """
@@ -505,6 +507,10 @@ def main(args):
                 show_error(
                     'Package %s is native; unable to merge new upstream.',
                     e.package)
+                ret = 1
+                continue
+            except InconsistentSourceFormatError as e:
+                show_error('Inconsistencies in type of package: %s', e)
                 ret = 1
                 continue
             else:
