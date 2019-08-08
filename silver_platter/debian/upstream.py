@@ -55,6 +55,7 @@ from breezy.plugins.debian.errors import (
     PackageVersionNotPresent,
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
+    UnparseableChangelog,
     )
 
 from breezy.trace import note, show_error, warning
@@ -107,6 +108,7 @@ __all__ = [
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
     'PackageIsNative',
+    'UnparseableChangelog',
 ]
 
 
@@ -223,6 +225,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamBranchUnknown
       PackageIsNative
       InconsistentSourceFormatError
+      UnparseableChangelog
     Returns:
       MergeUpstreamResult object
     """
