@@ -475,7 +475,7 @@ def main(args):
     for package in args.packages:
         try:
             main_branch = open_packaging_branch(package)
-        except NoSuchPackage as e:
+        except NoSuchPackage:
             show_error('No such package: %s', package)
             ret = 1
             continue

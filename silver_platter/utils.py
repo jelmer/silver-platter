@@ -20,7 +20,6 @@ import shutil
 import socket
 import subprocess
 
-from breezy.branch import Branch
 from breezy import errors, osutils
 from breezy.controldir import ControlDir
 from breezy.transport import get_transport
@@ -168,7 +167,9 @@ def open_branch(url, possible_transports=None, vcs_type=None):
     try:
         transport = get_transport(
             url, possible_transports=possible_transports)
-        if vcs_type.lower() == 'bzr':
+        if vcs_type is None:
+            probers = None
+        elif vcs_type.lower() == 'bzr':
             probers = [RemoteBzrProber]
         elif vcs_type.lower() == 'git':
             probers = [RemoteGitProber]
