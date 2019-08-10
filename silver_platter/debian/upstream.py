@@ -98,6 +98,7 @@ from breezy.plugins.debian.upstream.branch import (
 __all__ = [
     'PreviousVersionTagMissing',
     'merge_upstream',
+    'InvalidFormatUpstreamVersion',
     'MissingChangelogError',
     'NewUpstreamMissing',
     'UpstreamBranchUnavailable',
@@ -152,6 +153,14 @@ class PackageIsNative(Exception):
     def __init__(self, package, version):
         self.package = package
         self.version = version
+
+
+class InvalidFormatUpstreamVersion(Exception):
+    """Invalid format upstream version string."""
+
+    def __init__(self, version, source):
+        self.version = version
+        self.source = source
 
 
 RELEASE_BRANCH_NAME = "new-upstream-release"
@@ -213,6 +222,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     """Merge a new upstream version into a tree.
 
     Raises:
+      InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
       MissingChangelogError
       NewUpstreamMissing
@@ -301,9 +311,16 @@ def merge_upstream(tree, snapshot=False, location=None,
     if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version)
+        try:
+            Version(new_upstream_version)
+        except ValueError:
+            raise InvalidFormatUpstreamVersion(
+                new_upstream_version, primary_upstream_source)
+
     if new_upstream_version is None:
         raise NewUpstreamMissing()
     note("Using version string %s.", new_upstream_version)
+
     # Look up the revision id from the version string
     if upstream_branch_source is not None:
         try:
@@ -490,6 +507,12 @@ def main(args):
                 show_error(
                     'Unable to find tag %s for previous upstream version %s.',
                     e.tag_name, e.version)
+                ret = 1
+                continue
+            except InvalidFormatUpstreamVersion as e:
+                show_error(
+                    '%r reported invalid format version string %s.',
+                    e.source, e.version)
                 ret = 1
                 continue
             except PristineTarError as e:
