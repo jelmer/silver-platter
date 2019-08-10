@@ -126,8 +126,9 @@ class UpstreamBranchUnavailable(Exception):
 class UpstreamMergeConflicted(Exception):
     """The upstream merge resulted in conflicts."""
 
-    def __init__(self, upstream_version):
+    def __init__(self, upstream_version, conflicts):
         self.version = upstream_version
+        self.conflicts = conflicts
 
 
 class UpstreamAlreadyMerged(Exception):
@@ -393,7 +394,16 @@ def merge_upstream(tree, snapshot=False, location=None,
                             package, new_upstream_version)[None])
                 except PointlessMerge:
                     raise UpstreamAlreadyMerged(new_upstream_version)
+
+    # Re-read changelog, since it may have been changed by the merge
+    # from upstream.
+    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    old_upstream_version = changelog.version.upstream_version
+    package = changelog.package
+
     if Version(old_upstream_version) >= Version(new_upstream_version):
+        if conflicts:
+            raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
         tree, new_upstream_version, distribution_name, changelog, package)
@@ -402,7 +412,7 @@ def merge_upstream(tree, snapshot=False, location=None,
              "added to the changelog.")
     else:
         if conflicts:
-            raise UpstreamMergeConflicted(new_upstream_version)
+            raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
     debcommit(tree, committer=committer)
 
@@ -530,6 +540,10 @@ def main(args):
                 show_error(
                     'Upstream branch location unknown. '
                     'Set \'Repository\' field in debian/upstream/metadata?')
+                ret = 1
+                continue
+            except UpstreamMergeConflicted:
+                show_error('Merging upstream resulted in conflicts.')
                 ret = 1
                 continue
             except PackageIsNative as e:
