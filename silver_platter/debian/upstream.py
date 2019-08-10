@@ -339,11 +339,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             if upstream_branch_source is primary_upstream_source:
                 # The branch is our primary upstream source, so if it can't
                 # find the version then there's nothing we can do.
-                raise AssertionError(
-                    "Version %s can not be found in upstream branch %r. "
-                    "Specify the revision manually using --revision or adjust "
-                    "'export-upstream-revision' in the configuration." %
-                    (new_upstream_version, upstream_branch_source))
+                raise UpstreamVersionMissingInUpstreamBranch(
+                    upstream_branch, new_upstream_version)
             elif not allow_ignore_upstream_branch:
                 raise UpstreamVersionMissingInUpstreamBranch(
                     upstream_branch, new_upstream_version)

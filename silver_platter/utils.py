@@ -22,6 +22,10 @@ import subprocess
 
 from breezy.branch import Branch
 from breezy import errors, osutils
+from breezy.controldir import ControlDir
+from breezy.transport import get_transport
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
 
 
 def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
@@ -159,10 +163,19 @@ class BranchMissing(Exception):
         return self.description
 
 
-def open_branch(url, possible_transports=None):
+def open_branch(url, possible_transports=None, vcs_type=None):
     """Open a branch by URL."""
     try:
-        return Branch.open(url, possible_transports=possible_transports)
+        transport = get_transport(
+            url, possible_transports=possible_transports)
+        if vcs_type.lower() == 'bzr':
+            probers = [RemoteBzrProber]
+        elif vcs_type.lower() == 'git':
+            probers = [RemoteGitProber]
+        else:
+            probers = None
+        dir = ControlDir.open_from_transport(transport, probers)
+        return dir.open_branch()
     except socket.error as e:
         raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
     except errors.NotBranchError as e:
