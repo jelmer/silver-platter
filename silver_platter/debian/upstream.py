@@ -39,6 +39,7 @@ from ..utils import (
 
 from . import (
     open_packaging_branch,
+    NoSuchPackage,
     Workspace,
     DEFAULT_BUILDER,
     debcommit,
@@ -121,6 +122,10 @@ class NewUpstreamMissing(Exception):
 
 class UpstreamBranchUnavailable(Exception):
     """Snapshot merging was requested by upstream branch is unavailable."""
+
+    def __init__(self, location, error):
+        self.location = location
+        self.error = error
 
 
 class UpstreamMergeConflicted(Exception):
@@ -284,7 +289,7 @@ def merge_upstream(tree, snapshot=False, location=None,
                 warning('Upstream branch %s inaccessible; ignoring. %s',
                         upstream_branch_location, e)
             else:
-                raise UpstreamBranchUnavailable(e)
+                raise UpstreamBranchUnavailable(upstream_branch_location, e)
             upstream_branch = None
             upstream_branch_browse = None
     else:
@@ -471,7 +476,12 @@ def main(args):
     possible_hosters = []
     ret = 0
     for package in args.packages:
-        main_branch = open_packaging_branch(package)
+        try:
+            main_branch = open_packaging_branch(package)
+        except NoSuchPackage as e:
+            show_error('No such package: %s', package)
+            ret = 1
+            continue
 
         if args.snapshot:
             branch_name = SNAPSHOT_BRANCH_NAME
@@ -533,7 +543,8 @@ def main(args):
                 ret = 1
                 continue
             except UpstreamBranchUnavailable as e:
-                show_error('Upstream branch unavailable: %s. ', e)
+                show_error('Upstream branch %s unavailable: %s. ', e.location,
+                           e.error)
                 ret = 1
                 continue
             except UpstreamBranchUnknown:
