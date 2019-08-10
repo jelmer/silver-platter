@@ -89,6 +89,7 @@ from breezy.plugins.debian.util import (
 from breezy.plugins.debian.upstream import (
     UScanSource,
     TarfileSource,
+    UScanError,
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
@@ -110,6 +111,7 @@ __all__ = [
     'UpstreamBranchUnknown',
     'PackageIsNative',
     'UnparseableChangelog',
+    'UScanError',
 ]
 
 
@@ -236,6 +238,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       PackageIsNative
       InconsistentSourceFormatError
       UnparseableChangelog
+      UScanError
     Returns:
       MergeUpstreamResult object
     """
