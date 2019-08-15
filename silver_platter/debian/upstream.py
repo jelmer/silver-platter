@@ -396,6 +396,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                             package, new_upstream_version)[None])
                 except PointlessMerge:
                     raise UpstreamAlreadyMerged(new_upstream_version)
+    else:
+        conflicts = 0
 
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
