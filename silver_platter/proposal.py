@@ -19,6 +19,7 @@ from breezy.diff import show_diff_trees
 from breezy.errors import (
     DivergedBranches,
     PermissionDenied,
+    UnsupportedOperation,
     )
 from breezy.trace import (
     note,
@@ -434,7 +435,10 @@ def propose_changes(
         if getattr(resume_proposal, 'get_commit_message', None):
             # brz >= 3.1 only
             if resume_proposal.get_commit_message() != commit_message:
-                resume_proposal.set_commit_message(commit_message)
+                try:
+                    resume_proposal.set_commit_message(commit_message)
+                except UnsupportedOperation:
+                    pass
         return (resume_proposal, False)
     else:
         if not dry_run:
