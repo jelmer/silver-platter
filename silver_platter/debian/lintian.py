@@ -25,14 +25,6 @@ from lintian_brush import (
     run_lintian_fixers,
     )
 
-try:
-    from lintian_brush import GeneratedControlFile
-except ImportError:  # Only available in lintian_brush >= 0.16
-    class GeneratedControlFile(Exception):
-
-        def __init__(self, path):
-            self.path = path
-
 from . import (
     open_packaging_branch,
     should_update_changelog,
@@ -54,7 +46,6 @@ from ..utils import (
 
 __all__ = [
     'available_lintian_fixers',
-    'GeneratedControlFile',
     ]
 
 
@@ -323,16 +314,11 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
-                try:
-                    applied, failed = run_lintian_fixers(
-                            ws.local_tree, fixers,
-                            committer=args.committer,
-                            update_changelog=update_changelog,
-                            compat_release=debian_info.stable())
-                except GeneratedControlFile as e:
-                    note('%s: control file is generated: %s',
-                         pkg, e.path)
-                    return
+                applied, failed = run_lintian_fixers(
+                        ws.local_tree, fixers,
+                        committer=args.committer,
+                        update_changelog=update_changelog,
+                        compat_release=debian_info.stable())
 
                 if failed:
                     note('%s: some fixers failed to run: %r',

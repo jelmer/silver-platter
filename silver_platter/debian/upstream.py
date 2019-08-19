@@ -25,6 +25,7 @@ import tempfile
 
 from ..proposal import (
     get_hoster,
+    find_existing_proposed,
     publish_changes,
     UnsupportedHoster,
     SUPPORTED_MODES,
@@ -32,11 +33,13 @@ from ..proposal import (
 from ..utils import (
     open_branch,
     run_pre_check,
+    BranchMissing,
     BranchUnavailable,
     )
 
 from . import (
     open_packaging_branch,
+    NoSuchPackage,
     Workspace,
     DEFAULT_BUILDER,
     debcommit,
@@ -49,9 +52,11 @@ from breezy.errors import (
     PointlessMerge,
     )
 from breezy.plugins.debian.errors import (
-    UpstreamAlreadyImported,
+    InconsistentSourceFormatError,
     PackageVersionNotPresent,
+    UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
+    UnparseableChangelog,
     )
 
 from breezy.trace import note, show_error, warning
@@ -85,6 +90,7 @@ from breezy.plugins.debian.util import (
 from breezy.plugins.debian.upstream import (
     UScanSource,
     TarfileSource,
+    UScanError,
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
@@ -94,6 +100,7 @@ from breezy.plugins.debian.upstream.branch import (
 __all__ = [
     'PreviousVersionTagMissing',
     'merge_upstream',
+    'InvalidFormatUpstreamVersion',
     'MissingChangelogError',
     'NewUpstreamMissing',
     'UpstreamBranchUnavailable',
@@ -104,6 +111,8 @@ __all__ = [
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
     'PackageIsNative',
+    'UnparseableChangelog',
+    'UScanError',
 ]
 
 
@@ -114,12 +123,17 @@ class NewUpstreamMissing(Exception):
 class UpstreamBranchUnavailable(Exception):
     """Snapshot merging was requested by upstream branch is unavailable."""
 
+    def __init__(self, location, error):
+        self.location = location
+        self.error = error
+
 
 class UpstreamMergeConflicted(Exception):
     """The upstream merge resulted in conflicts."""
 
-    def __init__(self, upstream_version):
+    def __init__(self, upstream_version, conflicts):
         self.version = upstream_version
+        self.conflicts = conflicts
 
 
 class UpstreamAlreadyMerged(Exception):
@@ -147,6 +161,14 @@ class PackageIsNative(Exception):
     def __init__(self, package, version):
         self.package = package
         self.version = version
+
+
+class InvalidFormatUpstreamVersion(Exception):
+    """Invalid format upstream version string."""
+
+    def __init__(self, version, source):
+        self.version = version
+        self.source = source
 
 
 RELEASE_BRANCH_NAME = "new-upstream-release"
@@ -179,11 +201,21 @@ def refresh_quilt_patches(local_tree, committer=None):
 class MergeUpstreamResult(object):
     """Object representing the result of a merge_upstream operation."""
 
-    __slots__ = ['old_upstream_version', 'new_upstream_version']
+    __slots__ = [
+            'old_upstream_version',
+            'new_upstream_version',
+            'upstream_branch',
+            'upstream_branch_browse',
+            'upstream_revisions']
 
-    def __init__(self, old_upstream_version, new_upstream_version):
+    def __init__(self, old_upstream_version, new_upstream_version,
+                 upstream_branch, upstream_branch_browse,
+                 upstream_revisions):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
+        self.upstream_branch = upstream_branch
+        self.upstream_branch_browse = upstream_branch_browse
+        self.upstream_revisions = upstream_revisions
 
     def __tuple__(self):
         # Backwards compatibility
@@ -198,6 +230,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     """Merge a new upstream version into a tree.
 
     Raises:
+      InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
       MissingChangelogError
       NewUpstreamMissing
@@ -209,6 +242,9 @@ def merge_upstream(tree, snapshot=False, location=None,
       UpstreamVersionMissingInUpstreamBranch
       UpstreamBranchUnknown
       PackageIsNative
+      InconsistentSourceFormatError
+      UnparseableChangelog
+      UScanError
     Returns:
       MergeUpstreamResult object
     """
@@ -229,17 +265,18 @@ def merge_upstream(tree, snapshot=False, location=None,
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
         upstream_branch_location = config.upstream_branch
+        upstream_branch_browse = getattr(
+            config, 'upstream_branch_browse', None)
     else:
-        try:
-            from lintian_brush.upstream_metadata import guess_upstream_metadata
-        except ImportError:
-            # Version of lintian-brush is too old..
-            upstream_branch_location = None
-        else:
-            guessed_upstream_metadata = guess_upstream_metadata(
-                tree.basedir, trust_package=trust_package)
-            upstream_branch_location = guessed_upstream_metadata.get(
-                'Repository')
+        from lintian_brush.upstream_metadata import (
+            guess_upstream_metadata,
+            )
+        guessed_upstream_metadata = guess_upstream_metadata(
+            tree.basedir, trust_package=trust_package)
+        upstream_branch_location = guessed_upstream_metadata.get(
+            'Repository')
+        upstream_branch_browse = guessed_upstream_metadata.get(
+            'Repository-Browse')
         if upstream_branch_location:
             note("Using upstream branch %s (guessed)",
                  upstream_branch_location)
@@ -247,13 +284,14 @@ def merge_upstream(tree, snapshot=False, location=None,
     if upstream_branch_location:
         try:
             upstream_branch = open_branch(upstream_branch_location)
-        except BranchUnavailable as e:
+        except (BranchUnavailable, BranchMissing) as e:
             if not snapshot and allow_ignore_upstream_branch:
                 warning('Upstream branch %s inaccessible; ignoring. %s',
                         upstream_branch_location, e)
             else:
-                raise UpstreamBranchUnavailable(e)
+                raise UpstreamBranchUnavailable(upstream_branch_location, e)
             upstream_branch = None
+            upstream_branch_browse = None
     else:
         upstream_branch = None
 
@@ -268,7 +306,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 open_branch(location), config=config,
                 local_dir=tree.controldir)
-        except BranchUnavailable:
+        except (BranchUnavailable, BranchMissing):
             primary_upstream_source = TarfileSource(
                 location, new_upstream_version)
     else:
@@ -282,9 +320,16 @@ def merge_upstream(tree, snapshot=False, location=None,
     if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version)
+        try:
+            Version(new_upstream_version)
+        except ValueError:
+            raise InvalidFormatUpstreamVersion(
+                new_upstream_version, primary_upstream_source)
+
     if new_upstream_version is None:
         raise NewUpstreamMissing()
     note("Using version string %s.", new_upstream_version)
+
     # Look up the revision id from the version string
     if upstream_branch_source is not None:
         try:
@@ -294,11 +339,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             if upstream_branch_source is primary_upstream_source:
                 # The branch is our primary upstream source, so if it can't
                 # find the version then there's nothing we can do.
-                raise AssertionError(
-                    "Version %s can not be found in upstream branch %r. "
-                    "Specify the revision manually using --revision or adjust "
-                    "'export-upstream-revision' in the configuration." %
-                    (new_upstream_version, upstream_branch_source))
+                raise UpstreamVersionMissingInUpstreamBranch(
+                    upstream_branch, new_upstream_version)
             elif not allow_ignore_upstream_branch:
                 raise UpstreamVersionMissingInUpstreamBranch(
                     upstream_branch, new_upstream_version)
@@ -354,7 +396,18 @@ def merge_upstream(tree, snapshot=False, location=None,
                             package, new_upstream_version)[None])
                 except PointlessMerge:
                     raise UpstreamAlreadyMerged(new_upstream_version)
+    else:
+        conflicts = 0
+
+    # Re-read changelog, since it may have been changed by the merge
+    # from upstream.
+    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    old_upstream_version = changelog.version.upstream_version
+    package = changelog.package
+
     if Version(old_upstream_version) >= Version(new_upstream_version):
+        if conflicts:
+            raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
         tree, new_upstream_version, distribution_name, changelog, package)
@@ -363,13 +416,16 @@ def merge_upstream(tree, snapshot=False, location=None,
              "added to the changelog.")
     else:
         if conflicts:
-            raise UpstreamMergeConflicted(new_upstream_version)
+            raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
     debcommit(tree, committer=committer)
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
-        new_upstream_version=new_upstream_version)
+        new_upstream_version=new_upstream_version,
+        upstream_branch=upstream_branch,
+        upstream_branch_browse=upstream_branch_browse,
+        upstream_revisions=upstream_revisions)
 
 
 def setup_parser(parser):
@@ -419,8 +475,17 @@ def main(args):
     possible_hosters = []
     ret = 0
     for package in args.packages:
-        main_branch = open_packaging_branch(package)
-        overwrite = False
+        try:
+            main_branch = open_packaging_branch(package)
+        except NoSuchPackage:
+            show_error('No such package: %s', package)
+            ret = 1
+            continue
+
+        if args.snapshot:
+            branch_name = SNAPSHOT_BRANCH_NAME
+        else:
+            branch_name = RELEASE_BRANCH_NAME
 
         try:
             hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
@@ -431,6 +496,12 @@ def main(args):
             # hoster that can tell us.
             warning('Unsupported hoster (%s), will attempt to push to %s',
                     e, main_branch.user_url)
+            overwrite_existing = False
+        else:
+            (resume_branch, overwrite_existing,
+             existing_proposal) = find_existing_proposed(
+                 main_branch, hoster, branch_name)
+
         with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
             try:
@@ -450,11 +521,20 @@ def main(args):
                 show_error('Last upstream version %s already merged.',
                            e.version)
                 ret = 1
-                continue
+                # Continue, since we may want to close the existing merge
+                # proposal.
+                build_verify = False
+                refresh_patches = False
             except PreviousVersionTagMissing as e:
                 show_error(
                     'Unable to find tag %s for previous upstream version %s.',
                     e.tag_name, e.version)
+                ret = 1
+                continue
+            except InvalidFormatUpstreamVersion as e:
+                show_error(
+                    '%r reported invalid format version string %s.',
+                    e.source, e.version)
                 ret = 1
                 continue
             except PristineTarError as e:
@@ -462,7 +542,8 @@ def main(args):
                 ret = 1
                 continue
             except UpstreamBranchUnavailable as e:
-                show_error('Upstream branch unavailable: %s. ', e)
+                show_error('Upstream branch %s unavailable: %s. ', e.location,
+                           e.error)
                 ret = 1
                 continue
             except UpstreamBranchUnknown:
@@ -471,18 +552,28 @@ def main(args):
                     'Set \'Repository\' field in debian/upstream/metadata?')
                 ret = 1
                 continue
+            except UpstreamMergeConflicted:
+                show_error('Merging upstream resulted in conflicts.')
+                ret = 1
+                continue
             except PackageIsNative as e:
                 show_error(
                     'Package %s is native; unable to merge new upstream.',
                     e.package)
                 ret = 1
                 continue
+            except InconsistentSourceFormatError as e:
+                show_error('Inconsistencies in type of package: %s', e)
+                ret = 1
+                continue
             else:
                 note('Merged new upstream version %s (previous: %s)',
                      merge_upstream_result.new_upstream_version,
                      merge_upstream_result.old_upstream_version)
+                build_verify = args.build_verify
+                refresh_patches = args.refresh_patches
 
-            if args.refresh_patches and \
+            if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
                 note('Refresh quilt patches.')
                 try:
@@ -492,25 +583,21 @@ def main(args):
                     ret = 1
                     continue
 
-            if args.build_verify:
+            if build_verify:
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
 
-            def get_proposal_description(existing_proposal):
+            def get_proposal_description(unused_proposal):
                 return ("Merge new upstream release %s" %
                         merge_upstream_result.new_upstream_version)
-
-            if args.snapshot:
-                branch_name = SNAPSHOT_BRANCH_NAME
-            else:
-                branch_name = RELEASE_BRANCH_NAME
 
             (proposal, is_new) = publish_changes(
                 ws, args.mode, branch_name,
                 get_proposal_description=get_proposal_description,
                 get_proposal_commit_message=get_proposal_description,
                 dry_run=args.dry_run, hoster=hoster,
-                overwrite_existing=overwrite)
+                existing_proposal=existing_proposal,
+                overwrite_existing=overwrite_existing)
 
             if proposal:
                 if is_new:
@@ -519,6 +606,9 @@ def main(args):
                 else:
                     note('%s: Updated merge proposal %s.',
                          package, proposal.url)
+            elif existing_proposal:
+                note('%s: Closed merge proposal %s',
+                     package, existing_proposal.url)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
     return ret

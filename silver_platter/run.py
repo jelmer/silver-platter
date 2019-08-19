@@ -43,6 +43,7 @@ from .proposal import (
     )
 from .utils import (
     open_branch,
+    BranchMissing,
     BranchUnavailable,
 )
 
@@ -122,7 +123,7 @@ def setup_parser(parser):
 def main(args):
     try:
         main_branch = open_branch(args.url)
-    except BranchUnavailable as e:
+    except (BranchUnavailable, BranchMissing) as e:
         show_error('%s: %s', args.url, e)
         return 1
 

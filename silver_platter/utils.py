@@ -20,8 +20,11 @@ import shutil
 import socket
 import subprocess
 
-from breezy.branch import Branch
 from breezy import errors, osutils
+from breezy.controldir import ControlDir
+from breezy.transport import get_transport
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
 
 
 def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
@@ -38,12 +41,17 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
 
     def destroy():
         shutil.rmtree(td)
+    # Only use stacking if the remote repository supports chks because of
+    # https://bugs.launchpad.net/bzr/+bug/375013
+    use_stacking = (
+        branch._format.supports_stacking() and
+        branch.repository._format.supports_chks)
     try:
         # preserve whatever source format we have.
         to_dir = branch.controldir.sprout(
             td, None, create_tree_if_local=True,
             source_branch=branch,
-            stacked=branch._format.supports_stacking())
+            stacked=use_stacking)
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in additional_colocated_branches or []:
             try:
@@ -143,14 +151,36 @@ class BranchUnavailable(Exception):
         return self.description
 
 
-def open_branch(url, possible_transports=None):
+class BranchMissing(Exception):
+    """Branch did not exist."""
+
+    def __init__(self, url, description):
+        self.url = url
+        self.description = description
+
+    def __str__(self):
+        return self.description
+
+
+def open_branch(url, possible_transports=None, vcs_type=None):
     """Open a branch by URL."""
     try:
-        return Branch.open(url, possible_transports=possible_transports)
+        transport = get_transport(
+            url, possible_transports=possible_transports)
+        if vcs_type is None:
+            probers = None
+        elif vcs_type.lower() == 'bzr':
+            probers = [RemoteBzrProber]
+        elif vcs_type.lower() == 'git':
+            probers = [RemoteGitProber]
+        else:
+            probers = None
+        dir = ControlDir.open_from_transport(transport, probers)
+        return dir.open_branch()
     except socket.error as e:
         raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
     except errors.NotBranchError as e:
-        raise BranchUnavailable(url, 'Branch does not exist: %s' % e)
+        raise BranchMissing(url, 'Branch does not exist: %s' % e)
     except errors.UnsupportedProtocol as e:
         raise BranchUnavailable(url, str(e))
     except errors.ConnectionError as e:
