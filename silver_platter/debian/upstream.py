@@ -51,6 +51,9 @@ from breezy.errors import (
     FileExists,
     PointlessMerge,
     )
+from breezy.plugins.debian.config import (
+    UpstreamMetadataSyntaxError
+    )
 from breezy.plugins.debian.errors import (
     InconsistentSourceFormatError,
     PackageVersionNotPresent,
@@ -113,6 +116,7 @@ __all__ = [
     'PackageIsNative',
     'UnparseableChangelog',
     'UScanError',
+    'UpstreamMetadataSyntaxError',
 ]
 
 
@@ -245,6 +249,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       InconsistentSourceFormatError
       UnparseableChangelog
       UScanError
+      UpstreamMetadataSyntaxError
     Returns:
       MergeUpstreamResult object
     """
@@ -564,6 +569,14 @@ def main(args):
                 continue
             except InconsistentSourceFormatError as e:
                 show_error('Inconsistencies in type of package: %s', e)
+                ret = 1
+                continue
+            except UScanError as e:
+                show_error('UScan failed: %s', e)
+                ret = 1
+                continue
+            except UpstreamMetadataSyntaxError as e:
+                show_error('Unable to parse %s', e.path)
                 ret = 1
                 continue
             else:
