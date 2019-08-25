@@ -173,13 +173,15 @@ def push_result(local_branch, remote_branch,
                 add_branch, name=branch_name)
 
 
-def find_existing_proposed(main_branch, hoster, name):
+def find_existing_proposed(main_branch, hoster, name, overwrite_unrelated=False):
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
       main_branch: Main branch
       hoster: The hoster
       name: Name of the derived branch
+      overwrite_unrelated: Whether to overwrite existing (but unrelated)
+        branches
     Returns:
       Tuple with (resume_branch, overwrite_existing, existing_proposal)
       The resume_branch is the branch to continue from; overwrite_existing
@@ -206,8 +208,13 @@ def find_existing_proposed(main_branch, hoster, name):
                      merged_proposal.url)
                 return (None, True, None)
             else:
-                # No related merge proposals found
-                return (None, False, None)
+                # No related merge proposals found, but there is an existing
+                # branch (perhaps for a different target branch?)
+                if overwrite_unrelated:
+                    return (None, True, None)
+                else:
+                    # TODO(jelmer): What to do in this case?
+                    return (None, False, None)
 
 
 class Workspace(object):
@@ -257,6 +264,7 @@ class Workspace(object):
                     self.local_tree.branch.generate_revision_history(
                         self.main_branch_revid)
                     self.resume_branch = None
+                    self.refreshed = True
             self.orig_revid = self.local_tree.last_revision()
         return self
 

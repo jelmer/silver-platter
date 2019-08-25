@@ -187,6 +187,9 @@ def setup_parser(parser):
         '--build-target-dir', type=str,
         help=("Store built Debian files in specified directory "
               "(with --build-verify)"))
+    parser.add_argument(
+        '--overwrite', action='store_true',
+        help='Overwrite existing branches.')
 
 
 def get_fixers(available_fixers, names=None, tags=None):
@@ -298,15 +301,17 @@ def main(args):
                     e, main_branch.user_url)
         else:
             (resume_branch, overwrite, existing_proposal) = (
-                find_existing_proposed(main_branch, hoster, BRANCH_NAME))
+                find_existing_proposed(
+                    main_branch, hoster, BRANCH_NAME,
+                    overwrite_unrelated=args.overwrite))
         if args.refresh:
+            overwrite = True
             resume_branch = None
 
         with Workspace(main_branch, resume_branch=resume_branch) as ws:
             with ws.local_tree.lock_write():
-                if not ws.local_tree.has_filename('debian/control'):
-                    note('%s: missing control file', pkg)
-                    continue
+                if ws.refreshed:
+                    overwrite = True
                 run_pre_check(ws.local_tree, args.pre_check)
                 if args.update_changelog is None:
                     update_changelog = should_update_changelog(
@@ -376,6 +381,10 @@ def main(args):
                 continue
             except errors.PermissionDenied as e:
                 note('%s: %s', pkg, e)
+                continue
+            except errors.DivergedBranches:
+                note('%s: a branch exists. Use --overwrite to discard it.',
+                     pkg)
                 continue
 
             if proposal:
