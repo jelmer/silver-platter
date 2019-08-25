@@ -263,6 +263,7 @@ def iter_packages(packages, overwrite_unrelated=False, refresh=False):
             existing_proposal = None
             warning('Unsupported hoster (%s), will attempt to push to %s',
                     e, main_branch.user_url)
+            hoster = None
         else:
             (resume_branch, overwrite, existing_proposal) = (
                 find_existing_proposed(

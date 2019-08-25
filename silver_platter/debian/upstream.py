@@ -479,6 +479,12 @@ def setup_parser(parser):
 def main(args):
     possible_hosters = []
     ret = 0
+
+    if args.snapshot:
+        branch_name = SNAPSHOT_BRANCH_NAME
+    else:
+        branch_name = RELEASE_BRANCH_NAME
+
     for package in args.packages:
         try:
             main_branch = open_packaging_branch(package)
@@ -486,11 +492,6 @@ def main(args):
             show_error('No such package: %s', package)
             ret = 1
             continue
-
-        if args.snapshot:
-            branch_name = SNAPSHOT_BRANCH_NAME
-        else:
-            branch_name = RELEASE_BRANCH_NAME
 
         try:
             hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
