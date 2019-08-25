@@ -154,6 +154,13 @@ class DryRunProposal(MergeProposal):
         """Check whether this merge proposal has been merged."""
         return False
 
+    def is_closed(self):
+        """Check whether this merge proposal has been closed."""
+        return False
+
+    def reopen(self):
+        pass
+
 
 def push_result(local_branch, remote_branch,
                 additional_colocated_branches=None):
@@ -432,10 +439,21 @@ def propose_changes(
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing)
+    if resume_proposal is not None and dry_run:
+        resume_proposal = DryRunProposal.from_existing(
+            resume_proposal, source_branch=local_branch)
+    if (resume_proposal is not None and
+            getattr(resume_proposal, 'is_closed', None) and
+            resume_proposal.is_closed()):
+        from breezy.plugins.propose.propose import (
+            ReopenFailed,
+            )
+        try:
+            resume_proposal.reopen()
+        except ReopenFailed:
+            note('Reopening existing proposal failed. Creating new proposal.')
+            resume_proposal = None
     if resume_proposal is not None:
-        if dry_run:
-            resume_proposal = DryRunProposal.from_existing(
-                resume_proposal, source_branch=local_branch)
         # Check that the proposal doesn't already has this description.
         # Setting the description (regardless of whether it changes)
         # causes Launchpad to send emails.
