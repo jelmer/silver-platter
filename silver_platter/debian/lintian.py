@@ -29,6 +29,7 @@ from . import (
     open_packaging_branch,
     should_update_changelog,
     DEFAULT_BUILDER,
+    NoSuchPackage,
     )
 from ..proposal import (
     get_hoster,
@@ -41,6 +42,8 @@ from ..utils import (
     run_pre_check,
     run_post_check,
     PostCheckFailed,
+    BranchMissing,
+    BranchUnavailable,
     )
 
 
@@ -221,41 +224,16 @@ def get_fixers(available_fixers, names=None, tags=None):
         return by_name.values()
 
 
-def main(args):
-    import distro_info
-    import socket
-
-    import silver_platter   # noqa: F401
-    from . import (
-        BuildFailedError,
-        MissingUpstreamTarball,
-        NoSuchPackage,
-        Workspace,
-        )
-
-    from breezy import (
-        errors,
-        )
-
+def iter_packages(packages, overwrite_unrelated=False, refresh=False):
     from breezy.trace import note, warning
-
     from breezy.plugins.propose.propose import (
-        NoSuchProject,
         UnsupportedHoster,
         )
 
     possible_transports = []
     possible_hosters = []
 
-    try:
-        fixers = get_fixers(available_lintian_fixers(), names=args.fixers)
-    except UnknownFixer as e:
-        note('Unknown fixer: %s', e.fixer)
-        return 1
-
-    debian_info = distro_info.DebianDistroInfo()
-
-    for pkg in args.packages:
+    for pkg in packages:
         note('Processing: %s', pkg)
 
         try:
@@ -264,26 +242,8 @@ def main(args):
         except NoSuchPackage:
             note('%s: no such package', pkg)
             continue
-        except socket.error:
+        except (BranchMissing, BranchUnavailable):
             note('%s: ignoring, socket error', pkg)
-            continue
-        except errors.NotBranchError as e:
-            note('%s: Branch does not exist: %s', pkg, e)
-            continue
-        except errors.UnsupportedProtocol:
-            note('%s: Branch available over unsupported protocol', pkg)
-            continue
-        except errors.ConnectionError as e:
-            note('%s: %s', pkg, e)
-            continue
-        except errors.PermissionDenied as e:
-            note('%s: %s', pkg, e)
-            continue
-        except errors.InvalidHttpResponse as e:
-            note('%s: %s', pkg, e)
-            continue
-        except errors.TransportError as e:
-            note('%s: %s', pkg, e)
             continue
 
         overwrite = False
@@ -303,11 +263,48 @@ def main(args):
             (resume_branch, overwrite, existing_proposal) = (
                 find_existing_proposed(
                     main_branch, hoster, BRANCH_NAME,
-                    overwrite_unrelated=args.overwrite))
-        if args.refresh:
+                    overwrite_unrelated=overwrite_unrelated))
+        if refresh:
             overwrite = True
             resume_branch = None
 
+        yield (pkg, main_branch, resume_branch, hoster, existing_proposal,
+               overwrite)
+
+
+def main(args):
+    import distro_info
+
+    import silver_platter   # noqa: F401
+    from . import (
+        BuildFailedError,
+        MissingUpstreamTarball,
+        Workspace,
+        )
+
+    from breezy import (
+        errors,
+        )
+
+    from breezy.plugins.propose.propose import (
+        NoSuchProject,
+        UnsupportedHoster,
+        )
+    from breezy.trace import note
+
+    ret = 0
+
+    try:
+        fixers = get_fixers(available_lintian_fixers(), names=args.fixers)
+    except UnknownFixer as e:
+        note('Unknown fixer: %s', e.fixer)
+        return 1
+
+    debian_info = distro_info.DebianDistroInfo()
+
+    for (pkg, main_branch, resume_branch, existing_proposal, hoster,
+         overwrite) in iter_packages(
+            args.packages, args.overwrite, args.refresh):
         with Workspace(main_branch, resume_branch=resume_branch) as ws:
             with ws.local_tree.lock_write():
                 if ws.refreshed:
@@ -343,9 +340,11 @@ def main(args):
                              result_dir=args.build_target_dir)
                 except BuildFailedError:
                     note('%s: build failed', pkg)
+                    ret = 1
                     continue
                 except MissingUpstreamTarball:
                     note('%s: unable to find upstream source', pkg)
+                    ret = 1
                     continue
 
             enable_tag_pushing(ws.local_tree.branch)
@@ -375,16 +374,20 @@ def main(args):
                     existing_proposal=existing_proposal)
             except UnsupportedHoster:
                 note('%s: Hoster unsupported', pkg)
+                ret = 1
                 continue
             except NoSuchProject as e:
                 note('%s: project %s was not found', pkg, e.project)
+                ret = 1
                 continue
             except errors.PermissionDenied as e:
                 note('%s: %s', pkg, e)
+                ret = 1
                 continue
             except errors.DivergedBranches:
                 note('%s: a branch exists. Use --overwrite to discard it.',
                      pkg)
+                ret = 1
                 continue
 
             if proposal:
@@ -402,6 +405,8 @@ def main(args):
                          proposal.url)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
+
+    return ret
 
 
 if __name__ == '__main__':
