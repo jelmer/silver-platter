@@ -49,6 +49,7 @@ __all__ = [
     'NoSuchProject',
     'get_hoster',
     'hosters',
+    'iter_all_mps',
     ]
 
 
@@ -487,3 +488,14 @@ def push_derived_changes(
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing)
     return remote_branch, public_branch_url
+
+
+def iter_all_mps(statuses=None):
+    """iterate over all existing merge proposals."""
+    if statuses is None:
+        statuses = ['open', 'merged', 'closed']
+    for name, hoster_cls in hosters.items():
+        for instance in hoster_cls.iter_instances():
+            for status in statuses:
+                for mp in instance.iter_my_proposals(status=status):
+                    yield mp, status

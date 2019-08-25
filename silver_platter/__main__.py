@@ -80,11 +80,9 @@ def proposals_setup_parser(parser):
 
 
 def proposals_main(args):
-    from breezy.plugins.propose.propose import hosters
-    for name, hoster_cls in hosters.items():
-        for instance in hoster_cls.iter_instances():
-            for proposal in instance.iter_my_proposals(status=args.status):
-                print(proposal.url)
+    from .proposal import iter_all_mps
+    for proposal, status in iter_all_mps([args.status]):
+        print(proposal.url)
 
 
 subcommands = [
