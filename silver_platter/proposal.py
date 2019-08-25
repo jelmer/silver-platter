@@ -506,4 +506,27 @@ def iter_all_mps(statuses=None):
         for instance in hoster_cls.iter_instances():
             for status in statuses:
                 for mp in instance.iter_my_proposals(status=status):
-                    yield mp, status
+                    yield instance, mp, status
+
+
+def iter_conflicted(branch_name):
+    possible_transports = []
+    for hoster, mp, status in iter_all_mps(['open']):
+        try:
+            if mp.can_be_merged():
+                continue
+        except NotImplementedError:
+            # TODO(jelmer): Check some other way that the branch is conflicted?
+            continue
+        main_branch = open_branch(
+            mp.get_target_branch_url(),
+            possible_transports=possible_transports)
+        resume_branch = open_branch(
+            mp.get_source_branch_url(),
+            possible_transports=possible_transports)
+        if resume_branch.name != branch_name and not (
+            not resume_branch.name and
+                resume_branch.user_url.endswith(branch_name)):
+            continue
+        yield (resume_branch.user_url, main_branch, resume_branch, hoster, mp,
+               True)

@@ -81,7 +81,7 @@ def proposals_setup_parser(parser):
 
 def proposals_main(args):
     from .proposal import iter_all_mps
-    for proposal, status in iter_all_mps([args.status]):
+    for hoster, proposal, status in iter_all_mps([args.status]):
         print(proposal.url)
 
 

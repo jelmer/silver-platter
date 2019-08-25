@@ -37,6 +37,7 @@ from ..proposal import (
     enable_tag_pushing,
     publish_changes,
     SUPPORTED_MODES,
+    iter_conflicted,
     )
 from ..utils import (
     run_pre_check,
@@ -193,6 +194,9 @@ def setup_parser(parser):
     parser.add_argument(
         '--overwrite', action='store_true',
         help='Overwrite existing branches.')
+    parser.add_argument(
+        '--fix-conflicted', action='store_true',
+        help='Fix existing merge proposals that are conflicted.')
 
 
 def get_fixers(available_fixers, names=None, tags=None):
@@ -274,6 +278,7 @@ def iter_packages(packages, overwrite_unrelated=False, refresh=False):
 
 def main(args):
     import distro_info
+    import itertools
 
     import silver_platter   # noqa: F401
     from . import (
@@ -302,9 +307,13 @@ def main(args):
 
     debian_info = distro_info.DebianDistroInfo()
 
-    for (pkg, main_branch, resume_branch, existing_proposal, hoster,
-         overwrite) in iter_packages(
-            args.packages, args.overwrite, args.refresh):
+    package_iter = iter_packages(args.packages, args.overwrite, args.refresh)
+    if args.fix_conflicted:
+        package_iter = itertools.chain(
+            package_iter, iter_conflicted(BRANCH_NAME))
+
+    for (pkg, main_branch, resume_branch, hoster, existing_proposal,
+         overwrite) in package_iter:
         with Workspace(main_branch, resume_branch=resume_branch) as ws:
             with ws.local_tree.lock_write():
                 if ws.refreshed:
