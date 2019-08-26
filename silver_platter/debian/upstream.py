@@ -217,6 +217,8 @@ def refresh_quilt_patches(local_tree, committer=None):
                 debcommit(local_tree, committer=committer, paths=[
                     'debian/patches/series', 'debian/patches/' + name,
                     'debian/changelog'])
+            else:
+                raise
     patches.pop_all()
     try:
         local_tree.commit(
