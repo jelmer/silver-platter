@@ -74,11 +74,16 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     PristineTarSource,
     )
-from breezy.plugins.debian.quilt.quilt import (
-    QuiltError,
-    QuiltPatches,
-    )
-
+try:
+    from breezy.plugins.quilt import (
+        QuiltError,
+        QuiltPatches,
+        )
+except ImportError:
+    from breezy.plugins.debian.quilt.quilt import (
+        QuiltError,
+        QuiltPatches,
+        )
 
 from breezy.plugins.debian.util import (
     debuild_config,
