@@ -219,7 +219,8 @@ def refresh_quilt_patches(local_tree, committer=None):
                     'debian/changelog'])
     patches.pop_all()
     try:
-        local_tree.commit('Refresh patches.', committer=committer)
+        local_tree.commit(
+            'Refresh patches.', committer=committer, allow_pointless=False)
     except PointlessCommit:
         pass
 
