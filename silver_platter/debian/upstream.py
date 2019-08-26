@@ -215,7 +215,8 @@ def refresh_quilt_patches(local_tree, committer=None):
                     ['dch', 'Drop patch %s, present upstream.' % name],
                     cwd=local_tree.basedir)
                 debcommit(local_tree, committer=committer, paths=[
-                    'debian/patches/series', 'debian/patches/' + name])
+                    'debian/patches/series', 'debian/patches/' + name,
+                    'debian/changelog'])
     patches.pop_all()
     try:
         local_tree.commit('Refresh patches.', committer=committer)
