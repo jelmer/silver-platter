@@ -20,6 +20,8 @@
 import silver_platter  # noqa: F401
 
 from debian.changelog import Version
+import re
+import subprocess
 import sys
 import tempfile
 
@@ -75,7 +77,7 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarSource,
     )
 try:
-    from breezy.plugins.quilt import (
+    from breezy.plugins.quilt.quilt import (
         QuiltError,
         QuiltPatches,
         )
@@ -199,7 +201,20 @@ def check_quilt_patches_apply(local_tree):
 def refresh_quilt_patches(local_tree, committer=None):
     patches = QuiltPatches(local_tree, 'debian/patches')
     patches.upgrade()
-    patches.push_all(refresh=True)
+    for name in patches.unapplied():
+        try:
+            patches.push(name, refresh=True)
+        except QuiltError as e:
+            lines = e.stdout.splitlines()
+            m = re.match(
+                'Patch debian/patches/(.*) can be reverse-applied', lines[-1])
+            if m and getattr(patches, 'delete', None):
+                assert m.group(1) == name
+                patches.delete(name, remove=True)
+                subprocess.check_call(
+                    ['dch', 'Drop patch %s, present upstream.' % name],
+                    cwd=local_tree.basedir)
+                debcommit(local_tree, committer=committer)
     patches.pop_all()
     try:
         local_tree.commit('Refresh patches.', committer=committer)
