@@ -58,6 +58,7 @@ from breezy.plugins.debian.config import (
     )
 from breezy.plugins.debian.errors import (
     InconsistentSourceFormatError,
+    MissingUpstreamTarball,
     PackageVersionNotPresent,
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
@@ -112,6 +113,7 @@ __all__ = [
     'merge_upstream',
     'InvalidFormatUpstreamVersion',
     'MissingChangelogError',
+    'MissingUpstreamTarball',
     'NewUpstreamMissing',
     'UpstreamBranchUnavailable',
     'UpstreamAlreadyMerged',
@@ -262,6 +264,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
       MissingChangelogError
+      MissingUpstreamTarball
       NewUpstreamMissing
       UpstreamBranchUnavailable
       UpstreamAlreadyMerged
@@ -603,6 +606,14 @@ def main(args):
                 continue
             except UpstreamMetadataSyntaxError as e:
                 show_error('Unable to parse %s', e.path)
+                ret = 1
+                continue
+            except MissingChangelogError as e:
+                show_error('Missing changelog %s', e)
+                ret = 1
+                continue
+            except MissingUpstreamTarball as e:
+                show_error('Missing upstream tarball: %s', e)
                 ret = 1
                 continue
             else:

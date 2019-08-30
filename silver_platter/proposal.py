@@ -180,7 +180,8 @@ def push_result(local_branch, remote_branch,
                 add_branch, name=branch_name)
 
 
-def find_existing_proposed(main_branch, hoster, name, overwrite_unrelated=False):
+def find_existing_proposed(main_branch, hoster, name,
+                           overwrite_unrelated=False):
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
