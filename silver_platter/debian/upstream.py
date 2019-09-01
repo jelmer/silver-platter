@@ -126,6 +126,7 @@ __all__ = [
     'UnparseableChangelog',
     'UScanError',
     'UpstreamMetadataSyntaxError',
+    'QuiltPatchPushFailure',
 ]
 
 
@@ -184,6 +185,13 @@ class InvalidFormatUpstreamVersion(Exception):
         self.source = source
 
 
+class QuiltPatchPushFailure(Exception):
+
+    def __init__(self, patch_name, actual_error):
+        self.patch_name = patch_name
+        self.actual_error = actual_error
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
@@ -220,7 +228,7 @@ def refresh_quilt_patches(local_tree, committer=None):
                     'debian/patches/series', 'debian/patches/' + name,
                     'debian/changelog'])
             else:
-                raise
+                raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
     try:
         local_tree.commit(
