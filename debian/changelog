@@ -1,11 +1,11 @@
-silver-platter (0.2.0+git20190818.eb92ff5-1) UNRELEASED; urgency=medium
+silver-platter (0.2.0+git20190901.fe90a04-1) UNRELEASED; urgency=medium
 
   * Bump dependency on brz-debian to 2.8.28.
   * debian/tests/control: Add missing dependency on python3-
     breezy.tests.
   * New upstream snapshot.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 19 Aug 2019 21:31:10 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 05 Sep 2019 01:46:23 +0000
 
 silver-platter (0.1.0-1) unstable; urgency=medium
 

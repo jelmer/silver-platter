@@ -20,6 +20,8 @@
 import silver_platter  # noqa: F401
 
 from debian.changelog import Version
+import re
+import subprocess
 import sys
 import tempfile
 
@@ -51,8 +53,12 @@ from breezy.errors import (
     FileExists,
     PointlessMerge,
     )
+from breezy.plugins.debian.config import (
+    UpstreamMetadataSyntaxError
+    )
 from breezy.plugins.debian.errors import (
     InconsistentSourceFormatError,
+    MissingUpstreamTarball,
     PackageVersionNotPresent,
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
@@ -71,11 +77,16 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     PristineTarSource,
     )
-from breezy.plugins.debian.quilt.quilt import (
-    QuiltError,
-    QuiltPatches,
-    )
-
+try:
+    from breezy.plugins.quilt.quilt import (
+        QuiltError,
+        QuiltPatches,
+        )
+except ImportError:
+    from breezy.plugins.debian.quilt.quilt import (
+        QuiltError,
+        QuiltPatches,
+        )
 
 from breezy.plugins.debian.util import (
     debuild_config,
@@ -102,6 +113,7 @@ __all__ = [
     'merge_upstream',
     'InvalidFormatUpstreamVersion',
     'MissingChangelogError',
+    'MissingUpstreamTarball',
     'NewUpstreamMissing',
     'UpstreamBranchUnavailable',
     'UpstreamAlreadyMerged',
@@ -113,6 +125,8 @@ __all__ = [
     'PackageIsNative',
     'UnparseableChangelog',
     'UScanError',
+    'UpstreamMetadataSyntaxError',
+    'QuiltPatchPushFailure',
 ]
 
 
@@ -171,6 +185,13 @@ class InvalidFormatUpstreamVersion(Exception):
         self.source = source
 
 
+class QuiltPatchPushFailure(Exception):
+
+    def __init__(self, patch_name, actual_error):
+        self.patch_name = patch_name
+        self.actual_error = actual_error
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
@@ -190,10 +211,28 @@ def check_quilt_patches_apply(local_tree):
 def refresh_quilt_patches(local_tree, committer=None):
     patches = QuiltPatches(local_tree, 'debian/patches')
     patches.upgrade()
-    patches.push_all(refresh=True)
+    for name in patches.unapplied():
+        try:
+            patches.push(name, refresh=True)
+        except QuiltError as e:
+            lines = e.stdout.splitlines()
+            m = re.match(
+                'Patch debian/patches/(.*) can be reverse-applied', lines[-1])
+            if m and getattr(patches, 'delete', None):
+                assert m.group(1) == name
+                patches.delete(name, remove=True)
+                subprocess.check_call(
+                    ['dch', 'Drop patch %s, present upstream.' % name],
+                    cwd=local_tree.basedir)
+                debcommit(local_tree, committer=committer, paths=[
+                    'debian/patches/series', 'debian/patches/' + name,
+                    'debian/changelog'])
+            else:
+                raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
     try:
-        local_tree.commit('Refresh patches.', committer=committer)
+        local_tree.commit(
+            'Refresh patches.', committer=committer, allow_pointless=False)
     except PointlessCommit:
         pass
 
@@ -233,6 +272,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
       MissingChangelogError
+      MissingUpstreamTarball
       NewUpstreamMissing
       UpstreamBranchUnavailable
       UpstreamAlreadyMerged
@@ -245,6 +285,7 @@ def merge_upstream(tree, snapshot=False, location=None,
       InconsistentSourceFormatError
       UnparseableChangelog
       UScanError
+      UpstreamMetadataSyntaxError
     Returns:
       MergeUpstreamResult object
     """
@@ -474,6 +515,12 @@ def setup_parser(parser):
 def main(args):
     possible_hosters = []
     ret = 0
+
+    if args.snapshot:
+        branch_name = SNAPSHOT_BRANCH_NAME
+    else:
+        branch_name = RELEASE_BRANCH_NAME
+
     for package in args.packages:
         try:
             main_branch = open_packaging_branch(package)
@@ -481,11 +528,6 @@ def main(args):
             show_error('No such package: %s', package)
             ret = 1
             continue
-
-        if args.snapshot:
-            branch_name = SNAPSHOT_BRANCH_NAME
-        else:
-            branch_name = RELEASE_BRANCH_NAME
 
         try:
             hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
@@ -564,6 +606,22 @@ def main(args):
                 continue
             except InconsistentSourceFormatError as e:
                 show_error('Inconsistencies in type of package: %s', e)
+                ret = 1
+                continue
+            except UScanError as e:
+                show_error('UScan failed: %s', e)
+                ret = 1
+                continue
+            except UpstreamMetadataSyntaxError as e:
+                show_error('Unable to parse %s', e.path)
+                ret = 1
+                continue
+            except MissingChangelogError as e:
+                show_error('Missing changelog %s', e)
+                ret = 1
+                continue
+            except MissingUpstreamTarball as e:
+                show_error('Missing upstream tarball: %s', e)
                 ret = 1
                 continue
             else:
