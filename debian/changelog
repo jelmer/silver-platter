@@ -8,6 +8,7 @@ silver-platter (0.2.0+git20190901.fe90a04-1) UNRELEASED; urgency=medium
   * Update standards version, no changes needed.
   * Bump debhelper from old 11 to 12.
   * Remove obsolete fields Name, Contact from debian/upstream/metadata.
+  * Bump minimum lintian-brush to 0.28.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 05 Sep 2019 01:46:23 +0000
 

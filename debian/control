@@ -12,7 +12,7 @@ Build-Depends: dh-python,
                python3-github,
                python3-gitlab,
                python3-launchpadlib,
-               lintian-brush (>= 0.16),
+               lintian-brush (>= 0.28),
                debhelper-compat (= 12)
 Standards-Version: 4.4.0
 Homepage: https://www.jelmer.uk/code/silver-platter
@@ -31,7 +31,7 @@ Depends: devscripts,
          python3-launchpadlib,
          ${misc:Depends},
          ${python3:Depends}
-Recommends: brz, lintian-brush (>= 0.16)
+Recommends: brz, lintian-brush (>= 0.28)
 Description: automatically create merge proposals
  Silver-Platter makes it possible to contribute automatable changes to source
  code in a version control system.
