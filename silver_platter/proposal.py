@@ -49,6 +49,7 @@ __all__ = [
     'NoSuchProject',
     'get_hoster',
     'hosters',
+    'iter_all_mps',
     ]
 
 
@@ -153,6 +154,13 @@ class DryRunProposal(MergeProposal):
         """Check whether this merge proposal has been merged."""
         return False
 
+    def is_closed(self):
+        """Check whether this merge proposal has been closed."""
+        return False
+
+    def reopen(self):
+        pass
+
 
 def push_result(local_branch, remote_branch,
                 additional_colocated_branches=None):
@@ -172,13 +180,16 @@ def push_result(local_branch, remote_branch,
                 add_branch, name=branch_name)
 
 
-def find_existing_proposed(main_branch, hoster, name):
+def find_existing_proposed(main_branch, hoster, name,
+                           overwrite_unrelated=False):
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
       main_branch: Main branch
       hoster: The hoster
       name: Name of the derived branch
+      overwrite_unrelated: Whether to overwrite existing (but unrelated)
+        branches
     Returns:
       Tuple with (resume_branch, overwrite_existing, existing_proposal)
       The resume_branch is the branch to continue from; overwrite_existing
@@ -205,8 +216,13 @@ def find_existing_proposed(main_branch, hoster, name):
                      merged_proposal.url)
                 return (None, True, None)
             else:
-                # No related merge proposals found
-                return (None, False, None)
+                # No related merge proposals found, but there is an existing
+                # branch (perhaps for a different target branch?)
+                if overwrite_unrelated:
+                    return (None, True, None)
+                else:
+                    # TODO(jelmer): What to do in this case?
+                    return (None, False, None)
 
 
 class Workspace(object):
@@ -256,6 +272,7 @@ class Workspace(object):
                     self.local_tree.branch.generate_revision_history(
                         self.main_branch_revid)
                     self.resume_branch = None
+                    self.refreshed = True
             self.orig_revid = self.local_tree.last_revision()
         return self
 
@@ -423,10 +440,21 @@ def propose_changes(
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing)
+    if resume_proposal is not None and dry_run:
+        resume_proposal = DryRunProposal.from_existing(
+            resume_proposal, source_branch=local_branch)
+    if (resume_proposal is not None and
+            getattr(resume_proposal, 'is_closed', None) and
+            resume_proposal.is_closed()):
+        from breezy.plugins.propose.propose import (
+            ReopenFailed,
+            )
+        try:
+            resume_proposal.reopen()
+        except ReopenFailed:
+            note('Reopening existing proposal failed. Creating new proposal.')
+            resume_proposal = None
     if resume_proposal is not None:
-        if dry_run:
-            resume_proposal = DryRunProposal.from_existing(
-                resume_proposal, source_branch=local_branch)
         # Check that the proposal doesn't already has this description.
         # Setting the description (regardless of whether it changes)
         # causes Launchpad to send emails.
@@ -487,3 +515,37 @@ def push_derived_changes(
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing)
     return remote_branch, public_branch_url
+
+
+def iter_all_mps(statuses=None):
+    """iterate over all existing merge proposals."""
+    if statuses is None:
+        statuses = ['open', 'merged', 'closed']
+    for name, hoster_cls in hosters.items():
+        for instance in hoster_cls.iter_instances():
+            for status in statuses:
+                for mp in instance.iter_my_proposals(status=status):
+                    yield instance, mp, status
+
+
+def iter_conflicted(branch_name):
+    possible_transports = []
+    for hoster, mp, status in iter_all_mps(['open']):
+        try:
+            if mp.can_be_merged():
+                continue
+        except NotImplementedError:
+            # TODO(jelmer): Check some other way that the branch is conflicted?
+            continue
+        main_branch = open_branch(
+            mp.get_target_branch_url(),
+            possible_transports=possible_transports)
+        resume_branch = open_branch(
+            mp.get_source_branch_url(),
+            possible_transports=possible_transports)
+        if resume_branch.name != branch_name and not (
+            not resume_branch.name and
+                resume_branch.user_url.endswith(branch_name)):
+            continue
+        yield (resume_branch.user_url, main_branch, resume_branch, hoster, mp,
+               True)

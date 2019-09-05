@@ -200,7 +200,8 @@ class Workspace(_mod_proposal.Workspace):
                      result_dir=result_dir)
 
 
-def debcommit(tree, committer=None):
+def debcommit(tree, committer=None, paths=None):
     tree.commit(
         committer=committer,
-        message=changelog_commit_message(tree, tree.basis_tree()))
+        message=changelog_commit_message(tree, tree.basis_tree()),
+        specific_files=paths)
