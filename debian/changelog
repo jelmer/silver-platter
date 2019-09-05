@@ -5,6 +5,7 @@ silver-platter (0.2.0+git20190901.fe90a04-1) UNRELEASED; urgency=medium
     breezy.tests.
   * New upstream snapshot.
   * Bump minimum brz-debian to 2.8.30.
+  * Update standards version, no changes needed.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 05 Sep 2019 01:46:23 +0000
 
