@@ -1,4 +1,4 @@
-silver-platter (0.2.0+git20190901.fe90a04-1) UNRELEASED; urgency=medium
+silver-platter (0.2.0+git20190901.fe90a04-1) unstable; urgency=medium
 
   * Bump dependency on brz-debian to 2.8.28.
   * debian/tests/control: Add missing dependency on python3-
