@@ -23,6 +23,7 @@ from breezy.errors import BzrError
 from lintian_brush import (
     available_lintian_fixers,
     run_lintian_fixers,
+    DEFAULT_MINIMUM_CERTAINTY,
     )
 
 from . import (
@@ -326,11 +327,39 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
+                compat_release = None
+                allow_reformatting = None
+                minimum_certainty = None
+                try:
+                    from lintian_brush.config import Config
+                except ImportError:  # lintian-brush < 0.30
+                    pass
+                else:
+                    try:
+                        cfg = Config.from_workingtree(ws.local_tree, '')
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        compat_release = cfg.compat_release()
+                        if compat_release:
+                            compat_release = debian_info.codename(
+                                compat_release, default=compat_release)
+                        allow_reformatting = cfg.allow_reformatting()
+                        minimum_certainty = cfg.minimum_certainty()
+                if compat_release is None:
+                    compat_release = debian_info.stable()
+                if allow_reformatting is None:
+                    allow_reformatting = False
+                if minimum_certainty is None:
+                    minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
+
                 applied, failed = run_lintian_fixers(
                         ws.local_tree, fixers,
                         committer=args.committer,
                         update_changelog=update_changelog,
-                        compat_release=debian_info.stable())
+                        compat_release=compat_release,
+                        allow_reformatting=allow_reformatting,
+                        minimum_certainty=minimum_certainty)
 
                 if failed:
                     note('%s: some fixers failed to run: %r',
