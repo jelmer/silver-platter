@@ -303,9 +303,11 @@ def merge_upstream(tree, snapshot=False, location=None,
         raise PackageIsNative(changelog.package, changelog.version)
 
     if config.upstream_branch is not None:
+        from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
-        upstream_branch_location = config.upstream_branch
+        # TODO(jelmer): Make brz-debian sanitize the URL?
+        upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
         upstream_branch_browse = getattr(
             config, 'upstream_branch_browse', None)
     else:
