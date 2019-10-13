@@ -408,12 +408,37 @@ def push_changes(local_branch, main_branch, hoster, possible_transports=None,
         push_result(local_branch, target_branch, additional_colocated_branches)
 
 
+class EmptyMergeProposal(Exception):
+    """Merge proposal does not have any changes."""
+
+    def __init__(self, local_branch, main_branch):
+        self.local_branch = local_branch
+        self.main_branch = main_branch
+
+
+def check_branch_diff(local_branch, main_branch):
+    from breezy.merge import Merger
+    source_revid = main_branch.last_revision()
+    source_tree = local_branch.repository.revision_tree(source_revid)
+    merger = Merger.from_revision_ids(
+        source_tree, local_branch.last_revision(), None, local_branch,
+        local_branch)
+    tree_merger = merger.make_merger()
+    tt = tree_merger.make_preview_transform()
+    with tt:
+        result_tree = tt.get_preview_tree()
+        changes = result_tree.iter_changes(source_tree)
+        if not any(changes):
+            raise EmptyMergeProposal(local_branch, main_branch)
+
+
 def propose_changes(
         local_branch, main_branch, hoster, name,
         mp_description, resume_branch=None, resume_proposal=None,
         overwrite_existing=True,
         labels=None, dry_run=False, commit_message=None,
-        additional_colocated_branches=None):
+        additional_colocated_branches=None,
+        allow_empty=False):
     """Create or update a merge proposal.
 
     Args:
@@ -428,9 +453,12 @@ def propose_changes(
       dry_run: Whether to just dry-run the change
       commit_message: Optional commit message
       additional_colocated_branches: Additional colocated branches to propose
+      allow_empty: Whether to allow empty merge proposals
     Returns:
       Tuple with (proposal, is_new)
     """
+    if not allow_empty:
+        check_branch_diff(local_branch, main_branch)
     # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:
