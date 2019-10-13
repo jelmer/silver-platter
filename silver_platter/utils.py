@@ -178,7 +178,7 @@ def open_branch(url, possible_transports=None, vcs_type=None):
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
     except socket.error as e:
-        raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
+        raise BranchUnavailable(url, 'Socket error: %s' % e)
     except errors.NotBranchError as e:
         raise BranchMissing(url, 'Branch does not exist: %s' % e)
     except errors.UnsupportedProtocol as e:
