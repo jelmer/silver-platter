@@ -22,7 +22,7 @@ import subprocess
 
 from breezy import errors, osutils
 from breezy.controldir import ControlDir
-from breezy.transport import get_transport
+import breezy.transport
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 
@@ -165,7 +165,7 @@ class BranchMissing(Exception):
 def open_branch(url, possible_transports=None, vcs_type=None):
     """Open a branch by URL."""
     try:
-        transport = get_transport(
+        transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
         if vcs_type is None:
             probers = None
@@ -190,4 +190,6 @@ def open_branch(url, possible_transports=None, vcs_type=None):
     except errors.InvalidHttpResponse as e:
         raise BranchUnavailable(url, str(e))
     except errors.TransportError as e:
+        raise BranchUnavailable(url, str(e))
+    except breezy.transport.UnusableRedirect as e:
         raise BranchUnavailable(url, str(e))
