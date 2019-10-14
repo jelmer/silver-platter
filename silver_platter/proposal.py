@@ -417,12 +417,14 @@ class EmptyMergeProposal(Exception):
 
 
 def check_branch_diff(local_branch, main_branch):
-    from breezy.merge import Merger
+    from breezy.merge import Merger, Merge3Merger
     source_revid = main_branch.last_revision()
+    local_branch.repository.fetch(main_branch.repository, source_revid)
     source_tree = local_branch.repository.revision_tree(source_revid)
     merger = Merger.from_revision_ids(
         source_tree, local_branch.last_revision(), None, local_branch,
-        local_branch)
+        local_branch, tree_branch=local_branch)
+    merger.merge_type = Merge3Merger
     tree_merger = merger.make_merger()
     tt = tree_merger.make_preview_transform()
     with tt:
