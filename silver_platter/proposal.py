@@ -564,7 +564,7 @@ def iter_conflicted(branch_name):
         try:
             if mp.can_be_merged():
                 continue
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             # TODO(jelmer): Check some other way that the branch is conflicted?
             continue
         main_branch = open_branch(
