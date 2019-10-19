@@ -416,22 +416,21 @@ class EmptyMergeProposal(Exception):
         self.main_branch = main_branch
 
 
-def check_branch_diff(local_branch, main_branch):
-    from breezy.merge import Merger, Merge3Merger
-    source_revid = main_branch.last_revision()
-    local_branch.repository.fetch(main_branch.repository, source_revid)
-    source_tree = local_branch.repository.revision_tree(source_revid)
-    merger = Merger.from_revision_ids(
-        source_tree, local_branch.last_revision(), None, local_branch,
-        local_branch, tree_branch=local_branch)
-    merger.merge_type = Merge3Merger
+def check_proposal_diff(other_branch, main_branch):
+    from breezy import merge as _mod_merge
+    main_revid = main_branch.last_revision()
+    other_branch.repository.fetch(main_branch.repository, main_revid)
+    main_tree = other_branch.repository.revision_tree(main_revid)
+    merger = _mod_merge.Merger.from_revision_ids(
+            other_branch.basis_tree(), other_branch=other_branch,
+            other=main_branch.last_revision(), tree_branch=other_branch)
+    merger.merge_type = _mod_merge.Merge3Merger
     tree_merger = merger.make_merger()
-    tt = tree_merger.make_preview_transform()
-    with tt:
+    with tree_merger.make_preview_transform() as tt:
         result_tree = tt.get_preview_tree()
-        changes = result_tree.iter_changes(source_tree)
+        changes = result_tree.iter_changes(main_tree)
         if not any(changes):
-            raise EmptyMergeProposal(local_branch, main_branch)
+            raise EmptyMergeProposal(other_branch, main_branch)
 
 
 def propose_changes(
@@ -460,7 +459,7 @@ def propose_changes(
       Tuple with (proposal, is_new)
     """
     if not allow_empty:
-        check_branch_diff(local_branch, main_branch)
+        check_proposal_diff(local_branch, main_branch)
     # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:

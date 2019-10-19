@@ -21,6 +21,8 @@ import os
 from breezy.tests import TestCaseWithTransport
 
 from ..proposal import (
+    EmptyMergeProposal,
+    check_proposal_diff,
     push_result,
     Workspace,
     )
@@ -106,3 +108,64 @@ class WorkspaceTests(TestCaseWithTransport):
             ws.show_diff(outf=f)
             self.assertContainsRe(
                 f.getvalue().decode('utf-8'), '\\+some content')
+
+
+class CheckProposalDiffTests(TestCaseWithTransport):
+
+    def test_no_new_commits(self):
+        orig = self.make_branch_and_tree('orig')
+        self.build_tree(['orig/a'])
+        orig.add(['a'])
+        orig.commit('blah')
+
+        proposal = orig.controldir.sprout('proposal').open_branch()
+
+        self.addCleanup(proposal.lock_write().unlock)
+        self.assertRaises(
+            EmptyMergeProposal, check_proposal_diff, proposal, orig.branch)
+
+    def test_no_op_commits(self):
+        orig = self.make_branch_and_tree('orig')
+        self.build_tree(['orig/a'])
+        orig.add(['a'])
+        orig.commit('blah')
+
+        proposal = orig.controldir.sprout('proposal').open_workingtree()
+        proposal.commit('another commit that is pointless')
+
+        self.addCleanup(proposal.lock_write().unlock)
+        self.assertRaises(
+            EmptyMergeProposal, check_proposal_diff, proposal.branch,
+            orig.branch)
+
+    def test_indep(self):
+        orig = self.make_branch_and_tree('orig')
+        self.build_tree(['orig/a'])
+        orig.add(['a'])
+        orig.commit('blah')
+
+        proposal = orig.controldir.sprout('proposal').open_workingtree()
+        self.build_tree(['orig/b', 'orig/c'])
+        orig.add(['b', 'c'])
+        proposal.commit('independent')
+
+        self.build_tree(['proposal/b'])
+        proposal.add(['b'])
+        proposal.commit('not pointless')
+
+        self.addCleanup(proposal.lock_write().unlock)
+        check_proposal_diff(proposal.branch, orig.branch)
+
+    def test_changes(self):
+        orig = self.make_branch_and_tree('orig')
+        self.build_tree(['orig/a'])
+        orig.add(['a'])
+        orig.commit('blah')
+
+        proposal = orig.controldir.sprout('proposal').open_workingtree()
+        self.build_tree(['proposal/b'])
+        proposal.add(['b'])
+        proposal.commit('not pointless')
+
+        self.addCleanup(proposal.lock_write().unlock)
+        check_proposal_diff(proposal.branch, orig.branch)
