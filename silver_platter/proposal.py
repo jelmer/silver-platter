@@ -421,14 +421,15 @@ def check_proposal_diff(other_branch, main_branch):
     main_revid = main_branch.last_revision()
     other_branch.repository.fetch(main_branch.repository, main_revid)
     main_tree = other_branch.repository.revision_tree(main_revid)
+    revision_graph = other_branch.repository.get_graph()
     merger = _mod_merge.Merger.from_revision_ids(
-            other_branch.basis_tree(), other_branch=other_branch,
-            other=main_branch.last_revision(), tree_branch=other_branch)
+            main_tree, other_branch=other_branch,
+            other=other_branch.last_revision(), tree_branch=main_branch,
+            revision_graph=revision_graph)
     merger.merge_type = _mod_merge.Merge3Merger
     tree_merger = merger.make_merger()
     with tree_merger.make_preview_transform() as tt:
-        result_tree = tt.get_preview_tree()
-        changes = result_tree.iter_changes(main_tree)
+        changes = tt.iter_changes()
         if not any(changes):
             raise EmptyMergeProposal(other_branch, main_branch)
 

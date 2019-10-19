@@ -110,10 +110,10 @@ class WorkspaceTests(TestCaseWithTransport):
                 f.getvalue().decode('utf-8'), '\\+some content')
 
 
-class CheckProposalDiffTests(TestCaseWithTransport):
+class CheckProposalDiffBase(object):
 
     def test_no_new_commits(self):
-        orig = self.make_branch_and_tree('orig')
+        orig = self.make_branch_and_tree('orig', format=self.format)
         self.build_tree(['orig/a'])
         orig.add(['a'])
         orig.commit('blah')
@@ -125,7 +125,7 @@ class CheckProposalDiffTests(TestCaseWithTransport):
             EmptyMergeProposal, check_proposal_diff, proposal, orig.branch)
 
     def test_no_op_commits(self):
-        orig = self.make_branch_and_tree('orig')
+        orig = self.make_branch_and_tree('orig', format=self.format)
         self.build_tree(['orig/a'])
         orig.add(['a'])
         orig.commit('blah')
@@ -139,25 +139,30 @@ class CheckProposalDiffTests(TestCaseWithTransport):
             orig.branch)
 
     def test_indep(self):
-        orig = self.make_branch_and_tree('orig')
+        orig = self.make_branch_and_tree('orig', format=self.format)
         self.build_tree(['orig/a'])
         orig.add(['a'])
         orig.commit('blah')
 
         proposal = orig.controldir.sprout('proposal').open_workingtree()
-        self.build_tree(['orig/b', 'orig/c'])
+        self.build_tree_contents([('orig/b', 'b'), ('orig/c', 'c')])
         orig.add(['b', 'c'])
-        proposal.commit('independent')
+        orig.commit('independent')
 
-        self.build_tree(['proposal/b'])
-        proposal.add(['b'])
+        self.build_tree_contents([('proposal/b', 'b')])
+        if proposal.supports_setting_file_ids():
+            proposal.add(['b'], [orig.path2id('b')])
+        else:
+            proposal.add(['b'])
         proposal.commit('not pointless')
 
         self.addCleanup(proposal.lock_write().unlock)
-        check_proposal_diff(proposal.branch, orig.branch)
+        self.assertRaises(
+            EmptyMergeProposal, check_proposal_diff, proposal.branch,
+            orig.branch)
 
     def test_changes(self):
-        orig = self.make_branch_and_tree('orig')
+        orig = self.make_branch_and_tree('orig', format=self.format)
         self.build_tree(['orig/a'])
         orig.add(['a'])
         orig.commit('blah')
@@ -169,3 +174,13 @@ class CheckProposalDiffTests(TestCaseWithTransport):
 
         self.addCleanup(proposal.lock_write().unlock)
         check_proposal_diff(proposal.branch, orig.branch)
+
+
+class CheckProposalDiffGitTests(TestCaseWithTransport, CheckProposalDiffBase):
+
+    format = 'git'
+
+
+class CheckProposalDiffBzrTests(TestCaseWithTransport, CheckProposalDiffBase):
+
+    format = 'bzr'
