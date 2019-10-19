@@ -40,6 +40,7 @@ from breezy.plugins.propose.propose import (
 from .utils import (
     create_temp_sprout,
     open_branch,
+    MinimalMemoryBranch,
     )
 
 
@@ -424,7 +425,10 @@ def check_proposal_diff(other_branch, main_branch):
     revision_graph = other_branch.repository.get_graph()
     merger = _mod_merge.Merger.from_revision_ids(
             main_tree, other_branch=other_branch,
-            other=other_branch.last_revision(), tree_branch=main_branch,
+            other=other_branch.last_revision(),
+            tree_branch=MinimalMemoryBranch(
+                other_branch.repository, (None, main_branch.last_revision()),
+                None),
             revision_graph=revision_graph)
     merger.merge_type = _mod_merge.Merge3Merger
     tree_merger = merger.make_merger()
