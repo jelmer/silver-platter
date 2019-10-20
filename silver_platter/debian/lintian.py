@@ -43,6 +43,11 @@ from ..utils import (
     BranchUnavailable,
     )
 
+from lintian_brush import (
+    available_lintian_fixers,
+    run_lintian_fixers,
+    DEFAULT_MINIMUM_CERTAINTY,
+    )
 
 __all__ = [
     'available_lintian_fixers',
@@ -293,12 +298,6 @@ def main(args):
         UnsupportedHoster,
         )
     from breezy.trace import note
-
-    from lintian_brush import (
-        available_lintian_fixers,
-        run_lintian_fixers,
-        DEFAULT_MINIMUM_CERTAINTY,
-        )
 
     ret = 0
 
