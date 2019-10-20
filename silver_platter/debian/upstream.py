@@ -651,7 +651,7 @@ def main(args):
                 return ("Merge new upstream release %s" %
                         merge_upstream_result.new_upstream_version)
 
-            (proposal, is_new) = publish_changes(
+            publish_result = publish_changes(
                 ws, args.mode, branch_name,
                 get_proposal_description=get_proposal_description,
                 get_proposal_commit_message=get_proposal_description,
@@ -659,13 +659,13 @@ def main(args):
                 existing_proposal=existing_proposal,
                 overwrite_existing=overwrite_existing)
 
-            if proposal:
-                if is_new:
+            if publish_result.proposal:
+                if publish_result.is_new:
                     note('%s: Created new merge proposal %s.',
-                         package, proposal.url)
+                         package, publish_result.proposal.url)
                 else:
                     note('%s: Updated merge proposal %s.',
-                         package, proposal.url)
+                         package, publish_result.proposal.url)
             elif existing_proposal:
                 note('%s: Closed merge proposal %s',
                      package, existing_proposal.url)

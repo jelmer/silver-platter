@@ -403,7 +403,7 @@ def main(args):
                 allow_create_proposal = True
 
             try:
-                (proposal, is_new) = publish_changes(
+                publish_result = publish_changes(
                     ws, args.mode, BRANCH_NAME,
                     get_proposal_description=get_proposal_description,
                     get_proposal_commit_message=get_proposal_commit_message,
@@ -429,11 +429,12 @@ def main(args):
                 ret = 1
                 continue
 
-            if proposal:
+            if publish_result.proposal:
+                proposal = publish_result.proposal
                 tags = set()
                 for brush_result, unused_summary in applied:
                     tags.update(brush_result.fixed_lintian_tags)
-                if is_new:
+                if publish_result.is_new:
                     note('%s: Proposed fixes %r: %s', pkg, tags,
                          proposal.url)
                 elif tags:
