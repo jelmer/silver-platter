@@ -20,11 +20,6 @@ from __future__ import absolute_import
 import sys
 
 from breezy.errors import BzrError
-from lintian_brush import (
-    available_lintian_fixers,
-    run_lintian_fixers,
-    DEFAULT_MINIMUM_CERTAINTY,
-    )
 
 from . import (
     open_packaging_branch,
@@ -298,6 +293,12 @@ def main(args):
         UnsupportedHoster,
         )
     from breezy.trace import note
+
+    from lintian_brush import (
+        available_lintian_fixers,
+        run_lintian_fixers,
+        DEFAULT_MINIMUM_CERTAINTY,
+        )
 
     ret = 0
 

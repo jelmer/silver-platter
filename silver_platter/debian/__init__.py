@@ -17,7 +17,6 @@
 
 from __future__ import absolute_import
 
-import apt_pkg
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
@@ -89,6 +88,7 @@ def get_source_package(name):
     Returns:
       A `Deb822` object
     """
+    import apt_pkg
     apt_pkg.init()
 
     sources = apt_pkg.SourceRecords()
