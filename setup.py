@@ -60,6 +60,7 @@ setup(
           'breezy',
           'dulwich',
           'testtools',
-          'lintian-brush>=0.16'
+          'lintian-brush>=0.16',
+          'debian',
       ],
 )
