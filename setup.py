@@ -61,6 +61,5 @@ setup(
           'dulwich',
           'testtools',
           'lintian-brush>=0.16',
-          'debian',
       ],
 )
