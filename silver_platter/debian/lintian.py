@@ -20,10 +20,6 @@ from __future__ import absolute_import
 import sys
 
 from breezy.errors import BzrError
-from lintian_brush import (
-    available_lintian_fixers,
-    run_lintian_fixers,
-    )
 
 from . import (
     open_packaging_branch,
@@ -47,6 +43,11 @@ from ..utils import (
     BranchUnavailable,
     )
 
+from lintian_brush import (
+    available_lintian_fixers,
+    run_lintian_fixers,
+    DEFAULT_MINIMUM_CERTAINTY,
+    )
 
 __all__ = [
     'available_lintian_fixers',
@@ -326,11 +327,39 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
+                compat_release = None
+                allow_reformatting = None
+                minimum_certainty = None
+                try:
+                    from lintian_brush.config import Config
+                except ImportError:  # lintian-brush < 0.30
+                    pass
+                else:
+                    try:
+                        cfg = Config.from_workingtree(ws.local_tree, '')
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        compat_release = cfg.compat_release()
+                        if compat_release:
+                            compat_release = debian_info.codename(
+                                compat_release, default=compat_release)
+                        allow_reformatting = cfg.allow_reformatting()
+                        minimum_certainty = cfg.minimum_certainty()
+                if compat_release is None:
+                    compat_release = debian_info.stable()
+                if allow_reformatting is None:
+                    allow_reformatting = False
+                if minimum_certainty is None:
+                    minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
+
                 applied, failed = run_lintian_fixers(
                         ws.local_tree, fixers,
                         committer=args.committer,
                         update_changelog=update_changelog,
-                        compat_release=debian_info.stable())
+                        compat_release=compat_release,
+                        allow_reformatting=allow_reformatting,
+                        minimum_certainty=minimum_certainty)
 
                 if failed:
                     note('%s: some fixers failed to run: %r',
@@ -374,7 +403,7 @@ def main(args):
                 allow_create_proposal = True
 
             try:
-                (proposal, is_new) = publish_changes(
+                publish_result = publish_changes(
                     ws, args.mode, BRANCH_NAME,
                     get_proposal_description=get_proposal_description,
                     get_proposal_commit_message=get_proposal_commit_message,
@@ -400,11 +429,12 @@ def main(args):
                 ret = 1
                 continue
 
-            if proposal:
+            if publish_result.proposal:
+                proposal = publish_result.proposal
                 tags = set()
                 for brush_result, unused_summary in applied:
                     tags.update(brush_result.fixed_lintian_tags)
-                if is_new:
+                if publish_result.is_new:
                     note('%s: Proposed fixes %r: %s', pkg, tags,
                          proposal.url)
                 elif tags:

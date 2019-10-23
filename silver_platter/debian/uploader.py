@@ -36,7 +36,7 @@ from breezy.plugins.debian.util import (
     find_changelog,
     debsign,
     )
-from breezy.trace import show_error
+from breezy.trace import note, show_error
 
 from . import (
     get_source_package,
@@ -142,11 +142,35 @@ def setup_parser(parser):
         help='Build command',
         default=(DEFAULT_BUILDER + ' --source --source-only-changes '
                  '--debbuildopt=-v${LAST_VERSION}'))
+    parser.add_argument(
+        '--maintainer',
+        type=str,
+        action='append',
+        help='Select all packages maintainer by specified maintainer.')
 
 
 def main(args):
     ret = 0
-    for package in args.packages:
+
+    packages = []
+    if args.maintainer:
+        import apt_pkg
+        from email.utils import parseaddr
+        apt_pkg.init()
+        sources = apt_pkg.SourceRecords()
+        while sources.step():
+            fullname, email = parseaddr(sources.maintainer)
+            if email in args.maintainer:
+                packages.append(sources.package)
+
+    packages.extend(args.packages)
+
+    # TODO(jelmer): Sort packages by last commit date; least recently changed
+    # commits are more likely to be successful.
+
+    note('Uploading packages: %s', ', '.join(packages))
+
+    for package in packages:
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)

@@ -132,7 +132,7 @@ def main(args):
         enable_tag_pushing(ws.local_tree.branch)
 
         try:
-            (proposal, is_new) = publish_changes(
+            publish_result = publish_changes(
                 ws, args.mode, name,
                 get_proposal_description=get_description,
                 dry_run=args.dry_run, hoster=hoster,
@@ -148,14 +148,15 @@ def main(args):
                 'Run \'svp login\'?', e.hoster.base_url)
             return 1
 
-        if proposal:
-            if is_new:
+        if publish_result.proposal:
+            if publish_result.is_new:
                 note('Merge proposal created.')
             else:
                 note('Merge proposal updated.')
-            if proposal.url:
-                note('URL: %s', proposal.url)
-            note('Description: %s', proposal.get_description())
+            if publish_result.proposal.url:
+                note('URL: %s', publish_result.proposal.url)
+            note('Description: %s',
+                 publish_result.proposal.get_description())
 
         if args.diff:
             ws.show_diff(sys.stdout.buffer)

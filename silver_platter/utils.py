@@ -21,8 +21,14 @@ import socket
 import subprocess
 
 from breezy import errors, osutils
+from breezy.branch import (
+    Branch,
+    BranchWriteLockResult,
+    )
 from breezy.controldir import ControlDir
-from breezy.transport import get_transport
+from breezy.lock import _RelockDebugMixin, LogicalLockResult
+from breezy.revision import NULL_REVISION
+import breezy.transport
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 
@@ -165,7 +171,7 @@ class BranchMissing(Exception):
 def open_branch(url, possible_transports=None, vcs_type=None):
     """Open a branch by URL."""
     try:
-        transport = get_transport(
+        transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
         if vcs_type is None:
             probers = None
@@ -178,7 +184,7 @@ def open_branch(url, possible_transports=None, vcs_type=None):
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
     except socket.error as e:
-        raise BranchUnavailable(url, 'ignoring, socket error: %s' % e)
+        raise BranchUnavailable(url, 'Socket error: %s' % e)
     except errors.NotBranchError as e:
         raise BranchMissing(url, 'Branch does not exist: %s' % e)
     except errors.UnsupportedProtocol as e:
@@ -191,3 +197,66 @@ def open_branch(url, possible_transports=None, vcs_type=None):
         raise BranchUnavailable(url, str(e))
     except errors.TransportError as e:
         raise BranchUnavailable(url, str(e))
+    except breezy.transport.UnusableRedirect as e:
+        raise BranchUnavailable(url, str(e))
+
+
+# TODO(jelmer): This should be in breezy
+class MinimalMemoryBranch(Branch, _RelockDebugMixin):
+
+    def __init__(self, repository, last_revision_info, tags):
+        from breezy.tag import DisabledTags, MemoryTags
+        self.repository = repository
+        self._last_revision_info = last_revision_info
+        self._revision_history_cache = None
+        if tags is not None:
+            self.tags = MemoryTags(tags)
+        else:
+            self.tags = DisabledTags(self)
+        self._partial_revision_history_cache = []
+        self._last_revision_info_cache = None
+        self._revision_id_to_revno_cache = None
+        self._partial_revision_id_to_revno_cache = {}
+        self._partial_revision_history_cache = []
+
+    def lock_read(self):
+        self.repository.lock_read()
+        return LogicalLockResult(self.unlock)
+
+    def lock_write(self, token=None):
+        self.repository.lock_write()
+        return BranchWriteLockResult(self.unlock, None)
+
+    def unlock(self):
+        self.repository.unlock()
+
+    def last_revision_info(self):
+        return self._last_revision_info
+
+    def _gen_revision_history(self):
+        """Generate the revision history from last revision
+        """
+        last_revno, last_revision = self.last_revision_info()
+        self._extend_partial_history()
+        return list(reversed(self._partial_revision_history_cache))
+
+    def get_rev_id(self, revno, history=None):
+        """Find the revision id of the specified revno."""
+        with self.lock_read():
+            if revno == 0:
+                return NULL_REVISION
+            last_revno, last_revid = self.last_revision_info()
+            if revno == last_revno:
+                return last_revid
+            if last_revno is None:
+                self._extend_partial_history()
+                return self._partial_revision_history_cache[
+                        len(self._partial_revision_history_cache) - revno]
+            else:
+                if revno <= 0 or revno > last_revno:
+                    raise errors.NoSuchRevision(self, revno)
+                distance_from_last = last_revno - revno
+                if len(self._partial_revision_history_cache) <= \
+                        distance_from_last:
+                    self._extend_partial_history(distance_from_last)
+                return self._partial_revision_history_cache[distance_from_last]
