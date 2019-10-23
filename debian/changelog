@@ -3,6 +3,8 @@ silver-platter (0.2.0+git20191022.7591492-1) UNRELEASED; urgency=medium
   * New upstream snapshot.
   * Update standards version to 4.4.1, no changes needed.
   * Re-export upstream signing key without extra signatures.
+  * Remove unnecessary build-dependency on python-distro-info. Closes:
+    #943211
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 23 Oct 2019 22:31:36 +0000
 
