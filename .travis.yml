@@ -15,7 +15,7 @@ python:
   - 3.7
 
 install:
-  - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt
+  - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt python3-debian
   - mkdir $HOME/.config/breezy/plugins -p
   - bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
   - python setup.py develop

@@ -17,11 +17,11 @@
 
 from __future__ import absolute_import
 
-import apt_pkg
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
 
+from breezy import version_info as breezy_version
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs_url,
@@ -88,6 +88,7 @@ def get_source_package(name):
     Returns:
       A `Deb822` object
     """
+    import apt_pkg
     apt_pkg.init()
 
     sources = apt_pkg.SourceRecords()
@@ -123,10 +124,18 @@ def _changelog_stats(branch, history):
                 dch_references += 1
             revs.append(rev)
         for delta in branch.repository.get_deltas_for_revisions(revs):
-            filenames = set([a[0] for a in delta.added] +
-                            [r[0] for r in delta.removed] +
-                            [r[1] for r in delta.renamed] +
-                            [m[0] for m in delta.modified])
+            if breezy_version >= (3, 1):
+                filenames = set(
+                    [a.path[1] for a in delta.added] +
+                    [r.path[0] for r in delta.removed] +
+                    [r.path[0] for r in delta.renamed] +
+                    [r.path[1] for r in delta.renamed] +
+                    [m.path[0] for m in delta.modified])
+            else:
+                filenames = set([a[0] for a in delta.added] +
+                                [r[0] for r in delta.removed] +
+                                [r[1] for r in delta.renamed] +
+                                [m[0] for m in delta.modified])
             if not set([f for f in filenames if f.startswith('debian/')]):
                 continue
             if 'debian/changelog' in filenames:

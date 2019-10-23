@@ -17,8 +17,6 @@
 
 import unittest
 
-from lintian_brush import Fixer
-
 from ..debian.lintian import (
     parse_mp_description,
     create_mp_description,
@@ -58,6 +56,7 @@ class GetFixersTests(unittest.TestCase):
 
     def setUp(self):
         super(GetFixersTests, self).setUp()
+        from lintian_brush import Fixer
         self.fixers = [Fixer('foo', ['atag'])]
 
     def test_get_all(self):

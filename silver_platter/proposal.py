@@ -40,6 +40,7 @@ from breezy.plugins.propose.propose import (
 from .utils import (
     create_temp_sprout,
     open_branch,
+    MinimalMemoryBranch,
     )
 
 
@@ -206,7 +207,7 @@ def find_existing_proposed(main_branch, hoster, name,
         merged_proposal = None
         for mp in hoster.iter_proposals(
                 existing_branch, main_branch, status='all'):
-            if not mp.is_merged():
+            if not mp.is_closed():
                 return (existing_branch, False, mp)
             else:
                 merged_proposal = mp
@@ -311,6 +312,15 @@ class Workspace(object):
             additional_colocated_branches=self.additional_colocated_branches)
 
     def push_derived(self, name, hoster=None, overwrite_existing=False):
+        """Push a derived branch.
+
+        Args:
+          name: Branch name
+          hoster: Optional hoster to use
+          overwrite_existing: Whether to overwrite an existing branch
+        Returns:
+          tuple with remote_branch and public_branch_url
+        """
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return push_derived_changes(
@@ -339,6 +349,19 @@ def enable_tag_pushing(branch):
     stack.set_user_option('branch.fetch_tags', True)
 
 
+class PublishResult(object):
+    """A object describing the result of a publish action."""
+
+    def __init__(self, mode, proposal=None, is_new=False):
+        self.mode = mode
+        self.proposal = proposal
+        self.is_new = is_new
+
+    def __tuple__(self):
+        # Backwards compatibility
+        return (self.proposal, self.is_new)
+
+
 def publish_changes(ws, mode, name, get_proposal_description,
                     get_proposal_commit_message=None, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
@@ -350,7 +373,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         if existing_proposal is not None:
             note('closing existing merge proposal - no new revisions')
             existing_proposal.close()
-        return (None, None)
+        return PublishResult(mode)
 
     if not ws.changes_since_resume():
         # No new revisions added on this iteration, but changes since main
@@ -362,8 +385,9 @@ def publish_changes(ws, mode, name, get_proposal_description,
         hoster = get_hoster(ws.main_branch)
 
     if mode == 'push-derived':
-        ws.push_derived(name=name, overwrite_existing=overwrite_existing)
-        return (None, False)
+        (remote_branch, public_url) = ws.push_derived(
+            name=name, overwrite_existing=overwrite_existing)
+        return PublishResult(mode)
 
     if mode in ('push', 'attempt-push'):
         try:
@@ -376,12 +400,12 @@ def publish_changes(ws, mode, name, get_proposal_description,
                 note('permission denied during push')
                 raise
         else:
-            return (None, False)
+            return PublishResult(mode=mode)
 
     assert mode == 'propose'
     if not ws.resume_branch and not allow_create_proposal:
         # TODO(jelmer): Raise an exception of some sort here?
-        return (None, False)
+        return PublishResult(mode)
 
     mp_description = get_proposal_description(
         existing_proposal if ws.resume_branch else None)
@@ -394,7 +418,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
         commit_message=commit_message)
 
-    return (proposal, is_new)
+    return PublishResult(mode, proposal, is_new)
 
 
 def push_changes(local_branch, main_branch, hoster, possible_transports=None,
@@ -408,12 +432,43 @@ def push_changes(local_branch, main_branch, hoster, possible_transports=None,
         push_result(local_branch, target_branch, additional_colocated_branches)
 
 
+class EmptyMergeProposal(Exception):
+    """Merge proposal does not have any changes."""
+
+    def __init__(self, local_branch, main_branch):
+        self.local_branch = local_branch
+        self.main_branch = main_branch
+
+
+def check_proposal_diff(other_branch, main_branch):
+    from breezy import merge as _mod_merge
+    main_revid = main_branch.last_revision()
+    other_branch.repository.fetch(main_branch.repository, main_revid)
+    with other_branch.lock_read():
+        main_tree = other_branch.repository.revision_tree(main_revid)
+        revision_graph = other_branch.repository.get_graph()
+        merger = _mod_merge.Merger.from_revision_ids(
+                main_tree, other_branch=other_branch,
+                other=other_branch.last_revision(),
+                tree_branch=MinimalMemoryBranch(
+                    other_branch.repository,
+                    (None, main_branch.last_revision()), None),
+                revision_graph=revision_graph)
+        merger.merge_type = _mod_merge.Merge3Merger
+        tree_merger = merger.make_merger()
+        with tree_merger.make_preview_transform() as tt:
+            changes = tt.iter_changes()
+            if not any(changes):
+                raise EmptyMergeProposal(other_branch, main_branch)
+
+
 def propose_changes(
         local_branch, main_branch, hoster, name,
         mp_description, resume_branch=None, resume_proposal=None,
         overwrite_existing=True,
         labels=None, dry_run=False, commit_message=None,
-        additional_colocated_branches=None):
+        additional_colocated_branches=None,
+        allow_empty=False):
     """Create or update a merge proposal.
 
     Args:
@@ -428,9 +483,12 @@ def propose_changes(
       dry_run: Whether to just dry-run the change
       commit_message: Optional commit message
       additional_colocated_branches: Additional colocated branches to propose
+      allow_empty: Whether to allow empty merge proposals
     Returns:
       Tuple with (proposal, is_new)
     """
+    if not allow_empty:
+        check_proposal_diff(local_branch, main_branch)
     # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:
@@ -534,7 +592,7 @@ def iter_conflicted(branch_name):
         try:
             if mp.can_be_merged():
                 continue
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             # TODO(jelmer): Check some other way that the branch is conflicted?
             continue
         main_branch = open_branch(
