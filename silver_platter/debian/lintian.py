@@ -56,6 +56,7 @@ __all__ = [
 
 DEFAULT_ADDON_FIXERS = [
     'file-contains-trailing-whitespace',
+    'out-of-date-standards-version',
     'package-uses-old-debhelper-compat-version',
     ]
 BRANCH_NAME = "lintian-fixes"
