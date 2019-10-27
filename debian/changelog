@@ -1,10 +1,14 @@
 silver-platter (0.2.0+git20191022.7591492-1) unstable; urgency=medium
 
+  [ Jelmer Vernooĳ ]
   * New upstream snapshot.
   * Update standards version to 4.4.1, no changes needed.
   * Re-export upstream signing key without extra signatures.
   * Remove unnecessary build-dependency on python-distro-info. Closes:
     #943211
+
+  [ Debian Janitor ]
+  * Update standards version to 4.4.1, no changes needed.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 23 Oct 2019 22:36:19 +0000
 
