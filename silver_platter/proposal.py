@@ -207,7 +207,7 @@ def find_existing_proposed(main_branch, hoster, name,
         merged_proposal = None
         for mp in hoster.iter_proposals(
                 existing_branch, main_branch, status='all'):
-            if not mp.is_closed():
+            if not mp.is_closed() and not mp.is_merged():
                 return (existing_branch, False, mp)
             else:
                 merged_proposal = mp
