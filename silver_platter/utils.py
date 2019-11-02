@@ -168,19 +168,23 @@ class BranchMissing(Exception):
         return self.description
 
 
+def select_probers(vcs_type=None):
+    if vcs_type is None:
+        return None
+    elif vcs_type.lower() == 'bzr':
+        return [RemoteBzrProber]
+    elif vcs_type.lower() == 'git':
+        return [RemoteGitProber]
+    else:
+        return None
+
+
 def open_branch(url, possible_transports=None, vcs_type=None):
     """Open a branch by URL."""
     try:
         transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
-        if vcs_type is None:
-            probers = None
-        elif vcs_type.lower() == 'bzr':
-            probers = [RemoteBzrProber]
-        elif vcs_type.lower() == 'git':
-            probers = [RemoteGitProber]
-        else:
-            probers = None
+        probers = select_probers(vcs_type)
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
     except socket.error as e:
