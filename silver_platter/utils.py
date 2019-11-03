@@ -176,7 +176,26 @@ def select_probers(vcs_type=None):
     elif vcs_type.lower() == 'git':
         return [RemoteGitProber]
     else:
-        return None
+        return []
+
+
+def _convert_exception(url, e):
+    if isinstance(e, socket.error):
+        return BranchUnavailable(url, 'Socket error: %s' % e)
+    if isinstance(e, errors.NotBranchError):
+        return BranchMissing(url, 'Branch does not exist: %s' % e)
+    if isinstance(e, errors.UnsupportedProtocol):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.ConnectionError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.PermissionDenied):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e,  errors.InvalidHttpResponse):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.TransportError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, breezy.transport.UnusableRedirect):
+        return BranchUnavailable(url, str(e))
 
 
 def open_branch(url, possible_transports=None, vcs_type=None):
@@ -187,22 +206,27 @@ def open_branch(url, possible_transports=None, vcs_type=None):
         probers = select_probers(vcs_type)
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
-    except socket.error as e:
-        raise BranchUnavailable(url, 'Socket error: %s' % e)
-    except errors.NotBranchError as e:
-        raise BranchMissing(url, 'Branch does not exist: %s' % e)
-    except errors.UnsupportedProtocol as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.ConnectionError as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.PermissionDenied as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.InvalidHttpResponse as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.TransportError as e:
-        raise BranchUnavailable(url, str(e))
-    except breezy.transport.UnusableRedirect as e:
-        raise BranchUnavailable(url, str(e))
+    except Exception as e:
+        converted = _convert_exception(url, e)
+        if converted is not None:
+            raise converted
+        raise e
+
+
+def open_branch_containing(url, possible_transports=None, vcs_type=None):
+    """Open a branch by URL."""
+    try:
+        transport = breezy.transport.get_transport(
+            url, possible_transports=possible_transports)
+        probers = select_probers(vcs_type)
+        dir, subpath = ControlDir.open_containing_from_transport(
+            transport, probers)
+        return dir.open_branch(), subpath
+    except Exception as e:
+        converted = _convert_exception(url, e)
+        if converted is not None:
+            raise converted
+        raise e
 
 
 # TODO(jelmer): This should be in breezy
