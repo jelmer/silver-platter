@@ -15,12 +15,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
-
 from breezy.tests import (
     TestCaseWithTransport,
-    TestCase,
     )
 
 from ..utils import (
@@ -29,7 +25,6 @@ from ..utils import (
     run_post_check,
     PreCheckFailed,
     PostCheckFailed,
-    select_probers,
     )
 
 
@@ -100,17 +95,3 @@ class RunPostCheckTests(TestCaseWithTransport):
         tree = self.make_branch_and_tree('tree')
         cid = tree.commit('a')
         self.assertIs(run_post_check(tree, "/bin/true", since_revid=cid), None)
-
-
-class SelectProbersTests(TestCase):
-
-    def test_none(self):
-        self.assertIs(None, select_probers())
-        self.assertIs(None, select_probers(None))
-        self.assertEqual([], select_probers('svn'))
-
-    def test_bzr(self):
-        self.assertEqual([RemoteBzrProber], select_probers('bzr'))
-
-    def test_git(self):
-        self.assertEqual([RemoteGitProber], select_probers('git'))

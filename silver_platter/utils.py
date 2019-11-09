@@ -29,9 +29,6 @@ from breezy.controldir import ControlDir
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
 import breezy.transport
-from breezy.controldir import Prober
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
 
 
 def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
@@ -167,39 +164,6 @@ class BranchMissing(Exception):
         return self.description
 
 
-class UnsupportedVCSProber(Prober):
-
-    def __init__(self, vcs_type):
-        self.vcs_type = vcs_type
-
-    def __call__(self):
-        # The prober expects to be registered as a class.
-        return self
-
-    def priority(self, transport):
-        return 200
-
-    def probe_transport(self, transport):
-        raise errors.UnsupportedFormatError(
-            'This VCS %s is not currently supported.' %
-            self.vcs_type)
-
-    @classmethod
-    def known_formats(klass):
-        return []
-
-
-def select_probers(vcs_type=None):
-    if vcs_type is None:
-        return None
-    elif vcs_type.lower() == 'bzr':
-        return [RemoteBzrProber]
-    elif vcs_type.lower() == 'git':
-        return [RemoteGitProber]
-    else:
-        return [UnsupportedVCSProber(vcs_type)]
-
-
 def _convert_exception(url, e):
     if isinstance(e, socket.error):
         return BranchUnavailable(url, 'Socket error: %s' % e)
@@ -219,12 +183,11 @@ def _convert_exception(url, e):
         return BranchUnavailable(url, str(e))
 
 
-def open_branch(url, possible_transports=None, vcs_type=None):
+def open_branch(url, possible_transports=None, probers=None):
     """Open a branch by URL."""
     try:
         transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
-        probers = select_probers(vcs_type)
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
     except Exception as e:
@@ -234,12 +197,11 @@ def open_branch(url, possible_transports=None, vcs_type=None):
         raise e
 
 
-def open_branch_containing(url, possible_transports=None, vcs_type=None):
+def open_branch_containing(url, possible_transports=None, probers=None):
     """Open a branch by URL."""
     try:
         transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
-        probers = select_probers(vcs_type)
         dir, subpath = ControlDir.open_containing_from_transport(
             transport, probers)
         return dir.open_branch(), subpath

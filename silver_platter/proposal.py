@@ -172,8 +172,7 @@ def push_result(local_branch, remote_branch,
         raise PermissionDenied(path=remote_branch.user_url, extra=e)
     for branch_name in additional_colocated_branches or []:
         try:
-            add_branch = local_branch.controldir.open_branch(
-                name=branch_name)
+            add_branch = local_branch.controldir.open_branch(name=branch_name)
         except errors.NotBranchError:
             pass
         else:

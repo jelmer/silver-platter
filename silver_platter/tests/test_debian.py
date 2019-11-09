@@ -15,10 +15,19 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.tests import TestCaseWithTransport
+from breezy.tests import (
+    TestCaseWithTransport,
+    TestCase,
+    )
+
+
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
 
 from ..debian import (
+    select_probers,
     should_update_changelog,
+    UnsupportedVCSProber,
     )
 
 
@@ -101,3 +110,19 @@ class ShouldUpdateChangelogTests(TestCaseWithTransport):
             message='Git-Dch: ignore\n')
         branch = builder.get_branch()
         self.assertFalse(should_update_changelog(branch))
+
+
+class SelectProbersTests(TestCase):
+
+    def test_none(self):
+        self.assertIs(None, select_probers())
+        self.assertIs(None, select_probers(None))
+
+    def test_bzr(self):
+        self.assertEqual([RemoteBzrProber], select_probers('bzr'))
+
+    def test_git(self):
+        self.assertEqual([RemoteGitProber], select_probers('git'))
+
+    def test_unsupported(self):
+        self.assertEqual([UnsupportedVCSProber('foo')], select_probers('foo'))

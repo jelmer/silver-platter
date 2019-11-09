@@ -43,6 +43,7 @@ from . import (
     source_package_vcs_url,
     Workspace,
     DEFAULT_BUILDER,
+    select_probers,
     )
 from ..utils import (
     open_branch,
@@ -175,8 +176,9 @@ def main(args):
         # later on.
         pkg_source = get_source_package(package)
         vcs_type, vcs_url = source_package_vcs_url(pkg_source)
+        probers = select_probers(vcs_type)
         try:
-            main_branch = open_branch(vcs_url, vcs_type=vcs_type)
+            main_branch = open_branch(vcs_url, probers=probers)
         except (BranchUnavailable, BranchMissing) as e:
             show_error('%s: %s', vcs_url, e)
             ret = 1
