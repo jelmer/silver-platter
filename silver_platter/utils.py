@@ -29,6 +29,7 @@ from breezy.controldir import ControlDir
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
 import breezy.transport
+from breezy.controldir import Prober
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 
@@ -59,16 +60,14 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
             source_branch=branch,
             stacked=use_stacking)
         # TODO(jelmer): Fetch these during the initial clone
-        for branch_name in additional_colocated_branches or []:
+        for branch_name in set(additional_colocated_branches or []):
             try:
-                add_branch = branch.controldir.open_branch(
-                    name=branch_name)
+                add_branch = branch.controldir.open_branch(name=branch_name)
             except (errors.NotBranchError,
                     errors.NoColocatedBranchSupport):
                 pass
             else:
-                local_add_branch = to_dir.create_branch(
-                        name=branch_name)
+                local_add_branch = to_dir.create_branch(name=branch_name)
                 add_branch.push(local_add_branch)
                 assert (add_branch.last_revision() ==
                         local_add_branch.last_revision())
@@ -168,6 +167,28 @@ class BranchMissing(Exception):
         return self.description
 
 
+class UnsupportedVCSProber(Prober):
+
+    def __init__(self, vcs_type):
+        self.vcs_type = vcs_type
+
+    def __call__(self):
+        # The prober expects to be registered as a class.
+        return self
+
+    def priority(self, transport):
+        return 200
+
+    def probe_transport(self, transport):
+        raise errors.UnsupportedFormatError(
+            'This VCS %s is not currently supported.' %
+            self.vcs_type)
+
+    @classmethod
+    def known_formats(klass):
+        return []
+
+
 def select_probers(vcs_type=None):
     if vcs_type is None:
         return None
@@ -176,7 +197,7 @@ def select_probers(vcs_type=None):
     elif vcs_type.lower() == 'git':
         return [RemoteGitProber]
     else:
-        return []
+        return [UnsupportedVCSProber(vcs_type)]
 
 
 def _convert_exception(url, e):
