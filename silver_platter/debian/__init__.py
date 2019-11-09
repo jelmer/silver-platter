@@ -23,7 +23,7 @@ import itertools
 
 from breezy import version_info as breezy_version
 from breezy.errors import UnsupportedFormatError
-from breezy.controldir import Prober
+from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 from breezy.plugins.debian.cmds import cmd_builddeb
@@ -281,3 +281,13 @@ def select_probers(vcs_type=None):
         return [prober_registry[vcs_type.lower()]]
     except KeyError:
         return [UnsupportedVCSProber(vcs_type)]
+
+
+def select_preferred_probers(vcs_type=None):
+    probers = list(ControlDirFormat.all_probers())
+    if vcs_type:
+        try:
+            probers.insert(0, prober_registry[vcs_type])
+        except KeyError:
+            pass
+    return probers
