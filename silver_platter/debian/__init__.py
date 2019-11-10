@@ -287,7 +287,7 @@ def select_preferred_probers(vcs_type=None):
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
         try:
-            probers.insert(0, prober_registry[vcs_type])
+            probers.insert(0, prober_registry[vcs_type.lower()])
         except KeyError:
             pass
     return probers
