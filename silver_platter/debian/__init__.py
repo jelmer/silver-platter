@@ -68,11 +68,12 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree, builder=None, result_dir=None):
+def build(tree, subpath='', builder=None, result_dir=None):
     """Build a debian package in a directory.
 
     Args:
       tree: Working tree
+      subpath: Subpath to build in
       builder: Builder command (e.g. 'sbuild', 'debuild')
       result_dir: Directory to copy results to
     """
@@ -81,7 +82,8 @@ def build(tree, builder=None, result_dir=None):
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([tree.basedir], builder=builder, result_dir=result_dir)
+    cmd_builddeb().run(
+        [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 def get_source_package(name):
@@ -209,8 +211,8 @@ class Workspace(_mod_proposal.Workspace):
                 ["pristine-tar", "upstream"])
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
-    def build(self, builder=None, result_dir=None):
-        return build(tree=self.local_tree, builder=builder,
+    def build(self, builder=None, result_dir=None, subpath=''):
+        return build(tree=self.local_tree, subpath=subpath, builder=builder,
                      result_dir=result_dir)
 
 
