@@ -41,6 +41,7 @@ from ..utils import (
     PostCheckFailed,
     BranchMissing,
     BranchUnavailable,
+    BranchUnsupported,
     )
 
 from lintian_brush import (
@@ -249,8 +250,8 @@ def iter_packages(packages, overwrite_unrelated=False, refresh=False):
         except NoSuchPackage:
             note('%s: no such package', pkg)
             continue
-        except (BranchMissing, BranchUnavailable):
-            note('%s: ignoring, socket error', pkg)
+        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+            note('%s: ignoring: %s', pkg, e)
             continue
 
         overwrite = False

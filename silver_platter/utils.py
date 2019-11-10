@@ -164,13 +164,24 @@ class BranchMissing(Exception):
         return self.description
 
 
+class BranchUnsupported(Exception):
+    """The branch uses a VCS or protocol that is unsupported."""
+
+    def __init__(self, url, description):
+        self.url = url
+        self.description = description
+
+    def __str__(self):
+        return self.description
+
+
 def _convert_exception(url, e):
     if isinstance(e, socket.error):
         return BranchUnavailable(url, 'Socket error: %s' % e)
     if isinstance(e, errors.NotBranchError):
         return BranchMissing(url, 'Branch does not exist: %s' % e)
     if isinstance(e, errors.UnsupportedProtocol):
-        return BranchUnavailable(url, str(e))
+        return BranchUnsupported(url, str(e))
     if isinstance(e, errors.ConnectionError):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.PermissionDenied):
@@ -181,6 +192,8 @@ def _convert_exception(url, e):
         return BranchUnavailable(url, str(e))
     if isinstance(e, breezy.transport.UnusableRedirect):
         return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.UnsupportedFormatError):
+        return BranchUnsupported(url, str(e))
 
 
 def open_branch(url, possible_transports=None, probers=None):

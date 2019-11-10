@@ -37,6 +37,7 @@ from ..utils import (
     run_pre_check,
     BranchMissing,
     BranchUnavailable,
+    BranchUnsupported,
     )
 
 from . import (
@@ -327,7 +328,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     if upstream_branch_location:
         try:
             upstream_branch = open_branch(upstream_branch_location)
-        except (BranchUnavailable, BranchMissing) as e:
+        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             if not snapshot and allow_ignore_upstream_branch:
                 warning('Upstream branch %s inaccessible; ignoring. %s',
                         upstream_branch_location, e)
@@ -349,7 +350,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 open_branch(location), config=config,
                 local_dir=tree.controldir)
-        except (BranchUnavailable, BranchMissing):
+        except (BranchUnavailable, BranchMissing, BranchUnsupported):
             primary_upstream_source = TarfileSource(
                 location, new_upstream_version)
     else:

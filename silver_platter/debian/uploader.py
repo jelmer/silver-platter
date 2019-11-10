@@ -49,6 +49,7 @@ from ..utils import (
     open_branch,
     BranchUnavailable,
     BranchMissing,
+    BranchUnsupported,
     )
 
 
@@ -179,7 +180,7 @@ def main(args):
         probers = select_probers(vcs_type)
         try:
             main_branch = open_branch(vcs_url, probers=probers)
-        except (BranchUnavailable, BranchMissing) as e:
+        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             show_error('%s: %s', vcs_url, e)
             ret = 1
             continue
