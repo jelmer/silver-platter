@@ -316,7 +316,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             guess_upstream_metadata,
             )
         guessed_upstream_metadata = guess_upstream_metadata(
-            tree.basedir, trust_package=trust_package, net_access=True)
+            tree.basedir, trust_package=trust_package,
+            net_access=True, consult_external_directory=False)
         upstream_branch_location = guessed_upstream_metadata.get(
             'Repository')
         upstream_branch_browse = guessed_upstream_metadata.get(
