@@ -202,13 +202,18 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         location, possible_transports=possible_transports, probers=probers)
 
 
+def pick_additional_colocated_branches(main_branch):
+    return [
+        "pristine-tar", "upstream", 'patch-queue/' + main_branch.name]
+
+
 class Workspace(_mod_proposal.Workspace):
 
     def __init__(self, main_branch, *args, **kwargs):
         if getattr(main_branch.repository, '_git', None):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
-                ["pristine-tar", "upstream"])
+                pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
     def build(self, builder=None, result_dir=None, subpath=''):
