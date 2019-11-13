@@ -108,6 +108,12 @@ from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
     )
 
+from lintian_brush import reset_tree
+from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
+from lintian_brush.upstream_metadata import (
+    guess_upstream_metadata,
+    )
+
 
 __all__ = [
     'PreviousVersionTagMissing',
@@ -200,7 +206,6 @@ DEFAULT_DISTRIBUTION = 'unstable'
 
 
 def check_quilt_patches_apply(local_tree):
-    from lintian_brush import reset_tree  # lintian-brush < 0.16.
     assert not local_tree.has_changes()
     if local_tree.has_filename('debian/patches/series'):
         patches = QuiltPatches(local_tree, 'debian/patches')
@@ -209,7 +214,8 @@ def check_quilt_patches_apply(local_tree):
         reset_tree(local_tree)
 
 
-def refresh_quilt_patches(local_tree, committer=None):
+def refresh_quilt_patches(local_tree, old_version, new_version,
+                          committer=None):
     patches = QuiltPatches(local_tree, 'debian/patches')
     patches.upgrade()
     for name in patches.unapplied():
@@ -304,7 +310,6 @@ def merge_upstream(tree, snapshot=False, location=None,
         raise PackageIsNative(changelog.package, changelog.version)
 
     if config.upstream_branch is not None:
-        from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
         # TODO(jelmer): Make brz-debian sanitize the URL?
@@ -312,9 +317,6 @@ def merge_upstream(tree, snapshot=False, location=None,
         upstream_branch_browse = getattr(
             config, 'upstream_branch_browse', None)
     else:
-        from lintian_brush.upstream_metadata import (
-            guess_upstream_metadata,
-            )
         guessed_upstream_metadata = guess_upstream_metadata(
             tree.basedir, trust_package=trust_package,
             net_access=True, consult_external_directory=False)
@@ -639,7 +641,10 @@ def main(args):
                     ws.local_tree.has_filename('debian/patches/series'):
                 note('Refresh quilt patches.')
                 try:
-                    refresh_quilt_patches(ws.local_tree)
+                    refresh_quilt_patches(
+                        ws.local_tree,
+                        old_version=merge_upstream_result.old_upstream_version,
+                        new_version=merge_upstream_result.new_upstream_version)
                 except QuiltError as e:
                     show_error('Quilt error while refreshing patches: %s', e)
                     ret = 1
