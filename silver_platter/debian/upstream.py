@@ -486,6 +486,33 @@ def merge_upstream(tree, snapshot=False, location=None,
         upstream_revisions=upstream_revisions)
 
 
+def override_dh_autoreconf_add_arguments(args):
+    from lintian_brush.rules import update_rules
+
+    def update_makefile(mf):
+        rule = mf.get_rule(b'override_dh_autoreconf')
+        if not rule:
+            rule = mf.add_rule(b'override_dh_autoreconf')
+            command = [b'dh_autoreconf'] + args
+        else:
+            command = rule.commands()[0].split(b' ')
+            if command[0] != b'dh_autoreconf':
+                return
+            rule.lines = [rule.lines[0]]
+            command += args
+        rule.append_command(b' '.join(command))
+
+    update_rules(make_cb=update_makefile)
+
+
+def update_packaging(tree, old_revision):
+    tree_delta = tree.changes_from(
+        tree.branch.repository.revision_tree(old_revision))
+    for delta in tree_delta:
+        if delta.name == (None, 'autogen.sh'):
+            override_dh_autoreconf_add_arguments([b'autogen.sh'])
+
+
 def setup_parser(parser):
     import argparse
     parser.add_argument("packages", nargs='+')
@@ -527,6 +554,10 @@ def setup_parser(parser):
         '--trust-package', action='store_true',
         default=False,
         help=argparse.SUPPRESS)
+    parser.add_argument(
+        '--update-packaging', action='store_true',
+        default=False,
+        help='Attempt to update packaging to upstream changes.')
 
 
 def main(args):
@@ -647,6 +678,10 @@ def main(args):
                      merge_upstream_result.old_upstream_version)
                 build_verify = args.build_verify
                 refresh_patches = args.refresh_patches
+
+            if args.update_packaging:
+                update_packaging(
+                    ws.local_tree, merge_upstream_result.old_revision)
 
             if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
