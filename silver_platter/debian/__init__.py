@@ -20,6 +20,7 @@ from __future__ import absolute_import
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
+import subprocess
 
 from breezy import version_info as breezy_version
 from breezy.errors import UnsupportedFormatError
@@ -51,6 +52,7 @@ from ..utils import (
 
 
 __all__ = [
+    'changelog_add_line',
     'get_source_package',
     'should_update_changelog',
     'source_package_vcs_url',
@@ -298,3 +300,7 @@ def select_preferred_probers(vcs_type=None):
         except KeyError:
             pass
     return probers
+
+
+def changelog_add_line(tree, line):
+    subprocess.check_call(['dch', '--', line], cwd=tree.basedir)

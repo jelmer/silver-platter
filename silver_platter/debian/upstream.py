@@ -21,7 +21,6 @@ import silver_platter  # noqa: F401
 
 from debian.changelog import Version
 import re
-import subprocess
 import sys
 import tempfile
 
@@ -45,6 +44,7 @@ from . import (
     NoSuchPackage,
     Workspace,
     DEFAULT_BUILDER,
+    changelog_add_line,
     debcommit,
     )
 from breezy.commit import (
@@ -228,9 +228,8 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
             if m and getattr(patches, 'delete', None):
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
-                subprocess.check_call(
-                    ['dch', 'Drop patch %s, present upstream.' % name],
-                    cwd=local_tree.basedir)
+                changelog_add_line(
+                    local_tree, 'Drop patch %s, present upstream.' % name)
                 debcommit(local_tree, committer=committer, paths=[
                     'debian/patches/series', 'debian/patches/' + name,
                     'debian/changelog'])
@@ -511,10 +510,10 @@ def update_packaging(tree, old_revision, committer=None):
     for delta in tree_delta.added:
         if delta.path == (None, 'autogen.sh'):
             override_dh_autoreconf_add_arguments([b'autogen.sh'])
-            subprocess.check_call(
-                ['dch', 'Invoke autogen.sh from dh_autoreconf.'],
-                cwd=tree.basedir)
-            debcommit(tree, committer=committer)
+            changelog_add_line(tree, 'Invoke autogen.sh from dh_autoreconf.')
+            debcommit(
+                tree, committer=committer,
+                paths=['debian/changelog', 'debian/rules'])
 
 
 def setup_parser(parser):
