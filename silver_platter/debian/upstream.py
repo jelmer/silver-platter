@@ -505,12 +505,16 @@ def override_dh_autoreconf_add_arguments(args):
     update_rules(make_cb=update_makefile)
 
 
-def update_packaging(tree, old_revision):
+def update_packaging(tree, old_revision, committer=None):
     tree_delta = tree.changes_from(
         tree.branch.repository.revision_tree(old_revision))
-    for delta in tree_delta:
-        if delta.name == (None, 'autogen.sh'):
+    for delta in tree_delta.added:
+        if delta.path == (None, 'autogen.sh'):
             override_dh_autoreconf_add_arguments([b'autogen.sh'])
+            subprocess.check_call(
+                ['dch', 'Invoke autogen.sh from dh_autoreconf.'],
+                cwd=tree.basedir)
+            debcommit(tree, committer=committer)
 
 
 def setup_parser(parser):
