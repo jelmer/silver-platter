@@ -507,12 +507,22 @@ def override_dh_autoreconf_add_arguments(args):
     return update_rules(makefile_cb=update_makefile)
 
 
-def update_packaging(tree, old_revision, committer=None):
-    tree_delta = tree.changes_from(
-        tree.branch.repository.revision_tree(old_revision))
+def update_packaging(tree, old_tree, committer=None):
+    """Update packaging to take in changes between upstream trees.
+
+    Args:
+      tree: Current tree
+      old_tree: Old tree
+      committer: Optional committer to use for changes
+    """
+    tree_delta = tree.changes_from(old_tree)
     for delta in tree_delta.added:
-        if delta.path == (None, 'autogen.sh'):
-            if override_dh_autoreconf_add_arguments([b'autogen.sh']):
+        if getattr(delta, 'path', None):
+            path = delta.path[1]
+        else:  # Breezy < 3.1
+            path = delta[0]
+        if path == 'autogen.sh':
+            if override_dh_autoreconf_add_arguments([b'./autogen.sh']):
                 note('Modifying debian/rules: '
                      'Invoke autogen.sh from dh_autoreconf.')
                 changelog_add_line(
@@ -689,8 +699,9 @@ def main(args):
                 refresh_patches = args.refresh_patches
 
             if args.update_packaging:
-                update_packaging(
-                    ws.local_tree, merge_upstream_result.old_revision)
+                old_tree = ws.local_tree.branch.repository.revision_tree(
+                    merge_upstream_result.old_revision)
+                update_packaging(ws.local_tree, old_tree)
 
             if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
