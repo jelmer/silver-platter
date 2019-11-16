@@ -252,16 +252,22 @@ class MergeUpstreamResult(object):
             'new_upstream_version',
             'upstream_branch',
             'upstream_branch_browse',
-            'upstream_revisions']
+            'upstream_revisions',
+            'old_revision',
+            'new_revision',
+            ]
 
     def __init__(self, old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
-                 upstream_revisions):
+                 upstream_revisions, old_revision,
+                 new_revision):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
         self.upstream_branch_browse = upstream_branch_browse
         self.upstream_revisions = upstream_revisions
+        self.old_revision = old_revision
+        self.new_revision = new_revision
 
     def __tuple__(self):
         # Backwards compatibility
@@ -400,6 +406,9 @@ def merge_upstream(tree, snapshot=False, location=None,
                 upstream_branch_source = None
     else:
         upstream_revisions = None
+
+    old_revision = tree.last_revision()
+
     if need_upstream_tarball:
         with tempfile.TemporaryDirectory() as target_dir:
             try:
@@ -470,6 +479,8 @@ def merge_upstream(tree, snapshot=False, location=None,
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version,
+        old_revision=old_revision,
+        new_revision=tree.last_revision(),
         upstream_branch=upstream_branch,
         upstream_branch_browse=upstream_branch_browse,
         upstream_revisions=upstream_revisions)
