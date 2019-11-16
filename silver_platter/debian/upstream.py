@@ -501,7 +501,7 @@ def override_dh_autoreconf_add_arguments(args):
             command += args
         rule.append_command(b' '.join(command))
 
-    update_rules(makefile_cb=update_makefile)
+    return update_rules(makefile_cb=update_makefile)
 
 
 def update_packaging(tree, old_revision, committer=None):
@@ -509,11 +509,14 @@ def update_packaging(tree, old_revision, committer=None):
         tree.branch.repository.revision_tree(old_revision))
     for delta in tree_delta.added:
         if delta.path == (None, 'autogen.sh'):
-            override_dh_autoreconf_add_arguments([b'autogen.sh'])
-            changelog_add_line(tree, 'Invoke autogen.sh from dh_autoreconf.')
-            debcommit(
-                tree, committer=committer,
-                paths=['debian/changelog', 'debian/rules'])
+            if override_dh_autoreconf_add_arguments([b'autogen.sh']):
+                note('Modifying debian/rules: '
+                     'Invoke autogen.sh from dh_autoreconf.')
+                changelog_add_line(
+                    tree, 'Invoke autogen.sh from dh_autoreconf.')
+                debcommit(
+                    tree, committer=committer,
+                    paths=['debian/changelog', 'debian/rules'])
 
 
 def setup_parser(parser):
