@@ -20,6 +20,7 @@
 import silver_platter  # noqa: F401
 
 from debian.changelog import Version
+import os
 import re
 import sys
 import tempfile
@@ -485,7 +486,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         upstream_revisions=upstream_revisions)
 
 
-def override_dh_autoreconf_add_arguments(args):
+def override_dh_autoreconf_add_arguments(basedir, args):
     from lintian_brush.rules import update_rules
 
     # TODO(jelmer): Make sure dh-autoreconf is installed,
@@ -504,7 +505,9 @@ def override_dh_autoreconf_add_arguments(args):
             command += args
         rule.append_command(b' '.join(command))
 
-    return update_rules(makefile_cb=update_makefile)
+    return update_rules(
+        makefile_cb=update_makefile,
+        path=os.path.join(basedir, 'debian', 'rules'))
 
 
 def update_packaging(tree, old_tree, committer=None):
@@ -522,7 +525,8 @@ def update_packaging(tree, old_tree, committer=None):
         else:  # Breezy < 3.1
             path = delta[0]
         if path == 'autogen.sh':
-            if override_dh_autoreconf_add_arguments([b'./autogen.sh']):
+            if override_dh_autoreconf_add_arguments(
+                    tree.basedir, [b'./autogen.sh']):
                 note('Modifying debian/rules: '
                      'Invoke autogen.sh from dh_autoreconf.')
                 changelog_add_line(

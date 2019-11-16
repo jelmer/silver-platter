@@ -65,5 +65,4 @@ lintian-brush (0.37) UNRELEASED; urgency=medium
 
 override_dh_autoreconf:
 \tdh_autoreconf ./autogen.sh
-
 """, 'debian/rules')
