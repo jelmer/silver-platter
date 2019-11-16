@@ -488,6 +488,9 @@ def merge_upstream(tree, snapshot=False, location=None,
 def override_dh_autoreconf_add_arguments(args):
     from lintian_brush.rules import update_rules
 
+    # TODO(jelmer): Make sure dh-autoreconf is installed,
+    # or debhelper version is >= 10
+
     def update_makefile(mf):
         rule = mf.get_rule(b'override_dh_autoreconf')
         if not rule:
