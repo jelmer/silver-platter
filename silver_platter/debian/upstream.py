@@ -502,7 +502,7 @@ def override_dh_autoreconf_add_arguments(args):
             command += args
         rule.append_command(b' '.join(command))
 
-    update_rules(make_cb=update_makefile)
+    update_rules(makefile_cb=update_makefile)
 
 
 def update_packaging(tree, old_revision, committer=None):
