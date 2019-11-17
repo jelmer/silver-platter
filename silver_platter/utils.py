@@ -20,7 +20,11 @@ import shutil
 import socket
 import subprocess
 
-from breezy import errors, osutils
+from breezy import (
+    config as _mod_config,
+    errors,
+    osutils,
+    )
 from breezy.branch import (
     Branch,
     BranchWriteLockResult,
@@ -242,6 +246,10 @@ class MinimalMemoryBranch(Branch, _RelockDebugMixin):
         self._revision_id_to_revno_cache = None
         self._partial_revision_id_to_revno_cache = {}
         self._partial_revision_history_cache = []
+        self.base = 'memory://' + osutils.rand_chars(10)
+
+    def get_config(self):
+        return _mod_config.Config()
 
     def lock_read(self):
         self.repository.lock_read()
