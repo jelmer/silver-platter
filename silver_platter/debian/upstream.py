@@ -278,7 +278,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                    new_upstream_version=None, force=False,
                    distribution_name=DEFAULT_DISTRIBUTION,
                    allow_ignore_upstream_branch=True,
-                   trust_package=False, committer=None):
+                   trust_package=False, committer=None,
+                   subpath=''):
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -302,15 +303,17 @@ def merge_upstream(tree, snapshot=False, location=None,
     Returns:
       MergeUpstreamResult object
     """
-    config = debuild_config(tree)
-    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    config = debuild_config(tree, subpath)
+    (changelog, top_level) = find_changelog(
+        tree, subpath, merge=False, max_blocks=2)
     old_upstream_version = changelog.version.upstream_version
     package = changelog.package
-    contains_upstream_source = tree_contains_upstream_source(tree)
+    contains_upstream_source = tree_contains_upstream_source(tree, subpath)
     build_type = config.build_type
     if build_type is None:
         build_type = guess_build_type(
-            tree, changelog.version, contains_upstream_source)
+            tree, changelog.version, subpath,
+            contains_upstream_source=contains_upstream_source)
     need_upstream_tarball = (build_type != BUILD_TYPE_MERGE)
     if build_type == BUILD_TYPE_NATIVE:
         raise PackageIsNative(changelog.package, changelog.version)
@@ -324,7 +327,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             config, 'upstream_branch_browse', None)
     else:
         guessed_upstream_metadata = guess_upstream_metadata(
-            tree.basedir, trust_package=trust_package,
+            tree.abspath(subpath), trust_package=trust_package,
             net_access=True, consult_external_directory=False)
         upstream_branch_location = guessed_upstream_metadata.get(
             'Repository')
@@ -435,7 +438,7 @@ def merge_upstream(tree, snapshot=False, location=None,
                     % e.path)
             try:
                 conflicts = do_merge(
-                    tree, tarball_filenames, package,
+                    tree, subpath, tarball_filenames, package,
                     new_upstream_version, old_upstream_version,
                     upstream_branch, upstream_revisions, merge_type=None,
                     force=force, committer=committer)
