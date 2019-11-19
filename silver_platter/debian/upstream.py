@@ -206,18 +206,9 @@ ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
 
 
-def check_quilt_patches_apply(local_tree):
-    assert not local_tree.has_changes()
-    if local_tree.has_filename('debian/patches/series'):
-        patches = QuiltPatches(local_tree, 'debian/patches')
-        patches.push_all()
-        patches.pop_all()
-        reset_tree(local_tree)
-
-
 def refresh_quilt_patches(local_tree, old_version, new_version,
-                          committer=None):
-    patches = QuiltPatches(local_tree, 'debian/patches')
+                          committer=None, subpath=''):
+    patches = QuiltPatches(local_tree, os.path.join(subpath, 'debian/patches'))
     patches.upgrade()
     for name in patches.unapplied():
         try:
@@ -232,8 +223,9 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
                 changelog_add_line(
                     local_tree, 'Drop patch %s, present upstream.' % name)
                 debcommit(local_tree, committer=committer, paths=[
-                    'debian/patches/series', 'debian/patches/' + name,
-                    'debian/changelog'])
+                    os.path.join(subpath, p) for p in [
+                     'debian/patches/series', 'debian/patches/' + name,
+                     'debian/changelog']])
             else:
                 raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
@@ -460,7 +452,7 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
-    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
     old_upstream_version = changelog.version.upstream_version
     package = changelog.package
 
@@ -469,7 +461,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
-        tree, new_upstream_version, distribution_name, changelog, package)
+        tree, subpath, new_upstream_version, distribution_name, changelog,
+        package)
     if not need_upstream_tarball:
         note("An entry for the new upstream version has been "
              "added to the changelog.")
