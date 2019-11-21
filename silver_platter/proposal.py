@@ -488,7 +488,6 @@ def propose_changes(
     """
     if not allow_empty:
         check_proposal_diff(local_branch, main_branch)
-    # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:
             local_branch.push(resume_branch, overwrite=overwrite_existing)
@@ -497,6 +496,15 @@ def propose_changes(
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing)
+        for colocated_branch_name in (additional_colocated_branches or []):
+            try:
+                local_colo_branch = local_branch.controldir.open_branch(
+                    name=colocated_branch_name)
+            except errors.NotBranchError:
+                pass
+            else:
+                remote_branch.controldir.push_branch(
+                    source=local_colo_branch, overwrite=overwrite_existing)
     if resume_proposal is not None and dry_run:
         resume_proposal = DryRunProposal.from_existing(
             resume_proposal, source_branch=local_branch)
