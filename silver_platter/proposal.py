@@ -265,6 +265,16 @@ class Workspace(object):
                     self.local_tree.pull(self.main_branch, overwrite=False)
                 except DivergedBranches:
                     pass
+                for branch_name in self.additional_colocated_branches:
+                    try:
+                        remote_colo_branch = (
+                            self.main_branch.controldir.open_branch(
+                                name=branch_name))
+                    except errors.NotBranchError:
+                        continue
+                    self.local_tree.branch.controldir.push_branch(
+                        name=branch_name, source=remote_colo_branch,
+                        overwrite=True)
                 if merge_conflicts(
                         self.main_branch, self.local_tree.branch):
                     note('restarting branch')
@@ -504,7 +514,8 @@ def propose_changes(
                 pass
             else:
                 remote_branch.controldir.push_branch(
-                    source=local_colo_branch, overwrite=overwrite_existing)
+                    source=local_colo_branch, overwrite=overwrite_existing,
+                    name=colocated_branch_name)
     if resume_proposal is not None and dry_run:
         resume_proposal = DryRunProposal.from_existing(
             resume_proposal, source_branch=local_branch)
