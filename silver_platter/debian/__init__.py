@@ -205,8 +205,13 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
 
 def pick_additional_colocated_branches(main_branch):
-    return [
-        "pristine-tar", "upstream", 'patch-queue/' + main_branch.name]
+    ret = ["pristine-tar", "upstream"]
+    ret.append('patch-queue/' + main_branch.name)
+    if main_branch.name.startswith('debian/'):
+        parts = main_branch.name.split('/')
+        parts[0] = 'upstream'
+        ret.append('/'.join(parts))
+    return ret
 
 
 class Workspace(_mod_proposal.Workspace):
