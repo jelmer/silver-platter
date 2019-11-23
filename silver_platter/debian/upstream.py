@@ -53,6 +53,7 @@ from breezy.commit import (
     )
 from breezy.errors import (
     FileExists,
+    NoSuchFile,
     PointlessMerge,
     )
 from breezy.plugins.debian.config import (
@@ -93,6 +94,7 @@ except ImportError:
 from breezy.plugins.debian.util import (
     debuild_config,
     guess_build_type,
+    get_files_excluded,
     tree_contains_upstream_source,
     BUILD_TYPE_MERGE,
     BUILD_TYPE_NATIVE,
@@ -405,6 +407,10 @@ def merge_upstream(tree, snapshot=False, location=None,
     old_revision = tree.last_revision()
 
     if need_upstream_tarball:
+        try:
+            files_excluded = get_files_excluded(tree, subpath, top_level)
+        except NoSuchFile:
+            files_excluded = None
         with tempfile.TemporaryDirectory() as target_dir:
             try:
                 locations = primary_upstream_source.fetch_tarballs(
@@ -433,7 +439,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                     tree, subpath, tarball_filenames, package,
                     new_upstream_version, old_upstream_version,
                     upstream_branch, upstream_revisions, merge_type=None,
-                    force=force, committer=committer)
+                    force=force, committer=committer,
+                    files_excluded=files_excluded)
             except UpstreamBranchAlreadyMerged:
                 # TODO(jelmer): Perhaps reconcile these two exceptions?
                 raise UpstreamAlreadyMerged(new_upstream_version)
