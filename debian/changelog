@@ -1,6 +1,7 @@
 silver-platter (0.2.0+git20191123.09fd426-1) UNRELEASED; urgency=medium
 
   * New upstream snapshot.
+  * Set Rules-Requires-Root.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 24 Nov 2019 03:09:08 +0000
 
