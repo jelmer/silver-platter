@@ -20,8 +20,8 @@
 import silver_platter  # noqa: F401
 
 from debian.changelog import Version
+import os
 import re
-import subprocess
 import sys
 import tempfile
 
@@ -37,6 +37,7 @@ from ..utils import (
     run_pre_check,
     BranchMissing,
     BranchUnavailable,
+    BranchUnsupported,
     )
 
 from . import (
@@ -44,6 +45,7 @@ from . import (
     NoSuchPackage,
     Workspace,
     DEFAULT_BUILDER,
+    changelog_add_line,
     debcommit,
     )
 from breezy.commit import (
@@ -51,6 +53,7 @@ from breezy.commit import (
     )
 from breezy.errors import (
     FileExists,
+    NoSuchFile,
     PointlessMerge,
     )
 from breezy.plugins.debian.config import (
@@ -91,6 +94,7 @@ except ImportError:
 from breezy.plugins.debian.util import (
     debuild_config,
     guess_build_type,
+    get_files_excluded,
     tree_contains_upstream_source,
     BUILD_TYPE_MERGE,
     BUILD_TYPE_NATIVE,
@@ -105,6 +109,12 @@ from breezy.plugins.debian.upstream import (
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
+    )
+
+from lintian_brush import reset_tree
+from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
+from lintian_brush.upstream_metadata import (
+    guess_upstream_metadata,
     )
 
 
@@ -198,18 +208,9 @@ ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
 
 
-def check_quilt_patches_apply(local_tree):
-    from lintian_brush import reset_tree  # lintian-brush < 0.16.
-    assert not local_tree.has_changes()
-    if local_tree.has_filename('debian/patches/series'):
-        patches = QuiltPatches(local_tree, 'debian/patches')
-        patches.push_all()
-        patches.pop_all()
-        reset_tree(local_tree)
-
-
-def refresh_quilt_patches(local_tree, committer=None):
-    patches = QuiltPatches(local_tree, 'debian/patches')
+def refresh_quilt_patches(local_tree, old_version, new_version,
+                          committer=None, subpath=''):
+    patches = QuiltPatches(local_tree, os.path.join(subpath, 'debian/patches'))
     patches.upgrade()
     for name in patches.unapplied():
         try:
@@ -221,12 +222,12 @@ def refresh_quilt_patches(local_tree, committer=None):
             if m and getattr(patches, 'delete', None):
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
-                subprocess.check_call(
-                    ['dch', 'Drop patch %s, present upstream.' % name],
-                    cwd=local_tree.basedir)
+                changelog_add_line(
+                    local_tree, 'Drop patch %s, present upstream.' % name)
                 debcommit(local_tree, committer=committer, paths=[
-                    'debian/patches/series', 'debian/patches/' + name,
-                    'debian/changelog'])
+                    os.path.join(subpath, p) for p in [
+                     'debian/patches/series', 'debian/patches/' + name,
+                     'debian/changelog']])
             else:
                 raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
@@ -245,16 +246,22 @@ class MergeUpstreamResult(object):
             'new_upstream_version',
             'upstream_branch',
             'upstream_branch_browse',
-            'upstream_revisions']
+            'upstream_revisions',
+            'old_revision',
+            'new_revision',
+            ]
 
     def __init__(self, old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
-                 upstream_revisions):
+                 upstream_revisions, old_revision,
+                 new_revision):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
         self.upstream_branch_browse = upstream_branch_browse
         self.upstream_revisions = upstream_revisions
+        self.old_revision = old_revision
+        self.new_revision = new_revision
 
     def __tuple__(self):
         # Backwards compatibility
@@ -265,7 +272,8 @@ def merge_upstream(tree, snapshot=False, location=None,
                    new_upstream_version=None, force=False,
                    distribution_name=DEFAULT_DISTRIBUTION,
                    allow_ignore_upstream_branch=True,
-                   trust_package=False, committer=None):
+                   trust_package=False, committer=None,
+                   subpath=''):
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -289,21 +297,22 @@ def merge_upstream(tree, snapshot=False, location=None,
     Returns:
       MergeUpstreamResult object
     """
-    config = debuild_config(tree)
-    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    config = debuild_config(tree, subpath)
+    (changelog, top_level) = find_changelog(
+        tree, subpath, merge=False, max_blocks=2)
     old_upstream_version = changelog.version.upstream_version
     package = changelog.package
-    contains_upstream_source = tree_contains_upstream_source(tree)
+    contains_upstream_source = tree_contains_upstream_source(tree, subpath)
     build_type = config.build_type
     if build_type is None:
         build_type = guess_build_type(
-            tree, changelog.version, contains_upstream_source)
+            tree, changelog.version, subpath,
+            contains_upstream_source=contains_upstream_source)
     need_upstream_tarball = (build_type != BUILD_TYPE_MERGE)
     if build_type == BUILD_TYPE_NATIVE:
         raise PackageIsNative(changelog.package, changelog.version)
 
     if config.upstream_branch is not None:
-        from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
         note("Using upstream branch %s (from configuration)",
              config.upstream_branch)
         # TODO(jelmer): Make brz-debian sanitize the URL?
@@ -311,11 +320,9 @@ def merge_upstream(tree, snapshot=False, location=None,
         upstream_branch_browse = getattr(
             config, 'upstream_branch_browse', None)
     else:
-        from lintian_brush.upstream_metadata import (
-            guess_upstream_metadata,
-            )
         guessed_upstream_metadata = guess_upstream_metadata(
-            tree.basedir, trust_package=trust_package)
+            tree.abspath(subpath), trust_package=trust_package,
+            net_access=True, consult_external_directory=False)
         upstream_branch_location = guessed_upstream_metadata.get(
             'Repository')
         upstream_branch_browse = guessed_upstream_metadata.get(
@@ -327,7 +334,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     if upstream_branch_location:
         try:
             upstream_branch = open_branch(upstream_branch_location)
-        except (BranchUnavailable, BranchMissing) as e:
+        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             if not snapshot and allow_ignore_upstream_branch:
                 warning('Upstream branch %s inaccessible; ignoring. %s',
                         upstream_branch_location, e)
@@ -349,7 +356,7 @@ def merge_upstream(tree, snapshot=False, location=None,
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 open_branch(location), config=config,
                 local_dir=tree.controldir)
-        except (BranchUnavailable, BranchMissing):
+        except (BranchUnavailable, BranchMissing, BranchUnsupported):
             primary_upstream_source = TarfileSource(
                 location, new_upstream_version)
     else:
@@ -396,7 +403,14 @@ def merge_upstream(tree, snapshot=False, location=None,
                 upstream_branch_source = None
     else:
         upstream_revisions = None
+
+    old_revision = tree.last_revision()
+
     if need_upstream_tarball:
+        try:
+            files_excluded = get_files_excluded(tree, subpath, top_level)
+        except NoSuchFile:
+            files_excluded = None
         with tempfile.TemporaryDirectory() as target_dir:
             try:
                 locations = primary_upstream_source.fetch_tarballs(
@@ -422,10 +436,11 @@ def merge_upstream(tree, snapshot=False, location=None,
                     % e.path)
             try:
                 conflicts = do_merge(
-                    tree, tarball_filenames, package,
+                    tree, subpath, tarball_filenames, package,
                     new_upstream_version, old_upstream_version,
                     upstream_branch, upstream_revisions, merge_type=None,
-                    force=force, committer=committer)
+                    force=force, committer=committer,
+                    files_excluded=files_excluded)
             except UpstreamBranchAlreadyMerged:
                 # TODO(jelmer): Perhaps reconcile these two exceptions?
                 raise UpstreamAlreadyMerged(new_upstream_version)
@@ -444,7 +459,7 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
-    (changelog, top_level) = find_changelog(tree, False, max_blocks=2)
+    (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
     old_upstream_version = changelog.version.upstream_version
     package = changelog.package
 
@@ -453,7 +468,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
     changelog_add_new_version(
-        tree, new_upstream_version, distribution_name, changelog, package)
+        tree, subpath, new_upstream_version, distribution_name, changelog,
+        package)
     if not need_upstream_tarball:
         note("An entry for the new upstream version has been "
              "added to the changelog.")
@@ -466,9 +482,61 @@ def merge_upstream(tree, snapshot=False, location=None,
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version,
+        old_revision=old_revision,
+        new_revision=tree.last_revision(),
         upstream_branch=upstream_branch,
         upstream_branch_browse=upstream_branch_browse,
         upstream_revisions=upstream_revisions)
+
+
+def override_dh_autoreconf_add_arguments(basedir, args):
+    from lintian_brush.rules import update_rules
+
+    # TODO(jelmer): Make sure dh-autoreconf is installed,
+    # or debhelper version is >= 10
+
+    def update_makefile(mf):
+        rule = mf.get_rule(b'override_dh_autoreconf')
+        if not rule:
+            rule = mf.add_rule(b'override_dh_autoreconf')
+            command = [b'dh_autoreconf'] + args
+        else:
+            command = rule.commands()[0].split(b' ')
+            if command[0] != b'dh_autoreconf':
+                return
+            rule.lines = [rule.lines[0]]
+            command += args
+        rule.append_command(b' '.join(command))
+
+    return update_rules(
+        makefile_cb=update_makefile,
+        path=os.path.join(basedir, 'debian', 'rules'))
+
+
+def update_packaging(tree, old_tree, committer=None):
+    """Update packaging to take in changes between upstream trees.
+
+    Args:
+      tree: Current tree
+      old_tree: Old tree
+      committer: Optional committer to use for changes
+    """
+    tree_delta = tree.changes_from(old_tree)
+    for delta in tree_delta.added:
+        if getattr(delta, 'path', None):
+            path = delta.path[1]
+        else:  # Breezy < 3.1
+            path = delta[0]
+        if path == 'autogen.sh':
+            if override_dh_autoreconf_add_arguments(
+                    tree.basedir, [b'./autogen.sh']):
+                note('Modifying debian/rules: '
+                     'Invoke autogen.sh from dh_autoreconf.')
+                changelog_add_line(
+                    tree, 'Invoke autogen.sh from dh_autoreconf.')
+                debcommit(
+                    tree, committer=committer,
+                    paths=['debian/changelog', 'debian/rules'])
 
 
 def setup_parser(parser):
@@ -512,6 +580,10 @@ def setup_parser(parser):
         '--trust-package', action='store_true',
         default=False,
         help=argparse.SUPPRESS)
+    parser.add_argument(
+        '--update-packaging', action='store_true',
+        default=False,
+        help='Attempt to update packaging to upstream changes.')
 
 
 def main(args):
@@ -633,11 +705,19 @@ def main(args):
                 build_verify = args.build_verify
                 refresh_patches = args.refresh_patches
 
+            if args.update_packaging:
+                old_tree = ws.local_tree.branch.repository.revision_tree(
+                    merge_upstream_result.old_revision)
+                update_packaging(ws.local_tree, old_tree)
+
             if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
                 note('Refresh quilt patches.')
                 try:
-                    refresh_quilt_patches(ws.local_tree)
+                    refresh_quilt_patches(
+                        ws.local_tree,
+                        old_version=merge_upstream_result.old_upstream_version,
+                        new_version=merge_upstream_result.new_upstream_version)
                 except QuiltError as e:
                     show_error('Quilt error while refreshing patches: %s', e)
                     ret = 1

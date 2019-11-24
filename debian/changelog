@@ -1,3 +1,9 @@
+silver-platter (0.2.0+git20191123.09fd426-1) UNRELEASED; urgency=medium
+
+  * New upstream snapshot.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 24 Nov 2019 03:09:08 +0000
+
 silver-platter (0.2.0+git20191022.7591492-1) unstable; urgency=medium
 
   [ Jelmer Vernooĳ ]

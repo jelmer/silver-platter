@@ -20,8 +20,13 @@ from __future__ import absolute_import
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
+import subprocess
 
 from breezy import version_info as breezy_version
+from breezy.errors import UnsupportedFormatError
+from breezy.controldir import Prober, ControlDirFormat
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs_url,
@@ -47,6 +52,7 @@ from ..utils import (
 
 
 __all__ = [
+    'changelog_add_line',
     'get_source_package',
     'should_update_changelog',
     'source_package_vcs_url',
@@ -64,11 +70,12 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree, builder=None, result_dir=None):
+def build(tree, subpath='', builder=None, result_dir=None):
     """Build a debian package in a directory.
 
     Args:
       tree: Working tree
+      subpath: Subpath to build in
       builder: Builder command (e.g. 'sbuild', 'debuild')
       result_dir: Directory to copy results to
     """
@@ -77,7 +84,8 @@ def build(tree, builder=None, result_dir=None):
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([tree.basedir], builder=builder, result_dir=result_dir)
+    cmd_builddeb().run(
+        [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 def get_source_package(name):
@@ -191,8 +199,19 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     if '/' not in location:
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
+    probers = select_probers(vcs_type)
     return open_branch(
-        location, possible_transports=possible_transports, vcs_type=vcs_type)
+        location, possible_transports=possible_transports, probers=probers)
+
+
+def pick_additional_colocated_branches(main_branch):
+    ret = ["pristine-tar", "upstream"]
+    ret.append('patch-queue/' + main_branch.name)
+    if main_branch.name.startswith('debian/'):
+        parts = main_branch.name.split('/')
+        parts[0] = 'upstream'
+        ret.append('/'.join(parts))
+    return ret
 
 
 class Workspace(_mod_proposal.Workspace):
@@ -201,11 +220,11 @@ class Workspace(_mod_proposal.Workspace):
         if getattr(main_branch.repository, '_git', None):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
-                ["pristine-tar", "upstream"])
+                pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
-    def build(self, builder=None, result_dir=None):
-        return build(tree=self.local_tree, builder=builder,
+    def build(self, builder=None, result_dir=None, subpath=''):
+        return build(tree=self.local_tree, subpath=subpath, builder=builder,
                      result_dir=result_dir)
 
 
@@ -214,3 +233,79 @@ def debcommit(tree, committer=None, paths=None):
         committer=committer,
         message=changelog_commit_message(tree, tree.basis_tree()),
         specific_files=paths)
+
+
+class UnsupportedVCSProber(Prober):
+
+    def __init__(self, vcs_type):
+        self.vcs_type = vcs_type
+
+    def __eq__(self, other):
+        return (isinstance(other, type(self)) and
+                other.vcs_type == self.vcs_type)
+
+    def __call__(self):
+        # The prober expects to be registered as a class.
+        return self
+
+    def priority(self, transport):
+        return 200
+
+    def probe_transport(self, transport):
+        raise UnsupportedFormatError(
+            'This VCS %s is not currently supported.' %
+            self.vcs_type)
+
+    @classmethod
+    def known_formats(klass):
+        return []
+
+
+prober_registry = {
+    'bzr': RemoteBzrProber,
+    'git': RemoteGitProber,
+}
+
+try:
+    from breezy.plugins.fossil import RemoteFossilProber
+except ImportError:
+    pass
+else:
+    prober_registry['fossil'] = RemoteFossilProber
+
+try:
+    from breezy.plugins.svn import SvnRepositoryProber
+except ImportError:
+    pass
+else:
+    prober_registry['svn'] = SvnRepositoryProber
+
+try:
+    from breezy.plugins.hg import SmartHgProber
+except ImportError:
+    pass
+else:
+    prober_registry['hg'] = SmartHgProber
+
+
+def select_probers(vcs_type=None):
+    if vcs_type is None:
+        return None
+    try:
+        return [prober_registry[vcs_type.lower()]]
+    except KeyError:
+        return [UnsupportedVCSProber(vcs_type)]
+
+
+def select_preferred_probers(vcs_type=None):
+    probers = list(ControlDirFormat.all_probers())
+    if vcs_type:
+        try:
+            probers.insert(0, prober_registry[vcs_type.lower()])
+        except KeyError:
+            pass
+    return probers
+
+
+def changelog_add_line(tree, line):
+    subprocess.check_call(['dch', '--', line], cwd=tree.basedir)

@@ -172,8 +172,7 @@ def push_result(local_branch, remote_branch,
         raise PermissionDenied(path=remote_branch.user_url, extra=e)
     for branch_name in additional_colocated_branches or []:
         try:
-            add_branch = local_branch.controldir.open_branch(
-                name=branch_name)
+            add_branch = local_branch.controldir.open_branch(name=branch_name)
         except errors.NotBranchError:
             pass
         else:
@@ -207,7 +206,7 @@ def find_existing_proposed(main_branch, hoster, name,
         merged_proposal = None
         for mp in hoster.iter_proposals(
                 existing_branch, main_branch, status='all'):
-            if not mp.is_closed():
+            if not mp.is_closed() and not mp.is_merged():
                 return (existing_branch, False, mp)
             else:
                 merged_proposal = mp
@@ -266,6 +265,16 @@ class Workspace(object):
                     self.local_tree.pull(self.main_branch, overwrite=False)
                 except DivergedBranches:
                     pass
+                for branch_name in self.additional_colocated_branches:
+                    try:
+                        remote_colo_branch = (
+                            self.main_branch.controldir.open_branch(
+                                name=branch_name))
+                    except errors.NotBranchError:
+                        continue
+                    self.local_tree.branch.controldir.push_branch(
+                        name=branch_name, source=remote_colo_branch,
+                        overwrite=True)
                 if merge_conflicts(
                         self.main_branch, self.local_tree.branch):
                     note('restarting branch')
@@ -489,7 +498,6 @@ def propose_changes(
     """
     if not allow_empty:
         check_proposal_diff(local_branch, main_branch)
-    # TODO(jelmer): Actually push additional_colocated_branches
     if not dry_run:
         if resume_branch is not None:
             local_branch.push(resume_branch, overwrite=overwrite_existing)
@@ -498,6 +506,16 @@ def propose_changes(
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing)
+        for colocated_branch_name in (additional_colocated_branches or []):
+            try:
+                local_colo_branch = local_branch.controldir.open_branch(
+                    name=colocated_branch_name)
+            except errors.NotBranchError:
+                pass
+            else:
+                remote_branch.controldir.push_branch(
+                    source=local_colo_branch, overwrite=overwrite_existing,
+                    name=colocated_branch_name)
     if resume_proposal is not None and dry_run:
         resume_proposal = DryRunProposal.from_existing(
             resume_proposal, source_branch=local_branch)

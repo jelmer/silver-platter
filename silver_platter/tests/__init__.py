@@ -24,6 +24,7 @@ def test_suite():
     names = [
         'debian',
         'debian_lintian',
+        'debian_upstream',
         'proposal',
         'run',
         'utils',

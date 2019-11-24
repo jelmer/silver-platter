@@ -20,7 +20,11 @@ import shutil
 import socket
 import subprocess
 
-from breezy import errors, osutils
+from breezy import (
+    config as _mod_config,
+    errors,
+    osutils,
+    )
 from breezy.branch import (
     Branch,
     BranchWriteLockResult,
@@ -29,8 +33,6 @@ from breezy.controldir import ControlDir
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
 import breezy.transport
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
 
 
 def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
@@ -59,16 +61,14 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
             source_branch=branch,
             stacked=use_stacking)
         # TODO(jelmer): Fetch these during the initial clone
-        for branch_name in additional_colocated_branches or []:
+        for branch_name in set(additional_colocated_branches or []):
             try:
-                add_branch = branch.controldir.open_branch(
-                    name=branch_name)
+                add_branch = branch.controldir.open_branch(name=branch_name)
             except (errors.NotBranchError,
                     errors.NoColocatedBranchSupport):
                 pass
             else:
-                local_add_branch = to_dir.create_branch(
-                        name=branch_name)
+                local_add_branch = to_dir.create_branch(name=branch_name)
                 add_branch.push(local_add_branch)
                 assert (add_branch.last_revision() ==
                         local_add_branch.last_revision())
@@ -168,37 +168,65 @@ class BranchMissing(Exception):
         return self.description
 
 
-def open_branch(url, possible_transports=None, vcs_type=None):
+class BranchUnsupported(Exception):
+    """The branch uses a VCS or protocol that is unsupported."""
+
+    def __init__(self, url, description):
+        self.url = url
+        self.description = description
+
+    def __str__(self):
+        return self.description
+
+
+def _convert_exception(url, e):
+    if isinstance(e, socket.error):
+        return BranchUnavailable(url, 'Socket error: %s' % e)
+    if isinstance(e, errors.NotBranchError):
+        return BranchMissing(url, 'Branch does not exist: %s' % e)
+    if isinstance(e, errors.UnsupportedProtocol):
+        return BranchUnsupported(url, str(e))
+    if isinstance(e, errors.ConnectionError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.PermissionDenied):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e,  errors.InvalidHttpResponse):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.TransportError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, breezy.transport.UnusableRedirect):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, errors.UnsupportedFormatError):
+        return BranchUnsupported(url, str(e))
+
+
+def open_branch(url, possible_transports=None, probers=None):
     """Open a branch by URL."""
     try:
         transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
-        if vcs_type is None:
-            probers = None
-        elif vcs_type.lower() == 'bzr':
-            probers = [RemoteBzrProber]
-        elif vcs_type.lower() == 'git':
-            probers = [RemoteGitProber]
-        else:
-            probers = None
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch()
-    except socket.error as e:
-        raise BranchUnavailable(url, 'Socket error: %s' % e)
-    except errors.NotBranchError as e:
-        raise BranchMissing(url, 'Branch does not exist: %s' % e)
-    except errors.UnsupportedProtocol as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.ConnectionError as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.PermissionDenied as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.InvalidHttpResponse as e:
-        raise BranchUnavailable(url, str(e))
-    except errors.TransportError as e:
-        raise BranchUnavailable(url, str(e))
-    except breezy.transport.UnusableRedirect as e:
-        raise BranchUnavailable(url, str(e))
+    except Exception as e:
+        converted = _convert_exception(url, e)
+        if converted is not None:
+            raise converted
+        raise e
+
+
+def open_branch_containing(url, possible_transports=None, probers=None):
+    """Open a branch by URL."""
+    try:
+        transport = breezy.transport.get_transport(
+            url, possible_transports=possible_transports)
+        dir, subpath = ControlDir.open_containing_from_transport(
+            transport, probers)
+        return dir.open_branch(), subpath
+    except Exception as e:
+        converted = _convert_exception(url, e)
+        if converted is not None:
+            raise converted
+        raise e
 
 
 # TODO(jelmer): This should be in breezy
@@ -218,6 +246,10 @@ class MinimalMemoryBranch(Branch, _RelockDebugMixin):
         self._revision_id_to_revno_cache = None
         self._partial_revision_id_to_revno_cache = {}
         self._partial_revision_history_cache = []
+        self.base = 'memory://' + osutils.rand_chars(10)
+
+    def get_config(self):
+        return _mod_config.Config()
 
     def lock_read(self):
         self.repository.lock_read()

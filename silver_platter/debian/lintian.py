@@ -41,6 +41,7 @@ from ..utils import (
     PostCheckFailed,
     BranchMissing,
     BranchUnavailable,
+    BranchUnsupported,
     )
 
 from lintian_brush import (
@@ -48,6 +49,7 @@ from lintian_brush import (
     run_lintian_fixers,
     DEFAULT_MINIMUM_CERTAINTY,
     )
+from lintian_brush.config import Config
 
 __all__ = [
     'available_lintian_fixers',
@@ -56,6 +58,7 @@ __all__ = [
 
 DEFAULT_ADDON_FIXERS = [
     'file-contains-trailing-whitespace',
+    'out-of-date-standards-version',
     'package-uses-old-debhelper-compat-version',
     ]
 BRANCH_NAME = "lintian-fixes"
@@ -247,8 +250,8 @@ def iter_packages(packages, overwrite_unrelated=False, refresh=False):
         except NoSuchPackage:
             note('%s: no such package', pkg)
             continue
-        except (BranchMissing, BranchUnavailable):
-            note('%s: ignoring, socket error', pkg)
+        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+            note('%s: ignoring: %s', pkg, e)
             continue
 
         overwrite = False
@@ -331,21 +334,16 @@ def main(args):
                 allow_reformatting = None
                 minimum_certainty = None
                 try:
-                    from lintian_brush.config import Config
-                except ImportError:  # lintian-brush < 0.30
+                    cfg = Config.from_workingtree(ws.local_tree, '')
+                except FileNotFoundError:
                     pass
                 else:
-                    try:
-                        cfg = Config.from_workingtree(ws.local_tree, '')
-                    except FileNotFoundError:
-                        pass
-                    else:
-                        compat_release = cfg.compat_release()
-                        if compat_release:
-                            compat_release = debian_info.codename(
-                                compat_release, default=compat_release)
-                        allow_reformatting = cfg.allow_reformatting()
-                        minimum_certainty = cfg.minimum_certainty()
+                    compat_release = cfg.compat_release()
+                    if compat_release:
+                        compat_release = debian_info.codename(
+                            compat_release, default=compat_release)
+                    allow_reformatting = cfg.allow_reformatting()
+                    minimum_certainty = cfg.minimum_certainty()
                 if compat_release is None:
                     compat_release = debian_info.stable()
                 if allow_reformatting is None:
@@ -365,7 +363,11 @@ def main(args):
                     note('%s: some fixers failed to run: %r',
                          pkg, set(failed))
                 if not applied:
-                    note('%s: no fixers to apply', pkg)
+                    if existing_proposal and not ws.changes_since_main():
+                        note('%s: no fixers to apply. Closing proposal.', pkg)
+                        existing_proposal.close()
+                    else:
+                        note('%s: no fixers to apply', pkg)
                     continue
 
             try:
