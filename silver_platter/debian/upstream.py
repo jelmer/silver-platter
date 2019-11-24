@@ -521,12 +521,15 @@ def update_packaging(tree, old_tree, committer=None):
       old_tree: Old tree
       committer: Optional committer to use for changes
     """
+    notes = []
     tree_delta = tree.changes_from(old_tree)
     for delta in tree_delta.added:
         if getattr(delta, 'path', None):
             path = delta.path[1]
         else:  # Breezy < 3.1
             path = delta[0]
+        if path is None:
+            continue
         if path == 'autogen.sh':
             if override_dh_autoreconf_add_arguments(
                     tree.basedir, [b'./autogen.sh']):
@@ -537,6 +540,9 @@ def update_packaging(tree, old_tree, committer=None):
                 debcommit(
                     tree, committer=committer,
                     paths=['debian/changelog', 'debian/rules'])
+        elif path.startswith('LICENSE') or path.startswith('COPYING'):
+            notes.append('License file %s has changed.' % path)
+        return notes
 
 
 def setup_parser(parser):
@@ -708,7 +714,9 @@ def main(args):
             if args.update_packaging:
                 old_tree = ws.local_tree.branch.repository.revision_tree(
                     merge_upstream_result.old_revision)
-                update_packaging(ws.local_tree, old_tree)
+                notes = update_packaging(ws.local_tree, old_tree)
+                for n in notes:
+                    note('%s', n)
 
             if refresh_patches and \
                     ws.local_tree.has_filename('debian/patches/series'):
