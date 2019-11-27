@@ -210,6 +210,12 @@ DEFAULT_DISTRIBUTION = 'unstable'
 
 def refresh_quilt_patches(local_tree, old_version, new_version,
                           committer=None, subpath=''):
+    # TODO(jelmer):
+    # Find patch base branch.
+    #   If it exists, rebase it onto the new upstream.
+    #   And then run 'gbp pqm export' or similar
+    # If not:
+    #   Refresh patches against the new upstream revision
     patches = QuiltPatches(local_tree, os.path.join(subpath, 'debian/patches'))
     patches.upgrade()
     for name in patches.unapplied():
