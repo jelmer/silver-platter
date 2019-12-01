@@ -18,8 +18,8 @@ install:
   - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt python3-debian python3-yaml cython3 cython
   - mkdir $HOME/.config/breezy/plugins -p
   - bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
-  - python setup.py develop
   - pip install cython
+  - python setup.py develop
   - pip install git+https://salsa.debian.org/python-debian-team/python-debian
 
 script:
