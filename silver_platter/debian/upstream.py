@@ -228,7 +228,8 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
                 changelog_add_line(
-                    local_tree, 'Drop patch %s, present upstream.' % name)
+                    local_tree, 'Drop patch %s, present upstream.' % name,
+                    email=committer)
                 debcommit(local_tree, committer=committer, paths=[
                     os.path.join(subpath, p) for p in [
                      'debian/patches/series', 'debian/patches/' + name,
@@ -541,7 +542,8 @@ def update_packaging(tree, old_tree, committer=None):
                 note('Modifying debian/rules: '
                      'Invoke autogen.sh from dh_autoreconf.')
                 changelog_add_line(
-                    tree, 'Invoke autogen.sh from dh_autoreconf.')
+                    tree, 'Invoke autogen.sh from dh_autoreconf.',
+                    email=committer)
                 debcommit(
                     tree, committer=committer,
                     paths=['debian/changelog', 'debian/rules'])
