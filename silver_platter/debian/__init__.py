@@ -307,5 +307,8 @@ def select_preferred_probers(vcs_type=None):
     return probers
 
 
-def changelog_add_line(tree, line):
-    subprocess.check_call(['dch', '--', line], cwd=tree.basedir)
+def changelog_add_line(tree, line, email):
+    env = {}
+    if email:
+        env['DEBEMAIL'] = email
+    subprocess.check_call(['dch', '--', line], cwd=tree.basedir, env=env)
