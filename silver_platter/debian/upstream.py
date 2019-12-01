@@ -501,16 +501,16 @@ def override_dh_autoreconf_add_arguments(basedir, args):
     # or debhelper version is >= 10
 
     def update_makefile(mf):
-        rule = mf.get_rule(b'override_dh_autoreconf')
-        if not rule:
-            rule = mf.add_rule(b'override_dh_autoreconf')
-            command = [b'dh_autoreconf'] + args
-        else:
+        for rule in mf.iter_rules(b'override_dh_autoreconf'):
             command = rule.commands()[0].split(b' ')
             if command[0] != b'dh_autoreconf':
                 return
             rule.lines = [rule.lines[0]]
             command += args
+            break
+        else:
+            rule = mf.add_rule(b'override_dh_autoreconf')
+            command = [b'dh_autoreconf'] + args
         rule.append_command(b' '.join(command))
 
     return update_rules(
