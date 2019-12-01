@@ -19,6 +19,7 @@ install:
   - mkdir $HOME/.config/breezy/plugins -p
   - bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
   - python setup.py develop
+  - pip install git+https://salsa.debian.org/python-debian-team/python-debian
 
 script:
   - make check
