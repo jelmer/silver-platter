@@ -21,5 +21,4 @@ install:
   - python setup.py develop
 
 script:
-  - python silver_platter/tests/test_debian.py
   - make check

@@ -111,7 +111,6 @@ from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
     )
 
-from lintian_brush import reset_tree
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
 from lintian_brush.upstream_metadata import (
     guess_upstream_metadata,
