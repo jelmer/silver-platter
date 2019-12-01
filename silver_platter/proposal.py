@@ -99,7 +99,8 @@ class DryRunProposal(MergeProposal):
     """
 
     def __init__(self, source_branch, target_branch, labels=None,
-                 description=None, commit_message=None):
+                 description=None, commit_message=None,
+                 reviewers=None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
@@ -107,6 +108,7 @@ class DryRunProposal(MergeProposal):
         self.target_branch = target_branch
         self.commit_message = commit_message
         self.url = None
+        self.reviewers = reviewers
 
     @classmethod
     def from_existing(cls, mp, source_branch=None):
@@ -307,17 +309,16 @@ class Workspace(object):
 
     def propose(self, name, description, hoster=None, existing_proposal=None,
                 overwrite_existing=None, labels=None, dry_run=False,
-                commit_message=None):
+                commit_message=None, reviewers=None):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
-            self.local_tree.branch, self.main_branch,
-            hoster=hoster, name=name, mp_description=description,
-            resume_branch=self.resume_branch,
+            self.local_tree.branch, self.main_branch, hoster=hoster, name=name,
+            mp_description=description, resume_branch=self.resume_branch,
             resume_proposal=existing_proposal,
-            overwrite_existing=overwrite_existing,
-            labels=labels, dry_run=dry_run,
-            commit_message=commit_message,
+            overwrite_existing=overwrite_existing, labels=labels,
+            dry_run=dry_run, commit_message=commit_message,
+            reviewers=reviewers,
             additional_colocated_branches=self.additional_colocated_branches)
 
     def push_derived(self, name, hoster=None, overwrite_existing=False):
@@ -477,7 +478,7 @@ def propose_changes(
         overwrite_existing=True,
         labels=None, dry_run=False, commit_message=None,
         additional_colocated_branches=None,
-        allow_empty=False):
+        allow_empty=False, reviewers=None):
     """Create or update a merge proposal.
 
     Args:
@@ -493,6 +494,7 @@ def propose_changes(
       commit_message: Optional commit message
       additional_colocated_branches: Additional colocated branches to propose
       allow_empty: Whether to allow empty merge proposals
+      reviewers: List of reviewers
     Returns:
       Tuple with (proposal, is_new)
     """
@@ -556,7 +558,7 @@ def propose_changes(
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
-                    **kwargs)
+                    reviewers=reviewers, **kwargs)
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
@@ -564,7 +566,8 @@ def propose_changes(
         else:
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
-                description=mp_description, commit_message=commit_message)
+                description=mp_description, commit_message=commit_message,
+                reviewers=reviewers)
         return (mp, True)
 
 
