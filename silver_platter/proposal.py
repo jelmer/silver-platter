@@ -375,7 +375,8 @@ class PublishResult(object):
 def publish_changes(ws, mode, name, get_proposal_description,
                     get_proposal_commit_message=None, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
-                    overwrite_existing=True, existing_proposal=None):
+                    overwrite_existing=True, existing_proposal=None,
+                    reviewers=None):
     if mode not in SUPPORTED_MODES:
         raise ValueError("invalid mode %r" % mode)
 
@@ -426,7 +427,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
-        commit_message=commit_message)
+        commit_message=commit_message, reviewers=reviewers)
 
     return PublishResult(mode, proposal, is_new)
 
