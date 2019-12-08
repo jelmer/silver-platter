@@ -149,6 +149,9 @@ def setup_parser(parser):
         "--fixers",
         help="Fixers to run.", type=str, action='append')
     parser.add_argument(
+        '--exclude',
+        help='Fixers to exclude.', type=str, action='append')
+    parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
@@ -204,16 +207,19 @@ def setup_parser(parser):
         help='Fix existing merge proposals that are conflicted.')
 
 
-def get_fixers(available_fixers, names=None, tags=None):
+def get_fixers(available_fixers, names=None, tags=None, exclude=None):
     """Get the set of fixers to try.
 
     Args:
       available_fixers: Dictionary mapping fixer names to objects
       names: Optional set of fixers to restrict to
       tags: Optional set of tags to restrict to
+      exclude: Optional set of fixers to exclude
     Returns:
       List of fixer objects
     """
+    if exclude is None:
+        exclude = set()
     by_tag = {}
     by_name = {}
     for fixer in available_fixers:
@@ -224,13 +230,17 @@ def get_fixers(available_fixers, names=None, tags=None):
     # If it's unknown which fixers are relevant, just try all of them.
     if names:
         try:
-            return [by_name[name] for name in names]
+            fixers = [by_name[name] for name in names]
         except KeyError as e:
             raise UnknownFixer(e.args[0])
     elif tags:
-        return [by_tag[tag] for tag in tags]
+        fixers = [by_tag[tag] for tag in tags]
     else:
-        return by_name.values()
+        fixers = list(by_name.values())
+
+    if exclude:
+        fixers = [fixer for fixer in fixers if fixer.name not in exclude]
+    return fixers
 
 
 def iter_packages(packages, overwrite_unrelated=False, refresh=False):
@@ -306,7 +316,9 @@ def main(args):
     ret = 0
 
     try:
-        fixers = get_fixers(available_lintian_fixers(), names=args.fixers)
+        fixers = get_fixers(
+            available_lintian_fixers(), names=args.fixers,
+            exclude=args.exclude)
     except UnknownFixer as e:
         note('Unknown fixer: %s', e.fixer)
         return 1
