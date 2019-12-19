@@ -20,16 +20,14 @@ from __future__ import absolute_import
 import sys
 
 from breezy.errors import BzrError
+from breezy.trace import note, warning
 
 from . import (
-    open_packaging_branch,
     should_update_changelog,
     DEFAULT_BUILDER,
-    NoSuchPackage,
     )
+from .changer import iter_packages
 from ..proposal import (
-    get_hoster,
-    find_existing_proposed,
     enable_tag_pushing,
     publish_changes,
     SUPPORTED_MODES,
@@ -39,9 +37,6 @@ from ..utils import (
     run_pre_check,
     run_post_check,
     PostCheckFailed,
-    BranchMissing,
-    BranchUnavailable,
-    BranchUnsupported,
     )
 
 from lintian_brush import (
@@ -243,55 +238,6 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
     return fixers
 
 
-def iter_packages(packages, overwrite_unrelated=False, refresh=False):
-    from breezy.trace import note, warning
-    from breezy.plugins.propose.propose import (
-        UnsupportedHoster,
-        )
-
-    possible_transports = []
-    possible_hosters = []
-
-    for pkg in packages:
-        note('Processing: %s', pkg)
-
-        try:
-            main_branch = open_packaging_branch(
-                pkg, possible_transports=possible_transports)
-        except NoSuchPackage:
-            note('%s: no such package', pkg)
-            continue
-        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-            note('%s: ignoring: %s', pkg, e)
-            continue
-
-        overwrite = False
-
-        try:
-            hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-        except UnsupportedHoster as e:
-            if args.mode != 'push':
-                raise
-            # We can't figure out what branch to resume from when there's no
-            # hoster that can tell us.
-            resume_branch = None
-            existing_proposal = None
-            warning('Unsupported hoster (%s), will attempt to push to %s',
-                    e, main_branch.user_url)
-            hoster = None
-        else:
-            (resume_branch, overwrite, existing_proposal) = (
-                find_existing_proposed(
-                    main_branch, hoster, BRANCH_NAME,
-                    overwrite_unrelated=overwrite_unrelated))
-        if refresh:
-            overwrite = True
-            resume_branch = None
-
-        yield (pkg, main_branch, resume_branch, hoster, existing_proposal,
-               overwrite)
-
-
 def main(args):
     import distro_info
     import itertools
@@ -311,7 +257,6 @@ def main(args):
         NoSuchProject,
         UnsupportedHoster,
         )
-    from breezy.trace import note
 
     ret = 0
 
@@ -325,13 +270,18 @@ def main(args):
 
     debian_info = distro_info.DebianDistroInfo()
 
-    package_iter = iter_packages(args.packages, args.overwrite, args.refresh)
+    package_iter = iter_packages(
+        args.packages, BRANCH_NAME, args.overwrite, args.refresh)
     if args.fix_conflicted:
         package_iter = itertools.chain(
             package_iter, iter_conflicted(BRANCH_NAME))
 
     for (pkg, main_branch, resume_branch, hoster, existing_proposal,
          overwrite) in package_iter:
+        if hoster is None and args.mode == 'attempt-push':
+            warning('Unsupported hoster; will attempt to push to %s',
+                    main_branch.user_url)
+            args.mode = 'push'
         with Workspace(main_branch, resume_branch=resume_branch) as ws:
             with ws.local_tree.lock_write():
                 if ws.refreshed:

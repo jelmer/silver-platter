@@ -26,10 +26,7 @@ import sys
 import tempfile
 
 from ..proposal import (
-    get_hoster,
-    find_existing_proposed,
     publish_changes,
-    UnsupportedHoster,
     SUPPORTED_MODES,
     )
 from ..utils import (
@@ -41,13 +38,12 @@ from ..utils import (
     )
 
 from . import (
-    open_packaging_branch,
-    NoSuchPackage,
     Workspace,
     DEFAULT_BUILDER,
     changelog_add_line,
     debcommit,
     )
+from .changer import iter_packages
 from breezy.commit import (
     PointlessCommit,
     )
@@ -608,29 +604,15 @@ def main(args):
     else:
         branch_name = RELEASE_BRANCH_NAME
 
-    for package in args.packages:
-        try:
-            main_branch = open_packaging_branch(package)
-        except NoSuchPackage:
-            show_error('No such package: %s', package)
-            ret = 1
-            continue
+    package_iter = iter_packages(
+        args.packages, branch_name, args.overwrite, args.refresh)
 
-        try:
-            hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-        except UnsupportedHoster as e:
-            if args.mode != 'push':
-                raise
-            # We can't figure out what branch to resume from when there's no
-            # hoster that can tell us.
-            warning('Unsupported hoster (%s), will attempt to push to %s',
-                    e, main_branch.user_url)
-            overwrite_existing = False
-        else:
-            (resume_branch, overwrite_existing,
-             existing_proposal) = find_existing_proposed(
-                 main_branch, hoster, branch_name)
-
+    for (pkg, main_branch, resume_branch, hoster, existing_proposal,
+         overwrite) in package_iter:
+        if hoster is None and args.mode == 'attempt-push':
+            warning('Unsupported hoster; will attempt to push to %s',
+                    main_branch.user_url)
+            args.mode = 'push'
         with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
             try:
