@@ -168,7 +168,7 @@ class DryRunProposal(MergeProposal):
 def push_result(local_branch, remote_branch,
                 additional_colocated_branches=None):
     try:
-        local_branch.push(remote_branch)
+        local_branch.push(remote_branch, overwrite=False)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
         raise PermissionDenied(path=remote_branch.user_url, extra=e)
@@ -178,8 +178,7 @@ def push_result(local_branch, remote_branch,
         except errors.NotBranchError:
             pass
         else:
-            remote_branch.controldir.push_branch(
-                add_branch, name=branch_name)
+            remote_branch.controldir.push_branch(add_branch, name=branch_name)
 
 
 def find_existing_proposed(main_branch, hoster, name,
@@ -277,8 +276,7 @@ class Workspace(object):
                     self.local_tree.branch.controldir.push_branch(
                         name=branch_name, source=remote_colo_branch,
                         overwrite=True)
-                if merge_conflicts(
-                        self.main_branch, self.local_tree.branch):
+                if merge_conflicts(self.main_branch, self.local_tree.branch):
                     note('restarting branch')
                     self.local_tree.update(revision=self.main_branch_revid)
                     self.local_tree.branch.generate_revision_history(
