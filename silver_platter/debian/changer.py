@@ -36,6 +36,19 @@ from ..utils import (
 
 def iter_packages(packages, branch_name, overwrite_unrelated=False,
                   refresh=False):
+    """Iterate over relevant branches for a set of packages.
+
+    Args:
+      packages: Iterable over package names (or packaging URLs)
+      branch_name: Branch name to look for
+      overwrite_unrelated: Allow overwriting unrelated changes
+      refresh: Whether to refresh existing merge proposals
+    Returns:
+      iterator over
+        (package name, main branch object, branch to resume (if any),
+         hoster (None if the hoster is not supported),
+         existing_proposal, whether to overwrite the branch)
+    """
     from breezy.plugins.propose.propose import (
         UnsupportedHoster,
         )

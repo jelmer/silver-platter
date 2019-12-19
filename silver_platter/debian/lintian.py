@@ -238,8 +238,53 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
     return fixers
 
 
+class LintianBrushChanger(object):
+
+    def __init__(self, names=None, exclude=None):
+        self.fixers = get_fixers(
+            available_lintian_fixers(), names=names,
+            exclude=exclude)
+
+    def make_changes(self, local_tree, update_changelog):
+        import distro_info
+        debian_info = distro_info.DebianDistroInfo()
+
+        compat_release = None
+        allow_reformatting = None
+        minimum_certainty = None
+        try:
+            cfg = Config.from_workingtree(local_tree, '')
+        except FileNotFoundError:
+            pass
+        else:
+            compat_release = cfg.compat_release()
+            if compat_release:
+                compat_release = debian_info.codename(
+                    compat_release, default=compat_release)
+            allow_reformatting = cfg.allow_reformatting()
+            minimum_certainty = cfg.minimum_certainty()
+        if compat_release is None:
+            compat_release = debian_info.stable()
+        if allow_reformatting is None:
+            allow_reformatting = False
+        if minimum_certainty is None:
+            minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
+
+        applied, failed = run_lintian_fixers(
+                local_tree, self.fixers,
+                committer=args.committer,
+                update_changelog=update_changelog,
+                compat_release=compat_release,
+                allow_reformatting=allow_reformatting,
+                minimum_certainty=minimum_certainty)
+
+        if failed:
+            note('some fixers failed to run: %r', set(failed))
+
+        return applied
+
+
 def main(args):
-    import distro_info
     import itertools
 
     import silver_platter   # noqa: F401
@@ -261,14 +306,11 @@ def main(args):
     ret = 0
 
     try:
-        fixers = get_fixers(
-            available_lintian_fixers(), names=args.fixers,
-            exclude=args.exclude)
+        changer = LintianBrushChanger(
+            names=args.fixers, exclude=args.exclude)
     except UnknownFixer as e:
         note('Unknown fixer: %s', e.fixer)
         return 1
-
-    debian_info = distro_info.DebianDistroInfo()
 
     package_iter = iter_packages(
         args.packages, BRANCH_NAME, args.overwrite, args.refresh)
@@ -293,45 +335,14 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
-                compat_release = None
-                allow_reformatting = None
-                minimum_certainty = None
-                try:
-                    cfg = Config.from_workingtree(ws.local_tree, '')
-                except FileNotFoundError:
-                    pass
+                applied = changer.make_changes(ws.local_tree, update_changelog)
+
+                if existing_proposal and not ws.changes_since_main():
+                    note('%s: nothing left to do. Closing proposal.', pkg)
+                    existing_proposal.close()
                 else:
-                    compat_release = cfg.compat_release()
-                    if compat_release:
-                        compat_release = debian_info.codename(
-                            compat_release, default=compat_release)
-                    allow_reformatting = cfg.allow_reformatting()
-                    minimum_certainty = cfg.minimum_certainty()
-                if compat_release is None:
-                    compat_release = debian_info.stable()
-                if allow_reformatting is None:
-                    allow_reformatting = False
-                if minimum_certainty is None:
-                    minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
-
-                applied, failed = run_lintian_fixers(
-                        ws.local_tree, fixers,
-                        committer=args.committer,
-                        update_changelog=update_changelog,
-                        compat_release=compat_release,
-                        allow_reformatting=allow_reformatting,
-                        minimum_certainty=minimum_certainty)
-
-                if failed:
-                    note('%s: some fixers failed to run: %r',
-                         pkg, set(failed))
-                if not applied:
-                    if existing_proposal and not ws.changes_since_main():
-                        note('%s: no fixers to apply. Closing proposal.', pkg)
-                        existing_proposal.close()
-                    else:
-                        note('%s: no fixers to apply', pkg)
-                    continue
+                    note('%s: nothing to do', pkg)
+                continue
 
             try:
                 run_post_check(ws.local_tree, args.post_check, ws.orig_revid)

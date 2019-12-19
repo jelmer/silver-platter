@@ -39,6 +39,7 @@ from ..utils import (
 
 from . import (
     Workspace,
+    should_update_changelog,
     DEFAULT_BUILDER,
     changelog_add_line,
     debcommit,
@@ -275,7 +276,7 @@ def merge_upstream(tree, snapshot=False, location=None,
                    distribution_name=DEFAULT_DISTRIBUTION,
                    allow_ignore_upstream_branch=True,
                    trust_package=False, committer=None,
-                   subpath=''):
+                   update_changelog=True, subpath=''):
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -469,9 +470,10 @@ def merge_upstream(tree, snapshot=False, location=None,
         if conflicts:
             raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
-    changelog_add_new_version(
-        tree, subpath, new_upstream_version, distribution_name, changelog,
-        package)
+    if update_changelog:
+        changelog_add_new_version(
+            tree, subpath, new_upstream_version, distribution_name, changelog,
+            package)
     if not need_upstream_tarball:
         note("An entry for the new upstream version has been "
              "added to the changelog.")
@@ -595,14 +597,107 @@ def setup_parser(parser):
         help='Attempt to update packaging to upstream changes.')
 
 
+class ChangerError(Exception):
+
+    def __init__(self, summary, original):
+        self.summary = summary
+        self.original = original
+
+
+class NewUpstreamChanger(object):
+
+    def __init__(self, snapshot, trust_package, refresh_patches,
+                 update_packaging):
+        self.snapshot = snapshot
+        self.trust_package = trust_package
+        self.refresh_patches = refresh_patches
+        self.update_packaging = update_packaging
+
+    def make_changes(self, local_tree, update_changelog):
+        try:
+            merge_upstream_result = merge_upstream(
+                tree=local_tree, snapshot=self.snapshot,
+                trust_package=self.trust_package,
+                update_changelog=update_changelog)
+        except UpstreamAlreadyImported as e:
+            raise ChangerError(
+                'Last upstream version %s already imported.' % e.version, e)
+        except NewUpstreamMissing as e:
+            raise ChangerError('Unable to find new upstream.', e)
+        except UpstreamAlreadyMerged as e:
+            raise ChangerError(
+                'Last upstream version %s already merged.' % e.version, e)
+        except PreviousVersionTagMissing as e:
+            raise ChangerError(
+                'Unable to find tag %s for previous upstream version %s.' % (
+                    e.tag_name, e.version), e)
+        except InvalidFormatUpstreamVersion as e:
+            raise ChangerError(
+                '%r reported invalid format version string %s.' % (
+                    e.source, e.version), e)
+        except PristineTarError as e:
+            raise ChangerError('Pristine tar error: %s' % e, e)
+        except UpstreamBranchUnavailable as e:
+            raise ChangerError(
+                'Upstream branch %s unavailable: %s. ' % (e.location, e.error),
+                e)
+        except UpstreamBranchUnknown as e:
+            raise ChangerError(
+                'Upstream branch location unknown. '
+                'Set \'Repository\' field in debian/upstream/metadata?', e)
+        except UpstreamMergeConflicted as e:
+            raise ChangerError('Merging upstream resulted in conflicts.', e)
+        except PackageIsNative as e:
+            raise ChangerError(
+                'Package %s is native; unable to merge new upstream.' % (
+                    e.package, ), e)
+        except InconsistentSourceFormatError as e:
+            raise ChangerError('Inconsistencies in type of package: %s' % e,
+                               e)
+        except UScanError as e:
+            raise ChangerError('UScan failed: %s' % e, e)
+        except UpstreamMetadataSyntaxError as e:
+            raise ChangerError('Unable to parse %s' % e.path, e)
+        except MissingChangelogError as e:
+            raise ChangerError('Missing changelog %s' % e, e)
+        except MissingUpstreamTarball as e:
+            raise ChangerError('Missing upstream tarball: %s' % e, e)
+        else:
+            note('Merged new upstream version %s (previous: %s)',
+                 merge_upstream_result.new_upstream_version,
+                 merge_upstream_result.old_upstream_version)
+
+        if self.update_packaging:
+            old_tree = local_tree.branch.repository.revision_tree(
+                merge_upstream_result.old_revision)
+            notes = update_packaging(local_tree, old_tree)
+            for n in notes:
+                note('%s', n)
+
+        if self.refresh_patches and \
+                local_tree.has_filename('debian/patches/series'):
+            note('Refresh quilt patches.')
+            try:
+                refresh_quilt_patches(
+                    local_tree,
+                    old_version=merge_upstream_result.old_upstream_version,
+                    new_version=merge_upstream_result.new_upstream_version)
+            except QuiltError as e:
+                raise ChangerError(
+                    'Quilt error while refreshing patches: %s', e)
+
+        return merge_upstream_result
+
+
 def main(args):
-    possible_hosters = []
     ret = 0
 
     if args.snapshot:
         branch_name = SNAPSHOT_BRANCH_NAME
     else:
         branch_name = RELEASE_BRANCH_NAME
+
+    changer = NewUpstreamChanger()
 
     package_iter = iter_packages(
         args.packages, branch_name, args.overwrite, args.refresh)
@@ -615,112 +710,19 @@ def main(args):
             args.mode = 'push'
         with Workspace(main_branch) as ws, ws.local_tree.lock_write():
             run_pre_check(ws.local_tree, args.pre_check)
-            try:
-                merge_upstream_result = merge_upstream(
-                    tree=ws.local_tree, snapshot=args.snapshot,
-                    trust_package=args.trust_package)
-            except UpstreamAlreadyImported as e:
-                show_error(
-                    'Last upstream version %s already imported.', e.version)
-                ret = 1
-                continue
-            except NewUpstreamMissing:
-                show_error('Unable to find new upstream for %s.', package)
-                ret = 1
-                continue
-            except UpstreamAlreadyMerged as e:
-                show_error('Last upstream version %s already merged.',
-                           e.version)
-                ret = 1
-                # Continue, since we may want to close the existing merge
-                # proposal.
-                build_verify = False
-                refresh_patches = False
-            except PreviousVersionTagMissing as e:
-                show_error(
-                    'Unable to find tag %s for previous upstream version %s.',
-                    e.tag_name, e.version)
-                ret = 1
-                continue
-            except InvalidFormatUpstreamVersion as e:
-                show_error(
-                    '%r reported invalid format version string %s.',
-                    e.source, e.version)
-                ret = 1
-                continue
-            except PristineTarError as e:
-                show_error('Pristine tar error: %s', e)
-                ret = 1
-                continue
-            except UpstreamBranchUnavailable as e:
-                show_error('Upstream branch %s unavailable: %s. ', e.location,
-                           e.error)
-                ret = 1
-                continue
-            except UpstreamBranchUnknown:
-                show_error(
-                    'Upstream branch location unknown. '
-                    'Set \'Repository\' field in debian/upstream/metadata?')
-                ret = 1
-                continue
-            except UpstreamMergeConflicted:
-                show_error('Merging upstream resulted in conflicts.')
-                ret = 1
-                continue
-            except PackageIsNative as e:
-                show_error(
-                    'Package %s is native; unable to merge new upstream.',
-                    e.package)
-                ret = 1
-                continue
-            except InconsistentSourceFormatError as e:
-                show_error('Inconsistencies in type of package: %s', e)
-                ret = 1
-                continue
-            except UScanError as e:
-                show_error('UScan failed: %s', e)
-                ret = 1
-                continue
-            except UpstreamMetadataSyntaxError as e:
-                show_error('Unable to parse %s', e.path)
-                ret = 1
-                continue
-            except MissingChangelogError as e:
-                show_error('Missing changelog %s', e)
-                ret = 1
-                continue
-            except MissingUpstreamTarball as e:
-                show_error('Missing upstream tarball: %s', e)
-                ret = 1
-                continue
+            if args.update_changelog is None:
+                update_changelog = should_update_changelog(
+                    ws.local_tree.branch)
             else:
-                note('Merged new upstream version %s (previous: %s)',
-                     merge_upstream_result.new_upstream_version,
-                     merge_upstream_result.old_upstream_version)
-                build_verify = args.build_verify
-                refresh_patches = args.refresh_patches
-
-            if args.update_packaging:
-                old_tree = ws.local_tree.branch.repository.revision_tree(
-                    merge_upstream_result.old_revision)
-                notes = update_packaging(ws.local_tree, old_tree)
-                for n in notes:
-                    note('%s', n)
-
-            if refresh_patches and \
-                    ws.local_tree.has_filename('debian/patches/series'):
-                note('Refresh quilt patches.')
-                try:
-                    refresh_quilt_patches(
-                        ws.local_tree,
-                        old_version=merge_upstream_result.old_upstream_version,
-                        new_version=merge_upstream_result.new_upstream_version)
-                except QuiltError as e:
-                    show_error('Quilt error while refreshing patches: %s', e)
-                    ret = 1
-                    continue
-
-            if build_verify:
+                update_changelog = args.update_changelog
+            try:
+                merge_upstream_result = changer.make_changes(
+                    ws.local_tree, update_changelog)
+            except ChangerError as e:
+                show_error(e.summary, e.original)
+                ret = 1
+                continue
+            if args.build_verify:
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
 
@@ -734,18 +736,18 @@ def main(args):
                 get_proposal_commit_message=get_proposal_description,
                 dry_run=args.dry_run, hoster=hoster,
                 existing_proposal=existing_proposal,
-                overwrite_existing=overwrite_existing)
+                overwrite_existing=overwrite)
 
             if publish_result.proposal:
                 if publish_result.is_new:
                     note('%s: Created new merge proposal %s.',
-                         package, publish_result.proposal.url)
+                         pkg, publish_result.proposal.url)
                 else:
                     note('%s: Updated merge proposal %s.',
-                         package, publish_result.proposal.url)
+                         pkg, publish_result.proposal.url)
             elif existing_proposal:
                 note('%s: Closed merge proposal %s',
-                     package, existing_proposal.url)
+                     pkg, existing_proposal.url)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
     return ret
