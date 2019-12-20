@@ -17,28 +17,8 @@
 
 from __future__ import absolute_import
 
-from functools import partial
-import sys
-
 from breezy.errors import BzrError
-from breezy.trace import note, warning
-
-from . import (
-    should_update_changelog,
-    DEFAULT_BUILDER,
-    )
-from .changer import iter_packages
-from ..proposal import (
-    enable_tag_pushing,
-    publish_changes,
-    SUPPORTED_MODES,
-    iter_conflicted,
-    )
-from ..utils import (
-    run_pre_check,
-    run_post_check,
-    PostCheckFailed,
-    )
+from breezy.trace import note
 
 from lintian_brush import (
     available_lintian_fixers,
@@ -46,6 +26,12 @@ from lintian_brush import (
     DEFAULT_MINIMUM_CERTAINTY,
     )
 from lintian_brush.config import Config
+
+from .changer import (
+    run_changer,
+    DebianChanger,
+    setup_parser,
+    )
 
 __all__ = [
     'available_lintian_fixers',
@@ -139,62 +125,6 @@ def has_nontrivial_changes(applied, propose_addon_only):
     return bool(tags - set(propose_addon_only))
 
 
-def setup_parser(parser):
-    parser.add_argument("packages", nargs='*')
-    parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true", default=False)
-    parser.add_argument(
-        '--build-verify',
-        help='Build package to verify it.',
-        dest='build_verify',
-        action='store_true')
-    parser.add_argument(
-        '--pre-check',
-        help='Command to run to check whether to process package.',
-        type=str)
-    parser.add_argument(
-        '--post-check',
-        help='Command to run to check package before pushing.',
-        type=str)
-    parser.add_argument(
-        '--builder', default=DEFAULT_BUILDER, type=str,
-        help='Build command to use when verifying build.')
-    parser.add_argument(
-        '--refresh',
-        help='Discard old branch and apply fixers from scratch.',
-        action='store_true')
-    parser.add_argument(
-        '--committer',
-        help='Committer identity',
-        type=str)
-    parser.add_argument(
-        '--mode',
-        help='Mode for pushing', choices=SUPPORTED_MODES,
-        default="propose", type=str)
-    parser.add_argument(
-        '--no-update-changelog', action="store_false", default=None,
-        dest="update_changelog", help="do not update the changelog")
-    parser.add_argument(
-        '--update-changelog', action="store_true", dest="update_changelog",
-        help="force updating of the changelog", default=None)
-    parser.add_argument(
-        '--diff', action="store_true",
-        help="Output diff of created merge proposal.")
-    parser.add_argument(
-        '--build-target-dir', type=str,
-        help=("Store built Debian files in specified directory "
-              "(with --build-verify)"))
-    parser.add_argument(
-        '--overwrite', action='store_true',
-        help='Overwrite existing branches.')
-    parser.add_argument(
-        '--fix-conflicted', action='store_true',
-        help='Fix existing merge proposals that are conflicted.')
-    LintianBrushChanger.setup_parser(parser)
-
-
 def get_fixers(available_fixers, names=None, tags=None, exclude=None):
     """Get the set of fixers to try.
 
@@ -231,7 +161,7 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
     return fixers
 
 
-class LintianBrushChanger(object):
+class LintianBrushChanger(DebianChanger):
 
     def __init__(self, names=None, exclude=None, propose_addon_only=None):
         self.fixers = get_fixers(
@@ -329,134 +259,19 @@ class LintianBrushChanger(object):
 
 
 def main(args):
-    import itertools
-
-    import silver_platter   # noqa: F401
-    from . import (
-        BuildFailedError,
-        MissingUpstreamTarball,
-        Workspace,
-        )
-
-    from breezy import (
-        errors,
-        )
-
-    from breezy.plugins.propose.propose import (
-        NoSuchProject,
-        UnsupportedHoster,
-        )
-
-    ret = 0
-
     try:
         changer = LintianBrushChanger.from_args(args)
     except UnknownFixer as e:
         note('Unknown fixer: %s', e.fixer)
         return 1
 
-    branch_name = changer.suggest_branch_name()
-
-    package_iter = iter_packages(
-        args.packages, branch_name, args.overwrite, args.refresh)
-    if args.fix_conflicted:
-        package_iter = itertools.chain(
-            package_iter, iter_conflicted(branch_name))
-
-    for (pkg, main_branch, resume_branch, hoster, existing_proposal,
-         overwrite) in package_iter:
-        if hoster is None and args.mode == 'attempt-push':
-            warning('Unsupported hoster; will attempt to push to %s',
-                    main_branch.user_url)
-            args.mode = 'push'
-        with Workspace(main_branch, resume_branch=resume_branch) as ws, \
-                ws.local_tree.lock_write():
-            if ws.refreshed:
-                overwrite = True
-            run_pre_check(ws.local_tree, args.pre_check)
-            if args.update_changelog is None:
-                update_changelog = should_update_changelog(
-                    ws.local_tree.branch)
-            else:
-                update_changelog = args.update_changelog
-            try:
-                changer_result = changer.make_changes(
-                    ws.local_tree, subpath='',
-                    update_changelog=update_changelog,
-                    committer=args.committer)
-            except ChangerError as e:
-                show_error(e.summary)
-                ret = 1
-                continue
-
-            if not ws.changes_since_main():
-                if existing_proposal:
-                    note('%s: nothing left to do. Closing proposal.', pkg)
-                    existing_proposal.close()
-                else:
-                    note('%s: nothing to do', pkg)
-            continue
-
-        try:
-            run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
-        except PostCheckFailed as e:
-            note('%s: %s', pkg, e)
-            continue
-        if args.build_verify:
-            try:
-                ws.build(builder=args.builder,
-                         result_dir=args.build_target_dir)
-            except BuildFailedError:
-                note('%s: build failed', pkg)
-                ret = 1
-                continue
-            except MissingUpstreamTarball:
-                note('%s: unable to find upstream source', pkg)
-                ret = 1
-                continue
-
-        enable_tag_pushing(ws.local_tree.branch)
-
-        try:
-            publish_result = publish_changes(
-                ws, args.mode, branch_name,
-                get_proposal_description=partial(
-                    changer.get_proposal_description, changer_result),
-                get_proposal_commit_message=partial(
-                    changer.get_commit_message, changer_result),
-                dry_run=args.dry_run, hoster=hoster,
-                allow_create_proposal=partial(
-                    changer.allow_create_proposal, changer_result),
-                overwrite_existing=overwrite,
-                existing_proposal=existing_proposal)
-        except UnsupportedHoster:
-            note('%s: Hoster unsupported', pkg)
-            ret = 1
-            continue
-        except NoSuchProject as e:
-            note('%s: project %s was not found', pkg, e.project)
-            ret = 1
-            continue
-        except errors.PermissionDenied as e:
-            note('%s: %s', pkg, e)
-            ret = 1
-            continue
-        except errors.DivergedBranches:
-            note('%s: a branch exists. Use --overwrite to discard it.',
-                 pkg)
-            ret = 1
-            continue
-
-        if publish_result.proposal:
-            changer.describe(changer_result, publish_result)
-        if args.diff:
-            ws.show_diff(sys.stdout.buffer)
-    return ret
+    return run_changer(changer, args)
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
     setup_parser(parser)
+    LintianBrushChanger.setup_parser(parser)
     args = parser.parse_args()
     main(args)
