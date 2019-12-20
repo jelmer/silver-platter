@@ -146,6 +146,11 @@ def setup_parser(parser):
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
     parser.add_argument(
+        '--build-verify',
+        help='Build package to verify it.',
+        dest='build_verify',
+        action='store_true')
+    parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
         type=str)
@@ -153,9 +158,6 @@ def setup_parser(parser):
         '--post-check',
         help='Command to run to check package before pushing.',
         type=str)
-    parser.add_argument(
-        '--build-verify',
-        help='Build package to verify it.', action='store_true')
     parser.add_argument(
         '--builder', default=DEFAULT_BUILDER, type=str,
         help='Build command to use when verifying build.')
@@ -259,7 +261,7 @@ class LintianBrushChanger(object):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog):
+    def make_changes(self, local_tree, subpath, update_changelog, committer):
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 
@@ -302,7 +304,7 @@ class LintianBrushChanger(object):
         return update_proposal_description(
             existing_proposal, applied)
 
-    def get_proposal_commit_message(self, applied, existing_proposal):
+    def get_commit_message(self, applied, existing_proposal):
         return update_proposal_commit_message(
             existing_proposal, applied)
 
@@ -367,84 +369,88 @@ def main(args):
             warning('Unsupported hoster; will attempt to push to %s',
                     main_branch.user_url)
             args.mode = 'push'
-        with Workspace(main_branch, resume_branch=resume_branch) as ws:
-            with ws.local_tree.lock_write():
-                if ws.refreshed:
-                    overwrite = True
-                run_pre_check(ws.local_tree, args.pre_check)
-                if args.update_changelog is None:
-                    update_changelog = should_update_changelog(
-                        ws.local_tree.branch)
-                else:
-                    update_changelog = args.update_changelog
-
-                applied = changer.make_changes(
+        with Workspace(main_branch, resume_branch=resume_branch) as ws, \
+                ws.local_tree.lock_write():
+            if ws.refreshed:
+                overwrite = True
+            run_pre_check(ws.local_tree, args.pre_check)
+            if args.update_changelog is None:
+                update_changelog = should_update_changelog(
+                    ws.local_tree.branch)
+            else:
+                update_changelog = args.update_changelog
+            try:
+                changer_result = changer.make_changes(
                     ws.local_tree, subpath='',
-                    update_changelog=update_changelog)
-
-                if not ws.changes_since_main():
-                    if existing_proposal:
-                        note('%s: nothing left to do. Closing proposal.', pkg)
-                        existing_proposal.close()
-                    else:
-                        note('%s: nothing to do', pkg)
+                    update_changelog=update_changelog,
+                    committer=args.committer)
+            except ChangerError as e:
+                show_error(e.summary)
+                ret = 1
                 continue
 
+            if not ws.changes_since_main():
+                if existing_proposal:
+                    note('%s: nothing left to do. Closing proposal.', pkg)
+                    existing_proposal.close()
+                else:
+                    note('%s: nothing to do', pkg)
+            continue
+
+        try:
+            run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
+        except PostCheckFailed as e:
+            note('%s: %s', pkg, e)
+            continue
+        if args.build_verify:
             try:
-                run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
-            except PostCheckFailed as e:
-                note('%s: %s', pkg, e)
-                continue
-            if args.build_verify:
-                try:
-                    ws.build(builder=args.builder,
-                             result_dir=args.build_target_dir)
-                except BuildFailedError:
-                    note('%s: build failed', pkg)
-                    ret = 1
-                    continue
-                except MissingUpstreamTarball:
-                    note('%s: unable to find upstream source', pkg)
-                    ret = 1
-                    continue
-
-            enable_tag_pushing(ws.local_tree.branch)
-
-            try:
-                publish_result = publish_changes(
-                    ws, args.mode, branch_name,
-                    get_proposal_description=partial(
-                        changer.get_proposal_description, applied),
-                    get_proposal_commit_message=partial(
-                        changer.get_proposal_commit_message, applied),
-                    dry_run=args.dry_run, hoster=hoster,
-                    allow_create_proposal=partial(
-                        changer.allow_create_proposal, applied),
-                    overwrite_existing=overwrite,
-                    existing_proposal=existing_proposal)
-            except UnsupportedHoster:
-                note('%s: Hoster unsupported', pkg)
+                ws.build(builder=args.builder,
+                         result_dir=args.build_target_dir)
+            except BuildFailedError:
+                note('%s: build failed', pkg)
                 ret = 1
                 continue
-            except NoSuchProject as e:
-                note('%s: project %s was not found', pkg, e.project)
-                ret = 1
-                continue
-            except errors.PermissionDenied as e:
-                note('%s: %s', pkg, e)
-                ret = 1
-                continue
-            except errors.DivergedBranches:
-                note('%s: a branch exists. Use --overwrite to discard it.',
-                     pkg)
+            except MissingUpstreamTarball:
+                note('%s: unable to find upstream source', pkg)
                 ret = 1
                 continue
 
-            if publish_result.proposal:
-                changer.describe(applied, publish_result)
-            if args.diff:
-                ws.show_diff(sys.stdout.buffer)
+        enable_tag_pushing(ws.local_tree.branch)
 
+        try:
+            publish_result = publish_changes(
+                ws, args.mode, branch_name,
+                get_proposal_description=partial(
+                    changer.get_proposal_description, changer_result),
+                get_proposal_commit_message=partial(
+                    changer.get_commit_message, changer_result),
+                dry_run=args.dry_run, hoster=hoster,
+                allow_create_proposal=partial(
+                    changer.allow_create_proposal, changer_result),
+                overwrite_existing=overwrite,
+                existing_proposal=existing_proposal)
+        except UnsupportedHoster:
+            note('%s: Hoster unsupported', pkg)
+            ret = 1
+            continue
+        except NoSuchProject as e:
+            note('%s: project %s was not found', pkg, e.project)
+            ret = 1
+            continue
+        except errors.PermissionDenied as e:
+            note('%s: %s', pkg, e)
+            ret = 1
+            continue
+        except errors.DivergedBranches:
+            note('%s: a branch exists. Use --overwrite to discard it.',
+                 pkg)
+            ret = 1
+            continue
+
+        if publish_result.proposal:
+            changer.describe(changer_result, publish_result)
+        if args.diff:
+            ws.show_diff(sys.stdout.buffer)
     return ret
 
 

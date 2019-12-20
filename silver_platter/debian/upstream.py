@@ -19,6 +19,7 @@
 
 import silver_platter  # noqa: F401
 
+import argparse
 from debian.changelog import Version
 import os
 import re
@@ -553,35 +554,58 @@ def update_packaging(tree, old_tree, committer=None):
 
 
 def setup_parser(parser):
-    import argparse
-    parser.add_argument("packages", nargs='+')
+    parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        "--dry-run",
+        help="Create branches but don't push or propose anything.",
+        action="store_true", default=False)
     parser.add_argument(
         '--no-build-verify',
         help='Do not build package to verify it.',
         dest='build_verify',
         action='store_false')
     parser.add_argument(
-        '--builder', type=str, default=DEFAULT_BUILDER, help='Build command.')
-    parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
         type=str)
     parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true",
-        default=False)
+        '--post-check',
+        help='Command to run to check package before pushing.',
+        type=str)
+    parser.add_argument(
+        '--builder', default=DEFAULT_BUILDER, type=str,
+        help='Build command to use when verifying build.')
+    parser.add_argument(
+        '--refresh',
+        help='Discard old branch and apply fixers from scratch.',
+        action='store_true')
+    parser.add_argument(
+        '--committer',
+        help='Committer identity',
+        type=str)
     parser.add_argument(
         '--mode',
         help='Mode for pushing', choices=SUPPORTED_MODES,
         default="propose", type=str)
     parser.add_argument(
+        '--no-update-changelog', action="store_false", default=None,
+        dest="update_changelog", help="do not update the changelog")
+    parser.add_argument(
+        '--update-changelog', action="store_true", dest="update_changelog",
+        help="force updating of the changelog", default=None)
+    parser.add_argument(
+        '--diff', action="store_true",
+        help="Output diff of created merge proposal.")
+    parser.add_argument(
         '--build-target-dir', type=str,
         help=("Store built Debian files in specified directory "
               "(with --build-verify)"))
     parser.add_argument(
-        '--diff', action="store_true",
-        help="Output diff of created merge proposal.")
+        '--overwrite', action='store_true',
+        help='Overwrite existing branches.')
+    parser.add_argument(
+        '--fix-conflicted', action='store_true',
+        help='Fix existing merge proposals that are conflicted.')
     NewUpstreamChanger.setup_parser(parser)
 
 
@@ -632,13 +656,13 @@ class NewUpstreamChanger(object):
                    refresh_patches=args.refresh_patches,
                    update_package=args.update_packaging)
 
-    def make_changes(self, local_tree, subpath, update_changelog):
+    def make_changes(self, local_tree, subpath, update_changelog, committer):
         try:
             merge_upstream_result = merge_upstream(
                 tree=local_tree, snapshot=self.snapshot,
                 trust_package=self.trust_package,
                 update_changelog=update_changelog,
-                subpath=subpath)
+                subpath=subpath, committer=committer)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
                 'Last upstream version %s already imported.' % e.version, e)
@@ -737,6 +761,9 @@ def main(args):
 
     package_iter = iter_packages(
         args.packages, branch_name, args.overwrite, args.refresh)
+    if args.fix_conflicted:
+        package_iter = itertools.chain(
+            package_iter, iter_conflicted(branch_name))
 
     for (pkg, main_branch, resume_branch, hoster, existing_proposal,
          overwrite) in package_iter:
@@ -744,7 +771,10 @@ def main(args):
             warning('Unsupported hoster; will attempt to push to %s',
                     main_branch.user_url)
             args.mode = 'push'
-        with Workspace(main_branch) as ws, ws.local_tree.lock_write():
+        with Workspace(main_branch, resume_branch=resume_branch) as ws, \
+                ws.local_tree.lock_write():
+            if ws.refreshed:
+                overwrite = True
             run_pre_check(ws.local_tree, args.pre_check)
             if args.update_changelog is None:
                 update_changelog = should_update_changelog(
@@ -752,33 +782,77 @@ def main(args):
             else:
                 update_changelog = args.update_changelog
             try:
-                merge_upstream_result = changer.make_changes(
+                changer_result = changer.make_changes(
                     ws.local_tree, subpath='',
-                    update_changelog=update_changelog)
+                    update_changelog=update_changelog,
+                    committer=args.committer)
             except ChangerError as e:
-                show_error(e.summary, e.original)
+                show_error(e.summary)
                 ret = 1
                 continue
-            if args.build_verify:
+
+            if not ws.changes_since_main():
+                if existing_proposal:
+                    note('%s: nothing left to do. Closing proposal.', pkg)
+                    existing_proposal.close()
+                else:
+                    note('%s: nothing to do', pkg)
+            continue
+
+        try:
+            run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
+        except PostCheckFailed as e:
+            note('%s: %s', pkg, e)
+            continue
+        if args.build_verify:
+            try:
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
+            except BuildFailedError:
+                note('%s: build failed', pkg)
+                ret = 1
+                continue
+            except MissingUpstreamTarball:
+                note('%s: unable to find upstream source', pkg)
+                ret = 1
+                continue
 
+        enable_tag_pushing(ws.local_tree.branch)
+
+        try:
             publish_result = publish_changes(
                 ws, args.mode, branch_name,
                 get_proposal_description=partial(
-                    changer.get_proposal_description, merge_upstream_result),
+                    changer.get_proposal_description, changer_result),
                 get_proposal_commit_message=partial(
-                    changer.get_commit_message, merge_upstream_result),
-                allow_create_proposal=partial(
-                    changer.allow_create_proposal, merge_upstream_result),
+                    changer.get_commit_message, changer_result),
                 dry_run=args.dry_run, hoster=hoster,
-                existing_proposal=existing_proposal,
-                overwrite_existing=overwrite)
+                allow_create_proposal=partial(
+                    changer.allow_create_proposal, changer_result),
+                overwrite_existing=overwrite,
+                existing_proposal=existing_proposal)
+        except UnsupportedHoster:
+            note('%s: Hoster unsupported', pkg)
+            ret = 1
+            continue
+        except NoSuchProject as e:
+            note('%s: project %s was not found', pkg, e.project)
+            ret = 1
+            continue
+        except errors.PermissionDenied as e:
+            note('%s: %s', pkg, e)
+            ret = 1
+            continue
+        except errors.DivergedBranches:
+            note('%s: a branch exists. Use --overwrite to discard it.',
+                 pkg)
+            ret = 1
+            continue
 
-            changer.describe(merge_upstream_result, publish_result)
-
-            if args.diff:
-                ws.show_diff(sys.stdout.buffer)
+        if publish_result.proposal:
+            changer.describe(changer_result, publish_result)
+        if args.diff:
+            ws.show_diff(sys.stdout.buffer)
     return ret
 
 
