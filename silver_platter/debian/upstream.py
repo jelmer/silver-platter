@@ -25,6 +25,8 @@ import re
 import sys
 import tempfile
 
+from functools import partial
+
 from ..proposal import (
     publish_changes,
     SUPPORTED_MODES,
@@ -554,10 +556,6 @@ def setup_parser(parser):
     import argparse
     parser.add_argument("packages", nargs='+')
     parser.add_argument(
-        '--snapshot',
-        help='Merge a new upstream snapshot rather than a release',
-        action='store_true')
-    parser.add_argument(
         '--no-build-verify',
         help='Do not build package to verify it.',
         dest='build_verify',
@@ -584,17 +582,7 @@ def setup_parser(parser):
     parser.add_argument(
         '--diff', action="store_true",
         help="Output diff of created merge proposal.")
-    parser.add_argument(
-        '--refresh-patches', action="store_true",
-        help="Refresh quilt patches after upstream merge.")
-    parser.add_argument(
-        '--trust-package', action='store_true',
-        default=False,
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        '--update-packaging', action='store_true',
-        default=False,
-        help='Attempt to update packaging to upstream changes.')
+    NewUpstreamChanger.setup_parser(parser)
 
 
 class ChangerError(Exception):
@@ -613,12 +601,44 @@ class NewUpstreamChanger(object):
         self.refresh_patches = refresh_patches
         self.update_packaging = update_packaging
 
-    def make_changes(self, local_tree, update_changelog):
+    @classmethod
+    def setup_parser(cls, parser):
+        parser.add_argument(
+            '--trust-package', action='store_true',
+            default=False,
+            help=argparse.SUPPRESS)
+        parser.add_argument(
+            '--update-packaging', action='store_true',
+            default=False,
+            help='Attempt to update packaging to upstream changes.')
+        parser.add_argument(
+            '--snapshot',
+            help='Merge a new upstream snapshot rather than a release',
+            action='store_true')
+        parser.add_argument(
+            '--refresh-patches', action="store_true",
+            help="Refresh quilt patches after upstream merge.")
+
+    def suggest_branch_name(self):
+        if self.snapshot:
+            return SNAPSHOT_BRANCH_NAME
+        else:
+            return RELEASE_BRANCH_NAME
+
+    @classmethod
+    def from_args(cls, args):
+        return cls(snapshot=args.snapshot,
+                   trust_package=args.trust_package,
+                   refresh_patches=args.refresh_patches,
+                   update_package=args.update_packaging)
+
+    def make_changes(self, local_tree, subpath, update_changelog):
         try:
             merge_upstream_result = merge_upstream(
                 tree=local_tree, snapshot=self.snapshot,
                 trust_package=self.trust_package,
-                update_changelog=update_changelog)
+                update_changelog=update_changelog,
+                subpath=subpath)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
                 'Last upstream version %s already imported.' % e.version, e)
@@ -688,16 +708,32 @@ class NewUpstreamChanger(object):
 
         return merge_upstream_result
 
+    def get_proposal_description(self, merge_upstream_result, unused_proposal):
+        return ("Merge new upstream release %s" %
+                merge_upstream_result.new_upstream_version)
+
+    def get_commit_message(self, merge_upstream_result, unused_proposal):
+        return ("Merge new upstream release %s" %
+                merge_upstream_result.new_upstream_version)
+
+    def allow_create_proposal(self, merge_upstream_result):
+        return True
+
+    def describe(self, merge_upstream_result, publish_result):
+        if publish_result.proposal:
+            if publish_result.is_new:
+                note('Created new merge proposal %s.',
+                     publish_result.proposal.url)
+            else:
+                note('Updated merge proposal %s.',
+                     publish_result.proposal.url)
+
 
 def main(args):
     ret = 0
 
-    if args.snapshot:
-        branch_name = SNAPSHOT_BRANCH_NAME
-    else:
-        branch_name = RELEASE_BRANCH_NAME
-
-    changer = NewUpstreamChanger()
+    changer = NewUpstreamChanger.from_args(args)
+    branch_name = changer.suggest_branch_name()
 
     package_iter = iter_packages(
         args.packages, branch_name, args.overwrite, args.refresh)
@@ -717,7 +753,8 @@ def main(args):
                 update_changelog = args.update_changelog
             try:
                 merge_upstream_result = changer.make_changes(
-                    ws.local_tree, update_changelog)
+                    ws.local_tree, subpath='',
+                    update_changelog=update_changelog)
             except ChangerError as e:
                 show_error(e.summary, e.original)
                 ret = 1
@@ -726,28 +763,20 @@ def main(args):
                 ws.build(builder=args.builder,
                          result_dir=args.build_target_dir)
 
-            def get_proposal_description(unused_proposal):
-                return ("Merge new upstream release %s" %
-                        merge_upstream_result.new_upstream_version)
-
             publish_result = publish_changes(
                 ws, args.mode, branch_name,
-                get_proposal_description=get_proposal_description,
-                get_proposal_commit_message=get_proposal_description,
+                get_proposal_description=partial(
+                    changer.get_proposal_description, merge_upstream_result),
+                get_proposal_commit_message=partial(
+                    changer.get_commit_message, merge_upstream_result),
+                allow_create_proposal=partial(
+                    changer.allow_create_proposal, merge_upstream_result),
                 dry_run=args.dry_run, hoster=hoster,
                 existing_proposal=existing_proposal,
                 overwrite_existing=overwrite)
 
-            if publish_result.proposal:
-                if publish_result.is_new:
-                    note('%s: Created new merge proposal %s.',
-                         pkg, publish_result.proposal.url)
-                else:
-                    note('%s: Updated merge proposal %s.',
-                         pkg, publish_result.proposal.url)
-            elif existing_proposal:
-                note('%s: Closed merge proposal %s',
-                     pkg, existing_proposal.url)
+            changer.describe(merge_upstream_result, publish_result)
+
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
     return ret

@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+from functools import partial
 import sys
 
 from breezy.errors import BzrError
@@ -141,20 +142,9 @@ def has_nontrivial_changes(applied, propose_addon_only):
 def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
-        "--fixers",
-        help="Fixers to run.", type=str, action='append')
-    parser.add_argument(
-        '--exclude',
-        help='Fixers to exclude.', type=str, action='append')
-    parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
-    parser.add_argument(
-        '--propose-addon-only',
-        help='Fixers that should be considered add-on-only.',
-        type=str, action='append',
-        default=DEFAULT_ADDON_FIXERS)
     parser.add_argument(
         '--pre-check',
         help='Command to run to check whether to process package.',
@@ -200,6 +190,7 @@ def setup_parser(parser):
     parser.add_argument(
         '--fix-conflicted', action='store_true',
         help='Fix existing merge proposals that are conflicted.')
+    LintianBrushChanger.setup_parser(parser)
 
 
 def get_fixers(available_fixers, names=None, tags=None, exclude=None):
@@ -240,12 +231,35 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
 
 class LintianBrushChanger(object):
 
-    def __init__(self, names=None, exclude=None):
+    def __init__(self, names=None, exclude=None, propose_addon_only=None):
         self.fixers = get_fixers(
             available_lintian_fixers(), names=names,
             exclude=exclude)
+        self.propose_addon_only = propose_addon_only or []
 
-    def make_changes(self, local_tree, update_changelog):
+    @classmethod
+    def setup_parser(cls, parser):
+        parser.add_argument(
+            "--fixers",
+            help="Fixers to run.", type=str, action='append')
+        parser.add_argument(
+            '--exclude',
+            help='Fixers to exclude.', type=str, action='append')
+        parser.add_argument(
+            '--propose-addon-only',
+            help='Fixers that should be considered add-on-only.',
+            type=str, action='append',
+            default=DEFAULT_ADDON_FIXERS)
+
+    @classmethod
+    def from_args(cls, args):
+        return cls(names=args.names, exclude=args.exclude,
+                   propose_addon_only=args.propose_addon_only)
+
+    def suggest_branch_name(self):
+        return BRANCH_NAME
+
+    def make_changes(self, local_tree, subpath, update_changelog):
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 
@@ -253,7 +267,7 @@ class LintianBrushChanger(object):
         allow_reformatting = None
         minimum_certainty = None
         try:
-            cfg = Config.from_workingtree(local_tree, '')
+            cfg = Config.from_workingtree(local_tree, subpath)
         except FileNotFoundError:
             pass
         else:
@@ -276,12 +290,40 @@ class LintianBrushChanger(object):
                 update_changelog=update_changelog,
                 compat_release=compat_release,
                 allow_reformatting=allow_reformatting,
-                minimum_certainty=minimum_certainty)
+                minimum_certainty=minimum_certainty,
+                subpath=subpath)
 
         if failed:
             note('some fixers failed to run: %r', set(failed))
 
         return applied
+
+    def get_proposal_description(self, applied, existing_proposal):
+        return update_proposal_description(
+            existing_proposal, applied)
+
+    def get_proposal_commit_message(self, applied, existing_proposal):
+        return update_proposal_commit_message(
+            existing_proposal, applied)
+
+    def allow_create_proposal(self, applied):
+        if not has_nontrivial_changes(applied, self.propose_addon_only):
+            note('only add-on fixers found')
+            return False
+        else:
+            return True
+
+    def describe(self, applied, publish_result):
+        tags = set()
+        for brush_result, unused_summary in applied:
+            tags.update(brush_result.fixed_lintian_tags)
+        if publish_result.is_new:
+            note('Proposed fixes %r: %s', tags, publish_result.proposal.url)
+        elif tags:
+            note('Updated proposal %s with fixes %r',
+                 publish_result.proposal.url, tags)
+        else:
+            note('No new fixes for proposal %s', publish_result.proposal.url)
 
 
 def main(args):
@@ -306,17 +348,18 @@ def main(args):
     ret = 0
 
     try:
-        changer = LintianBrushChanger(
-            names=args.fixers, exclude=args.exclude)
+        changer = LintianBrushChanger.from_args(args)
     except UnknownFixer as e:
         note('Unknown fixer: %s', e.fixer)
         return 1
 
+    branch_name = changer.suggest_branch_name()
+
     package_iter = iter_packages(
-        args.packages, BRANCH_NAME, args.overwrite, args.refresh)
+        args.packages, branch_name, args.overwrite, args.refresh)
     if args.fix_conflicted:
         package_iter = itertools.chain(
-            package_iter, iter_conflicted(BRANCH_NAME))
+            package_iter, iter_conflicted(branch_name))
 
     for (pkg, main_branch, resume_branch, hoster, existing_proposal,
          overwrite) in package_iter:
@@ -335,13 +378,16 @@ def main(args):
                 else:
                     update_changelog = args.update_changelog
 
-                applied = changer.make_changes(ws.local_tree, update_changelog)
+                applied = changer.make_changes(
+                    ws.local_tree, subpath='',
+                    update_changelog=update_changelog)
 
-                if existing_proposal and not ws.changes_since_main():
-                    note('%s: nothing left to do. Closing proposal.', pkg)
-                    existing_proposal.close()
-                else:
-                    note('%s: nothing to do', pkg)
+                if not ws.changes_since_main():
+                    if existing_proposal:
+                        note('%s: nothing left to do. Closing proposal.', pkg)
+                        existing_proposal.close()
+                    else:
+                        note('%s: nothing to do', pkg)
                 continue
 
             try:
@@ -364,27 +410,16 @@ def main(args):
 
             enable_tag_pushing(ws.local_tree.branch)
 
-            def get_proposal_description(existing_proposal):
-                return update_proposal_description(
-                    existing_proposal, applied)
-
-            def get_proposal_commit_message(existing_proposal):
-                return update_proposal_commit_message(
-                    existing_proposal, applied)
-
-            if not has_nontrivial_changes(applied, args.propose_addon_only):
-                note('%s: only add-on fixers found', pkg)
-                allow_create_proposal = False
-            else:
-                allow_create_proposal = True
-
             try:
                 publish_result = publish_changes(
-                    ws, args.mode, BRANCH_NAME,
-                    get_proposal_description=get_proposal_description,
-                    get_proposal_commit_message=get_proposal_commit_message,
+                    ws, args.mode, branch_name,
+                    get_proposal_description=partial(
+                        changer.get_proposal_description, applied),
+                    get_proposal_commit_message=partial(
+                        changer.get_proposal_commit_message, applied),
                     dry_run=args.dry_run, hoster=hoster,
-                    allow_create_proposal=allow_create_proposal,
+                    allow_create_proposal=partial(
+                        changer.allow_create_proposal, applied),
                     overwrite_existing=overwrite,
                     existing_proposal=existing_proposal)
             except UnsupportedHoster:
@@ -406,19 +441,7 @@ def main(args):
                 continue
 
             if publish_result.proposal:
-                proposal = publish_result.proposal
-                tags = set()
-                for brush_result, unused_summary in applied:
-                    tags.update(brush_result.fixed_lintian_tags)
-                if publish_result.is_new:
-                    note('%s: Proposed fixes %r: %s', pkg, tags,
-                         proposal.url)
-                elif tags:
-                    note('%s: Updated proposal %s with fixes %r', pkg,
-                         proposal.url, tags)
-                else:
-                    note('%s: No new fixes for proposal %s', pkg,
-                         proposal.url)
+                changer.describe(applied, publish_result)
             if args.diff:
                 ws.show_diff(sys.stdout.buffer)
 
