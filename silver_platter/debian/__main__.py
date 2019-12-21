@@ -27,6 +27,7 @@ def main(argv=None):
     from . import (
         lintian as debian_lintian,
         run as debian_run,
+        multiarch,
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
@@ -37,6 +38,7 @@ def main(argv=None):
         ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
+        ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
         ]
 
     for cmd in main_subcommands:

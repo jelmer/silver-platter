@@ -24,7 +24,6 @@ import sys
 from breezy.trace import note, warning, show_error
 
 from . import (
-    get_hoster,
     open_packaging_branch,
     should_update_changelog,
     NoSuchPackage,
@@ -34,6 +33,7 @@ from ..proposal import (
     SUPPORTED_MODES,
     enable_tag_pushing,
     find_existing_proposed,
+    get_hoster,
     iter_conflicted,
     publish_changes,
     )
@@ -168,6 +168,8 @@ def setup_parser(parser):
 
 
 class DebianChanger(object):
+    """A class which can make and explain changes to a Debian package in VCS.
+    """
 
     @classmethod
     def setup_parser(cls, parser):
