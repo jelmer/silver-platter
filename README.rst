@@ -21,7 +21,7 @@ To log in to a code-hosting site, use ``svp login``::
 
 The simplest way to create a change as a merge proposal is to run something like::
 
-    svp run --mode propose https://github.com/jelmer/dulwich ./some-script.sh
+    svp run --mode=propose https://github.com/jelmer/dulwich ./some-script.sh
 
 where ``some-script.sh`` makes some modifications to a working copy and prints the
 body for the pull request to standard out. For example::
@@ -55,6 +55,7 @@ Subcommands that are available include:
  * *upload-pending*: Build and upload a package and push/propose the
    changelog updates.
  * *new-upstream*: Merge in a new upstream release or snapshot.
+ * *apply-multi-arch-hints*: Apply multi-arch hints.
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
@@ -70,6 +71,8 @@ Examples running ``debian-svp``::
     debian-svp upload-pending tdb
 
     debian-svp new-upstream --no-build-verify tdb
+
+    debian-svp apply-multi-arch-hints tdb
 
 Credentials
 ~~~~~~~~~~~
