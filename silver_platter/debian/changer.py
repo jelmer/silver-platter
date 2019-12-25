@@ -30,6 +30,7 @@ from . import (
     DEFAULT_BUILDER,
     )
 from ..proposal import (
+    HosterLoginRequired,
     SUPPORTED_MODES,
     enable_tag_pushing,
     find_existing_proposed,
@@ -165,6 +166,12 @@ def setup_parser(parser):
     parser.add_argument(
         '--fix-conflicted', action='store_true',
         help='Fix existing merge proposals that are conflicted.')
+    parser.add_argument(
+        '--name', type=str,
+        help='Proposed branch name', default=None)
+    parser.add_argument(
+        '--label', type=str,
+        help='Label to attach', action="append", default=[])
 
 
 class DebianChanger(object):
@@ -216,7 +223,10 @@ def run_changer(changer, args):
 
     ret = 0
 
-    branch_name = changer.suggest_branch_name()
+    if args.name:
+        branch_name = args.name
+    else:
+        branch_name = changer.suggest_branch_name()
 
     package_iter = iter_packages(
         args.packages, branch_name, args.overwrite, args.refresh)
@@ -289,9 +299,12 @@ def run_changer(changer, args):
                 allow_create_proposal=partial(
                     changer.allow_create_proposal, changer_result),
                 overwrite_existing=overwrite,
-                existing_proposal=existing_proposal)
-        except UnsupportedHoster:
-            note('%s: Hoster unsupported', pkg)
+                existing_proposal=existing_proposal,
+                labels=args.label)
+        except UnsupportedHoster as e:
+            show_error(
+                '%s: No known supported hoster for %s. Run \'svp login\'?',
+                pkg, e.branch.user_url)
             ret = 1
             continue
         except NoSuchProject as e:
@@ -305,6 +318,12 @@ def run_changer(changer, args):
         except errors.DivergedBranches:
             note('%s: a branch exists. Use --overwrite to discard it.',
                  pkg)
+            ret = 1
+            continue
+        except HosterLoginRequired as e:
+            show_error(
+                'Credentials for hosting site at %r missing. '
+                'Run \'svp login\'?', e.hoster.base_url)
             ret = 1
             continue
 
