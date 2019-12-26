@@ -696,10 +696,13 @@ def main(args):
     return run_changer(changer, args)
 
 
-if __name__ == '__main__':
+def setup_parser(parser):
     from .changer import setup_parser
-    parser = argparse.ArgumentParser(prog='propose-new-upstream')
     setup_parser(parser)
-    NewUpstreamMissing.setup_parser(parser)
+    NewUpstreamChanger.setup_parser(parser)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='propose-new-upstream')
     args = parser.parse_args()
     main(args)

@@ -48,6 +48,40 @@ from ..utils import (
     )
 
 
+def get_package(package, branch_name, overwrite_unrelated=False,
+                refresh=False, possible_transports=None,
+                possible_hosters=None):
+    from breezy.plugins.propose.propose import (
+        UnsupportedHoster,
+        )
+
+    main_branch = open_packaging_branch(
+        package, possible_transports=possible_transports)
+
+    overwrite = False
+
+    try:
+        hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
+    except UnsupportedHoster:
+        # We can't figure out what branch to resume from when there's no
+        # hoster that can tell us.
+        resume_branch = None
+        existing_proposal = None
+        hoster = None
+    else:
+        (resume_branch, overwrite, existing_proposal) = (
+            find_existing_proposed(
+                main_branch, hoster, branch_name,
+                overwrite_unrelated=overwrite_unrelated))
+    if refresh:
+        overwrite = True
+        resume_branch = None
+
+    return (
+        package, main_branch, resume_branch, hoster, existing_proposal,
+        overwrite)
+
+
 def iter_packages(packages, branch_name, overwrite_unrelated=False,
                   refresh=False):
     """Iterate over relevant branches for a set of packages.
@@ -63,44 +97,17 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
          hoster (None if the hoster is not supported),
          existing_proposal, whether to overwrite the branch)
     """
-    from breezy.plugins.propose.propose import (
-        UnsupportedHoster,
-        )
-
     possible_transports = []
     possible_hosters = []
 
     for pkg in packages:
         note('Processing: %s', pkg)
 
-        try:
-            main_branch = open_packaging_branch(
-                pkg, possible_transports=possible_transports)
-        except NoSuchPackage:
-            note('%s: no such package', pkg)
-            continue
-        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-            note('%s: ignoring: %s', pkg, e)
-            continue
-
-        overwrite = False
-
-        try:
-            hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
-        except UnsupportedHoster:
-            # We can't figure out what branch to resume from when there's no
-            # hoster that can tell us.
-            resume_branch = None
-            existing_proposal = None
-            hoster = None
-        else:
-            (resume_branch, overwrite, existing_proposal) = (
-                find_existing_proposed(
-                    main_branch, hoster, branch_name,
-                    overwrite_unrelated=overwrite_unrelated))
-        if refresh:
-            overwrite = True
-            resume_branch = None
+        (pkg, main_branch, resume_branch, hoster, existing_proposal,
+         overwrite) = get_package(
+                pkg, branch_name, overwrite_unrelated=overwrite_unrelated,
+                refresh=refresh, possible_transports=possible_transports,
+                possible_hosters=possible_hosters)
 
         yield (pkg, main_branch, resume_branch, hoster, existing_proposal,
                overwrite)
@@ -115,6 +122,18 @@ class ChangerError(Exception):
 
 def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        '--fix-conflicted', action='store_true',
+        help='Fix existing merge proposals that are conflicted.')
+    setup_parser_common(parser)
+
+
+def setup_single_parser(parser):
+    parser.add_argument("package")
+    setup_parser_common(parser)
+
+
+def setup_parser_common(parser):
     parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
@@ -164,9 +183,6 @@ def setup_parser(parser):
         '--overwrite', action='store_true',
         help='Overwrite existing branches.')
     parser.add_argument(
-        '--fix-conflicted', action='store_true',
-        help='Fix existing merge proposals that are conflicted.')
-    parser.add_argument(
         '--name', type=str,
         help='Proposed branch name', default=None)
     parser.add_argument(
@@ -205,21 +221,114 @@ class DebianChanger(object):
         raise NotImplementedError(self.describe)
 
 
-def run_changer(changer, args):
-    import silver_platter   # noqa: F401
-
+def _run_single_changer(
+        changer, pkg, main_branch, resume_branch, hoster, existing_proposal,
+        overwrite, mode, branch_name, diff=False, committer=None,
+        build_verify=False, pre_check=None, post_check=None,
+        builder=DEFAULT_BUILDER,
+        dry_run=False, update_changelog=None, label=None,
+        build_target_dir=None):
+    from breezy import errors
+    from breezy.plugins.propose.propose import (
+        NoSuchProject,
+        UnsupportedHoster,
+        )
     from . import (
         BuildFailedError,
         MissingUpstreamTarball,
         Workspace,
         )
-    from breezy import (
-        errors,
-        )
-    from breezy.plugins.propose.propose import (
-        NoSuchProject,
-        UnsupportedHoster,
-        )
+
+    if hoster is None and mode == 'attempt-push':
+        warning('Unsupported hoster; will attempt to push to %s',
+                main_branch.user_url)
+        mode = 'push'
+    with Workspace(main_branch, resume_branch=resume_branch) as ws, \
+            ws.local_tree.lock_write():
+        if ws.refreshed:
+            overwrite = True
+        run_pre_check(ws.local_tree, pre_check)
+        if update_changelog is None:
+            update_changelog = should_update_changelog(
+                ws.local_tree.branch)
+        try:
+            changer_result = changer.make_changes(
+                ws.local_tree, subpath='',
+                update_changelog=update_changelog,
+                committer=committer)
+        except ChangerError as e:
+            show_error(e.summary)
+            return False
+
+        if not ws.changes_since_main():
+            if existing_proposal:
+                note('%s: nothing left to do. Closing proposal.', pkg)
+                existing_proposal.close()
+            else:
+                note('%s: nothing to do', pkg)
+        return None
+
+    try:
+        run_post_check(ws.local_tree, post_check, ws.orig_revid)
+    except PostCheckFailed as e:
+        note('%s: %s', pkg, e)
+        return False
+    if build_verify:
+        try:
+            ws.build(builder=builder, result_dir=build_target_dir)
+        except BuildFailedError:
+            note('%s: build failed', pkg)
+            return False
+        except MissingUpstreamTarball:
+            note('%s: unable to find upstream source', pkg)
+            return False
+
+    enable_tag_pushing(ws.local_tree.branch)
+
+    try:
+        publish_result = publish_changes(
+            ws, mode, branch_name,
+            get_proposal_description=partial(
+                changer.get_proposal_description, changer_result),
+            get_proposal_commit_message=partial(
+                changer.get_commit_message, changer_result),
+            dry_run=dry_run, hoster=hoster,
+            allow_create_proposal=partial(
+                changer.allow_create_proposal, changer_result),
+            overwrite_existing=overwrite,
+            existing_proposal=existing_proposal,
+            labels=label)
+    except UnsupportedHoster as e:
+        show_error(
+            '%s: No known supported hoster for %s. Run \'svp login\'?',
+            pkg, e.branch.user_url)
+        return False
+    except NoSuchProject as e:
+        note('%s: project %s was not found', pkg, e.project)
+        return False
+    except errors.PermissionDenied as e:
+        note('%s: %s', pkg, e)
+        return False
+    except errors.DivergedBranches:
+        note('%s: a branch exists. Use --overwrite to discard it.',
+             pkg)
+        return False
+    except HosterLoginRequired as e:
+        show_error(
+            'Credentials for hosting site at %r missing. '
+            'Run \'svp login\'?', e.hoster.base_url)
+        return False
+
+    if publish_result.proposal:
+        changer.describe(changer_result, publish_result)
+    if diff:
+        ws.show_diff(sys.stdout.buffer)
+
+    return True
+
+
+def run_changer(changer, args):
+    import silver_platter   # noqa: F401
 
     ret = 0
 
@@ -236,99 +345,55 @@ def run_changer(changer, args):
 
     for (pkg, main_branch, resume_branch, hoster, existing_proposal,
          overwrite) in package_iter:
-        if hoster is None and args.mode == 'attempt-push':
-            warning('Unsupported hoster; will attempt to push to %s',
-                    main_branch.user_url)
-            args.mode = 'push'
-        with Workspace(main_branch, resume_branch=resume_branch) as ws, \
-                ws.local_tree.lock_write():
-            if ws.refreshed:
-                overwrite = True
-            run_pre_check(ws.local_tree, args.pre_check)
-            if args.update_changelog is None:
-                update_changelog = should_update_changelog(
-                    ws.local_tree.branch)
-            else:
-                update_changelog = args.update_changelog
-            try:
-                changer_result = changer.make_changes(
-                    ws.local_tree, subpath='',
-                    update_changelog=update_changelog,
-                    committer=args.committer)
-            except ChangerError as e:
-                show_error(e.summary)
-                ret = 1
-                continue
-
-            if not ws.changes_since_main():
-                if existing_proposal:
-                    note('%s: nothing left to do. Closing proposal.', pkg)
-                    existing_proposal.close()
-                else:
-                    note('%s: nothing to do', pkg)
-            continue
-
         try:
-            run_post_check(ws.local_tree, args.post_check, ws.orig_revid)
-        except PostCheckFailed as e:
-            note('%s: %s', pkg, e)
-            continue
-        if args.build_verify:
-            try:
-                ws.build(builder=args.builder,
-                         result_dir=args.build_target_dir)
-            except BuildFailedError:
-                note('%s: build failed', pkg)
+            if _run_single_changer(
+                    changer, pkg, main_branch, resume_branch, hoster,
+                    existing_proposal, overwrite, args.mode, diff=args.diff,
+                    committer=args.committer, build_verify=args.build_verify,
+                    pre_check=args.pre_check, builder=args.builder,
+                    post_check=args.post_check, dry_run=args.dry_run,
+                    update_changelog=args.update_changelog,
+                    label=args.label,
+                    build_target_dir=args.build_target_dir) is False:
                 ret = 1
-                continue
-            except MissingUpstreamTarball:
-                note('%s: unable to find upstream source', pkg)
-                ret = 1
-                continue
-
-        enable_tag_pushing(ws.local_tree.branch)
-
-        try:
-            publish_result = publish_changes(
-                ws, args.mode, branch_name,
-                get_proposal_description=partial(
-                    changer.get_proposal_description, changer_result),
-                get_proposal_commit_message=partial(
-                    changer.get_commit_message, changer_result),
-                dry_run=args.dry_run, hoster=hoster,
-                allow_create_proposal=partial(
-                    changer.allow_create_proposal, changer_result),
-                overwrite_existing=overwrite,
-                existing_proposal=existing_proposal,
-                labels=args.label)
-        except UnsupportedHoster as e:
-            show_error(
-                '%s: No known supported hoster for %s. Run \'svp login\'?',
-                pkg, e.branch.user_url)
+        except NoSuchPackage:
+            note('%s: no such package', pkg)
             ret = 1
-            continue
-        except NoSuchProject as e:
-            note('%s: project %s was not found', pkg, e.project)
+        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+            note('%s: ignoring: %s', pkg, e)
             ret = 1
-            continue
-        except errors.PermissionDenied as e:
-            note('%s: %s', pkg, e)
-            ret = 1
-            continue
-        except errors.DivergedBranches:
-            note('%s: a branch exists. Use --overwrite to discard it.',
-                 pkg)
-            ret = 1
-            continue
-        except HosterLoginRequired as e:
-            show_error(
-                'Credentials for hosting site at %r missing. '
-                'Run \'svp login\'?', e.hoster.base_url)
-            ret = 1
-            continue
-
-        if publish_result.proposal:
-            changer.describe(changer_result, publish_result)
-        if args.diff:
-            ws.show_diff(sys.stdout.buffer)
     return ret
+
+
+def run_single_changer(changer, args):
+    import silver_platter   # noqa: F401
+
+    if args.name:
+        branch_name = args.name
+    else:
+        branch_name = changer.suggest_branch_name()
+
+    try:
+        (pkg, main_branch, resume_branch, hoster, existing_proposal,
+         overwrite) = get_package(
+                args.package, branch_name, overwrite_unrelated=args.overwrite,
+                refresh=args.refresh)
+    except NoSuchPackage:
+        note('%s: no such package', args.package)
+        return 1
+    except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+        note('%s: ignoring: %s', args.package, e)
+        return 1
+
+    if _run_single_changer(
+            changer, pkg, main_branch, resume_branch, hoster,
+            existing_proposal, overwrite, args.mode, diff=args.diff,
+            committer=args.committer, build_verify=args.build_verify,
+            pre_check=args.pre_check, builder=args.builder,
+            post_check=args.post_check, dry_run=args.dry_run,
+            update_changelog=args.update_changelog,
+            label=args.label,
+            build_target_dir=args.build_target_dir) is False:
+        return 1
+    else:
+        return 0

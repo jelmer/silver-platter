@@ -21,15 +21,9 @@ import silver_platter  # noqa: F401
 
 from .changer import (
     DebianChanger,
-    )
-
-from lintian_brush.multiarch_hints import (
-    download_multi_arch_hints,
-    apply_multi_arch_hints,
     run_changer,
     setup_parser,
     )
-
 
 BRANCH_NAME = 'multi-arch-fixes'
 
@@ -47,12 +41,18 @@ class MultiArchHintsChanger(DebianChanger):
         return cls()
 
     def __init__(self):
+        from lintian_brush.multiarch_hints import (
+            download_multi_arch_hints,
+            )
         self.hints = download_multi_arch_hints()
 
     def suggest_branch_name(self):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
+        from lintian_brush.multiarch_hints import (
+            apply_multi_arch_hints,
+            )
         applied_hints = apply_multi_arch_hints(
             local_tree, self.hints.get(package, []))
         return applied_hints

@@ -34,6 +34,7 @@ from breezy.plugins.propose.propose import (
     MergeProposal,
     NoSuchProject,
     UnsupportedHoster,
+    HosterLoginRequired,
     )
 
 
