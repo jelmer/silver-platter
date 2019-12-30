@@ -23,31 +23,20 @@ import argparse
 from debian.changelog import Version
 import os
 import re
-import sys
 import tempfile
 
-from functools import partial
-
-from ..proposal import (
-    publish_changes,
-    SUPPORTED_MODES,
-    )
 from ..utils import (
     open_branch,
-    run_pre_check,
     BranchMissing,
     BranchUnavailable,
     BranchUnsupported,
     )
 
 from . import (
-    Workspace,
-    should_update_changelog,
-    DEFAULT_BUILDER,
     changelog_add_line,
     debcommit,
     )
-from .changer import iter_packages
+from .changer import ChangerError, Changer
 from breezy.commit import (
     PointlessCommit,
     )
@@ -68,7 +57,7 @@ from breezy.plugins.debian.errors import (
     UnparseableChangelog,
     )
 
-from breezy.trace import note, show_error, warning
+from breezy.trace import note, warning
 
 from breezy.plugins.debian.merge_upstream import (
     changelog_add_new_version,
@@ -553,7 +542,7 @@ def update_packaging(tree, old_tree, committer=None):
         return notes
 
 
-class NewUpstreamChanger(object):
+class NewUpstreamChanger(Changer):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
                  update_packaging):
