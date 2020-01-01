@@ -43,6 +43,7 @@ DEFAULT_ADDON_FIXERS = [
     'out-of-date-standards-version',
     'package-uses-old-debhelper-compat-version',
     'public-upstream-key-not-minimal',
+    'no-dh-sequencer',
     ]
 BRANCH_NAME = "lintian-fixes"
 
