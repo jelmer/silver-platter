@@ -267,7 +267,7 @@ def _run_single_changer(
                 existing_proposal.close()
             else:
                 note('%s: nothing to do', pkg)
-        return None
+            return None
 
     try:
         run_post_check(ws.local_tree, post_check, ws.orig_revid)
@@ -349,7 +349,8 @@ def run_changer(changer, args):
         try:
             if _run_single_changer(
                     changer, pkg, main_branch, resume_branch, hoster,
-                    existing_proposal, overwrite, args.mode, diff=args.diff,
+                    existing_proposal, overwrite, args.mode,
+                    branch_name, diff=args.diff,
                     committer=args.committer, build_verify=args.build_verify,
                     pre_check=args.pre_check, builder=args.builder,
                     post_check=args.post_check, dry_run=args.dry_run,
@@ -388,8 +389,9 @@ def run_single_changer(changer, args):
 
     if _run_single_changer(
             changer, pkg, main_branch, resume_branch, hoster,
-            existing_proposal, overwrite, args.mode, diff=args.diff,
-            committer=args.committer, build_verify=args.build_verify,
+            existing_proposal, overwrite, args.mode, branch_name,
+            diff=args.diff, committer=args.committer,
+            build_verify=args.build_verify,
             pre_check=args.pre_check, builder=args.builder,
             post_check=args.post_check, dry_run=args.dry_run,
             update_changelog=args.update_changelog,

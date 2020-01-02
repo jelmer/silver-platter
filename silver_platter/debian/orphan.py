@@ -22,6 +22,7 @@ from .changer import (
     DebianChanger,
     setup_parser,
     )
+from breezy import osutils
 from breezy.trace import note
 
 from lintian_brush.control import update_control
@@ -48,9 +49,12 @@ class OrphanChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         def set_maintainer(source):
-            source['Maintainer'] = (
-                'Debian QA Group <packages@qa.debian.org>')
-        update_control(source_package_cb=set_maintainer)
+            source['Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
+        update_control(
+            path=local_tree.abspath(
+                osutils.pathjoin(subpath, 'debian/control')),
+            source_package_cb=set_maintainer)
+        local_tree.commit('Set maintainer to QA team..', committer=committer)
         return {}
 
     def get_proposal_description(
