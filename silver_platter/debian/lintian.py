@@ -92,6 +92,16 @@ def create_mp_description(description_format, lines):
     return ''.join(mp_description)
 
 
+def applied_entry_as_line(description_format, r, l):
+    if not r.fixed_lintian_tags:
+        return l
+    if description_format == 'markdown':
+        return '%s (%s)' % (l, ', '.join(
+            ['[%s](https://lintian.debian.org/tags/%s.html)' % (tag, tag)
+             for tag in r.fixed_lintian_tags]))
+    return '%s (%s)' % (l, ', '.join(r.fixed_lintian_tags))
+
+
 def update_proposal_description(
         description_format, existing_proposal, applied):
     if existing_proposal:
@@ -100,7 +110,8 @@ def update_proposal_description(
     else:
         existing_lines = []
     return create_mp_description(
-        description_format, existing_lines + [l for r, l in applied])
+        description_format, existing_lines +
+        [applied_entry_as_line(description_format, r, l) for r, l in applied])
 
 
 def update_proposal_commit_message(existing_proposal, applied):
