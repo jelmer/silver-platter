@@ -17,6 +17,10 @@
 
 """Support for integration multi-arch hints."""
 
+from breezy import osutils
+
+from debian.changelog import Changelog
+
 import silver_platter  # noqa: F401
 
 from .changer import (
@@ -53,6 +57,10 @@ class MultiArchHintsChanger(DebianChanger):
         from lintian_brush.multiarch_hints import (
             apply_multi_arch_hints,
             )
+        cl_path = osutils.joinpath(subpath, 'debian/changelog')
+        with local_tree.get_file(cl_path) as f:
+            cl = Changelog(f, max_blocks=1)
+            package = cl.package
         applied_hints = apply_multi_arch_hints(
             local_tree, self.hints.get(package, []))
         return applied_hints

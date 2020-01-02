@@ -36,7 +36,7 @@ from . import (
     changelog_add_line,
     debcommit,
     )
-from .changer import ChangerError, Changer
+from .changer import ChangerError, DebianChanger
 from breezy.commit import (
     PointlessCommit,
     )
@@ -542,7 +542,7 @@ def update_packaging(tree, old_tree, committer=None):
         return notes
 
 
-class NewUpstreamChanger(Changer):
+class NewUpstreamChanger(DebianChanger):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
                  update_packaging):

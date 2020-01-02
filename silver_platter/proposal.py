@@ -46,6 +46,7 @@ from .utils import (
 
 
 __all__ = [
+    'HosterLoginRequired',
     'UnsupportedHoster',
     'PermissionDenied',
     'NoSuchProject',

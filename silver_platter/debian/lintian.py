@@ -73,7 +73,7 @@ def parse_mp_description(description):
                 for l in existing_lines if l.startswith('* ')]
 
 
-def create_mp_description(lines):
+def create_mp_description(description_format, lines):
     """Create a merge proposal description.
 
     Args:
@@ -92,14 +92,15 @@ def create_mp_description(lines):
     return ''.join(mp_description)
 
 
-def update_proposal_description(existing_proposal, applied):
+def update_proposal_description(
+        description_format, existing_proposal, applied):
     if existing_proposal:
         existing_description = existing_proposal.get_description()
         existing_lines = parse_mp_description(existing_description)
     else:
         existing_lines = []
     return create_mp_description(
-        existing_lines + [l for r, l in applied])
+        description_format, existing_lines + [l for r, l in applied])
 
 
 def update_proposal_commit_message(existing_proposal, applied):
@@ -233,7 +234,8 @@ class LintianBrushChanger(DebianChanger):
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
-        return update_proposal_description(existing_proposal, applied)
+        return update_proposal_description(
+            description_format, existing_proposal, applied)
 
     def get_commit_message(self, applied, existing_proposal):
         return update_proposal_commit_message(
