@@ -28,6 +28,7 @@ def main(argv=None):
         lintian as debian_lintian,
         run as debian_run,
         multiarch,
+        orphan,
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
@@ -39,6 +40,7 @@ def main(argv=None):
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
         ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
+        ('orphan', orphan.setup_parser, orphan.main),
         ]
 
     for cmd in main_subcommands:
