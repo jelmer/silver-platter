@@ -418,6 +418,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         return PublishResult(mode)
 
     mp_description = get_proposal_description(
+        getattr(hoster, 'merge_proposal_description_format', 'plain'),
         existing_proposal if ws.resume_branch else None)
     if get_proposal_commit_message is not None:
         commit_message = get_proposal_commit_message(

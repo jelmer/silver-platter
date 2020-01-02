@@ -67,7 +67,8 @@ class ScriptChanger(DebianChanger):
             raise ChangerError('Script did not make any changes.', e)
         return description
 
-    def get_proposal_description(self, description, existing_proposal):
+    def get_proposal_description(
+            self, description, description_format, existing_proposal):
         if description is not None:
             return description
         if existing_proposal is not None:

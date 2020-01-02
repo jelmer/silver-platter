@@ -161,7 +161,7 @@ def main(args):
             show_error('Script did not make any changes.')
             return 1
 
-        def get_description(existing_proposal):
+        def get_description(description_format, existing_proposal):
             if description is not None:
                 return description
             if existing_proposal is not None:

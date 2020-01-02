@@ -658,7 +658,8 @@ class NewUpstreamChanger(Changer):
 
         return merge_upstream_result
 
-    def get_proposal_description(self, merge_upstream_result, unused_proposal):
+    def get_proposal_description(
+            self, merge_upstream_result, description_format, unused_proposal):
         return ("Merge new upstream release %s" %
                 merge_upstream_result.new_upstream_version)
 

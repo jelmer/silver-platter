@@ -208,7 +208,8 @@ class DebianChanger(object):
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         raise NotImplementedError(self.make_changes)
 
-    def get_proposal_description(self, applied, existing_proposal):
+    def get_proposal_description(
+            self, applied, description_format, existing_proposal):
         raise NotImplementedError(self.get_proposal_description)
 
     def get_commit_message(self, applied, existing_proposal):

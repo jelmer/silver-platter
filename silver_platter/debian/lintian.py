@@ -231,9 +231,9 @@ class LintianBrushChanger(DebianChanger):
 
         return applied
 
-    def get_proposal_description(self, applied, existing_proposal):
-        return update_proposal_description(
-            existing_proposal, applied)
+    def get_proposal_description(
+            self, applied, description_format, existing_proposal):
+        return update_proposal_description(existing_proposal, applied)
 
     def get_commit_message(self, applied, existing_proposal):
         return update_proposal_commit_message(

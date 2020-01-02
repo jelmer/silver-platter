@@ -57,7 +57,8 @@ class MultiArchHintsChanger(DebianChanger):
             local_tree, self.hints.get(package, []))
         return applied_hints
 
-    def get_proposal_description(self, applied, existing_proposal):
+    def get_proposal_description(
+            self, applied, description_format, existing_proposal):
         return 'Apply multi-arch hints.'
 
     def get_commit_message(self, applied, existing_proposal):
