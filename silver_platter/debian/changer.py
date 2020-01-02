@@ -269,63 +269,63 @@ def _run_single_changer(
                 note('%s: nothing to do', pkg)
             return None
 
-    try:
-        run_post_check(ws.local_tree, post_check, ws.orig_revid)
-    except PostCheckFailed as e:
-        note('%s: %s', pkg, e)
-        return False
-    if build_verify:
         try:
-            ws.build(builder=builder, result_dir=build_target_dir)
-        except BuildFailedError:
-            note('%s: build failed', pkg)
+            run_post_check(ws.local_tree, post_check, ws.orig_revid)
+        except PostCheckFailed as e:
+            note('%s: %s', pkg, e)
             return False
-        except MissingUpstreamTarball:
-            note('%s: unable to find upstream source', pkg)
+        if build_verify:
+            try:
+                ws.build(builder=builder, result_dir=build_target_dir)
+            except BuildFailedError:
+                note('%s: build failed', pkg)
+                return False
+            except MissingUpstreamTarball:
+                note('%s: unable to find upstream source', pkg)
+                return False
+
+        enable_tag_pushing(ws.local_tree.branch)
+
+        try:
+            publish_result = publish_changes(
+                ws, mode, branch_name,
+                get_proposal_description=partial(
+                    changer.get_proposal_description, changer_result),
+                get_proposal_commit_message=partial(
+                    changer.get_commit_message, changer_result),
+                dry_run=dry_run, hoster=hoster,
+                allow_create_proposal=partial(
+                    changer.allow_create_proposal, changer_result),
+                overwrite_existing=overwrite,
+                existing_proposal=existing_proposal,
+                labels=label)
+        except UnsupportedHoster as e:
+            show_error(
+                '%s: No known supported hoster for %s. Run \'svp login\'?',
+                pkg, e.branch.user_url)
+            return False
+        except NoSuchProject as e:
+            note('%s: project %s was not found', pkg, e.project)
+            return False
+        except errors.PermissionDenied as e:
+            note('%s: %s', pkg, e)
+            return False
+        except errors.DivergedBranches:
+            note('%s: a branch exists. Use --overwrite to discard it.',
+                 pkg)
+            return False
+        except HosterLoginRequired as e:
+            show_error(
+                'Credentials for hosting site at %r missing. '
+                'Run \'svp login\'?', e.hoster.base_url)
             return False
 
-    enable_tag_pushing(ws.local_tree.branch)
+        if publish_result.proposal:
+            changer.describe(changer_result, publish_result)
+        if diff:
+            ws.show_diff(sys.stdout.buffer)
 
-    try:
-        publish_result = publish_changes(
-            ws, mode, branch_name,
-            get_proposal_description=partial(
-                changer.get_proposal_description, changer_result),
-            get_proposal_commit_message=partial(
-                changer.get_commit_message, changer_result),
-            dry_run=dry_run, hoster=hoster,
-            allow_create_proposal=partial(
-                changer.allow_create_proposal, changer_result),
-            overwrite_existing=overwrite,
-            existing_proposal=existing_proposal,
-            labels=label)
-    except UnsupportedHoster as e:
-        show_error(
-            '%s: No known supported hoster for %s. Run \'svp login\'?',
-            pkg, e.branch.user_url)
-        return False
-    except NoSuchProject as e:
-        note('%s: project %s was not found', pkg, e.project)
-        return False
-    except errors.PermissionDenied as e:
-        note('%s: %s', pkg, e)
-        return False
-    except errors.DivergedBranches:
-        note('%s: a branch exists. Use --overwrite to discard it.',
-             pkg)
-        return False
-    except HosterLoginRequired as e:
-        show_error(
-            'Credentials for hosting site at %r missing. '
-            'Run \'svp login\'?', e.hoster.base_url)
-        return False
-
-    if publish_result.proposal:
-        changer.describe(changer_result, publish_result)
-    if diff:
-        ws.show_diff(sys.stdout.buffer)
-
-    return True
+        return True
 
 
 def run_changer(changer, args):

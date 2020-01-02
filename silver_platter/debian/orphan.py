@@ -50,6 +50,10 @@ class OrphanChanger(DebianChanger):
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         def set_maintainer(source):
             source['Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
+            try:
+                del source['Uploaders']
+            except KeyError:
+                pass
         update_control(
             path=local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control')),
@@ -69,7 +73,7 @@ class OrphanChanger(DebianChanger):
 
     def describe(self, description, publish_result):
         if publish_result.is_new:
-            note('Proposed change of maintainer to QA team',
+            note('Proposed change of maintainer to QA team: %s',
                  publish_result.proposal.url)
         else:
             note('No fixes for proposal %s', publish_result.proposal.url)
