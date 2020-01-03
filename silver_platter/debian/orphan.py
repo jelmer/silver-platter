@@ -58,7 +58,7 @@ class OrphanChanger(DebianChanger):
             path=local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control')),
             source_package_cb=set_maintainer)
-        local_tree.commit('Set maintainer to QA team..', committer=committer)
+        local_tree.commit('Set maintainer to QA team.', committer=committer)
         return {}
 
     def get_proposal_description(
