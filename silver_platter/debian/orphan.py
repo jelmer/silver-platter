@@ -63,7 +63,7 @@ class OrphanChanger(DebianChanger):
             add_changelog_entry(
                 local_tree,
                 osutils.pathjoin(subpath, 'debian/changelog'),
-                'Orphan package.')
+                'Orphan package.', qa=True)
         local_tree.commit(
             'Orphan package.', committer=committer, allow_pointless=False)
         return {}
