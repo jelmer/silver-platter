@@ -25,6 +25,7 @@ from .changer import (
 from breezy import osutils
 from breezy.trace import note
 
+from lintian_brush import add_changelog_entry
 from lintian_brush.control import update_control
 
 
@@ -58,7 +59,13 @@ class OrphanChanger(DebianChanger):
             path=local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control')),
             source_package_cb=set_maintainer)
-        local_tree.commit('Set maintainer to QA team.', committer=committer)
+        if update_changelog in (True, None):
+            add_changelog_entry(
+                local_tree,
+                osutils.pathjoin(subpath, 'debian/changelog'),
+                'Orphan package.')
+        local_tree.commit(
+            'Orphan package.', committer=committer, allow_pointless=False)
         return {}
 
     def get_proposal_description(
@@ -76,7 +83,7 @@ class OrphanChanger(DebianChanger):
             note('Proposed change of maintainer to QA team: %s',
                  publish_result.proposal.url)
         else:
-            note('No fixes for proposal %s', publish_result.proposal.url)
+            note('No changes to proposal %s', publish_result.proposal.url)
 
 
 def main(args):
