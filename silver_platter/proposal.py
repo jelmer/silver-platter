@@ -47,7 +47,7 @@ except ImportError:
         HosterLoginRequired,
         )
 
-import breezy.plugins.propose
+import breezy.plugins.propose  # noqa: F401
 
 from .utils import (
     create_temp_sprout,
