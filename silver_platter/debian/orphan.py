@@ -67,6 +67,15 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
         dry_run=dry_run)
 
 
+class OrphanResult(object):
+
+    def __init__(self, package=None, old_vcs_url=None, new_vcs_url=None):
+        self.package = package
+        self.old_vcs_url = old_vcs_url
+        self.new_vcs_url = new_vcs_url
+        self.pushed = False
+
+
 class OrphanChanger(DebianChanger):
 
     def __init__(self, update_vcs=True, salsa_push=True,
@@ -111,22 +120,28 @@ class OrphanChanger(DebianChanger):
             local_tree, subpath, update_changelog, committer, set_maintainer,
             'Orphan package.')
 
+        result = OrphanResult()
+
         def set_vcs(source):
-            global package_name
-            package_name = source['Source']
+            result.package_name = source['Source']
+            result.old_vcs_url = source.get('Vcs-Git')
             source['Vcs-Git'] = 'https://salsa.debian.org/%s/%s.git' % (
-                self.salsa_user, package_name)
+                self.salsa_user, result.package_name)
+            result.new_vcs_url = source['Vcs-Git']
             source['Vcs-Browser'] = 'https://salsa.debian.org/%s/%s' % (
-                self.salsa_user, package_name)
+                self.salsa_user, result.package_name)
         if self.update_vcs:
             changed = _update_control(
                 local_tree, subpath, update_changelog, committer,
                 set_vcs, 'Point Vcs-* headers at salsa.')
-            if not self.salsa_push and changed:
+            if result.old_vcs_url == result.new_vcs_url:
+                result.old_vcs_url = result.new_vcs_url = None
+            if not self.salsa_push and changed and result.new_vcs_url:
                 push_to_salsa(
-                    local_tree, self.salsa_user, package_name,
+                    local_tree, self.salsa_user, result.package_name,
                     dry_run=self.dry_run)
-        return {}
+                result.pushed = True
+        return result
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -138,12 +153,17 @@ class OrphanChanger(DebianChanger):
     def allow_create_proposal(self, applied):
         return True
 
-    def describe(self, description, publish_result):
+    def describe(self, result, publish_result):
         if publish_result.is_new:
             note('Proposed change of maintainer to QA team: %s',
                  publish_result.proposal.url)
         else:
-            note('No changes to proposal %s', publish_result.proposal.url)
+            note('No changes for orphaned package %s', result.package_name)
+        if result.pushed:
+            note('Pushed new package to %s.', result.new_vcs_url)
+        elif result.new_vcs_url:
+            note('Please move the repository from %s to %s.',
+                 result.old_vcs_url, result.new_vcs_url)
 
 
 def main(args):
