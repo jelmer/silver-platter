@@ -136,7 +136,7 @@ class OrphanChanger(DebianChanger):
                 set_vcs, 'Point Vcs-* headers at salsa.')
             if result.old_vcs_url == result.new_vcs_url:
                 result.old_vcs_url = result.new_vcs_url = None
-            if not self.salsa_push and changed and result.new_vcs_url:
+            if self.salsa_push and changed and result.new_vcs_url:
                 push_to_salsa(
                     local_tree, self.salsa_user, result.package_name,
                     dry_run=self.dry_run)
