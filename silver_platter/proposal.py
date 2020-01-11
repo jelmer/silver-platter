@@ -28,15 +28,26 @@ from breezy import (
     errors,
     merge as _mod_merge,
     )
-from breezy.plugins.propose.propose import (
-    get_hoster,
-    hosters,
-    MergeProposal,
-    NoSuchProject,
-    UnsupportedHoster,
-    HosterLoginRequired,
-    )
+try:
+    from breezy.propose import (
+        get_hoster,
+        hosters,
+        MergeProposal,
+        NoSuchProject,
+        UnsupportedHoster,
+        HosterLoginRequired,
+        )
+except ImportError:
+    from breezy.plugins.propose.propose import (
+        get_hoster,
+        hosters,
+        MergeProposal,
+        NoSuchProject,
+        UnsupportedHoster,
+        HosterLoginRequired,
+        )
 
+import breezy.plugins.propose
 
 from .utils import (
     create_temp_sprout,

@@ -31,6 +31,8 @@ from . import (
     )
 from ..proposal import (
     HosterLoginRequired,
+    UnsupportedHoster,
+    NoSuchProject,
     SUPPORTED_MODES,
     enable_tag_pushing,
     find_existing_proposed,
@@ -51,10 +53,6 @@ from ..utils import (
 def get_package(package, branch_name, overwrite_unrelated=False,
                 refresh=False, possible_transports=None,
                 possible_hosters=None):
-    from breezy.plugins.propose.propose import (
-        UnsupportedHoster,
-        )
-
     main_branch = open_packaging_branch(
         package, possible_transports=possible_transports)
 
@@ -230,10 +228,6 @@ def _run_single_changer(
         dry_run=False, update_changelog=None, label=None,
         build_target_dir=None):
     from breezy import errors
-    from breezy.plugins.propose.propose import (
-        NoSuchProject,
-        UnsupportedHoster,
-        )
     from . import (
         BuildFailedError,
         MissingUpstreamTarball,
