@@ -33,24 +33,6 @@ from lintian_brush.control import update_control
 BRANCH_NAME = 'orphan'
 
 
-def _update_control(
-        local_tree, subpath, update_changelog, committer,
-        source_package_cb, message):
-    changed = update_control(
-        path=local_tree.abspath(
-            osutils.pathjoin(subpath, 'debian/control')),
-        source_package_cb=source_package_cb)
-    if not changed:
-        return False
-    if update_changelog in (True, None):
-        add_changelog_entry(
-            local_tree,
-            osutils.pathjoin(subpath, 'debian/changelog'),
-            message, qa=True)
-    local_tree.commit(message, committer=committer, allow_pointless=False)
-    return True
-
-
 def push_to_salsa(local_tree, user, name, dry_run=False):
     from breezy.branch import Branch
     from breezy.plugins.propose.gitlabs import GitLab
@@ -116,9 +98,10 @@ class OrphanChanger(DebianChanger):
                 del source['Uploaders']
             except KeyError:
                 pass
-        _update_control(
-            local_tree, subpath, update_changelog, committer, set_maintainer,
-            'Orphan package.')
+        update_control(
+            path=local_tree.abspath(
+                osutils.pathjoin(subpath, 'debian/control')),
+            source_package_cb=update_changelog)
 
         result = OrphanResult()
 
@@ -131,16 +114,26 @@ class OrphanChanger(DebianChanger):
             source['Vcs-Browser'] = 'https://salsa.debian.org/%s/%s' % (
                 self.salsa_user, result.package_name)
         if self.update_vcs:
-            changed = _update_control(
-                local_tree, subpath, update_changelog, committer,
-                set_vcs, 'Point Vcs-* headers at salsa.')
+            update_control(
+                path=local_tree.abspath(
+                    osutils.pathjoin(subpath, 'debian/control')),
+                source_package_cb=set_vcs)
             if result.old_vcs_url == result.new_vcs_url:
                 result.old_vcs_url = result.new_vcs_url = None
-            if self.salsa_push and changed and result.new_vcs_url:
-                push_to_salsa(
-                    local_tree, self.salsa_user, result.package_name,
-                    dry_run=self.dry_run)
-                result.pushed = True
+        if update_changelog in (True, None):
+            add_changelog_entry(
+                local_tree,
+                osutils.pathjoin(subpath, 'debian/changelog'),
+                'Move package to QA team.', qa=True)
+        local_tree.commit(
+            'Move package to QA team.', committer=committer,
+            allow_pointless=False)
+
+        if self.update_vcs and self.salsa_push and result.new_vcs_url:
+            push_to_salsa(
+                local_tree, self.salsa_user, result.package_name,
+                dry_run=self.dry_run)
+            result.pushed = True
         return result
 
     def get_proposal_description(
