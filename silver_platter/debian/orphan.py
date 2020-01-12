@@ -17,6 +17,8 @@
 
 from __future__ import absolute_import
 
+from urllib.parse import urlparse
+
 from . import pick_additional_colocated_branches
 from .changer import (
     run_changer,
@@ -51,11 +53,13 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
 
 class OrphanResult(object):
 
-    def __init__(self, package=None, old_vcs_url=None, new_vcs_url=None):
+    def __init__(self, package=None, old_vcs_url=None, new_vcs_url=None,
+                 salsa_user=None):
         self.package = package
         self.old_vcs_url = old_vcs_url
         self.new_vcs_url = new_vcs_url
         self.pushed = False
+        self.salsa_user = salsa_user
 
 
 class OrphanChanger(DebianChanger):
@@ -98,10 +102,11 @@ class OrphanChanger(DebianChanger):
                 del source['Uploaders']
             except KeyError:
                 pass
+        import pdb; pdb.set_trace()
         update_control(
             path=local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control')),
-            source_package_cb=update_changelog)
+            source_package_cb=set_maintainer)
 
         result = OrphanResult()
 
@@ -113,6 +118,7 @@ class OrphanChanger(DebianChanger):
             result.new_vcs_url = source['Vcs-Git']
             source['Vcs-Browser'] = 'https://salsa.debian.org/%s/%s' % (
                 self.salsa_user, result.package_name)
+            result.salsa_user = self.salsa_user
         if self.update_vcs:
             update_control(
                 path=local_tree.abspath(
@@ -155,8 +161,25 @@ class OrphanChanger(DebianChanger):
         if result.pushed:
             note('Pushed new package to %s.', result.new_vcs_url)
         elif result.new_vcs_url:
-            note('Please move the repository from %s to %s.',
-                 result.old_vcs_url, result.new_vcs_url)
+            for line in self._move_instructions(result):
+                note('%s', line)
+
+    @classmethod
+    def _move_instructions(cls, result):
+        yield 'Please move the repository from %s to %s.' % (
+             result.old_vcs_url, result.new_vcs_url)
+        if urlparse(result.old_vcs_url).hostname == 'salsa.debian.org':
+            yield 'If you have the salsa(1) tool installed, run: '
+            yield ''
+            yield '   salsa fork --group=%s %s' % (
+                 result.salsa_user, urlparse(result.old_vcs_url).path)
+        else:
+            yield 'If you have the salsa(1) tool installed, run: '
+            yield ''
+            yield '   git clone %s %s' % (
+                result.old_vcs_url, result.package_name)
+            yield '   salsa --group=%s push_repo %s' % (
+                result.salsa_user, result.package_name)
 
 
 def main(args):
