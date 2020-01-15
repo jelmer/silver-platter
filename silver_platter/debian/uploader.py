@@ -77,8 +77,8 @@ def get_maintainer_keys(context):
 
 
 def prepare_upload_package(
-        local_tree, pkg, last_uploaded_version, gpg_strategy, min_commit_age,
-        builder):
+        local_tree, subpath, pkg, last_uploaded_version, gpg_strategy,
+        min_commit_age, builder):
     cl, top_level = find_changelog(
             local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
@@ -117,10 +117,10 @@ def prepare_upload_package(
 
         if cl.distributions != "UNRELEASED":
             raise Exception("Nothing left to release")
-    release(local_tree)
+    release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     target_changes = _build_helper(
-        local_tree, local_tree.branch, target_dir, builder=builder)
+        local_tree, subpath, local_tree.branch, target_dir, builder=builder)
     debsign(target_changes)
     return target_changes
 
@@ -198,7 +198,7 @@ def main(args):
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
             target_changes = prepare_upload_package(
-                ws.local_tree,
+                ws.local_tree, '',
                 pkg_source["Package"], pkg_source["Version"], gpg_strategy,
                 args.min_commit_age, args.builder)
 
