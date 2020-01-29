@@ -232,7 +232,7 @@ class LintianBrushChanger(DebianChanger):
 
         applied, failed = run_lintian_fixers(
                 local_tree, self.fixers,
-                committer=args.committer,
+                committer=committer,
                 update_changelog=update_changelog,
                 compat_release=compat_release,
                 allow_reformatting=allow_reformatting,
