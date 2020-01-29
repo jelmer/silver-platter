@@ -580,7 +580,7 @@ class NewUpstreamChanger(DebianChanger):
         return cls(snapshot=args.snapshot,
                    trust_package=args.trust_package,
                    refresh_patches=args.refresh_patches,
-                   update_package=args.update_packaging)
+                   update_packaging=args.update_packaging)
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         try:
