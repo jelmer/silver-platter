@@ -29,6 +29,7 @@ def main(argv=None):
         run as debian_run,
         multiarch,
         orphan,
+        tidy,
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
@@ -41,6 +42,7 @@ def main(argv=None):
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
         ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
         ('orphan', orphan.setup_parser, orphan.main),
+        ('tidy', tidy.setup_parser, tidy.main),
         ]
 
     for cmd in main_subcommands:
