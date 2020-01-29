@@ -17,11 +17,10 @@
 
 """Support for integration multi-arch hints."""
 
-from breezy import osutils
-
-from debian.changelog import Changelog
-
 import silver_platter  # noqa: F401
+
+from lintian_brush import run_lintian_fixer
+from lintian_brush.config import Config
 
 from .changer import (
     DebianChanger,
@@ -46,28 +45,44 @@ class MultiArchHintsChanger(DebianChanger):
 
     def __init__(self):
         from lintian_brush.multiarch_hints import (
-            download_multi_arch_hints,
+            download_multiarch_hints,
+            multiarch_hints_by_binary,
+            parse_multiarch_hints,
             )
-        self.hints = download_multi_arch_hints()
+        with download_multiarch_hints() as f:
+            self.hints = multiarch_hints_by_binary(parse_multiarch_hints(f))
 
     def suggest_branch_name(self):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         from lintian_brush.multiarch_hints import (
-            apply_multi_arch_hints,
+            MultiArchHintFixer,
             )
-        cl_path = osutils.joinpath(subpath, 'debian/changelog')
-        with local_tree.get_file(cl_path) as f:
-            cl = Changelog(f, max_blocks=1)
-            package = cl.package
-        applied_hints = apply_multi_arch_hints(
-            local_tree, self.hints.get(package, []))
-        return applied_hints
+        try:
+            cfg = Config.from_workingtree(local_tree, subpath)
+        except FileNotFoundError:
+            minimum_certainty = None
+            allow_reformatting = False
+        else:
+            minimum_certainty = cfg.minimum_certainty()
+            allow_reformatting = cfg.allow_reformatting()
+            if update_changelog is None:
+                update_changelog = cfg.update_changelog()
+
+        result, summary = run_lintian_fixer(
+            local_tree, MultiArchHintFixer(self.hints),
+            update_changelog=update_changelog,
+            minimum_certainty=minimum_certainty,
+            subpath=subpath, allow_reformatting=allow_reformatting,
+            net_access=True)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
-        return 'Apply multi-arch hints.'
+        ret = ['Apply multi-arch hints.\n']
+        for binary, description, certainty in applied.changes:
+            ret.append('* %s: %s\n' % (binary['Package'], description))
+        return ''.join(ret)
 
     def get_commit_message(self, applied, existing_proposal):
         return 'Apply multi-arch hints.'
