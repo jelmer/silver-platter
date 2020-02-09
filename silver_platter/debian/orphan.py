@@ -102,7 +102,6 @@ class OrphanChanger(DebianChanger):
                 del source['Uploaders']
             except KeyError:
                 pass
-        import pdb; pdb.set_trace()
         update_control(
             path=local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control')),
