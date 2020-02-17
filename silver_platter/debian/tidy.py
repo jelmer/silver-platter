@@ -94,6 +94,15 @@ class TidyChanger(DebianChanger):
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
 
+    def tags(self, result):
+        ret = []
+        for subchanger, memo in result.items():
+            subret = subchanger.tags(memo)
+            if subret is None:
+                return None
+            ret.extend(subret)
+        return ret
+
 
 def main(args):
     changer = TidyChanger.from_args(args)

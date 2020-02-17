@@ -272,6 +272,9 @@ class LintianBrushChanger(DebianChanger):
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
 
+    def tags(self, applied):
+        return []
+
 
 def main(args):
     try:

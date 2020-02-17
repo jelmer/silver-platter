@@ -219,6 +219,10 @@ class DebianChanger(object):
     def describe(self, applied, publish_result):
         raise NotImplementedError(self.describe)
 
+    def tags(self, applied):
+        """Return list of changes to include."""
+        raise NotImplementedError(self.tags)
+
 
 def _run_single_changer(
         changer, pkg, main_branch, resume_branch, hoster, existing_proposal,

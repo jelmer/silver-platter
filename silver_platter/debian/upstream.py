@@ -679,6 +679,9 @@ class NewUpstreamChanger(DebianChanger):
                 note('Updated merge proposal %s.',
                      publish_result.proposal.url)
 
+    def tags(self, applied):
+        return ['upstream/%s' % applied.new_upstream_version]
+
 
 def main(args):
     from .changer import run_changer

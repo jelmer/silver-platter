@@ -165,6 +165,9 @@ class OrphanChanger(DebianChanger):
                     result.new_vcs_url):
                 note('%s', line)
 
+    def tags(self):
+        return []
+
 
 def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
     yield 'Please move the repository from %s to %s.' % (

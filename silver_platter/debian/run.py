@@ -87,6 +87,9 @@ class ScriptChanger(DebianChanger):
     def suggest_branch_name(self):
         return derived_branch_name(self.script)
 
+    def tags(self):
+        return None
+
 
 def main(args):
     changer = ScriptChanger(args)

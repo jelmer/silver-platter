@@ -93,6 +93,9 @@ class MultiArchHintsChanger(DebianChanger):
     def describe(self, applied, publish_result):
         raise NotImplementedError(self.describe)
 
+    def tags(self, applied):
+        return []
+
 
 def main(args):
     changer = MultiArchHintsChanger()
