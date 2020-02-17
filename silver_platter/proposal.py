@@ -567,7 +567,7 @@ def propose_changes(
     if (resume_proposal is not None and
             getattr(resume_proposal, 'is_closed', None) and
             resume_proposal.is_closed()):
-        from breezy.plugins.propose.propose import (
+        from breezy.propose import (
             ReopenFailed,
             )
         try:
