@@ -296,7 +296,8 @@ def _run_single_changer(
                     changer.allow_create_proposal, changer_result),
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
-                labels=label)
+                labels=label,
+                tags=changer.tags(changer_result))
         except UnsupportedHoster as e:
             show_error(
                 '%s: No known supported hoster for %s. Run \'svp login\'?',
