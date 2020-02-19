@@ -180,10 +180,12 @@ class DryRunProposal(MergeProposal):
 
 def push_result(local_branch, remote_branch,
                 additional_colocated_branches=None, tags=None):
+    kwargs = {}
     if tags is not None:
-        raise NotImplementedError('tags is not supported')
+        kwargs['tag_selector'] = tags.__contains__
     try:
-        local_branch.push(remote_branch, overwrite=False)
+        local_branch.push(
+            remote_branch, overwrite=False, **kwargs)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
         raise PermissionDenied(path=remote_branch.user_url, extra=e)
@@ -193,7 +195,8 @@ def push_result(local_branch, remote_branch,
         except errors.NotBranchError:
             pass
         else:
-            remote_branch.controldir.push_branch(add_branch, name=branch_name)
+            remote_branch.controldir.push_branch(
+                add_branch, name=branch_name, **kwargs)
 
 
 def find_existing_proposed(main_branch, hoster, name,
@@ -541,16 +544,20 @@ def propose_changes(
     """
     if not allow_empty:
         check_proposal_diff(local_branch, main_branch)
-    if tags is None:
-        raise NotImplementedError('tags is not supported')
+    push_kwargs = {}
+    if tags is not None:
+        push_kwargs['tag_selector'] = tags.__contains__
     if not dry_run:
         if resume_branch is not None:
-            local_branch.push(resume_branch, overwrite=overwrite_existing)
+            local_branch.push(
+                resume_branch, overwrite=overwrite_existing,
+                **push_kwargs)
             remote_branch = resume_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
-                overwrite=overwrite_existing)
+                overwrite=overwrite_existing,
+                **push_kwargs)
         for colocated_branch_name in (additional_colocated_branches or []):
             try:
                 local_colo_branch = local_branch.controldir.open_branch(
@@ -560,7 +567,8 @@ def propose_changes(
             else:
                 remote_branch.controldir.push_branch(
                     source=local_colo_branch, overwrite=overwrite_existing,
-                    name=colocated_branch_name)
+                    name=colocated_branch_name,
+                    **push_kwargs)
     if resume_proposal is not None and dry_run:
         resume_proposal = DryRunProposal.from_existing(
             resume_proposal, source_branch=local_branch)
@@ -635,10 +643,12 @@ def merge_directive_changes(
 def push_derived_changes(
         local_branch, main_branch, hoster, name, overwrite_existing=False,
         tags=None):
-    if tags is None:
-        raise NotImplementedError('tags specification not supported')
+    kwargs = {}
+    if tags is not None:
+        kwargs['tag_selector'] = tags.__contains__
     remote_branch, public_branch_url = hoster.publish_derived(
-        local_branch, main_branch, name=name, overwrite=overwrite_existing)
+        local_branch, main_branch, name=name, overwrite=overwrite_existing,
+        **kwargs)
     return remote_branch, public_branch_url
 
 

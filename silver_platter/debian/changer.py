@@ -21,6 +21,7 @@ from functools import partial
 import itertools
 import sys
 
+from breezy import version_info as breezy_version_info
 from breezy.trace import note, warning, show_error
 
 from . import (
@@ -284,6 +285,10 @@ def _run_single_changer(
 
         enable_tag_pushing(ws.local_tree.branch)
 
+        kwargs = {}
+        if breezy_version_info >= (3, 1):
+            kwargs['tags'] = changer.tags(changer_result)
+
         try:
             publish_result = publish_changes(
                 ws, mode, branch_name,
@@ -297,7 +302,7 @@ def _run_single_changer(
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
                 labels=label,
-                tags=changer.tags(changer_result))
+                **kwargs)
         except UnsupportedHoster as e:
             show_error(
                 '%s: No known supported hoster for %s. Run \'svp login\'?',
