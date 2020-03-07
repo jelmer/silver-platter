@@ -325,7 +325,8 @@ class Workspace(object):
 
     def propose(self, name, description, hoster=None, existing_proposal=None,
                 overwrite_existing=None, labels=None, dry_run=False,
-                commit_message=None, reviewers=None, tags=None):
+                commit_message=None, reviewers=None, tags=None,
+                allow_collaboration=False):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
@@ -336,7 +337,7 @@ class Workspace(object):
             dry_run=dry_run, commit_message=commit_message,
             reviewers=reviewers,
             additional_colocated_branches=self.additional_colocated_branches,
-            tags=tags)
+            tags=tags, allow_collaboration=allow_collaboration)
 
     def push_derived(self, name, hoster=None, overwrite_existing=False,
                      tags=None):
@@ -396,7 +397,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
                     get_proposal_commit_message=None, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
                     overwrite_existing=True, existing_proposal=None,
-                    reviewers=None, tags=None):
+                    reviewers=None, tags=None, allow_collaboration=False):
     """Publish a set of changes.
 
     Args:
@@ -413,6 +414,8 @@ def publish_changes(ws, mode, name, get_proposal_description,
       existing_proposal: Existing proposal to update
       reviewers: List of reviewers for merge proposal
       tags: Tags to push (None for default behaviour)
+      allow_collaboration: Whether to allow target branch owners to modify
+        source branch.
     """
     if mode not in SUPPORTED_MODES:
         raise ValueError("invalid mode %r" % mode)
@@ -467,7 +470,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         existing_proposal=existing_proposal,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
         commit_message=commit_message, reviewers=reviewers,
-        tags=tags)
+        tags=tags, allow_collaboration=allow_collaboration)
 
     return PublishResult(mode, proposal, is_new)
 
@@ -521,7 +524,8 @@ def propose_changes(
         overwrite_existing=True,
         labels=None, dry_run=False, commit_message=None,
         additional_colocated_branches=None,
-        allow_empty=False, reviewers=None, tags=None):
+        allow_empty=False, reviewers=None, tags=None,
+        allow_collaboration=False):
     """Create or update a merge proposal.
 
     Args:
@@ -539,6 +543,7 @@ def propose_changes(
       allow_empty: Whether to allow empty merge proposals
       reviewers: List of reviewers
       tags: Tags to push (None for default behaviour)
+      allow_collaboration: Allow target branch owners to modify source branch
     Returns:
       Tuple with (proposal, is_new)
     """
@@ -606,6 +611,9 @@ def propose_changes(
                     hoster, 'supports_merge_proposal_commit_message', False):
                 # brz >= 3.1 only
                 kwargs['commit_message'] = commit_message
+            if getattr(
+                    hoster, 'supports_allow_collaboration', False):
+                kwargs['allow_collaboration'] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
