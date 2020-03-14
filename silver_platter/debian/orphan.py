@@ -173,13 +173,13 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
     if urlparse(old_vcs_url).hostname == 'salsa.debian.org':
         yield 'If you have the salsa(1) tool installed, run: '
         yield ''
-        yield '   salsa fork --group=%s %s' % (
+        yield '    salsa fork --group=%s %s' % (
              salsa_user, urlparse(old_vcs_url).path)
     else:
         yield 'If you have the salsa(1) tool installed, run: '
         yield ''
-        yield '   git clone %s %s' % (old_vcs_url, package_name)
-        yield '   salsa --group=%s push_repo %s' % (salsa_user, package_name)
+        yield '    git clone %s %s' % (old_vcs_url, package_name)
+        yield '    salsa --group=%s push_repo %s' % (salsa_user, package_name)
 
 
 def main(args):
