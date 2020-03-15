@@ -20,6 +20,7 @@
 import silver_platter   # noqa: F401
 
 import datetime
+import subprocess
 import tempfile
 
 from breezy import gpg
@@ -79,8 +80,9 @@ def get_maintainer_keys(context):
 def prepare_upload_package(
         local_tree, subpath, pkg, last_uploaded_version, gpg_strategy,
         min_commit_age, builder):
-    cl, top_level = find_changelog(
-            local_tree, merge=False, max_blocks=None)
+    if local_tree.has_filename('debian/gbp.conf'):
+        subprocess.check_call(['gbp', 'dch'], cwd=local_tree.abspath('.'))
+    cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise Exception(
                 "nothing to upload, latest version is in archive: %s" %
