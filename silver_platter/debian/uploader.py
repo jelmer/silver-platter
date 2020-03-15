@@ -288,6 +288,8 @@ def main(args):
                 builder=args.builder, gpg_strategy=gpg_strategy,
                 min_commit_age=args.min_commit_age)
 
+            # TODO(jelmer): Upload the right tags
+
             ws.push(dry_run=args.dry_run)
             if not args.dry_run:
                 dput_changes(target_changes)
