@@ -121,6 +121,7 @@ def prepare_upload_package(
             raise Exception("Nothing left to release")
     release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
+    builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder)
     debsign(target_changes)
@@ -129,6 +130,9 @@ def prepare_upload_package(
 
 def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        '--dry-run', action='store_true',
+        help='Dry run changes.')
     parser.add_argument(
         '--acceptable-keys',
         help='List of acceptable GPG keys',
