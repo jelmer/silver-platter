@@ -55,6 +55,7 @@ from ..utils import (
 
 
 class NoUnuploadedChanges(Exception):
+    """Indicates there are no unuploaded changes for a package."""
 
     def __init__(self, archive_version):
         self.archive_version = archive_version
@@ -63,15 +64,33 @@ class NoUnuploadedChanges(Exception):
             archive_version)
 
 
+class RecentCommits(Exception):
+    """Indicates there are too recent commits for a package."""
+
+    def __init__(self, commit_age, min_commit_age):
+        self.commit_age = commit_age
+        self.min_commit_age = min_commit_age
+        super(RecentCommits, self).__init__(
+            "Last commit is only %d days old (< %d)" % (
+                self.commit_age, self.min_commit_age))
+
+
 def check_revision(rev, min_commit_age):
+    """Check whether a revision can be included in an upload.
+
+    Args:
+      rev: revision to check
+      min_commit_age: Minimum age for revisions
+    Raises:
+      RecentCommits: When there are commits younger than min_commit_age
+    """
     print("checking %r" % rev)
     # TODO(jelmer): deal with timezone
     if min_commit_age is not None:
         commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
         time_delta = datetime.datetime.now() - commit_time
         if time_delta.days < min_commit_age:
-            raise Exception(
-                "Last commit is only %d days old" % time_delta.days)
+            raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
 
 
@@ -164,23 +183,74 @@ def setup_parser(parser):
         type=str,
         action='append',
         help='Select all packages maintainer by specified maintainer.')
+    parser.add_argument(
+        '--vcswatch',
+        action='store_true',
+        help='Use vcswatch to determine what packages need uploading.')
+
+
+def select_apt_packages(package_names, maintainer):
+    packages = []
+    import apt_pkg
+    from email.utils import parseaddr
+    apt_pkg.init()
+    sources = apt_pkg.SourceRecords()
+    while sources.step():
+        if maintainer:
+            fullname, email = parseaddr(sources.maintainer)
+            if email not in maintainer:
+                continue
+
+        if package_names and sources.package not in package_names:
+            continue
+
+        packages.append(sources.package)
+
+    return packages
+
+
+def select_vcswatch_packages(packages, maintainer):
+    import psycopg2
+    conn = psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net")
+    cursor = conn.cursor()
+    args = []
+    query = """\
+    SELECT sources.source, vcswatch.url
+    FROM vcswatch JOIN sources ON sources.source = vcswatch.source
+    WHERE
+     vcswatch.status IN ('COMMITS', 'NEW') AND
+     sources.release = 'sid'
+"""
+    if maintainer:
+        query += " AND sources.maintainer_email IN (%s)"
+        args.append(tuple(maintainer))
+    if packages:
+        query += " AND sources.source IN (%s)"
+        args.append(tuple(packages))
+
+    cursor.execute(query, tuple(args))
+
+    packages = []
+    for package, vcs_url in cursor.fetchall():
+        packages.append(package)
+    return packages
 
 
 def main(args):
     ret = 0
 
-    packages = []
-    if args.maintainer:
-        import apt_pkg
-        from email.utils import parseaddr
-        apt_pkg.init()
-        sources = apt_pkg.SourceRecords()
-        while sources.step():
-            fullname, email = parseaddr(sources.maintainer)
-            if email in args.maintainer:
-                packages.append(sources.package)
-
-    packages.extend(args.packages)
+    if args.vcswatch:
+        packages = select_vcswatch_packages(
+            args.packages, args.maintainer)
+    else:
+        note('Use --vcswatch to only process packages for which '
+             'vcswatch found pending commits.')
+        packages = select_apt_packages(
+            args.packages, args.maintainer)
 
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
