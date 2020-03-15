@@ -95,28 +95,30 @@ class UncommittedChanger(DebianChanger):
                     tree_cl.version)
             if len(missing_versions) == 0:
                 raise Exception('no missing versions after all')
-            if len(missing_versions) > 1:
-                # TODO(jelmer): Download intermediate missing versions from
-                # snapshot.debian.org, and import them
-                raise NotImplementedError(self.make_changes)
+            ret = []
             dbs = DistributionBranchSet()
             db = DistributionBranch(
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
+            if len(missing_versions) > 1:
+                # TODO(jelmer): Download intermediate missing versions from
+                # snapshot.debian.org, and import them
+                raise NotImplementedError(self.make_changes)
             dsc_path = os.path.join(
                 archive_source,
                 '%s_%s.dsc' % (package_name, archive_cl.version))
-            db.import_package(dsc_path)
-        return missing_versions
+            tag_name = db.import_package(dsc_path)
+            ret.append((tag_name, archive_cl.version))
+        return ret
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return "Import missing uploads: %s." % (
-            ', '.join([str(v) for v in applied]))
+            ', '.join([str(v) for t, v in applied]))
 
     def get_commit_message(self, applied, existing_proposal):
         return "Import missing uploads: %s." % (
-            ', '.join([str(v) for v in applied]))
+            ', '.join([str(v) for t, v in applied]))
 
     def allow_create_proposal(self, applied):
         return True
@@ -124,19 +126,19 @@ class UncommittedChanger(DebianChanger):
     def describe(self, applied, publish_result):
         if publish_result.is_new:
             note('Proposed import of versions %s: %s',
-                 ', '.join([str(v) for v in applied]),
+                 ', '.join([str(v) for t, v in applied]),
                  publish_result.proposal.url)
         elif applied:
             note('Updated proposal %s with versions %s.',
                  publish_result.proposal.url,
-                 ', '.join([str(v) for v in applied]))
+                 ', '.join([str(v) for t, v in applied]))
         else:
             note('No new versions imported for proposal %s',
                  publish_result.proposal.url)
 
     def tags(self, applied):
-        # TODO(jelmer): Tag for the actual release and possible upstream.
-        return []
+        # TODO(jelmer): Include tags for upstream parts
+        return [t for t, v in applied]
 
 
 def main(args):
