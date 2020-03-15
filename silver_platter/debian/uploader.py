@@ -54,13 +54,24 @@ from ..utils import (
     )
 
 
+class NoUnuploadedChanges(Exception):
+
+    def __init__(self, archive_version):
+        self.archive_version = archive_version
+        super(NoUnuploadedChanges, self).__init__(
+            "nothing to upload, latest version is in archive: %s" %
+            archive_version)
+
+
 def check_revision(rev, min_commit_age):
     print("checking %r" % rev)
     # TODO(jelmer): deal with timezone
-    commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
-    time_delta = datetime.datetime.now() - commit_time
-    if time_delta.days < min_commit_age:
-        raise Exception("Last commit is only %d days old" % time_delta.days)
+    if min_commit_age is not None:
+        commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
+        time_delta = datetime.datetime.now() - commit_time
+        if time_delta.days < min_commit_age:
+            raise Exception(
+                "Last commit is only %d days old" % time_delta.days)
     # TODO(jelmer): Allow tag to prevent automatic uploads
 
 
@@ -78,15 +89,13 @@ def get_maintainer_keys(context):
 
 
 def prepare_upload_package(
-        local_tree, subpath, pkg, last_uploaded_version, gpg_strategy,
-        min_commit_age, builder):
+        local_tree, subpath, pkg, last_uploaded_version, builder,
+        gpg_strategy=None, min_commit_age=None):
     if local_tree.has_filename('debian/gbp.conf'):
         subprocess.check_call(['gbp', 'dch'], cwd=local_tree.abspath('.'))
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
-        raise Exception(
-                "nothing to upload, latest version is in archive: %s" %
-                cl.version)
+        raise NoUnuploadedChanges(cl.version)
     previous_version_in_branch = changelog_find_previous_upload(cl)
     if last_uploaded_version > previous_version_in_branch:
         raise Exception(
@@ -205,8 +214,9 @@ def main(args):
 
             target_changes = prepare_upload_package(
                 ws.local_tree, '',
-                pkg_source["Package"], pkg_source["Version"], gpg_strategy,
-                args.min_commit_age, args.builder)
+                pkg_source["Package"], pkg_source["Version"],
+                builder=args.builder, gpg_strategy=gpg_strategy,
+                min_commit_age=args.min_commit_age)
 
             ws.push(dry_run=args.dry_run)
             if not args.dry_run:
