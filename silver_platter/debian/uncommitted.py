@@ -118,13 +118,15 @@ class UncommittedChanger(DebianChanger):
             db = DistributionBranch(
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
-            if len(missing_versions) > 1:
-                download_snapshot(package_name, archive_cl.version, archive_source)
-            dsc_path = os.path.join(
-                archive_source,
-                '%s_%s.dsc' % (package_name, archive_cl.version))
-            tag_name = db.import_package(dsc_path)
-            ret.append((tag_name, archive_cl.version))
+            for version in missing_versions[:-1]:
+                download_snapshot(
+                    package_name, version, archive_source)
+            for version in missing_versions:
+                dsc_path = os.path.join(
+                    archive_source,
+                    '%s_%s.dsc' % (package_name, version))
+                tag_name = db.import_package(dsc_path)
+                ret.append((tag_name, version))
         return ret
 
     def get_proposal_description(
