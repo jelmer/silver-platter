@@ -71,6 +71,9 @@ def download_snapshot(package, version, output_dir):
             url = 'https://snapshot.debian.org/file/%s' % hsh
             with urlopen(url) as g:
                 f.write(g.read())
+    subprocess.check_call(
+        ['dpkg-source', '-x', '%s_%s.dsc' % (package, version)],
+        cwd=output_dir)
 
 
 class UncommittedChanger(DebianChanger):
