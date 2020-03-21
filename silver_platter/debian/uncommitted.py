@@ -15,9 +15,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import json
 import os
 import subprocess
 import tempfile
+
+from urllib.request import urlopen
 
 from debian.changelog import Changelog
 
@@ -53,6 +56,21 @@ def select_vcswatch_packages():
     for package, vcs_url in cursor.fetchall():
         packages.append(package)
     return packages
+
+
+def download_snapshot(package, version, output_dir):
+    srcfiles_url = ('https://snapshot.debian.org/mr/package/%s/%s/'
+                    'srcfiles?fileinfo=1' % (package, version))
+    files = {}
+    for hsh, entries in json.load(urlopen(srcfiles_url))['fileinfo'].items():
+        for entry in entries:
+            files[entry['name']] = hsh
+    for filename, hsh in files.items():
+        local_path = os.path.join(output_dir, os.path.basename(filename))
+        with open(local_path, 'wb') as f:
+            url = 'https://snapshot.debian.org/file/%s' % hsh
+            with urlopen(url) as g:
+                f.write(g.read())
 
 
 class UncommittedChanger(DebianChanger):
@@ -101,9 +119,7 @@ class UncommittedChanger(DebianChanger):
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
             if len(missing_versions) > 1:
-                # TODO(jelmer): Download intermediate missing versions from
-                # snapshot.debian.org, and import them
-                raise NotImplementedError(self.make_changes)
+                download_snapshot(package_name, archive_cl.version, archive_source)
             dsc_path = os.path.join(
                 archive_source,
                 '%s_%s.dsc' % (package_name, archive_cl.version))
