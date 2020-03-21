@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import contextlib
 import json
 import os
 import subprocess
@@ -98,7 +99,8 @@ class UncommittedChanger(DebianChanger):
         with local_tree.get_file(cl_path) as f:
             tree_cl = Changelog(f)
             package_name = tree_cl.package
-        with tempfile.TemporaryDirectory() as archive_source:
+        with contextlib.ExitStack() as es:
+            archive_source = es.enter_context(tempfile.TemporaryDirectory())
             subprocess.check_call(
                 ['apt-get', 'source', package_name], cwd=archive_source)
             [subdir] = [
@@ -121,12 +123,14 @@ class UncommittedChanger(DebianChanger):
             db = DistributionBranch(
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
+            version_path = {archive_cl.version: archive_source}
             for version in missing_versions[:-1]:
-                download_snapshot(
-                    package_name, version, archive_source)
+                output_dir = es.enter_context(tempfile.TemporaryDirectory())
+                download_snapshot(package_name, version, output_dir)
+                version_path[version] = output_dir
             for version in missing_versions:
                 dsc_path = os.path.join(
-                    archive_source,
+                    version_path[version],
                     '%s_%s.dsc' % (package_name, version))
                 tag_name = db.import_package(dsc_path)
                 ret.append((tag_name, version))
