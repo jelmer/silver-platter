@@ -59,7 +59,7 @@ def select_vcswatch_packages():
     return packages
 
 
-def download_snapshot(package, version, output_dir):
+def download_snapshot(package, version, output_dir, no_preparation=False):
     note('Downloading %s %s', package, version)
     srcfiles_url = ('https://snapshot.debian.org/mr/package/%s/%s/'
                     'srcfiles?fileinfo=1' % (package, version))
@@ -73,8 +73,11 @@ def download_snapshot(package, version, output_dir):
             url = 'https://snapshot.debian.org/file/%s' % hsh
             with urlopen(url) as g:
                 f.write(g.read())
+    args = []
+    if no_preparation:
+        args.append('--no-preparation')
     subprocess.check_call(
-        ['dpkg-source', '-x', '%s_%s.dsc' % (package, version)],
+        ['dpkg-source'] + args + ['-x', '%s_%s.dsc' % (package, version)],
         cwd=output_dir)
 
 
@@ -134,10 +137,13 @@ class UncommittedChanger(DebianChanger):
                             tree_cl.package,
                             tree_cl.version.upstream_version)
                 db.extract_upstream_tree(upstream_tips, upstream_dir)
-            version_path = {archive_cl.version: archive_source}
-            for version in missing_versions[1:]:
+            no_preparation = not local_tree.has_filename('.pc/applied-patches')
+            version_path = {}
+            for version in missing_versions:
                 output_dir = es.enter_context(tempfile.TemporaryDirectory())
-                download_snapshot(package_name, version, output_dir)
+                download_snapshot(
+                    package_name, version, output_dir,
+                    no_preparation=no_preparation)
                 version_path[version] = output_dir
             for version in reversed(missing_versions):
                 note('Importing %s', version)
