@@ -60,6 +60,7 @@ def select_vcswatch_packages():
 
 
 def download_snapshot(package, version, output_dir):
+    note('Downloading %s %s', package, version)
     srcfiles_url = ('https://snapshot.debian.org/mr/package/%s/%s/'
                     'srcfiles?fileinfo=1' % (package, version))
     files = {}
@@ -118,17 +119,19 @@ class UncommittedChanger(DebianChanger):
                     tree_cl.version)
             if len(missing_versions) == 0:
                 raise Exception('no missing versions after all')
+            note('Missing versions: %s', ', '.join(map(str, missing_versions)))
             ret = []
             dbs = DistributionBranchSet()
             db = DistributionBranch(
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
             version_path = {archive_cl.version: archive_source}
-            for version in missing_versions[:-1]:
+            for version in missing_versions[1:]:
                 output_dir = es.enter_context(tempfile.TemporaryDirectory())
                 download_snapshot(package_name, version, output_dir)
                 version_path[version] = output_dir
-            for version in missing_versions:
+            for version in reversed(missing_versions):
+                note('Importing %s', version)
                 dsc_path = os.path.join(
                     version_path[version],
                     '%s_%s.dsc' % (package_name, version))
