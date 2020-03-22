@@ -125,6 +125,15 @@ class UncommittedChanger(DebianChanger):
             db = DistributionBranch(
                 local_tree.branch, local_tree.branch, tree=local_tree)
             dbs.add_branch(db)
+            if tree_cl.version.debian_revision:
+                note('Extracting upstream version %s.',
+                     tree_cl.version.upstream_version)
+                upstream_dir = es.enter_context(tempfile.TemporaryDirectory())
+                upstream_tips = db.pristine_upstream_source\
+                    .version_as_revisions(
+                            tree_cl.package,
+                            tree_cl.version.upstream_version)
+                db.extract_upstream_tree(upstream_tips, upstream_dir)
             version_path = {archive_cl.version: archive_source}
             for version in missing_versions[1:]:
                 output_dir = es.enter_context(tempfile.TemporaryDirectory())
