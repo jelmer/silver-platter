@@ -198,6 +198,8 @@ def _convert_exception(url, e):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.UnsupportedFormatError):
         return BranchUnsupported(url, str(e))
+    if isinstance(e, errors.UnknownFormatError):
+        return BranchUnsupported(url, str(e))
 
 
 def open_branch(url, possible_transports=None, probers=None):
