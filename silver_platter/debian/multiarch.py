@@ -17,9 +17,11 @@
 
 """Support for integration multi-arch hints."""
 
+import argparse
+
 import silver_platter  # noqa: F401
 
-from lintian_brush import run_lintian_fixer
+from lintian_brush import run_lintian_fixer, SUPPORTED_CERTAINTIES
 from lintian_brush.config import Config
 
 from .changer import (
