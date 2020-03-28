@@ -31,6 +31,7 @@ from .changer import (
     setup_parser,
     )
 from breezy.trace import note
+from breezy.plugins.debian.errors import PackageVersionNotPresent
 
 
 BRANCH_NAME = 'missing-commits'
@@ -132,10 +133,15 @@ class UncommittedChanger(DebianChanger):
                 note('Extracting upstream version %s.',
                      tree_cl.version.upstream_version)
                 upstream_dir = es.enter_context(tempfile.TemporaryDirectory())
-                upstream_tips = db.pristine_upstream_source\
-                    .version_as_revisions(
-                            tree_cl.package,
-                            tree_cl.version.upstream_version)
+                try:
+                    upstream_tips = db.pristine_upstream_source\
+                        .version_as_revisions(
+                                tree_cl.package,
+                                tree_cl.version.upstream_version)
+                except PackageVersionNotPresent:
+                    raise Exception(
+                        'unable to find upstream version %r' %
+                        tree_cl.version.upstream_version)
                 db.extract_upstream_tree(upstream_tips, upstream_dir)
             no_preparation = not local_tree.has_filename('.pc/applied-patches')
             version_path = {}
