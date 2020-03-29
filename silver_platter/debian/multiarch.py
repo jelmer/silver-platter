@@ -125,7 +125,6 @@ def main(args):
 
 
 if __name__ == '__main__':
-    import argparse
     parser = argparse.ArgumentParser(prog='multi-arch-hints')
     setup_parser(parser)
     MultiArchHintsChanger.setup_parser(parser)
