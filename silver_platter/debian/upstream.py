@@ -23,6 +23,7 @@ import argparse
 from debian.changelog import Version
 import os
 import re
+import ssl
 import tempfile
 
 from ..utils import (
@@ -346,6 +347,8 @@ def merge_upstream(tree, snapshot=False, location=None,
             upstream_branch_source = UpstreamBranchSource.from_branch(
                 upstream_branch, config=config, local_dir=tree.controldir)
         except InvalidHttpResponse as e:
+            raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
+        except ssl.SSLError as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
     else:
         upstream_branch_source = None
