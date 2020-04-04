@@ -285,6 +285,20 @@ except ImportError:
 else:
     prober_registry['hg'] = SmartHgProber
 
+try:
+    from breezy.plugins.darcs import DarcsProber
+except ImportError:
+    pass
+else:
+    prober_registry['darcs'] = DarcsProber
+
+try:
+    from breezy.plugins.cvs import CVSProber
+except ImportError:
+    pass
+else:
+    prober_registry['cvs'] = CVSProber
+
 
 def select_probers(vcs_type=None):
     if vcs_type is None:
