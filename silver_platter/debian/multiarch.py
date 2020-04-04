@@ -27,7 +27,7 @@ from lintian_brush.config import Config
 from .changer import (
     DebianChanger,
     run_changer,
-    setup_parser,
+    setup_multi_parser as setup_changer_parser,
     )
 
 from breezy.trace import note
@@ -119,6 +119,11 @@ class MultiArchHintsChanger(DebianChanger):
         return []
 
 
+def setup_parser(parser):
+    setup_changer_parser(parser)
+    MultiArchHintsChanger.setup_parser(parser)
+
+
 def main(args):
     changer = MultiArchHintsChanger()
     return run_changer(changer, args)
@@ -127,6 +132,5 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='multi-arch-hints')
     setup_parser(parser)
-    MultiArchHintsChanger.setup_parser(parser)
     args = parser.parse_args()
     main(args)

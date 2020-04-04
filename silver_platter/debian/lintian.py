@@ -28,7 +28,7 @@ from lintian_brush.config import Config
 from .changer import (
     run_changer,
     DebianChanger,
-    setup_parser,
+    setup_multi_parser as setup_changer_parser,
     )
 
 __all__ = [
@@ -197,7 +197,7 @@ class LintianBrushChanger(DebianChanger):
 
     @classmethod
     def from_args(cls, args):
-        return cls(names=args.names, exclude=args.exclude,
+        return cls(names=args.fixers, exclude=args.exclude,
                    propose_addon_only=args.propose_addon_only)
 
     def suggest_branch_name(self):
@@ -274,6 +274,11 @@ class LintianBrushChanger(DebianChanger):
         return []
 
 
+def setup_parser(parser):
+    LintianBrushChanger.setup_parser(parser)
+    setup_changer_parser(parser)
+
+
 def main(args):
     try:
         changer = LintianBrushChanger.from_args(args)
@@ -288,6 +293,5 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
     setup_parser(parser)
-    LintianBrushChanger.setup_parser(parser)
     args = parser.parse_args()
     main(args)

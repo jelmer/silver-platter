@@ -117,7 +117,7 @@ class ChangerError(Exception):
         self.original = original
 
 
-def setup_parser(parser):
+def setup_multi_parser(parser):
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
         '--fix-conflicted', action='store_true',

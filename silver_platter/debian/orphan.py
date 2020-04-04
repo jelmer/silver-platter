@@ -188,8 +188,8 @@ def main(args):
 
 
 def setup_parser(parser):
-    from .changer import setup_parser
-    setup_parser(parser)
+    from .changer import setup_multi_parser
+    setup_multi_parser(parser)
     OrphanChanger.setup_parser(parser)
 
 
@@ -197,6 +197,5 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(prog='orphan')
     setup_parser(parser)
-    OrphanChanger.setup_parser(parser)
     args = parser.parse_args()
     main(args)

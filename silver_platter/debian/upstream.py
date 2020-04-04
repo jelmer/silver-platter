@@ -697,12 +697,13 @@ def main(args):
 
 
 def setup_parser(parser):
-    from .changer import setup_parser
-    setup_parser(parser)
+    from .changer import setup_multi_parser
+    setup_multi_parser(parser)
     NewUpstreamChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='propose-new-upstream')
+    setup_parser(parser)
     args = parser.parse_args()
     main(args)

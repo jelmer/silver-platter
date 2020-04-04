@@ -20,7 +20,7 @@ from breezy.trace import note
 from .changer import (
     run_changer,
     DebianChanger,
-    setup_parser,
+    setup_multi_parser as setup_changer_parser,
     )
 
 from .lintian import LintianBrushChanger
@@ -108,10 +108,14 @@ def main(args):
     return run_changer(changer, args)
 
 
+def setup_parser(parser):
+    setup_changer_parser(parser)
+    TidyChanger.setup_parser(parser)
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(prog='tidy')
     setup_parser(parser)
-    TidyChanger.setup_parser(parser)
     args = parser.parse_args()
     main(args)
