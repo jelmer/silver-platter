@@ -171,10 +171,13 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
     yield 'Please move the repository from %s to %s.' % (
          old_vcs_url, new_vcs_url)
     if urlparse(old_vcs_url).hostname == 'salsa.debian.org':
+        path = urlparse(old_vcs_url).path
+        if path.endswith('.git'):
+            path = path[:-4]
         yield 'If you have the salsa(1) tool installed, run: '
         yield ''
         yield '    salsa fork --group=%s %s' % (
-             salsa_user, urlparse(old_vcs_url).path)
+             salsa_user, path)
     else:
         yield 'If you have the salsa(1) tool installed, run: '
         yield ''
