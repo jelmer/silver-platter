@@ -56,6 +56,9 @@ Subcommands that are available include:
    changelog updates.
  * *new-upstream*: Merge in a new upstream release or snapshot.
  * *apply-multi-arch-hints*: Apply multi-arch hints.
+ * *orphan*: Mark a package as orphaned, update its Maintainer
+   field and and move it to the common Debian salsa group.
+ * *rules-requires-root*: Mark a package as "Rules-Requires-Root: no"
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
