@@ -27,6 +27,7 @@ def main(argv=None):
         run as debian_run,
         multiarch,
         orphan,
+        rrr,
         tidy,
         uncommitted,
         upstream as debian_upstream,
@@ -43,6 +44,7 @@ def main(argv=None):
         ('orphan', orphan.setup_parser, orphan.main),
         ('tidy', tidy.setup_parser, tidy.main),
         ('import-upload', uncommitted.setup_parser, uncommitted.main),
+        ('rules-requires-root', rrr.setup_parser, rrr.main),
         ]
 
     for cmd in main_subcommands:
