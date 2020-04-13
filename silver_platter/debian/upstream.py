@@ -100,6 +100,7 @@ from breezy.plugins.debian.upstream import (
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
+    DistCommandFailed,
     )
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
@@ -112,6 +113,7 @@ __all__ = [
     'PreviousVersionTagMissing',
     'merge_upstream',
     'InvalidFormatUpstreamVersion',
+    'DistCommandFailed',
     'MissingChangelogError',
     'MissingUpstreamTarball',
     'NewUpstreamMissing',
@@ -278,6 +280,7 @@ def merge_upstream(tree, snapshot=False, location=None,
     Raises:
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
+      DistCommandFailed
       MissingChangelogError
       MissingUpstreamTarball
       NewUpstreamMissing
@@ -358,12 +361,14 @@ def merge_upstream(tree, snapshot=False, location=None,
 
     if location is not None:
         try:
-            primary_upstream_source = UpstreamBranchSource.from_branch(
-                open_branch(location), config=config,
-                local_dir=tree.controldir, dist_command=dist_command)
+            branch = open_branch(location)
         except (BranchUnavailable, BranchMissing, BranchUnsupported):
             primary_upstream_source = TarfileSource(
                 location, new_upstream_version)
+        else:
+            primary_upstream_source = UpstreamBranchSource.from_branch(
+                branch, config=config,
+                local_dir=tree.controldir, dist_command=dist_command)
     else:
         if snapshot:
             if upstream_branch_source is None:
@@ -651,6 +656,8 @@ class NewUpstreamChanger(DebianChanger):
             raise ChangerError('Unable to parse %s' % e.path, e)
         except MissingChangelogError as e:
             raise ChangerError('Missing changelog %s' % e, e)
+        except DistCommandFailed as e:
+            raise ChangerError('Dist command failed: %s' % e, e)
         except MissingUpstreamTarball as e:
             raise ChangerError('Missing upstream tarball: %s' % e, e)
         else:
