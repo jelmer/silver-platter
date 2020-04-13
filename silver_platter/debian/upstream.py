@@ -270,9 +270,11 @@ def merge_upstream(tree, snapshot=False, location=None,
                    distribution_name=DEFAULT_DISTRIBUTION,
                    allow_ignore_upstream_branch=True,
                    trust_package=False, committer=None,
-                   update_changelog=True, subpath=''):
+                   update_changelog=True, subpath='', dist_command=None):
     """Merge a new upstream version into a tree.
 
+    Args:
+      dist_command: Command to run to create upstream tarball from source tree
     Raises:
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
@@ -345,7 +347,8 @@ def merge_upstream(tree, snapshot=False, location=None,
     if upstream_branch is not None:
         try:
             upstream_branch_source = UpstreamBranchSource.from_branch(
-                upstream_branch, config=config, local_dir=tree.controldir)
+                upstream_branch, config=config, local_dir=tree.controldir,
+                dist_command=dist_command)
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
         except ssl.SSLError as e:
@@ -357,7 +360,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         try:
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 open_branch(location), config=config,
-                local_dir=tree.controldir)
+                local_dir=tree.controldir, dist_command=dist_command)
         except (BranchUnavailable, BranchMissing, BranchUnsupported):
             primary_upstream_source = TarfileSource(
                 location, new_upstream_version)
@@ -480,7 +483,12 @@ def merge_upstream(tree, snapshot=False, location=None,
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
-    debcommit(tree, committer=committer)
+    if update_changelog:
+        debcommit(tree, committer=committer)
+    else:
+        tree.commit(
+            committer=committer,
+            message='Merge new upstream release %s.' % new_upstream_version)
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
@@ -552,11 +560,12 @@ def update_packaging(tree, old_tree, committer=None):
 class NewUpstreamChanger(DebianChanger):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
-                 update_packaging):
+                 update_packaging, dist_command):
         self.snapshot = snapshot
         self.trust_package = trust_package
         self.refresh_patches = refresh_patches
         self.update_packaging = update_packaging
+        self.dist_command = dist_command
 
     @classmethod
     def setup_parser(cls, parser):
@@ -575,6 +584,9 @@ class NewUpstreamChanger(DebianChanger):
         parser.add_argument(
             '--refresh-patches', action="store_true",
             help="Refresh quilt patches after upstream merge.")
+        parser.add_argument(
+            '--dist-command', type=str,
+            help="Command to run to create tarball from source tree.")
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -587,7 +599,8 @@ class NewUpstreamChanger(DebianChanger):
         return cls(snapshot=args.snapshot,
                    trust_package=args.trust_package,
                    refresh_patches=args.refresh_patches,
-                   update_packaging=args.update_packaging)
+                   update_packaging=args.update_packaging,
+                   dist_command=args.dist_command)
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         try:
@@ -595,7 +608,8 @@ class NewUpstreamChanger(DebianChanger):
                 tree=local_tree, snapshot=self.snapshot,
                 trust_package=self.trust_package,
                 update_changelog=update_changelog,
-                subpath=subpath, committer=committer)
+                subpath=subpath, committer=committer,
+                dist_command=self.dist_command)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
                 'Last upstream version %s already imported.' % e.version, e)

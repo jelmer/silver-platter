@@ -227,9 +227,10 @@ class Workspace(_mod_proposal.Workspace):
 
 
 def debcommit(tree, committer=None, paths=None):
+    message = changelog_commit_message(tree, tree.basis_tree())
     tree.commit(
         committer=committer,
-        message=changelog_commit_message(tree, tree.basis_tree()),
+        message=message,
         specific_files=paths)
 
 
