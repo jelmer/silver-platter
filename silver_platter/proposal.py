@@ -289,7 +289,8 @@ class Workspace(object):
                         remote_colo_branch = (
                             self.main_branch.controldir.open_branch(
                                 name=branch_name))
-                    except errors.NotBranchError:
+                    except (errors.NotBranchError,
+                            errors.NoColocatedBranchSupport):
                         continue
                     self.local_tree.branch.controldir.push_branch(
                         name=branch_name, source=remote_colo_branch,
