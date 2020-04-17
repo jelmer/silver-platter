@@ -15,8 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from __future__ import absolute_import
-
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
@@ -229,9 +227,10 @@ class Workspace(_mod_proposal.Workspace):
 
 
 def debcommit(tree, committer=None, paths=None):
+    message = changelog_commit_message(tree, tree.basis_tree())
     tree.commit(
         committer=committer,
-        message=changelog_commit_message(tree, tree.basis_tree()),
+        message=message,
         specific_files=paths)
 
 
@@ -287,6 +286,20 @@ except ImportError:
 else:
     prober_registry['hg'] = SmartHgProber
 
+try:
+    from breezy.plugins.darcs import DarcsProber
+except ImportError:
+    pass
+else:
+    prober_registry['darcs'] = DarcsProber
+
+try:
+    from breezy.plugins.cvs import CVSProber
+except ImportError:
+    pass
+else:
+    prober_registry['cvs'] = CVSProber
+
 
 def select_probers(vcs_type=None):
     if vcs_type is None:
@@ -307,5 +320,8 @@ def select_preferred_probers(vcs_type=None):
     return probers
 
 
-def changelog_add_line(tree, line):
-    subprocess.check_call(['dch', '--', line], cwd=tree.basedir)
+def changelog_add_line(tree, line, email):
+    env = {}
+    if email:
+        env['DEBEMAIL'] = email
+    subprocess.check_call(['dch', '--', line], cwd=tree.basedir, env=env)

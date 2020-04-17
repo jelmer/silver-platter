@@ -17,8 +17,6 @@
 
 """Automatic proposal/push creation."""
 
-from __future__ import absolute_import
-
 import os
 import subprocess
 import sys
@@ -29,9 +27,12 @@ from breezy import osutils
 from breezy import errors
 from breezy.commit import PointlessCommit
 from breezy.trace import note, warning, show_error
-from breezy.plugins.propose import (
-    propose as _mod_propose,
-    )
+try:
+    from breezy import propose as _mod_propose
+except ImportError:
+    from breezy.plugins.propose import (
+        propose as _mod_propose,
+        )
 from .proposal import (
     UnsupportedHoster,
     enable_tag_pushing,
@@ -161,7 +162,7 @@ def main(args):
             show_error('Script did not make any changes.')
             return 1
 
-        def get_description(existing_proposal):
+        def get_description(description_format, existing_proposal):
             if description is not None:
                 return description
             if existing_proposal is not None:

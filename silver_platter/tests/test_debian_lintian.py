@@ -42,14 +42,15 @@ class ParseMPDescriptionTests(unittest.TestCase):
 class CreateMPDescription(unittest.TestCase):
 
     def test_single_line(self):
-        self.assertEqual("some change", create_mp_description(['some change']))
+        self.assertEqual(
+            "some change", create_mp_description('plain', ['some change']))
 
     def test_multiple_lines(self):
         self.assertEqual("""\
 Fix some issues reported by lintian
 * some change
 * some other change
-""", create_mp_description(['some change', 'some other change']))
+""", create_mp_description('plain', ['some change', 'some other change']))
 
 
 class GetFixersTests(unittest.TestCase):

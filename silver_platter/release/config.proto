@@ -1,0 +1,21 @@
+syntax = "proto2";
+
+package releaser;
+
+message Project {
+    optional string name = 1;
+
+    optional string repository_url = 2;
+
+    optional string tag_format = 3;
+
+    optional string news_file = 4;
+
+    optional string tarball_location = 5;
+
+    optional string pypi_name = 6;
+};
+
+message Config {
+    repeated Project project = 1;
+};
