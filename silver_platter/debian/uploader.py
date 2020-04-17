@@ -20,6 +20,7 @@
 import silver_platter   # noqa: F401
 
 import datetime
+import subprocess
 import tempfile
 
 from breezy import gpg
@@ -53,13 +54,43 @@ from ..utils import (
     )
 
 
+class NoUnuploadedChanges(Exception):
+    """Indicates there are no unuploaded changes for a package."""
+
+    def __init__(self, archive_version):
+        self.archive_version = archive_version
+        super(NoUnuploadedChanges, self).__init__(
+            "nothing to upload, latest version is in archive: %s" %
+            archive_version)
+
+
+class RecentCommits(Exception):
+    """Indicates there are too recent commits for a package."""
+
+    def __init__(self, commit_age, min_commit_age):
+        self.commit_age = commit_age
+        self.min_commit_age = min_commit_age
+        super(RecentCommits, self).__init__(
+            "Last commit is only %d days old (< %d)" % (
+                self.commit_age, self.min_commit_age))
+
+
 def check_revision(rev, min_commit_age):
+    """Check whether a revision can be included in an upload.
+
+    Args:
+      rev: revision to check
+      min_commit_age: Minimum age for revisions
+    Raises:
+      RecentCommits: When there are commits younger than min_commit_age
+    """
     print("checking %r" % rev)
     # TODO(jelmer): deal with timezone
-    commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
-    time_delta = datetime.datetime.now() - commit_time
-    if time_delta.days < min_commit_age:
-        raise Exception("Last commit is only %d days old" % time_delta.days)
+    if min_commit_age is not None:
+        commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
+        time_delta = datetime.datetime.now() - commit_time
+        if time_delta.days < min_commit_age:
+            raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
 
 
@@ -77,14 +108,13 @@ def get_maintainer_keys(context):
 
 
 def prepare_upload_package(
-        local_tree, pkg, last_uploaded_version, gpg_strategy, min_commit_age,
-        builder):
-    cl, top_level = find_changelog(
-            local_tree, merge=False, max_blocks=None)
+        local_tree, subpath, pkg, last_uploaded_version, builder,
+        gpg_strategy=None, min_commit_age=None):
+    if local_tree.has_filename('debian/gbp.conf'):
+        subprocess.check_call(['gbp', 'dch'], cwd=local_tree.abspath('.'))
+    cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
-        raise Exception(
-                "nothing to upload, latest version is in archive: %s" %
-                cl.version)
+        raise NoUnuploadedChanges(cl.version)
     previous_version_in_branch = changelog_find_previous_upload(cl)
     if last_uploaded_version > previous_version_in_branch:
         raise Exception(
@@ -117,16 +147,20 @@ def prepare_upload_package(
 
         if cl.distributions != "UNRELEASED":
             raise Exception("Nothing left to release")
-    release(local_tree)
+    release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
+    builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
     target_changes = _build_helper(
-        local_tree, local_tree.branch, target_dir, builder=builder)
+        local_tree, subpath, local_tree.branch, target_dir, builder=builder)
     debsign(target_changes)
     return target_changes
 
 
 def setup_parser(parser):
     parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        '--dry-run', action='store_true',
+        help='Dry run changes.')
     parser.add_argument(
         '--acceptable-keys',
         help='List of acceptable GPG keys',
@@ -149,23 +183,74 @@ def setup_parser(parser):
         type=str,
         action='append',
         help='Select all packages maintainer by specified maintainer.')
+    parser.add_argument(
+        '--vcswatch',
+        action='store_true',
+        help='Use vcswatch to determine what packages need uploading.')
+
+
+def select_apt_packages(package_names, maintainer):
+    packages = []
+    import apt_pkg
+    from email.utils import parseaddr
+    apt_pkg.init()
+    sources = apt_pkg.SourceRecords()
+    while sources.step():
+        if maintainer:
+            fullname, email = parseaddr(sources.maintainer)
+            if email not in maintainer:
+                continue
+
+        if package_names and sources.package not in package_names:
+            continue
+
+        packages.append(sources.package)
+
+    return packages
+
+
+def select_vcswatch_packages(packages, maintainer):
+    import psycopg2
+    conn = psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net")
+    cursor = conn.cursor()
+    args = []
+    query = """\
+    SELECT sources.source, vcswatch.url
+    FROM vcswatch JOIN sources ON sources.source = vcswatch.source
+    WHERE
+     vcswatch.status IN ('COMMITS', 'NEW') AND
+     sources.release = 'sid'
+"""
+    if maintainer:
+        query += " AND sources.maintainer_email IN (%s)"
+        args.append(tuple(maintainer))
+    if packages:
+        query += " AND sources.source IN (%s)"
+        args.append(tuple(packages))
+
+    cursor.execute(query, tuple(args))
+
+    packages = []
+    for package, vcs_url in cursor.fetchall():
+        packages.append(package)
+    return packages
 
 
 def main(args):
     ret = 0
 
-    packages = []
-    if args.maintainer:
-        import apt_pkg
-        from email.utils import parseaddr
-        apt_pkg.init()
-        sources = apt_pkg.SourceRecords()
-        while sources.step():
-            fullname, email = parseaddr(sources.maintainer)
-            if email in args.maintainer:
-                packages.append(sources.package)
-
-    packages.extend(args.packages)
+    if args.vcswatch:
+        packages = select_vcswatch_packages(
+            args.packages, args.maintainer)
+    else:
+        note('Use --vcswatch to only process packages for which '
+             'vcswatch found pending commits.')
+        packages = select_apt_packages(
+            args.packages, args.maintainer)
 
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
@@ -198,9 +283,12 @@ def main(args):
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
             target_changes = prepare_upload_package(
-                ws.local_tree,
-                pkg_source["Package"], pkg_source["Version"], gpg_strategy,
-                args.min_commit_age, args.builder)
+                ws.local_tree, '',
+                pkg_source["Package"], pkg_source["Version"],
+                builder=args.builder, gpg_strategy=gpg_strategy,
+                min_commit_age=args.min_commit_age)
+
+            # TODO(jelmer): Upload the right tags
 
             ws.push(dry_run=args.dry_run)
             if not args.dry_run:

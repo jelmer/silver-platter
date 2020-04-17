@@ -2,10 +2,6 @@ Backends (in Breezy upstream)
 - Support for Mercurial
 - Support for Svn
 
-* For "push" packages, don't require an associated hoster - make changes, commit, push back
- + Still need a way to convert "public read-only URL" to "writeable URL".
-  - For git, just use pushInsteadOf
-
 Upstream changes:
 * pngcrush
 * FSF
@@ -23,3 +19,4 @@ upload-pending-commits.py:
  * Improve speed of verifying signatures
 
 - support --mode=merge-directive
+- support --mode=debian-bts

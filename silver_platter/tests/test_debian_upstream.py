@@ -49,7 +49,9 @@ lintian-brush (0.37) UNRELEASED; urgency=medium
         t.commit('Add autogen')
 
         self.addCleanup(t.lock_write().unlock)
-        update_packaging(t, t.branch.repository.revision_tree(oldrev))
+        update_packaging(
+            t, t.branch.repository.revision_tree(oldrev),
+            committer="Jelmer Vernooĳ <jelmer@debian.org>")
 
         self.assertFileEqual("""\
 lintian-brush (0.37) UNRELEASED; urgency=medium

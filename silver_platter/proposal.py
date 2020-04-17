@@ -28,14 +28,26 @@ from breezy import (
     errors,
     merge as _mod_merge,
     )
-from breezy.plugins.propose.propose import (
-    get_hoster,
-    hosters,
-    MergeProposal,
-    NoSuchProject,
-    UnsupportedHoster,
-    )
+try:
+    from breezy.propose import (
+        get_hoster,
+        hosters,
+        MergeProposal,
+        NoSuchProject,
+        UnsupportedHoster,
+        HosterLoginRequired,
+        )
+except ImportError:
+    from breezy.plugins.propose.propose import (
+        get_hoster,
+        hosters,
+        MergeProposal,
+        NoSuchProject,
+        UnsupportedHoster,
+        HosterLoginRequired,
+        )
 
+import breezy.plugins.propose  # noqa: F401
 
 from .utils import (
     create_temp_sprout,
@@ -45,6 +57,7 @@ from .utils import (
 
 
 __all__ = [
+    'HosterLoginRequired',
     'UnsupportedHoster',
     'PermissionDenied',
     'NoSuchProject',
@@ -99,7 +112,8 @@ class DryRunProposal(MergeProposal):
     """
 
     def __init__(self, source_branch, target_branch, labels=None,
-                 description=None, commit_message=None):
+                 description=None, commit_message=None,
+                 reviewers=None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
@@ -107,6 +121,7 @@ class DryRunProposal(MergeProposal):
         self.target_branch = target_branch
         self.commit_message = commit_message
         self.url = None
+        self.reviewers = reviewers
 
     @classmethod
     def from_existing(cls, mp, source_branch=None):
@@ -164,9 +179,13 @@ class DryRunProposal(MergeProposal):
 
 
 def push_result(local_branch, remote_branch,
-                additional_colocated_branches=None):
+                additional_colocated_branches=None, tags=None):
+    kwargs = {}
+    if tags is not None:
+        kwargs['tag_selector'] = tags.__contains__
     try:
-        local_branch.push(remote_branch)
+        local_branch.push(
+            remote_branch, overwrite=False, **kwargs)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
         raise PermissionDenied(path=remote_branch.user_url, extra=e)
@@ -177,7 +196,7 @@ def push_result(local_branch, remote_branch,
             pass
         else:
             remote_branch.controldir.push_branch(
-                add_branch, name=branch_name)
+                add_branch, name=branch_name, **kwargs)
 
 
 def find_existing_proposed(main_branch, hoster, name,
@@ -270,13 +289,13 @@ class Workspace(object):
                         remote_colo_branch = (
                             self.main_branch.controldir.open_branch(
                                 name=branch_name))
-                    except errors.NotBranchError:
+                    except (errors.NotBranchError,
+                            errors.NoColocatedBranchSupport):
                         continue
                     self.local_tree.branch.controldir.push_branch(
                         name=branch_name, source=remote_colo_branch,
                         overwrite=True)
-                if merge_conflicts(
-                        self.main_branch, self.local_tree.branch):
+                if merge_conflicts(self.main_branch, self.local_tree.branch):
                     note('restarting branch')
                     self.local_tree.update(revision=self.main_branch_revid)
                     self.local_tree.branch.generate_revision_history(
@@ -297,36 +316,39 @@ class Workspace(object):
     def changes_since_resume(self):
         return self.orig_revid != self.local_tree.branch.last_revision()
 
-    def push(self, hoster=None, dry_run=False):
+    def push(self, hoster=None, dry_run=False, tags=None):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return push_changes(
             self.local_tree.branch, self.main_branch, hoster=hoster,
             additional_colocated_branches=self.additional_colocated_branches,
-            dry_run=dry_run)
+            dry_run=dry_run, tags=tags)
 
     def propose(self, name, description, hoster=None, existing_proposal=None,
                 overwrite_existing=None, labels=None, dry_run=False,
-                commit_message=None):
+                commit_message=None, reviewers=None, tags=None,
+                allow_collaboration=False):
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
-            self.local_tree.branch, self.main_branch,
-            hoster=hoster, name=name, mp_description=description,
-            resume_branch=self.resume_branch,
+            self.local_tree.branch, self.main_branch, hoster=hoster, name=name,
+            mp_description=description, resume_branch=self.resume_branch,
             resume_proposal=existing_proposal,
-            overwrite_existing=overwrite_existing,
-            labels=labels, dry_run=dry_run,
-            commit_message=commit_message,
-            additional_colocated_branches=self.additional_colocated_branches)
+            overwrite_existing=overwrite_existing, labels=labels,
+            dry_run=dry_run, commit_message=commit_message,
+            reviewers=reviewers,
+            additional_colocated_branches=self.additional_colocated_branches,
+            tags=tags, allow_collaboration=allow_collaboration)
 
-    def push_derived(self, name, hoster=None, overwrite_existing=False):
+    def push_derived(self, name, hoster=None, overwrite_existing=False,
+                     tags=None):
         """Push a derived branch.
 
         Args:
           name: Branch name
           hoster: Optional hoster to use
           overwrite_existing: Whether to overwrite an existing branch
+          tags: Tags list to push
         Returns:
           tuple with remote_branch and public_branch_url
         """
@@ -335,7 +357,8 @@ class Workspace(object):
         return push_derived_changes(
             self.local_tree.branch,
             self.main_branch, hoster, name,
-            overwrite_existing=overwrite_existing)
+            overwrite_existing=overwrite_existing,
+            tags=tags)
 
     def orig_tree(self):
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
@@ -374,7 +397,27 @@ class PublishResult(object):
 def publish_changes(ws, mode, name, get_proposal_description,
                     get_proposal_commit_message=None, dry_run=False,
                     hoster=None, allow_create_proposal=True, labels=None,
-                    overwrite_existing=True, existing_proposal=None):
+                    overwrite_existing=True, existing_proposal=None,
+                    reviewers=None, tags=None, allow_collaboration=False):
+    """Publish a set of changes.
+
+    Args:
+      ws: Workspace to push from
+      mode: Mode to use ('push', 'push-derived', 'propose')
+      name: Branch name to push
+      get_proposal_description: Function to retrieve proposal description
+      get_proposal_commit_message: Function to retrieve proposal commit message
+      dry_run: Whether to dry run
+      hoster: Hoster, if known
+      allow_create_proposal: Whether to allow creating proposals
+      labels: Labels to set for any merge proposals
+      overwrite_existing: Whether to overwrite existing (but unrelated) branch
+      existing_proposal: Existing proposal to update
+      reviewers: List of reviewers for merge proposal
+      tags: Tags to push (None for default behaviour)
+      allow_collaboration: Whether to allow target branch owners to modify
+        source branch.
+    """
     if mode not in SUPPORTED_MODES:
         raise ValueError("invalid mode %r" % mode)
 
@@ -395,12 +438,13 @@ def publish_changes(ws, mode, name, get_proposal_description,
 
     if mode == 'push-derived':
         (remote_branch, public_url) = ws.push_derived(
-            name=name, overwrite_existing=overwrite_existing)
+            name=name, overwrite_existing=overwrite_existing,
+            tags=tags)
         return PublishResult(mode)
 
     if mode in ('push', 'attempt-push'):
         try:
-            ws.push(hoster, dry_run=dry_run)
+            ws.push(hoster, dry_run=dry_run, tags=tags)
         except PermissionDenied:
             if mode == 'attempt-push':
                 note('push access denied, falling back to propose')
@@ -417,6 +461,7 @@ def publish_changes(ws, mode, name, get_proposal_description,
         return PublishResult(mode)
 
     mp_description = get_proposal_description(
+        getattr(hoster, 'merge_proposal_description_format', 'plain'),
         existing_proposal if ws.resume_branch else None)
     if get_proposal_commit_message is not None:
         commit_message = get_proposal_commit_message(
@@ -425,20 +470,23 @@ def publish_changes(ws, mode, name, get_proposal_description,
         name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
-        commit_message=commit_message)
+        commit_message=commit_message, reviewers=reviewers,
+        tags=tags, allow_collaboration=allow_collaboration)
 
     return PublishResult(mode, proposal, is_new)
 
 
 def push_changes(local_branch, main_branch, hoster, possible_transports=None,
-                 additional_colocated_branches=None, dry_run=False):
+                 additional_colocated_branches=None, dry_run=False, tags=None):
     """Push changes to a branch."""
     push_url = hoster.get_push_url(main_branch)
     note('pushing to %s', push_url)
     target_branch = open_branch(
         push_url, possible_transports=possible_transports)
     if not dry_run:
-        push_result(local_branch, target_branch, additional_colocated_branches)
+        push_result(
+            local_branch, target_branch, additional_colocated_branches,
+            tags=tags)
 
 
 class EmptyMergeProposal(Exception):
@@ -477,7 +525,8 @@ def propose_changes(
         overwrite_existing=True,
         labels=None, dry_run=False, commit_message=None,
         additional_colocated_branches=None,
-        allow_empty=False):
+        allow_empty=False, reviewers=None, tags=None,
+        allow_collaboration=False):
     """Create or update a merge proposal.
 
     Args:
@@ -493,19 +542,28 @@ def propose_changes(
       commit_message: Optional commit message
       additional_colocated_branches: Additional colocated branches to propose
       allow_empty: Whether to allow empty merge proposals
+      reviewers: List of reviewers
+      tags: Tags to push (None for default behaviour)
+      allow_collaboration: Allow target branch owners to modify source branch
     Returns:
       Tuple with (proposal, is_new)
     """
     if not allow_empty:
         check_proposal_diff(local_branch, main_branch)
+    push_kwargs = {}
+    if tags is not None:
+        push_kwargs['tag_selector'] = tags.__contains__
     if not dry_run:
         if resume_branch is not None:
-            local_branch.push(resume_branch, overwrite=overwrite_existing)
+            local_branch.push(
+                resume_branch, overwrite=overwrite_existing,
+                **push_kwargs)
             remote_branch = resume_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
-                overwrite=overwrite_existing)
+                overwrite=overwrite_existing,
+                **push_kwargs)
         for colocated_branch_name in (additional_colocated_branches or []):
             try:
                 local_colo_branch = local_branch.controldir.open_branch(
@@ -515,14 +573,15 @@ def propose_changes(
             else:
                 remote_branch.controldir.push_branch(
                     source=local_colo_branch, overwrite=overwrite_existing,
-                    name=colocated_branch_name)
+                    name=colocated_branch_name,
+                    **push_kwargs)
     if resume_proposal is not None and dry_run:
         resume_proposal = DryRunProposal.from_existing(
             resume_proposal, source_branch=local_branch)
     if (resume_proposal is not None and
             getattr(resume_proposal, 'is_closed', None) and
             resume_proposal.is_closed()):
-        from breezy.plugins.propose.propose import (
+        from breezy.propose import (
             ReopenFailed,
             )
         try:
@@ -553,10 +612,13 @@ def propose_changes(
                     hoster, 'supports_merge_proposal_commit_message', False):
                 # brz >= 3.1 only
                 kwargs['commit_message'] = commit_message
+            if getattr(
+                    hoster, 'supports_allow_collaboration', False):
+                kwargs['allow_collaboration'] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
-                    **kwargs)
+                    reviewers=reviewers, **kwargs)
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
@@ -564,7 +626,8 @@ def propose_changes(
         else:
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
-                description=mp_description, commit_message=commit_message)
+                description=mp_description, commit_message=commit_message,
+                reviewers=reviewers)
         return (mp, True)
 
 
@@ -587,9 +650,14 @@ def merge_directive_changes(
 
 
 def push_derived_changes(
-        local_branch, main_branch, hoster, name, overwrite_existing=False):
+        local_branch, main_branch, hoster, name, overwrite_existing=False,
+        tags=None):
+    kwargs = {}
+    if tags is not None:
+        kwargs['tag_selector'] = tags.__contains__
     remote_branch, public_branch_url = hoster.publish_derived(
-        local_branch, main_branch, name=name, overwrite=overwrite_existing)
+        local_branch, main_branch, name=name, overwrite=overwrite_existing,
+        **kwargs)
     return remote_branch, public_branch_url
 
 

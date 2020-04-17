@@ -15,8 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from __future__ import absolute_import
-
 import silver_platter  # noqa: F401
 
 import argparse
@@ -27,6 +25,11 @@ def main(argv=None):
     from . import (
         lintian as debian_lintian,
         run as debian_run,
+        multiarch,
+        orphan,
+        rrr,
+        tidy,
+        uncommitted,
         upstream as debian_upstream,
         uploader as debian_uploader,
         )
@@ -37,6 +40,11 @@ def main(argv=None):
         ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
+        ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
+        ('orphan', orphan.setup_parser, orphan.main),
+        ('tidy', tidy.setup_parser, tidy.main),
+        ('import-upload', uncommitted.setup_parser, uncommitted.main),
+        ('rules-requires-root', rrr.setup_parser, rrr.main),
         ]
 
     for cmd in main_subcommands:

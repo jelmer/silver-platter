@@ -23,7 +23,7 @@ setup(
       author_email="jelmer@jelmer.uk",
       url="https://jelmer.uk/code/silver-platter",
       description="Automatic merge proposal creeator",
-      version="0.2.0",
+      version="0.3.0",
       license='GNU GPL v2 or later',
       project_urls={
           "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
@@ -39,8 +39,6 @@ setup(
       classifiers=[
           'Development Status :: 3 - Alpha',
           'License :: OSI Approved :: GNU General Public License (GPL)',
-          'Programming Language :: Python :: 3.3',
-          'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: 3.7',
@@ -60,6 +58,7 @@ setup(
           'breezy',
           'dulwich',
           'testtools',
-          'lintian-brush>=0.16',
+          'lintian-brush>=0.42',
+          'pyyaml',  # For reading debian/upstream/metadata
       ],
 )
