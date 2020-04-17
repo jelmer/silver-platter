@@ -1,11 +1,11 @@
-silver-platter (0.3.0-1) UNRELEASED; urgency=medium
+silver-platter (0.3.0-1) unstable; urgency=medium
 
   * New upstream snapshot.
   * Set Rules-Requires-Root.
   * New upstream release.
   * Update standards version to 4.5.0, no changes needed.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Fri, 17 Apr 2020 23:42:53 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Fri, 17 Apr 2020 23:57:52 +0000
 
 silver-platter (0.2.0+git20191022.7591492-1) unstable; urgency=medium
 
