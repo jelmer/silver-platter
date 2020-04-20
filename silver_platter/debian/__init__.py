@@ -18,6 +18,7 @@
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
+import re
 import subprocess
 
 from breezy import version_info as breezy_version
@@ -27,7 +28,7 @@ from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
-    source_package_vcs_url,
+    source_package_vcs,
     vcs_field_to_bzr_url_converters,
     )
 
@@ -53,7 +54,7 @@ __all__ = [
     'changelog_add_line',
     'get_source_package',
     'should_update_changelog',
-    'source_package_vcs_url',
+    'source_package_vcs',
     'build',
     'BuildFailedError',
     'MissingUpstreamTarball',
@@ -189,6 +190,22 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('invalid URL: %s' % e)
 
 
+def split_vcs_url(url):
+    m = re.finditer(r' \[([^] ]+)\]', url)
+    try:
+        m = next(m)
+        url = url[:m.start()] + url[m.end():]
+        subpath = m.group(1)
+    except StopIteration:
+        subpath = None
+    try:
+        (repo_url, branch) = url.split(' -b ', 1)
+    except ValueError:
+        branch = None
+        repo_url = url
+    return (repo_url, branch, subpath)
+
+
 def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     """Open a packaging branch from a location string.
 
@@ -196,11 +213,20 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     """
     if '/' not in location:
         pkg_source = get_source_package(location)
-        vcs_type, location = source_package_vcs_url(pkg_source)
+        try:
+            (vcs_type, vcs_url) = source_package_vcs(pkg_source)
+        except KeyError:
+            raise Exception(
+                'Package %s does not have any VCS information' % location)
+        (url, branch_name, subpath) = split_vcs_url(vcs_url)
+    else:
+        url = location
+        branch_name = None
+        subpath = ''
     probers = select_probers(vcs_type)
     branch = open_branch(
-        location, possible_transports=possible_transports, probers=probers)
-    subpath = ''
+        url, possible_transports=possible_transports, probers=probers,
+        name=branch_name)
     return branch, subpath
 
 

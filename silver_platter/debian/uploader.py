@@ -41,7 +41,8 @@ from breezy.trace import note, show_error
 
 from . import (
     get_source_package,
-    source_package_vcs_url,
+    source_package_vcs,
+    split_vcs_url,
     Workspace,
     DEFAULT_BUILDER,
     select_probers,
@@ -261,10 +262,12 @@ def main(args):
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)
-        vcs_type, vcs_url = source_package_vcs_url(pkg_source)
+        vcs_type, vcs_url = source_package_vcs(pkg_source)
+        (location, branch_name, subpath) = split_vcs_url(vcs_url)
         probers = select_probers(vcs_type)
         try:
-            main_branch = open_branch(vcs_url, probers=probers)
+            main_branch = open_branch(
+                location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             show_error('%s: %s', vcs_url, e)
             ret = 1
@@ -283,7 +286,7 @@ def main(args):
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
 
             target_changes = prepare_upload_package(
-                ws.local_tree, '',
+                ws.local_tree, subpath,
                 pkg_source["Package"], pkg_source["Version"],
                 builder=args.builder, gpg_strategy=gpg_strategy,
                 min_commit_age=args.min_commit_age)

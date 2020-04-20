@@ -202,13 +202,13 @@ def _convert_exception(url, e):
         return BranchUnsupported(url, str(e))
 
 
-def open_branch(url, possible_transports=None, probers=None):
+def open_branch(url, possible_transports=None, probers=None, name=None):
     """Open a branch by URL."""
     try:
         transport = breezy.transport.get_transport(
             url, possible_transports=possible_transports)
         dir = ControlDir.open_from_transport(transport, probers)
-        return dir.open_branch()
+        return dir.open_branch(name=name)
     except Exception as e:
         converted = _convert_exception(url, e)
         if converted is not None:

@@ -75,8 +75,8 @@ def get_package(package, branch_name, overwrite_unrelated=False,
         resume_branch = None
 
     return (
-        package, main_branch, subpath, resume_branch, hoster, existing_proposal,
-        overwrite)
+        package, main_branch, subpath, resume_branch, hoster,
+        existing_proposal, overwrite)
 
 
 def iter_packages(packages, branch_name, overwrite_unrelated=False,
@@ -224,12 +224,11 @@ class DebianChanger(object):
 
 
 def _run_single_changer(
-        changer, pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
-        overwrite, mode, branch_name, diff=False, committer=None,
-        build_verify=False, pre_check=None, post_check=None,
-        builder=DEFAULT_BUILDER,
-        dry_run=False, update_changelog=None, label=None,
-        build_target_dir=None):
+        changer, pkg, main_branch, subpath, resume_branch, hoster,
+        existing_proposal, overwrite, mode, branch_name, diff=False,
+        committer=None, build_verify=False, pre_check=None, post_check=None,
+        builder=DEFAULT_BUILDER, dry_run=False, update_changelog=None,
+        label=None, build_target_dir=None):
     from breezy import errors
     from . import (
         BuildFailedError,
