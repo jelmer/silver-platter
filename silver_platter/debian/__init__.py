@@ -198,8 +198,10 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         pkg_source = get_source_package(location)
         vcs_type, location = source_package_vcs_url(pkg_source)
     probers = select_probers(vcs_type)
-    return open_branch(
+    branch = open_branch(
         location, possible_transports=possible_transports, probers=probers)
+    subpath = ''
+    return branch, subpath
 
 
 def pick_additional_colocated_branches(main_branch):

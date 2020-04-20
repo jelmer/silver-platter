@@ -52,7 +52,7 @@ from ..utils import (
 def get_package(package, branch_name, overwrite_unrelated=False,
                 refresh=False, possible_transports=None,
                 possible_hosters=None):
-    main_branch = open_packaging_branch(
+    main_branch, subpath = open_packaging_branch(
         package, possible_transports=possible_transports)
 
     overwrite = False
@@ -75,7 +75,7 @@ def get_package(package, branch_name, overwrite_unrelated=False,
         resume_branch = None
 
     return (
-        package, main_branch, resume_branch, hoster, existing_proposal,
+        package, main_branch, subpath, resume_branch, hoster, existing_proposal,
         overwrite)
 
 
@@ -90,7 +90,7 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
       refresh: Whether to refresh existing merge proposals
     Returns:
       iterator over
-        (package name, main branch object, branch to resume (if any),
+        (package name, main branch object, subpath, branch to resume (if any),
          hoster (None if the hoster is not supported),
          existing_proposal, whether to overwrite the branch)
     """
@@ -100,14 +100,14 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
     for pkg in packages:
         note('Processing: %s', pkg)
 
-        (pkg, main_branch, resume_branch, hoster, existing_proposal,
+        (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
          overwrite) = get_package(
                 pkg, branch_name, overwrite_unrelated=overwrite_unrelated,
                 refresh=refresh, possible_transports=possible_transports,
                 possible_hosters=possible_hosters)
 
-        yield (pkg, main_branch, resume_branch, hoster, existing_proposal,
-               overwrite)
+        yield (pkg, main_branch, subpath, resume_branch, hoster,
+               existing_proposal, overwrite)
 
 
 class ChangerError(Exception):
@@ -224,7 +224,7 @@ class DebianChanger(object):
 
 
 def _run_single_changer(
-        changer, pkg, main_branch, resume_branch, hoster, existing_proposal,
+        changer, pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
         overwrite, mode, branch_name, diff=False, committer=None,
         build_verify=False, pre_check=None, post_check=None,
         builder=DEFAULT_BUILDER,
@@ -251,7 +251,7 @@ def _run_single_changer(
                 ws.local_tree.branch)
         try:
             changer_result = changer.make_changes(
-                ws.local_tree, subpath='',
+                ws.local_tree, subpath=subpath,
                 update_changelog=update_changelog,
                 committer=committer)
         except ChangerError as e:
@@ -346,11 +346,11 @@ def run_changer(changer, args):
         package_iter = itertools.chain(
             package_iter, iter_conflicted(branch_name))
 
-    for (pkg, main_branch, resume_branch, hoster, existing_proposal,
+    for (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
          overwrite) in package_iter:
         try:
             if _run_single_changer(
-                    changer, pkg, main_branch, resume_branch, hoster,
+                    changer, pkg, main_branch, subpath, resume_branch, hoster,
                     existing_proposal, overwrite, args.mode,
                     branch_name, diff=args.diff,
                     committer=args.committer, build_verify=args.build_verify,
@@ -378,7 +378,7 @@ def run_single_changer(changer, args):
         branch_name = changer.suggest_branch_name()
 
     try:
-        (pkg, main_branch, resume_branch, hoster, existing_proposal,
+        (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
          overwrite) = get_package(
                 args.package, branch_name, overwrite_unrelated=args.overwrite,
                 refresh=args.refresh)
@@ -390,7 +390,7 @@ def run_single_changer(changer, args):
         return 1
 
     if _run_single_changer(
-            changer, pkg, main_branch, resume_branch, hoster,
+            changer, pkg, main_branch, subpath, resume_branch, hoster,
             existing_proposal, overwrite, args.mode, branch_name,
             diff=args.diff, committer=args.committer,
             build_verify=args.build_verify,
