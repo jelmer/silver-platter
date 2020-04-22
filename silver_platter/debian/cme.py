@@ -15,27 +15,26 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import subprocess
+
+from . import debcommit
 from .changer import (
     run_changer,
     DebianChanger,
     )
-from breezy import osutils
 from breezy.trace import note
 
-from lintian_brush import add_changelog_entry
-from lintian_brush.control import ControlUpdater
+
+BRANCH_NAME = 'cme'
 
 
-BRANCH_NAME = 'rules-requires-root'
+class CMEResult(object):
+
+    def __init__(self):
+        pass
 
 
-class RulesRequiresRootResult(object):
-
-    def __init__(self, package=None):
-        self.package = package
-
-
-class RulesRequiresRootChanger(DebianChanger):
+class CMEChanger(DebianChanger):
 
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
@@ -52,32 +51,30 @@ class RulesRequiresRootChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
-        with ControlUpdater.from_tree(local_tree, subpath) as updater:
-            updater.source['Rules-Requires-Root'] = 'no'
-            result = RulesRequiresRootResult(updater.source['Source'])
-        if update_changelog in (True, None):
-            add_changelog_entry(
-                local_tree,
-                osutils.pathjoin(subpath, 'debian/changelog'),
-                'Set Rules-Requires-Root: no.', qa=True)
-        local_tree.commit(
-            'Set Rules-Requires-Root.', committer=committer,
-            allow_pointless=False)
+        cwd = local_tree.abspath(subpath or '')
+        subprocess.check_call(
+            ['/usr/bin/cme', 'modify', 'dpkg', '-save'],
+            cwd=cwd)
+        local_tree.commit('Reformat for cme.')
+        subprocess.check_call(
+            ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
+        local_tree.commit('Run cme.')
+        result = CMEResult()
         return result
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
-        return 'Set Rules-Requires-Root.'
+        return 'Run cme.'
 
     def get_commit_message(self, applied, existing_proposal):
-        return 'Set Rules-Requires-Root.'
+        return 'Run cme'
 
     def allow_create_proposal(self, applied):
         return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note('Proposed change to enable Rules-Requires-Root: %s',
+            note('Proposed change from \'cme fix dpkg\': %s',
                  publish_result.proposal.url)
         else:
             note('No changes for package %s', result.package_name)
@@ -87,19 +84,19 @@ class RulesRequiresRootChanger(DebianChanger):
 
 
 def main(args):
-    changer = RulesRequiresRootChanger.from_args(args)
+    changer = CMEChanger.from_args(args)
     return run_changer(changer, args)
 
 
 def setup_parser(parser):
     from .changer import setup_multi_parser
     setup_multi_parser(parser)
-    RulesRequiresRootChanger.setup_parser(parser)
+    CMEChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(prog='rules-requires-root')
+    parser = argparse.ArgumentParser(prog='cme-fix')
     setup_parser(parser)
     args = parser.parse_args()
     main(args)

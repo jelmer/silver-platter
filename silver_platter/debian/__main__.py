@@ -24,6 +24,7 @@ import sys
 def main(argv=None):
     from . import (
         lintian as debian_lintian,
+        cme,
         run as debian_run,
         multiarch,
         orphan,
@@ -45,6 +46,7 @@ def main(argv=None):
         ('tidy', tidy.setup_parser, tidy.main),
         ('import-upload', uncommitted.setup_parser, uncommitted.main),
         ('rules-requires-root', rrr.setup_parser, rrr.main),
+        ('cme-fix', cme.setup_parser, cme.main),
         ]
 
     for cmd in main_subcommands:
