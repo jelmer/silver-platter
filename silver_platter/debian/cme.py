@@ -17,7 +17,6 @@
 
 import subprocess
 
-from . import debcommit
 from .changer import (
     run_changer,
     DebianChanger,
