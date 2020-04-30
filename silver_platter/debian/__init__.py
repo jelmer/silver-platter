@@ -20,8 +20,10 @@ from debian.changelog import Version
 import itertools
 import re
 import subprocess
+from typing import Optional
 
 from breezy import version_info as breezy_version
+from breezy.branch import Branch
 from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
@@ -231,7 +233,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
 
 def pick_additional_colocated_branches(main_branch):
-    ret = ["pristine-tar", "upstream"]
+    ret = ["pristine-tar", "pristine-lfs", "upstream"]
     ret.append('patch-queue/' + main_branch.name)
     if main_branch.name.startswith('debian/'):
         parts = main_branch.name.split('/')
@@ -242,14 +244,15 @@ def pick_additional_colocated_branches(main_branch):
 
 class Workspace(_mod_proposal.Workspace):
 
-    def __init__(self, main_branch, *args, **kwargs):
+    def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
         if getattr(main_branch.repository, '_git', None):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
                 pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
-    def build(self, builder=None, result_dir=None, subpath=''):
+    def build(self, builder: Optional[str] = None,
+              result_dir: Optional[str] = None, subpath: str = '') -> None:
         return build(tree=self.local_tree, subpath=subpath, builder=builder,
                      result_dir=result_dir)
 

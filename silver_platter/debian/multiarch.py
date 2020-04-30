@@ -37,10 +37,10 @@ BRANCH_NAME = 'multi-arch-fixes'
 
 class MultiArchHintsChanger(DebianChanger):
 
-    name = 'apply-multi-arch-hints'
+    name: str = 'apply-multi-arch-hints'
 
     @classmethod
-    def setup_parser(cls, parser):
+    def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
         # Hide the minimum-certainty option for the moment.
         parser.add_argument(
             '--minimum-certainty',

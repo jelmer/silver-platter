@@ -17,9 +17,11 @@
 
 """Automatic proposal/push creation."""
 
+import argparse
 import os
 import subprocess
 import sys
+from typing import Optional
 
 import silver_platter  # noqa: F401
 
@@ -27,6 +29,7 @@ from breezy import osutils
 from breezy import errors
 from breezy.commit import PointlessCommit
 from breezy.trace import note, warning, show_error
+from breezy.workingtree import WorkingTree
 try:
     from breezy import propose as _mod_propose
 except ImportError:
@@ -55,7 +58,9 @@ class ScriptMadeNoChanges(errors.BzrError):
     _fmt = "Script made no changes."
 
 
-def script_runner(local_tree, script, commit_pending=None):
+def script_runner(local_tree: WorkingTree,
+                  script: str,
+                  commit_pending: Optional[bool] = None) -> str:
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
@@ -70,13 +75,13 @@ def script_runner(local_tree, script, commit_pending=None):
     last_revision = local_tree.last_revision()
     p = subprocess.Popen(script, cwd=local_tree.basedir,
                          stdout=subprocess.PIPE, shell=True)
-    (description, err) = p.communicate("")
+    (description_encoded, err) = p.communicate(b"")
     if p.returncode != 0:
         raise errors.BzrCommandError(
             "Script %s failed with error code %d" % (
                 script, p.returncode))
     new_revision = local_tree.last_revision()
-    description = description.decode()
+    description = description_encoded.decode()
     if last_revision == new_revision and commit_pending is None:
         # Automatically commit pending changes if the script did not
         # touch the branch.
@@ -92,11 +97,11 @@ def script_runner(local_tree, script, commit_pending=None):
     return description
 
 
-def derived_branch_name(script):
+def derived_branch_name(script: str) -> str:
     return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
 
 
-def setup_parser(parser):
+def setup_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('--refresh', action="store_true",
@@ -122,7 +127,7 @@ def setup_parser(parser):
         action="store_true", default=False)
 
 
-def main(args):
+def main(args: argparse.Namespace) -> Optional[int]:
     try:
         main_branch = open_branch(args.url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -150,8 +155,10 @@ def main(args):
         warning('Unsupported hoster (%s), will attempt to push to %s',
                 e, main_branch.user_url)
     else:
-        (resume_branch, overwrite, existing_proposal) = (
+        (resume_branch, resume_overwrite, existing_proposal) = (
             find_existing_proposed(main_branch, hoster, name))
+        if resume_overwrite is not None:
+            overwrite = resume_overwrite
     if args.refresh:
         resume_branch = None
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
@@ -200,9 +207,10 @@ def main(args):
         if args.diff:
             ws.show_diff(sys.stdout.buffer)
 
+    return None
+
 
 if __name__ == '__main__':
-    import argparse
     parser = argparse.ArgumentParser()
     setup_parser(parser)
     args = parser.parse_args()

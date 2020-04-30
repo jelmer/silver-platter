@@ -15,13 +15,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from typing import Optional, List, Tuple, Callable
+
 import silver_platter  # noqa: F401
 
 import argparse
 import sys
 
 
-def main(argv=None):
+def main(argv: Optional[List[str]] = None) -> Optional[int]:
     from . import (
         lintian as debian_lintian,
         cme,
@@ -36,7 +38,9 @@ def main(argv=None):
         )
     from ..__main__ import subcommands as main_subcommands
 
-    subcommands = [
+    subcommands: List[
+            Tuple[str, Optional[Callable[[argparse.ArgumentParser], None]],
+                  Callable[[argparse.Namespace], Optional[int]]]] = [
         ('run', debian_run.setup_parser, debian_run.main),
         ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),

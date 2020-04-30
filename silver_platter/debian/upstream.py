@@ -711,13 +711,13 @@ class NewUpstreamChanger(DebianChanger):
         return ['upstream/%s' % applied.new_upstream_version]
 
 
-def main(args):
+def main(args: argparse.Namespace):
     from .changer import run_changer
     changer = NewUpstreamChanger.from_args(args)
     return run_changer(changer, args)
 
 
-def setup_parser(parser):
+def setup_parser(parser: argparse.ArgumentParser):
     from .changer import setup_multi_parser
     setup_multi_parser(parser)
     NewUpstreamChanger.setup_parser(parser)

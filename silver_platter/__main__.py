@@ -18,6 +18,7 @@
 import argparse
 import silver_platter   # noqa: F401
 import sys
+from typing import Optional, List, Tuple, Callable
 from . import (
     run,
     version_string,
@@ -26,7 +27,7 @@ from . import (
 from breezy.trace import show_error
 
 
-def hosters_main(args):
+def hosters_main(args: argparse.Namespace) -> Optional[int]:
     try:
         from breezy.propose import hosters
     except ImportError:
@@ -36,12 +37,14 @@ def hosters_main(args):
         for instance in hoster_cls.iter_instances():
             print('%s (%s)' % (instance.base_url, name))
 
+    return None
 
-def login_setup_parser(parser):
+
+def login_setup_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('url', help='URL of branch to work on.', type=str)
 
 
-def login_main(args):
+def login_main(args: argparse.Namespace) -> Optional[int]:
     from launchpadlib import uris as lp_uris
 
     hoster = None
@@ -71,24 +74,28 @@ def login_main(args):
         cmd.run()
         from breezy.plugins.launchpad import lp_api
         lp_api.connect_launchpad(lp_service_root, version='devel')
+        return None
     else:
         show_error('Unknown hoster %r.', hoster)
         return 1
 
 
-def proposals_setup_parser(parser):
+def proposals_setup_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--status', default='open', choices=['open', 'merged', 'closed'],
         type=str, help='Only display proposals with this status.')
 
 
-def proposals_main(args):
+def proposals_main(args: argparse.Namespace) -> None:
     from .proposal import iter_all_mps
     for hoster, proposal, status in iter_all_mps([args.status]):
         print(proposal.url)
 
 
-subcommands = [
+subcommands: List[Tuple[
+        str,
+        Optional[Callable[[argparse.ArgumentParser], None]],
+        Callable[[argparse.Namespace], Optional[int]]]] = [
     ('hosters', None, hosters_main),
     ('login', login_setup_parser, login_main),
     ('proposals', proposals_setup_parser, proposals_main),
@@ -96,7 +103,7 @@ subcommands = [
     ]
 
 
-def main(argv=None):
+def main(argv: Optional[List[str]] = None) -> Optional[int]:
     parser = argparse.ArgumentParser(prog='svp')
     parser.add_argument(
         '--version', action='version', version='%(prog)s ' + version_string)

@@ -15,15 +15,27 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from typing import (
+    List, Optional, Tuple, Iterator, BinaryIO, Callable, Dict, Any,
+    )
+
+from breezy.branch import Branch
 from breezy.diff import show_diff_trees
 from breezy.errors import (
     DivergedBranches,
     PermissionDenied,
     UnsupportedOperation,
     )
+from breezy.merge_directive import (
+    MergeDirective,
+    MergeDirective2,
+    )
 from breezy.trace import (
     note,
     )
+from breezy.transport import Transport
+from breezy.tree import Tree
+from breezy.workingtree import WorkingTree
 from breezy import (
     errors,
     merge as _mod_merge,
@@ -32,6 +44,7 @@ try:
     from breezy.propose import (
         get_hoster,
         hosters,
+        Hoster,
         MergeProposal,
         NoSuchProject,
         UnsupportedHoster,
@@ -41,6 +54,7 @@ except ImportError:
     from breezy.plugins.propose.propose import (
         get_hoster,
         hosters,
+        Hoster,
         MergeProposal,
         NoSuchProject,
         UnsupportedHoster,
@@ -67,10 +81,15 @@ __all__ = [
     ]
 
 
-SUPPORTED_MODES = ['push', 'attempt-push', 'propose', 'push-derived']
+SUPPORTED_MODES: List[str] = [
+    'push',
+    'attempt-push',
+    'propose',
+    'push-derived',
+    ]
 
 
-def merge_conflicts(main_branch, other_branch):
+def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
     """Check whether two branches are conflicted when merged.
 
     Args:
@@ -111,9 +130,11 @@ class DryRunProposal(MergeProposal):
     :ivar url: URL for the merge proposal
     """
 
-    def __init__(self, source_branch, target_branch, labels=None,
-                 description=None, commit_message=None,
-                 reviewers=None):
+    def __init__(self, source_branch: Branch, target_branch: Branch,
+                 labels: Optional[List[str]] = None,
+                 description: Optional[str] = None,
+                 commit_message: Optional[str] = None,
+                 reviewers: Optional[List[str]] = None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
@@ -124,7 +145,8 @@ class DryRunProposal(MergeProposal):
         self.reviewers = reviewers
 
     @classmethod
-    def from_existing(cls, mp, source_branch=None):
+    def from_existing(cls, mp: MergeProposal,
+                      source_branch: Optional[Branch] = None) -> MergeProposal:
         if source_branch is None:
             source_branch = open_branch(mp.get_source_branch_url())
         commit_message = None
@@ -137,49 +159,52 @@ class DryRunProposal(MergeProposal):
             description=mp.get_description(),
             commit_message=commit_message)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%r, %r)" % (
             self.__class__.__name__, self.source_branch, self.target_branch)
 
-    def get_description(self):
+    def get_description(self) -> Optional[str]:
         """Get the description of the merge proposal."""
         return self.description
 
-    def set_description(self, description):
+    def set_description(self, description: str) -> None:
         self.description = description
 
-    def get_commit_message(self):
+    def get_commit_message(self) -> Optional[str]:
         return self.commit_message
 
-    def set_commit_message(self, commit_message):
+    def set_commit_message(self, commit_message: str) -> None:
         self.commit_message = commit_message
 
-    def get_source_branch_url(self):
+    def get_source_branch_url(self) -> str:
         """Return the source branch."""
         return self.source_branch.user_url
 
-    def get_target_branch_url(self):
+    def get_target_branch_url(self) -> str:
         """Return the target branch."""
         return self.target_branch.user_url
 
-    def close(self):
+    def close(self) -> None:
         """Close the merge proposal (without merging it)."""
         self.closed = True
 
-    def is_merged(self):
+    def is_merged(self) -> bool:
         """Check whether this merge proposal has been merged."""
         return False
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         """Check whether this merge proposal has been closed."""
         return False
 
-    def reopen(self):
+    def reopen(self) -> None:
         pass
 
 
-def push_result(local_branch, remote_branch,
-                additional_colocated_branches=None, tags=None):
+def push_result(
+        local_branch: Branch,
+        remote_branch: Branch,
+        additional_colocated_branches: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None) -> None:
     kwargs = {}
     if tags is not None:
         kwargs['tag_selector'] = tags.__contains__
@@ -199,8 +224,10 @@ def push_result(local_branch, remote_branch,
                 add_branch, name=branch_name, **kwargs)
 
 
-def find_existing_proposed(main_branch, hoster, name,
-                           overwrite_unrelated=False):
+def find_existing_proposed(main_branch: Branch, hoster: Hoster, name: str,
+                           overwrite_unrelated: bool = False
+                           ) -> Tuple[
+        Optional[Branch], Optional[bool], Optional[MergeProposal]]:
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
@@ -254,10 +281,15 @@ class Workspace(object):
     local_tree: The tree the user can work in
     """
 
-    def __init__(self, main_branch, resume_branch=None,
-                 cached_branch=None,
-                 additional_colocated_branches=None,
-                 dir=None, path=None):
+    _destroy: Optional[Callable[[], None]]
+    local_tree: WorkingTree
+
+    def __init__(self, main_branch: Branch,
+                 resume_branch: Optional[Branch] = None,
+                 cached_branch: Optional[Branch] = None,
+                 additional_colocated_branches: Optional[List[str]] = None,
+                 dir: Optional[str] = None,
+                 path: Optional[str] = None) -> None:
         self.main_branch = main_branch
         self.main_branch_revid = main_branch.last_revision()
         self.cached_branch = cached_branch
@@ -265,11 +297,10 @@ class Workspace(object):
         self.additional_colocated_branches = (
             additional_colocated_branches or [])
         self._destroy = None
-        self.local_tree = None
         self._dir = dir
         self._path = path
 
-    def __enter__(self):
+    def __enter__(self) -> Any:
         self.local_tree, self._destroy = create_temp_sprout(
             self.cached_branch or self.resume_branch or self.main_branch,
             self.additional_colocated_branches,
@@ -305,18 +336,19 @@ class Workspace(object):
             self.orig_revid = self.local_tree.last_revision()
         return self
 
-    def defer_destroy(self):
+    def defer_destroy(self) -> Optional[Callable[[], None]]:
         ret = self._destroy
         self._destroy = None
         return ret
 
-    def changes_since_main(self):
+    def changes_since_main(self) -> bool:
         return self.local_tree.branch.last_revision() != self.main_branch_revid
 
-    def changes_since_resume(self):
+    def changes_since_resume(self) -> bool:
         return self.orig_revid != self.local_tree.branch.last_revision()
 
-    def push(self, hoster=None, dry_run=False, tags=None):
+    def push(self, hoster: Optional[Hoster] = None, dry_run: bool = False,
+             tags: Optional[List[str]] = None) -> None:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return push_changes(
@@ -324,24 +356,32 @@ class Workspace(object):
             additional_colocated_branches=self.additional_colocated_branches,
             dry_run=dry_run, tags=tags)
 
-    def propose(self, name, description, hoster=None, existing_proposal=None,
-                overwrite_existing=None, labels=None, dry_run=False,
-                commit_message=None, reviewers=None, tags=None,
-                allow_collaboration=False):
+    def propose(self, name: str, description: str,
+                hoster: Optional[Hoster] = None,
+                existing_proposal: Optional[MergeProposal] = None,
+                overwrite_existing: Optional[bool] = None,
+                labels: Optional[List[str]] = None,
+                dry_run: bool = False,
+                commit_message: Optional[str] = None,
+                reviewers: Optional[List[str]] = None,
+                tags: Optional[List[str]] = None,
+                allow_collaboration: bool = False) -> MergeProposal:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
             self.local_tree.branch, self.main_branch, hoster=hoster, name=name,
             mp_description=description, resume_branch=self.resume_branch,
             resume_proposal=existing_proposal,
-            overwrite_existing=overwrite_existing, labels=labels,
+            overwrite_existing=(overwrite_existing or False), labels=labels,
             dry_run=dry_run, commit_message=commit_message,
             reviewers=reviewers,
             additional_colocated_branches=self.additional_colocated_branches,
             tags=tags, allow_collaboration=allow_collaboration)
 
-    def push_derived(self, name, hoster=None, overwrite_existing=False,
-                     tags=None):
+    def push_derived(self,
+                     name: str, hoster: Optional[Hoster] = None,
+                     overwrite_existing: bool = False,
+                     tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
         """Push a derived branch.
 
         Args:
@@ -360,10 +400,11 @@ class Workspace(object):
             overwrite_existing=overwrite_existing,
             tags=tags)
 
-    def orig_tree(self):
+    def orig_tree(self) -> Tree:
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
 
-    def show_diff(self, outf, old_label='old/', new_label='new/'):
+    def show_diff(self, outf: BinaryIO,
+                  old_label: str = 'old/', new_label: str = 'new/') -> None:
         orig_tree = self.orig_tree()
         show_diff_trees(
             orig_tree, self.local_tree.basis_tree(), outf,
@@ -376,7 +417,7 @@ class Workspace(object):
         return False
 
 
-def enable_tag_pushing(branch):
+def enable_tag_pushing(branch: Branch) -> None:
     stack = branch.get_config()
     stack.set_user_option('branch.fetch_tags', True)
 
@@ -384,21 +425,33 @@ def enable_tag_pushing(branch):
 class PublishResult(object):
     """A object describing the result of a publish action."""
 
-    def __init__(self, mode, proposal=None, is_new=False):
+    def __init__(self, mode: str,
+                 proposal: Optional[MergeProposal] = None,
+                 is_new: bool = False) -> None:
         self.mode = mode
         self.proposal = proposal
         self.is_new = is_new
 
-    def __tuple__(self):
+    def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
         # Backwards compatibility
         return (self.proposal, self.is_new)
 
 
-def publish_changes(ws, mode, name, get_proposal_description,
-                    get_proposal_commit_message=None, dry_run=False,
-                    hoster=None, allow_create_proposal=True, labels=None,
-                    overwrite_existing=True, existing_proposal=None,
-                    reviewers=None, tags=None, allow_collaboration=False):
+def publish_changes(
+        ws: Workspace, mode: str, name: str,
+        get_proposal_description: Callable[
+            [str, Optional[MergeProposal]], str],
+        get_proposal_commit_message: Callable[
+            [Optional[MergeProposal]], str] = None,
+        dry_run: bool = False,
+        hoster: Optional[Hoster] = None,
+        allow_create_proposal: bool = True,
+        labels: Optional[List[str]] = None,
+        overwrite_existing: bool = True,
+        existing_proposal: Optional[MergeProposal] = None,
+        reviewers: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        allow_collaboration: bool = False) -> PublishResult:
     """Publish a set of changes.
 
     Args:
@@ -476,8 +529,12 @@ def publish_changes(ws, mode, name, get_proposal_description,
     return PublishResult(mode, proposal, is_new)
 
 
-def push_changes(local_branch, main_branch, hoster, possible_transports=None,
-                 additional_colocated_branches=None, dry_run=False, tags=None):
+def push_changes(local_branch: Branch, main_branch: Branch,
+                 hoster: Hoster,
+                 possible_transports: Optional[List[Transport]] = None,
+                 additional_colocated_branches: Optional[List[str]] = None,
+                 dry_run: bool = False, tags: Optional[List[str]] = None
+                 ) -> None:
     """Push changes to a branch."""
     push_url = hoster.get_push_url(main_branch)
     note('pushing to %s', push_url)
@@ -492,12 +549,12 @@ def push_changes(local_branch, main_branch, hoster, possible_transports=None,
 class EmptyMergeProposal(Exception):
     """Merge proposal does not have any changes."""
 
-    def __init__(self, local_branch, main_branch):
+    def __init__(self, local_branch: Branch, main_branch: Branch):
         self.local_branch = local_branch
         self.main_branch = main_branch
 
 
-def check_proposal_diff(other_branch, main_branch):
+def check_proposal_diff(other_branch: Branch, main_branch: Branch) -> None:
     from breezy import merge as _mod_merge
     main_revid = main_branch.last_revision()
     other_branch.repository.fetch(main_branch.repository, main_revid)
@@ -520,13 +577,17 @@ def check_proposal_diff(other_branch, main_branch):
 
 
 def propose_changes(
-        local_branch, main_branch, hoster, name,
-        mp_description, resume_branch=None, resume_proposal=None,
-        overwrite_existing=True,
-        labels=None, dry_run=False, commit_message=None,
-        additional_colocated_branches=None,
-        allow_empty=False, reviewers=None, tags=None,
-        allow_collaboration=False):
+        local_branch: Branch, main_branch: Branch,
+        hoster: Hoster, name: str, mp_description: str,
+        resume_branch: Optional[Branch] = None,
+        resume_proposal: Optional[MergeProposal] = None,
+        overwrite_existing: bool = True,
+        labels: Optional[List[str]] = None,
+        dry_run: bool = False, commit_message: Optional[str] = None,
+        additional_colocated_branches: Optional[List[str]] = None,
+        allow_empty: bool = False, reviewers: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        allow_collaboration: bool = False) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
 
     Args:
@@ -607,7 +668,7 @@ def propose_changes(
         if not dry_run:
             proposal_builder = hoster.get_proposer(
                     remote_branch, main_branch)
-            kwargs = {}
+            kwargs: Dict[str, Any] = {}
             if getattr(
                     hoster, 'supports_merge_proposal_commit_message', False):
                 # brz >= 3.1 only
@@ -632,15 +693,17 @@ def propose_changes(
 
 
 def merge_directive_changes(
-        local_branch, main_branch, hoster, name, message, include_patch=False,
-        include_bundle=False, overwrite_existing=False):
-    from breezy import merge_directive, osutils
+        local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
+        message: str, include_patch: bool = False,
+        include_bundle: bool = False,
+        overwrite_existing: bool = False) -> MergeDirective:
+    from breezy import osutils
     import time
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name,
         overwrite=overwrite_existing)
     public_branch = open_branch(public_branch_url)
-    directive = merge_directive.MergeDirective2.from_objects(
+    directive = MergeDirective2.from_objects(
         local_branch.repository, local_branch.last_revision(), time.time(),
         osutils.local_time_offset(), main_branch,
         public_branch=public_branch, include_patch=include_patch,
@@ -650,8 +713,9 @@ def merge_directive_changes(
 
 
 def push_derived_changes(
-        local_branch, main_branch, hoster, name, overwrite_existing=False,
-        tags=None):
+        local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
+        overwrite_existing: bool = False,
+        tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
         kwargs['tag_selector'] = tags.__contains__
@@ -661,7 +725,8 @@ def push_derived_changes(
     return remote_branch, public_branch_url
 
 
-def iter_all_mps(statuses=None):
+def iter_all_mps(statuses: Optional[List[str]] = None
+                 ) -> Iterator[Tuple[Hoster, MergeProposal, str]]:
     """iterate over all existing merge proposals."""
     if statuses is None:
         statuses = ['open', 'merged', 'closed']
@@ -672,8 +737,9 @@ def iter_all_mps(statuses=None):
                     yield instance, mp, status
 
 
-def iter_conflicted(branch_name):
-    possible_transports = []
+def iter_conflicted(branch_name: str) -> Iterator[
+                  Tuple[str, Branch, Branch, Hoster, MergeProposal, bool]]:
+    possible_transports: List[Transport] = []
     for hoster, mp, status in iter_all_mps(['open']):
         try:
             if mp.can_be_merged():

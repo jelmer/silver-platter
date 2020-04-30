@@ -15,12 +15,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import argparse
 from functools import partial
 import itertools
 import sys
+from typing import Any, List, Optional, Dict
 
 from breezy import version_info as breezy_version_info
+from breezy.branch import Branch
+from breezy.propose import Hoster, MergeProposal
 from breezy.trace import note, warning, show_error
+from breezy.workingtree import WorkingTree
 
 from . import (
     open_packaging_branch,
@@ -38,6 +43,7 @@ from ..proposal import (
     get_hoster,
     iter_conflicted,
     publish_changes,
+    PublishResult,
     )
 from ..utils import (
     BranchMissing,
@@ -112,12 +118,12 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
 
 class ChangerError(Exception):
 
-    def __init__(self, summary, original):
+    def __init__(self, summary: str, original: Optional[Exception]):
         self.summary = summary
         self.original = original
 
 
-def setup_multi_parser(parser):
+def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
         '--fix-conflicted', action='store_true',
@@ -125,12 +131,12 @@ def setup_multi_parser(parser):
     setup_parser_common(parser)
 
 
-def setup_single_parser(parser):
+def setup_single_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("package")
     setup_parser_common(parser)
 
 
-def setup_parser_common(parser):
+def setup_parser_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
@@ -191,44 +197,62 @@ class DebianChanger(object):
     """A class which can make and explain changes to a Debian package in VCS.
     """
 
+    name: str
+
     @classmethod
-    def setup_parser(cls, parser):
+    def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
         raise NotImplementedError(cls.setup_parser)
 
     @classmethod
-    def from_args(cls, args):
+    def from_args(cls, args: List[str]) -> 'DebianChanger':
         raise NotImplementedError(cls.from_args)
 
-    def suggest_branch_name(self):
+    def suggest_branch_name(self) -> str:
         raise NotImplementedError(self.suggest_branch_name)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree: WorkingTree,
+                     subpath: str,
+                     update_changelog: bool,
+                     committer: Optional[str]) -> Any:
         raise NotImplementedError(self.make_changes)
 
     def get_proposal_description(
-            self, applied, description_format, existing_proposal):
+            self, applied: Any,
+            description_format: str,
+            existing_proposal: MergeProposal) -> str:
         raise NotImplementedError(self.get_proposal_description)
 
-    def get_commit_message(self, applied, existing_proposal):
+    def get_commit_message(self,
+                           applied: Any,
+                           existing_proposal: MergeProposal) -> str:
         raise NotImplementedError(self.get_commit_message)
 
-    def allow_create_proposal(self, applied):
+    def allow_create_proposal(self, applied: Any) -> bool:
         raise NotImplementedError(self.allow_create_proposal)
 
-    def describe(self, applied, publish_result):
+    def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
 
-    def tags(self, applied):
+    def tags(self, applied: Any) -> List[str]:
         """Return list of changes to include."""
         raise NotImplementedError(self.tags)
 
 
 def _run_single_changer(
-        changer, pkg, main_branch, subpath, resume_branch, hoster,
-        existing_proposal, overwrite, mode, branch_name, diff=False,
-        committer=None, build_verify=False, pre_check=None, post_check=None,
-        builder=DEFAULT_BUILDER, dry_run=False, update_changelog=None,
-        label=None, build_target_dir=None):
+        changer: DebianChanger,
+        pkg: str,
+        main_branch: Branch,
+        subpath: str,
+        resume_branch: Optional[Branch],
+        hoster: Optional[Hoster],
+        existing_proposal: Optional[MergeProposal],
+        overwrite: bool, mode: str, branch_name: str, diff: bool = False,
+        committer: Optional[str] = None, build_verify: bool = False,
+        pre_check: Optional[str] = None, post_check: Optional[str] = None,
+        builder: str = DEFAULT_BUILDER, dry_run: bool = False,
+        update_changelog: Optional[bool] = None,
+        label: Optional[List[str]] = None,
+        build_target_dir: Optional[str] = None) -> Optional[bool]:
     from breezy import errors
     from . import (
         BuildFailedError,
@@ -282,7 +306,7 @@ def _run_single_changer(
 
         enable_tag_pushing(ws.local_tree.branch)
 
-        kwargs = {}
+        kwargs: Dict[str, Any] = {}
         if breezy_version_info >= (3, 1):
             kwargs['tags'] = changer.tags(changer_result)
 
@@ -294,8 +318,8 @@ def _run_single_changer(
                 get_proposal_commit_message=partial(
                     changer.get_commit_message, changer_result),
                 dry_run=dry_run, hoster=hoster,
-                allow_create_proposal=partial(
-                    changer.allow_create_proposal, changer_result),
+                allow_create_proposal=changer.allow_create_proposal(
+                    changer_result),
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
                 labels=label,
@@ -329,7 +353,7 @@ def _run_single_changer(
         return True
 
 
-def run_changer(changer, args):
+def run_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
     import silver_platter   # noqa: F401
 
     ret = 0
@@ -368,7 +392,8 @@ def run_changer(changer, args):
     return ret
 
 
-def run_single_changer(changer, args):
+def run_single_changer(
+        changer: DebianChanger, args: argparse.Namespace) -> int:
     import silver_platter   # noqa: F401
 
     if args.name:
