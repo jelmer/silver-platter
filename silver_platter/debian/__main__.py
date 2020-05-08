@@ -76,4 +76,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
 
 if __name__ == '__main__':
+    import breezy
+    breezy.initialize()
     sys.exit(main())
