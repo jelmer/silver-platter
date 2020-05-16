@@ -26,14 +26,13 @@ if os.name == "posix":
     # Use better default than ascii with posix filesystems that deal in bytes
     # natively even when the C locale or no locale at all is given. Note that
     # we need an immortal string for the hack, hence the lack of a hyphen.
-    sys._brz_default_fs_enc = "utf8"
+    sys._brz_default_fs_enc = "utf8"   # type: ignore
 
-import breezy  # noqa: E402
-breezy.initialize()
-import breezy.git  # For git support   # noqa: E402
-import breezy.bzr  # For bzr support   # noqa: E402
-import breezy.plugins.launchpad  # For lp: URL support  # noqa: E402
-import breezy.plugins.debian  # For apt: URL support  # noqa: E402
+import breezy  # noqa: F401
+import breezy.git  # For git support   # noqa: F401
+import breezy.bzr  # For bzr support   # noqa: F401
+import breezy.plugins.launchpad  # For lp: URL support  # noqa: F401
+import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 
 __version__ = (0, 3, 0)
 version_string = '.'.join(map(str, __version__))

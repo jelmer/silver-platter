@@ -163,7 +163,7 @@ class OrphanChanger(DebianChanger):
                     result.new_vcs_url):
                 note('%s', line)
 
-    def tags(self):
+    def tags(self, result):
         return []
 
 

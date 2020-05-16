@@ -18,16 +18,19 @@
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import itertools
+import re
 import subprocess
+from typing import Optional
 
 from breezy import version_info as breezy_version
+from breezy.branch import Branch
 from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
-    source_package_vcs_url,
+    source_package_vcs,
     vcs_field_to_bzr_url_converters,
     )
 
@@ -53,7 +56,7 @@ __all__ = [
     'changelog_add_line',
     'get_source_package',
     'should_update_changelog',
-    'source_package_vcs_url',
+    'source_package_vcs',
     'build',
     'BuildFailedError',
     'MissingUpstreamTarball',
@@ -189,6 +192,22 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('invalid URL: %s' % e)
 
 
+def split_vcs_url(url):
+    m = re.finditer(r' \[([^] ]+)\]', url)
+    try:
+        m = next(m)
+        url = url[:m.start()] + url[m.end():]
+        subpath = m.group(1)
+    except StopIteration:
+        subpath = None
+    try:
+        (repo_url, branch) = url.split(' -b ', 1)
+    except ValueError:
+        branch = None
+        repo_url = url
+    return (repo_url, branch, subpath)
+
+
 def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     """Open a packaging branch from a location string.
 
@@ -196,14 +215,25 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     """
     if '/' not in location:
         pkg_source = get_source_package(location)
-        vcs_type, location = source_package_vcs_url(pkg_source)
+        try:
+            (vcs_type, vcs_url) = source_package_vcs(pkg_source)
+        except KeyError:
+            raise Exception(
+                'Package %s does not have any VCS information' % location)
+        (url, branch_name, subpath) = split_vcs_url(vcs_url)
+    else:
+        url = location
+        branch_name = None
+        subpath = ''
     probers = select_probers(vcs_type)
-    return open_branch(
-        location, possible_transports=possible_transports, probers=probers)
+    branch = open_branch(
+        url, possible_transports=possible_transports, probers=probers,
+        name=branch_name)
+    return branch, subpath
 
 
 def pick_additional_colocated_branches(main_branch):
-    ret = ["pristine-tar", "upstream"]
+    ret = ["pristine-tar", "pristine-lfs", "upstream"]
     ret.append('patch-queue/' + main_branch.name)
     if main_branch.name.startswith('debian/'):
         parts = main_branch.name.split('/')
@@ -214,14 +244,15 @@ def pick_additional_colocated_branches(main_branch):
 
 class Workspace(_mod_proposal.Workspace):
 
-    def __init__(self, main_branch, *args, **kwargs):
+    def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
         if getattr(main_branch.repository, '_git', None):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
                 pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
-    def build(self, builder=None, result_dir=None, subpath=''):
+    def build(self, builder: Optional[str] = None,
+              result_dir: Optional[str] = None, subpath: str = '') -> None:
         return build(tree=self.local_tree, subpath=subpath, builder=builder,
                      result_dir=result_dir)
 

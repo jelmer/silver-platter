@@ -15,6 +15,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from typing import List, Set
+
 from breezy.errors import BzrError
 from breezy.trace import note
 
@@ -55,7 +57,7 @@ class UnknownFixer(BzrError):
         super(UnknownFixer, self).__init__(fixer=fixer)
 
 
-def parse_mp_description(description):
+def parse_mp_description(description: str) -> List[str]:
     """Parse a merge proposal description.
 
     Args:
@@ -71,7 +73,7 @@ def parse_mp_description(description):
                 for l in existing_lines if l.startswith('* ')]
 
 
-def create_mp_description(description_format, lines):
+def create_mp_description(description_format: str, lines: List[str]) -> str:
     """Create a merge proposal description.
 
     Args:
@@ -86,7 +88,7 @@ def create_mp_description(description_format, lines):
             if line not in mp_description:
                 mp_description.append(line)
     else:
-        mp_description = lines[0]
+        mp_description = [lines[0]]
     return ''.join(mp_description)
 
 
@@ -129,7 +131,7 @@ def update_proposal_commit_message(existing_proposal, applied):
         ', '.join(sorted(existing_applied + [l for r, l in applied])))
 
 
-def has_nontrivial_changes(applied, propose_addon_only):
+def has_nontrivial_changes(applied, propose_addon_only: Set[str]) -> bool:
     tags = set()
     for result, unused_summary in applied:
         tags.update(result.fixed_lintian_tags)

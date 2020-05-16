@@ -1,5 +1,0 @@
-breezy
-dulwich
-lintian-brush>=0.42
-pyyaml
-testtools
