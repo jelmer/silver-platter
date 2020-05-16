@@ -1,10 +1,11 @@
-silver-platter (0.3.0+git20200508.96b1cdb-1) UNRELEASED; urgency=medium
+silver-platter (0.3.0+git20200516.9f9af15-1) UNRELEASED; urgency=medium
 
   * New upstream snapshot.
    + Fixes compatibility with newer brz-debian. Closes: #960751
   * Bump debhelper from old 12 to 13.
+  * New upstream snapshot.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Sat, 16 May 2020 13:13:00 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sat, 16 May 2020 14:09:40 +0000
 
 silver-platter (0.3.0-1) unstable; urgency=medium
 
