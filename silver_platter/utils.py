@@ -19,6 +19,7 @@ import os
 import shutil
 import socket
 import subprocess
+from typing import Callable, Tuple, Optional, List
 
 from breezy import (
     config as _mod_config,
@@ -29,14 +30,18 @@ from breezy.branch import (
     Branch,
     BranchWriteLockResult,
     )
-from breezy.controldir import ControlDir
+from breezy.controldir import ControlDir, Prober
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
-import breezy.transport
+from breezy.transport import Transport, UnusableRedirect, get_transport
+from breezy.workingtree import WorkingTree
 
 
-def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
-                       path=None):
+def create_temp_sprout(
+        branch: Branch,
+        additional_colocated_branches: Optional[List[str]] = None,
+        dir: Optional[str] = None,
+        path: Optional[str] = None) -> Tuple[WorkingTree, Callable[[], None]]:
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.
@@ -47,7 +52,7 @@ def create_temp_sprout(branch, additional_colocated_branches=None, dir=None,
         td = path
         os.mkdir(path)
 
-    def destroy():
+    def destroy() -> None:
         shutil.rmtree(td)
     # Only use stacking if the remote repository supports chks because of
     # https://bugs.launchpad.net/bzr/+bug/375013
@@ -84,12 +89,15 @@ class TemporarySprout(object):
     This attempts to fetch the least amount of history as possible.
     """
 
-    def __init__(self, branch, additional_colocated_branches=None, dir=None):
+    def __init__(self,
+                 branch: Branch,
+                 additional_colocated_branches: Optional[List[str]] = None,
+                 dir: Optional[str] = None):
         self.branch = branch
         self.additional_colocated_branches = additional_colocated_branches
         self.dir = dir
 
-    def __enter__(self):
+    def __enter__(self) -> WorkingTree:
         tree, self._destroy = create_temp_sprout(
             self.branch,
             additional_colocated_branches=self.additional_colocated_branches,
@@ -105,7 +113,7 @@ class PreCheckFailed(Exception):
     """The post check failed."""
 
 
-def run_pre_check(tree, script):
+def run_pre_check(tree: WorkingTree, script: Optional[str]) -> None:
     """Run a script ahead of making any changes to a tree.
 
     Args:
@@ -126,7 +134,9 @@ class PostCheckFailed(Exception):
     """The post check failed."""
 
 
-def run_post_check(tree, script, since_revid):
+def run_post_check(tree: WorkingTree,
+                   script: Optional[str],
+                   since_revid: bytes) -> None:
     """Run a script after making any changes to a tree.
 
     Args:
@@ -149,37 +159,37 @@ def run_post_check(tree, script, since_revid):
 class BranchUnavailable(Exception):
     """Opening branch failed."""
 
-    def __init__(self, url, description):
+    def __init__(self, url: str, description: str):
         self.url = url
         self.description = description
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.description
 
 
 class BranchMissing(Exception):
     """Branch did not exist."""
 
-    def __init__(self, url, description):
+    def __init__(self, url: str, description: str):
         self.url = url
         self.description = description
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.description
 
 
 class BranchUnsupported(Exception):
     """The branch uses a VCS or protocol that is unsupported."""
 
-    def __init__(self, url, description):
+    def __init__(self, url: str, description: str):
         self.url = url
         self.description = description
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.description
 
 
-def _convert_exception(url, e):
+def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, socket.error):
         return BranchUnavailable(url, 'Socket error: %s' % e)
     if isinstance(e, errors.NotBranchError):
@@ -194,21 +204,25 @@ def _convert_exception(url, e):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
-    if isinstance(e, breezy.transport.UnusableRedirect):
+    if isinstance(e, UnusableRedirect):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.UnsupportedFormatError):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.UnknownFormatError):
         return BranchUnsupported(url, str(e))
+    return None
 
 
-def open_branch(url, possible_transports=None, probers=None):
+def open_branch(url: str,
+                possible_transports: Optional[List[Transport]] = None,
+                probers: Optional[List[Prober]] = None,
+                name: str = None) -> Branch:
     """Open a branch by URL."""
     try:
-        transport = breezy.transport.get_transport(
+        transport = get_transport(
             url, possible_transports=possible_transports)
         dir = ControlDir.open_from_transport(transport, probers)
-        return dir.open_branch()
+        return dir.open_branch(name=name)
     except Exception as e:
         converted = _convert_exception(url, e)
         if converted is not None:
@@ -216,10 +230,13 @@ def open_branch(url, possible_transports=None, probers=None):
         raise e
 
 
-def open_branch_containing(url, possible_transports=None, probers=None):
+def open_branch_containing(
+        url: str,
+        possible_transports: Optional[List[Transport]] = None,
+        probers: Optional[List[Prober]] = None) -> Tuple[Branch, str]:
     """Open a branch by URL."""
     try:
-        transport = breezy.transport.get_transport(
+        transport = get_transport(
             url, possible_transports=possible_transports)
         dir, subpath = ControlDir.open_containing_from_transport(
             transport, probers)

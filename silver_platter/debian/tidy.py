@@ -37,7 +37,7 @@ class TidyChanger(DebianChanger):
         MultiArchHintsChanger,
         ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.subchangers = [kls() for kls in self.SUBCHANGERS]
 
     @classmethod
