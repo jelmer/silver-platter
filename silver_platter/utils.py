@@ -33,8 +33,13 @@ from breezy.branch import (
 from breezy.controldir import ControlDir, Prober
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
-from breezy.transport import Transport, UnusableRedirect, get_transport
+from breezy.transport import Transport, get_transport
 from breezy.workingtree import WorkingTree
+
+try:
+    from breezy.transport import UnusableRedirect
+except ImportError:
+    UnusableRedirect = None
 
 
 def create_temp_sprout(
@@ -204,7 +209,7 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
-    if isinstance(e, UnusableRedirect):
+    if UnusableRedirect is not None and isinstance(e, UnusableRedirect):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.UnsupportedFormatError):
         return BranchUnsupported(url, str(e))
