@@ -13,7 +13,7 @@ Build-Depends: dh-python,
                python3-gitlab,
                python3-launchpadlib,
                lintian-brush (>= 0.40),
-               debhelper-compat (= 12)
+               debhelper-compat (= 13)
 Standards-Version: 4.5.0
 Homepage: https://www.jelmer.uk/code/silver-platter
 Rules-Requires-Root: no
