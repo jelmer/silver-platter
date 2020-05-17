@@ -24,6 +24,9 @@ import sys
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
+    import breezy
+    breezy.initialize()
+
     from . import (
         lintian as debian_lintian,
         cme,
@@ -76,6 +79,4 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
 
 if __name__ == '__main__':
-    import breezy
-    breezy.initialize()
     sys.exit(main())

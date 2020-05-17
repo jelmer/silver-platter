@@ -104,6 +104,8 @@ subcommands: List[Tuple[
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
+    import breezy
+    breezy.initialize()
     parser = argparse.ArgumentParser(prog='svp')
     parser.add_argument(
         '--version', action='version', version='%(prog)s ' + version_string)
@@ -122,6 +124,4 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
 
 if __name__ == '__main__':
-    import breezy
-    breezy.initialize()
     sys.exit(main())

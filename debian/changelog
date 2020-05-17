@@ -1,3 +1,10 @@
+silver-platter (0.3.0+git20200517.38c492c-1) unstable; urgency=medium
+
+  * New upstream snapshot.
+   + Ensures breezy is correctly initialized. Closes: #960862
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 17 May 2020 18:02:49 +0000
+
 silver-platter (0.3.0+git20200516.9f9af15-1) unstable; urgency=medium
 
   * New upstream snapshot.
