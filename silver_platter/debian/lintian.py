@@ -39,6 +39,7 @@ __all__ = [
 
 
 DEFAULT_ADDON_FIXERS = [
+    'debian-changelog-line-too-long',
     'file-contains-trailing-whitespace',
     'out-of-date-standards-version',
     'package-uses-old-debhelper-compat-version',
