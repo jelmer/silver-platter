@@ -23,6 +23,7 @@ import subprocess
 from typing import Optional
 
 from breezy import version_info as breezy_version
+from breezy import urlutils
 from breezy.branch import Branch
 from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
@@ -222,8 +223,8 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
                 'Package %s does not have any VCS information' % location)
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
-        url = location
-        branch_name = None
+        url, params = urlutils.split_segment_parameters(location)
+        branch_name = params.get('branch')
         subpath = ''
     probers = select_probers(vcs_type)
     branch = open_branch(
