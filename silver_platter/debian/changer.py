@@ -32,7 +32,7 @@ from breezy.workingtree import WorkingTree
 
 from . import (
     open_packaging_branch,
-    should_update_changelog,
+    guess_update_changelog,
     NoSuchPackage,
     DEFAULT_BUILDER,
     )
@@ -273,8 +273,8 @@ def _run_single_changer(
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
         if update_changelog is None:
-            update_changelog = should_update_changelog(
-                ws.local_tree.branch)
+            update_changelog = guess_update_changelog(
+                ws.local_tree.branch) in (True, None)
         try:
             changer_result = changer.make_changes(
                 ws.local_tree, subpath=subpath,

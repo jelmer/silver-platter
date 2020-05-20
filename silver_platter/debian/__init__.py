@@ -1,5 +1,3 @@
-#!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,12 +15,10 @@
 
 from debian.deb822 import Deb822
 from debian.changelog import Version
-import itertools
 import re
 import subprocess
 from typing import Optional
 
-from breezy import version_info as breezy_version
 from breezy import urlutils
 from breezy.branch import Branch
 from breezy.errors import UnsupportedFormatError
@@ -47,6 +43,11 @@ from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
     )
 
+try:
+    from lintian_brush.detect_gbp_dch import guess_update_changelog
+except ImportError:
+    from lintian_brush import guess_update_changelog
+
 from .. import proposal as _mod_proposal
 from ..utils import (
     open_branch,
@@ -56,7 +57,7 @@ from ..utils import (
 __all__ = [
     'changelog_add_line',
     'get_source_package',
-    'should_update_changelog',
+    'guess_update_changelog',
     'source_package_vcs',
     'build',
     'BuildFailedError',
@@ -114,73 +115,6 @@ def get_source_package(name):
     version = sorted(by_version, key=Version)[-1]
 
     return Deb822(by_version[version])
-
-
-def _changelog_stats(branch, history):
-    mixed = 0
-    changelog_only = 0
-    other_only = 0
-    dch_references = 0
-    with branch.lock_read():
-        graph = branch.repository.get_graph()
-        revids = list(itertools.islice(
-            graph.iter_lefthand_ancestry(branch.last_revision()), history))
-        revs = []
-        for revid, rev in branch.repository.iter_revisions(revids):
-            if rev is None:
-                # Ghost
-                continue
-            if 'Git-Dch: ' in rev.message:
-                dch_references += 1
-            revs.append(rev)
-        for delta in branch.repository.get_deltas_for_revisions(revs):
-            if breezy_version >= (3, 1):
-                filenames = set(
-                    [a.path[1] for a in delta.added] +
-                    [r.path[0] for r in delta.removed] +
-                    [r.path[0] for r in delta.renamed] +
-                    [r.path[1] for r in delta.renamed] +
-                    [m.path[0] for m in delta.modified])
-            else:
-                filenames = set([a[0] for a in delta.added] +
-                                [r[0] for r in delta.removed] +
-                                [r[1] for r in delta.renamed] +
-                                [m[0] for m in delta.modified])
-            if not set([f for f in filenames if f.startswith('debian/')]):
-                continue
-            if 'debian/changelog' in filenames:
-                if len(filenames) > 1:
-                    mixed += 1
-                else:
-                    changelog_only += 1
-            else:
-                other_only += 1
-    return (changelog_only, other_only, mixed, dch_references)
-
-
-def should_update_changelog(branch, history=200):
-    """Guess whether the changelog should be updated manually.
-
-    Args:
-      branch: A branch object
-      history: Number of revisions back to analyze
-    Returns:
-      boolean indicating whether changelog should be updated
-    """
-    # Two indications this branch may be doing changelog entries at
-    # release time:
-    # - "Git-Dch: " is used in the commit messages
-    # - The vast majority of lines in changelog get added in
-    #   commits that only touch the changelog
-    (changelog_only, other_only, mixed, dch_references) = _changelog_stats(
-            branch, history)
-    if dch_references:
-        return False
-    if changelog_only > mixed:
-        # Is this a reasonable threshold?
-        return False
-    # Assume yes
-    return True
 
 
 def convert_debian_vcs_url(vcs_type, vcs_url):

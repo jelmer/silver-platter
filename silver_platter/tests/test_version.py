@@ -31,8 +31,8 @@ class VersionMatchTest(TestCase):
                 'Running outside of source tree?')
         # TODO(jelmer): Surely there's a better way of doing this?
         with open('setup.py', 'r') as f:
-            for l in f:
-                m = re.match(r'[ ]*version=["\'](.*)["\'],', l)
+            for line in f:
+                m = re.match(r'[ ]*version=["\'](.*)["\'],', line)
                 if m:
                     setup_version = m.group(1)
                     break

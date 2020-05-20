@@ -70,8 +70,8 @@ def parse_mp_description(description: str) -> List[str]:
     if len(existing_lines) == 1:
         return existing_lines
     else:
-        return [l[2:].rstrip('\n')
-                for l in existing_lines if l.startswith('* ')]
+        return [line[2:].rstrip('\n')
+                for line in existing_lines if line.startswith('* ')]
 
 
 def create_mp_description(description_format: str, lines: List[str]) -> str:
@@ -93,14 +93,14 @@ def create_mp_description(description_format: str, lines: List[str]) -> str:
     return ''.join(mp_description)
 
 
-def applied_entry_as_line(description_format, fixed_lintian_tags, l):
+def applied_entry_as_line(description_format, fixed_lintian_tags, line):
     if not fixed_lintian_tags:
-        return l
+        return line
     if description_format == 'markdown':
-        return '%s (%s)' % (l, ', '.join(
+        return '%s (%s)' % (line, ', '.join(
             ['[%s](https://lintian.debian.org/tags/%s.html)' % (tag, tag)
              for tag in fixed_lintian_tags]))
-    return '%s (%s)' % (l, ', '.join(fixed_lintian_tags))
+    return '%s (%s)' % (line, ', '.join(fixed_lintian_tags))
 
 
 def update_proposal_description(
