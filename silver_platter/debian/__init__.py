@@ -52,6 +52,7 @@ try:
     from lintian_brush.changelog import add_changelog_entry
 except ImportError:
     from lintian_brush import add_changelog_entry as add_changelog_entry_old
+
     def add_changelog_entry(tree, path, summary):
         return add_changelog_entry_old(tree, path, summary[0])
 
