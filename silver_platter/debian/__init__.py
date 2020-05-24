@@ -37,7 +37,7 @@ from breezy.plugins.debian.changelog import (
     )
 try:
     from breezy.plugins.debian.builder import BuildFailedError
-except ImportError:
+except ImportError:  # breezy < 3.1
     from breezy.plugins.debian.errors import BuildFailedError
 from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
@@ -45,12 +45,12 @@ from breezy.plugins.debian.errors import (
 
 try:
     from lintian_brush.detect_gbp_dch import guess_update_changelog
-except ImportError:
+except ImportError:  # lintian-brush < 0.65
     from lintian_brush import guess_update_changelog
 
 try:
     from lintian_brush.changelog import add_changelog_entry
-except ImportError:
+except ImportError:  # lintian-brush < 0.66
     from lintian_brush import add_changelog_entry as add_changelog_entry_old
 
     def add_changelog_entry(tree, path, summary):
