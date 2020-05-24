@@ -22,7 +22,7 @@ from .changer import (
 from breezy import osutils
 from breezy.trace import note
 
-from lintian_brush import add_changelog_entry
+from lintian_brush.changelog import add_changelog_entry
 from lintian_brush.control import ControlUpdater
 
 
@@ -59,7 +59,7 @@ class RulesRequiresRootChanger(DebianChanger):
             add_changelog_entry(
                 local_tree,
                 osutils.pathjoin(subpath, 'debian/changelog'),
-                'Set Rules-Requires-Root: no.', qa=True)
+                ['Set Rules-Requires-Root: no.'])
         local_tree.commit(
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)

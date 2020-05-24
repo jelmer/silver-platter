@@ -26,7 +26,7 @@ from ..proposal import push_changes
 from breezy import osutils
 from breezy.trace import note
 
-from lintian_brush import add_changelog_entry
+from lintian_brush.changelog import add_changelog_entry
 from lintian_brush.control import update_control
 
 
@@ -127,7 +127,7 @@ class OrphanChanger(DebianChanger):
             add_changelog_entry(
                 local_tree,
                 osutils.pathjoin(subpath, 'debian/changelog'),
-                'Move package to QA team.', qa=True)
+                ['QA Upload.', 'Move package to QA team.'])
         local_tree.commit(
             'Move package to QA team.', committer=committer,
             allow_pointless=False)
