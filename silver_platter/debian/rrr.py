@@ -22,7 +22,7 @@ from .changer import (
 from breezy import osutils
 from breezy.trace import note
 
-from lintian_brush.changelog import add_changelog_entry
+from . import add_changelog_entry
 from lintian_brush.control import ControlUpdater
 
 

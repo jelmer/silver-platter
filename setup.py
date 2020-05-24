@@ -58,7 +58,7 @@ setup(
           'breezy',
           'dulwich',
           'testtools',
-          'lintian-brush>=0.66',
+          'lintian-brush>=0.50',
           'pyyaml',  # For reading debian/upstream/metadata
       ],
 )

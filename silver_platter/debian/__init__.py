@@ -48,6 +48,13 @@ try:
 except ImportError:
     from lintian_brush import guess_update_changelog
 
+try:
+    from lintian_brush.changelog import add_changelog_entry
+except ImportError:
+    from lintian_brush import add_changelog_entry as add_changelog_entry_old
+    def add_changelog_entry(tree, path, summary):
+        return add_changelog_entry_old(tree, path, summary[0])
+
 from .. import proposal as _mod_proposal
 from ..utils import (
     open_branch,
