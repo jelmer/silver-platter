@@ -35,6 +35,7 @@ from .changer import (
 
 __all__ = [
     'available_lintian_fixers',
+    'calculate_value',
     ]
 
 
@@ -46,6 +47,16 @@ DEFAULT_ADDON_FIXERS = [
     'public-upstream-key-not-minimal',
     'no-dh-sequencer',
     ]
+
+DEFAULT_VALUE_LINTIAN_BRUSH_ADDON_ONLY = 10
+DEFAULT_VALUE_LINTIAN_BRUSH = 50
+# Base these scores on the importance as set in Debian?
+LINTIAN_BRUSH_TAG_VALUES = {
+    'file-contains-trailing-whitespace': 0,
+    }
+LINTIAN_BRUSH_TAG_DEFAULT_VALUE = 5
+
+
 BRANCH_NAME = "lintian-fixes"
 
 
@@ -56,6 +67,17 @@ class UnknownFixer(BzrError):
 
     def __init__(self, fixer):
         super(UnknownFixer, self).__init__(fixer=fixer)
+
+
+def calculate_value(tags):
+    if not (set(tags) - set(DEFAULT_ADDON_FIXERS)):
+        value = DEFAULT_VALUE_LINTIAN_BRUSH_ADDON_ONLY
+    else:
+        value = DEFAULT_VALUE_LINTIAN_BRUSH
+    for tag in tags:
+        value += LINTIAN_BRUSH_TAG_VALUES.get(
+            tag, LINTIAN_BRUSH_TAG_DEFAULT_VALUE)
+    return value
 
 
 def parse_mp_description(description: str) -> List[str]:
