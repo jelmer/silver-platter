@@ -46,7 +46,12 @@ from breezy.plugins.debian.errors import (
 try:
     from lintian_brush.detect_gbp_dch import guess_update_changelog
 except ImportError:  # lintian-brush < 0.65
-    from lintian_brush import guess_update_changelog
+    from lintian_brush import (
+        guess_update_changelog as old_guess_update_changelog,
+        )
+
+    def guess_update_changelog(tree, path, cl=None):
+        return (old_guess_update_changelog(tree, path, cl), None)
 
 try:
     from lintian_brush.changelog import add_changelog_entry

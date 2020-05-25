@@ -273,8 +273,14 @@ def _run_single_changer(
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
         if update_changelog is None:
-            update_changelog = guess_update_changelog(
-                ws.local_tree.branch) in (True, None)
+            dch_guess = guess_update_changelog(
+                ws.local_tree.branch)
+            if dch_guess:
+                note(dch_guess[1])
+                update_changelog = dch_guess[0]
+            else:
+                # Assume yes.
+                update_changelog = True
         try:
             changer_result = changer.make_changes(
                 ws.local_tree, subpath=subpath,
