@@ -35,6 +35,22 @@ from breezy.trace import note
 BRANCH_NAME = 'multi-arch-fixes'
 
 
+DEFAULT_VALUE_MULTIARCH_HINT = 50
+MULTIARCH_HINTS_VALUE = {
+    'ma-foreign': 20,
+    'file-conflict': 50,
+    'ma-foreign-library': 20,
+    'dep-any': 20,
+    'ma-same': 20,
+    'arch-all': 20,
+}
+
+
+def calculate_value(hints):
+    return sum(map(MULTIARCH_HINTS_VALUE.__getitem__, hints)) + (
+        DEFAULT_VALUE_MULTIARCH_HINT)
+
+
 class MultiArchHintsChanger(DebianChanger):
 
     name: str = 'apply-multi-arch-hints'
