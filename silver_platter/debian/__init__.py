@@ -208,12 +208,14 @@ class Workspace(_mod_proposal.Workspace):
                      result_dir=result_dir)
 
 
-def debcommit(tree, committer=None, paths=None):
-    message = changelog_commit_message(tree, tree.basis_tree())
+def debcommit(tree, committer=None, subpath='', paths=None):
+    message = changelog_commit_message(
+        tree, tree.basis_tree(),
+        path=os.path.join(subpath, 'debian/changelog'))
     tree.commit(
         committer=committer,
         message=message,
-        specific_files=paths)
+        specific_files=[os.path.join(subpath, p) for p in paths])
 
 
 class UnsupportedVCSProber(Prober):

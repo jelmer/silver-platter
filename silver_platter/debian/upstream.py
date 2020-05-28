@@ -223,10 +223,11 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
                 changelog_add_line(
                     local_tree, 'Drop patch %s, present upstream.' % name,
                     email=committer)
-                debcommit(local_tree, committer=committer, paths=[
-                    os.path.join(subpath, p) for p in [
+                debcommit(local_tree, committer=committer,
+                    subpath=subpath,
+                    paths=[
                      'debian/patches/series', 'debian/patches/' + name,
-                     'debian/changelog']])
+                     'debian/changelog'])
             else:
                 raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
@@ -489,11 +490,12 @@ def merge_upstream(tree, snapshot=False, location=None,
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
     if update_changelog:
-        debcommit(tree, committer=committer)
+        debcommit(tree, subpath=subpath, committer=committer)
     else:
         tree.commit(
             committer=committer,
-            message='Merge new upstream release %s.' % new_upstream_version)
+            message='Merge new upstream release %s.' % new_upstream_version,
+            specific_files=[subpath])
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
@@ -556,6 +558,7 @@ def update_packaging(tree, old_tree, committer=None):
                     email=committer)
                 debcommit(
                     tree, committer=committer,
+                    subpath='',
                     paths=['debian/changelog', 'debian/rules'])
         elif path.startswith('LICENSE') or path.startswith('COPYING'):
             notes.append('License file %s has changed.' % path)
