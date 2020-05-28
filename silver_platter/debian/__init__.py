@@ -17,7 +17,7 @@ from debian.deb822 import Deb822
 from debian.changelog import Version
 import re
 import subprocess
-from typing import Optional
+from typing import Optional, Tuple
 
 from breezy import urlutils
 from breezy.branch import Branch
@@ -86,7 +86,10 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree, subpath='', builder=None, result_dir=None):
+def build(tree; Tree,
+          subpath: str = '',
+          builder: Optional[str] = None,
+          result_dir: Optional[str] = None) -> None:
     """Build a debian package in a directory.
 
     Args:
@@ -104,7 +107,7 @@ def build(tree, subpath='', builder=None, result_dir=None):
         [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
-def get_source_package(name):
+def get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
     Args:
@@ -130,7 +133,7 @@ def get_source_package(name):
     return Deb822(by_version[version])
 
 
-def convert_debian_vcs_url(vcs_type, vcs_url):
+def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
     converters = dict(vcs_field_to_bzr_url_converters)
     try:
         return converters[vcs_type](vcs_url)
@@ -140,7 +143,7 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('invalid URL: %s' % e)
 
 
-def split_vcs_url(url):
+def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
     m = re.finditer(r' \[([^] ]+)\]', url)
     try:
         m = next(m)
