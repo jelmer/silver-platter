@@ -217,10 +217,16 @@ def debcommit(tree, committer=None, subpath='', paths=None):
     message = changelog_commit_message(
         tree, tree.basis_tree(),
         path=os.path.join(subpath, 'debian/changelog'))
+    if paths:
+        specific_files = [os.path.join(subpath, p) for p in paths]
+    elif subpath:
+        specific_files = [subpath]
+    else:
+        specific_files = None
     tree.commit(
         committer=committer,
         message=message,
-        specific_files=[os.path.join(subpath, p) for p in paths])
+        specific_files=specific_files)
 
 
 class UnsupportedVCSProber(Prober):
