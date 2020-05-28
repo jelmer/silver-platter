@@ -15,9 +15,10 @@
 
 from debian.deb822 import Deb822
 from debian.changelog import Version
+import os
 import re
 import subprocess
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 
 from breezy import urlutils
 from breezy.branch import Branch
@@ -31,7 +32,10 @@ from breezy.plugins.debian.directory import (
     vcs_field_to_bzr_url_converters,
     )
 
+from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
+from breezy.workingtree import WorkingTree
+
 from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
@@ -86,7 +90,7 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree; Tree,
+def build(tree: Tree,
           subpath: str = '',
           builder: Optional[str] = None,
           result_dir: Optional[str] = None) -> None:
@@ -120,9 +124,9 @@ def get_source_package(name: str) -> Deb822:
 
     sources = apt_pkg.SourceRecords()
 
-    by_version = {}
+    by_version: Dict[str, Deb822] = {}
     while sources.lookup(name):
-        by_version[sources.version] = sources.record
+        by_version[sources.version] = sources.record  # type: ignore
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -144,13 +148,14 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
 
 
 def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
-    m = re.finditer(r' \[([^] ]+)\]', url)
-    try:
-        m = next(m)
+    subpath: Optional[str]
+    m = re.search(r' \[([^] ]+)\]', url)
+    if m:
         url = url[:m.start()] + url[m.end():]
         subpath = m.group(1)
-    except StopIteration:
+    else:
         subpath = None
+    branch: Optional[str]
     try:
         (repo_url, branch) = url.split(' -b ', 1)
     except ValueError:
@@ -294,7 +299,7 @@ def select_probers(vcs_type=None):
         return [UnsupportedVCSProber(vcs_type)]
 
 
-def select_preferred_probers(vcs_type=None):
+def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
         try:
@@ -304,9 +309,13 @@ def select_preferred_probers(vcs_type=None):
     return probers
 
 
-def changelog_add_line(tree, subpath, line, email=None):
+def changelog_add_line(
+        tree: WorkingTree,
+        subpath: str,
+        line: str,
+        email: Optional[str] = None) -> None:
     env = {}
     if email:
         env['DEBEMAIL'] = email
     subprocess.check_call(
-        ['dch', '--', line], cwd=tree.local_abspath(subpath), env=env)
+        ['dch', '--', line], cwd=tree.abspath(subpath), env=env)

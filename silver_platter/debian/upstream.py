@@ -224,7 +224,8 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
                     local_tree, subpath,
                     'Drop patch %s, present upstream.' % name,
                     email=committer)
-                debcommit(local_tree, committer=committer,
+                debcommit(
+                    local_tree, committer=committer,
                     subpath=subpath,
                     paths=[
                      'debian/patches/series', 'debian/patches/' + name,
