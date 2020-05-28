@@ -302,6 +302,8 @@ def merge_upstream(tree, snapshot=False, location=None,
     Returns:
       MergeUpstreamResult object
     """
+    if subpath is None:
+        subpath = ''
     config = debuild_config(tree, subpath)
     (changelog, top_level) = find_changelog(
         tree, subpath, merge=False, max_blocks=2)
