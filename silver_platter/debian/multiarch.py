@@ -74,11 +74,11 @@ class MultiArchHintsChanger(DebianChanger):
 
     def __init__(self, minimum_certainty=None, allow_reformatting=None):
         from lintian_brush.multiarch_hints import (
-            download_multiarch_hints,
+            cache_download_multiarch_hints,
             multiarch_hints_by_binary,
             parse_multiarch_hints,
             )
-        with download_multiarch_hints() as f:
+        with cache_download_multiarch_hints() as f:
             self.hints = multiarch_hints_by_binary(parse_multiarch_hints(f))
         self.minimum_certainty = minimum_certainty
         self.allow_reformatting = allow_reformatting
@@ -137,7 +137,7 @@ class MultiArchHintsChanger(DebianChanger):
     def value(self, applied):
         hint_names = []
         for (binary, hint, description, certainty) in applied.changes:
-            hint_names.append(entry['link'].split('#')[-1])
+            hint_names.append(hint['link'].split('#')[-1])
         return calculate_value(hint_names)
 
 
