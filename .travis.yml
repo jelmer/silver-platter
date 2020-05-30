@@ -13,10 +13,10 @@ python:
   - 3.8
 
 install:
-  - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt python3-debian python3-yaml cython3 python3-mypy
+  - sudo apt install devscripts bzr python3-flake8 flake8 python3-apt python3-debian python3-yaml cython3
   - mkdir $HOME/.config/breezy/plugins -p
   - bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
-  - pip install cython
+  - pip install cython mypy
   - python setup.py develop
   - pip install git+https://salsa.debian.org/python-debian-team/python-debian
 
