@@ -69,7 +69,7 @@ class UnknownFixer(BzrError):
         super(UnknownFixer, self).__init__(fixer=fixer)
 
 
-def calculate_value(tags):
+def calculate_value(tags: Set[str]) -> int:
     if not (set(tags) - set(DEFAULT_ADDON_FIXERS)):
         value = DEFAULT_VALUE_LINTIAN_BRUSH_ADDON_ONLY
     else:
@@ -297,6 +297,12 @@ class LintianBrushChanger(DebianChanger):
 
     def tags(self, applied):
         return []
+
+    def value(self, applied):
+        tags = set()
+        for brush_result, unused_summary in applied:
+            tags.update(brush_result.fixed_lintian_tags)
+        return calculate_value(tags)
 
 
 def setup_parser(parser):

@@ -134,6 +134,12 @@ class MultiArchHintsChanger(DebianChanger):
     def tags(self, applied):
         return []
 
+    def value(self, applied):
+        hint_names = []
+        for (binary, hint, description, certainty) in applied.changes:
+            hint_names.append(entry['link'].split('#')[-1])
+        return calculate_value(hint_names)
+
 
 def setup_parser(parser):
     setup_changer_parser(parser)

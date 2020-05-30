@@ -240,6 +240,10 @@ class DebianChanger(object):
         """Return list of changes to include."""
         raise NotImplementedError(self.tags)
 
+    def value(self, applied: Any) -> Optional[int]:
+        """Return indicator of value of changes."""
+        return None
+
 
 def _run_single_changer(
         changer: DebianChanger,
