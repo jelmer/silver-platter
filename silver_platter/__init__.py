@@ -17,17 +17,6 @@
 
 # TODO(jelmer): Imports with side-effects are bad...
 
-import os
-import sys
-
-if os.name == "posix":
-    import locale
-    locale.setlocale(locale.LC_ALL, '')
-    # Use better default than ascii with posix filesystems that deal in bytes
-    # natively even when the C locale or no locale at all is given. Note that
-    # we need an immortal string for the hack, hence the lack of a hyphen.
-    sys._brz_default_fs_enc = "utf8"   # type: ignore
-
 import breezy  # noqa: F401
 import breezy.git  # For git support   # noqa: F401
 import breezy.bzr  # For bzr support   # noqa: F401
