@@ -32,7 +32,7 @@ from breezy.workingtree import WorkingTree
 
 from . import (
     open_packaging_branch,
-    should_update_changelog,
+    guess_update_changelog,
     NoSuchPackage,
     DEFAULT_BUILDER,
     )
@@ -240,6 +240,10 @@ class DebianChanger(object):
         """Return list of changes to include."""
         raise NotImplementedError(self.tags)
 
+    def value(self, applied: Any) -> Optional[int]:
+        """Return indicator of value of changes."""
+        return None
+
 
 def _run_single_changer(
         changer: DebianChanger,
@@ -273,8 +277,14 @@ def _run_single_changer(
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
         if update_changelog is None:
-            update_changelog = should_update_changelog(
+            dch_guess = guess_update_changelog(
                 ws.local_tree.branch)
+            if dch_guess:
+                note(dch_guess[1])
+                update_changelog = dch_guess[0]
+            else:
+                # Assume yes.
+                update_changelog = True
         try:
             changer_result = changer.make_changes(
                 ws.local_tree, subpath=subpath,

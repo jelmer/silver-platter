@@ -221,12 +221,15 @@ def refresh_quilt_patches(local_tree, old_version, new_version,
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
                 changelog_add_line(
-                    local_tree, 'Drop patch %s, present upstream.' % name,
+                    local_tree, subpath,
+                    'Drop patch %s, present upstream.' % name,
                     email=committer)
-                debcommit(local_tree, committer=committer, paths=[
-                    os.path.join(subpath, p) for p in [
+                debcommit(
+                    local_tree, committer=committer,
+                    subpath=subpath,
+                    paths=[
                      'debian/patches/series', 'debian/patches/' + name,
-                     'debian/changelog']])
+                     'debian/changelog'])
             else:
                 raise QuiltPatchPushFailure(name, e)
     patches.pop_all()
@@ -299,6 +302,8 @@ def merge_upstream(tree, snapshot=False, location=None,
     Returns:
       MergeUpstreamResult object
     """
+    if subpath is None:
+        subpath = ''
     config = debuild_config(tree, subpath)
     (changelog, top_level) = find_changelog(
         tree, subpath, merge=False, max_blocks=2)
@@ -489,11 +494,12 @@ def merge_upstream(tree, snapshot=False, location=None,
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
     if update_changelog:
-        debcommit(tree, committer=committer)
+        debcommit(tree, subpath=subpath, committer=committer)
     else:
         tree.commit(
             committer=committer,
-            message='Merge new upstream release %s.' % new_upstream_version)
+            message='Merge new upstream release %s.' % new_upstream_version,
+            specific_files=[subpath])
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
@@ -529,7 +535,7 @@ def override_dh_autoreconf_add_arguments(basedir, args):
         path=os.path.join(basedir, 'debian', 'rules'))
 
 
-def update_packaging(tree, old_tree, committer=None):
+def update_packaging(tree, old_tree, subpath='', committer=None):
     """Update packaging to take in changes between upstream trees.
 
     Args:
@@ -538,7 +544,7 @@ def update_packaging(tree, old_tree, committer=None):
       committer: Optional committer to use for changes
     """
     notes = []
-    tree_delta = tree.changes_from(old_tree)
+    tree_delta = tree.changes_from(old_tree, specific_files=[subpath])
     for delta in tree_delta.added:
         if getattr(delta, 'path', None):
             path = delta.path[1]
@@ -546,19 +552,24 @@ def update_packaging(tree, old_tree, committer=None):
             path = delta[0]
         if path is None:
             continue
+        if not path.startswith(subpath):
+            continue
+        path = path[len(subpath):]
         if path == 'autogen.sh':
             if override_dh_autoreconf_add_arguments(
                     tree.basedir, [b'./autogen.sh']):
                 note('Modifying debian/rules: '
                      'Invoke autogen.sh from dh_autoreconf.')
                 changelog_add_line(
-                    tree, 'Invoke autogen.sh from dh_autoreconf.',
+                    tree, subpath, 'Invoke autogen.sh from dh_autoreconf.',
                     email=committer)
                 debcommit(
                     tree, committer=committer,
+                    subpath=subpath,
                     paths=['debian/changelog', 'debian/rules'])
         elif path.startswith('LICENSE') or path.startswith('COPYING'):
-            notes.append('License file %s has changed.' % path)
+            notes.append(
+                'License file %s has changed.' % os.path.join(subpath, path))
         return notes
 
 
