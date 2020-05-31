@@ -1,5 +1,3 @@
-#!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,12 +15,12 @@
 
 from debian.deb822 import Deb822
 from debian.changelog import Version
-import itertools
+import os
 import re
 import subprocess
-from typing import Optional
+from typing import Optional, Tuple, Dict, List
 
-from breezy import version_info as breezy_version
+from breezy import urlutils
 from breezy.branch import Branch
 from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
@@ -34,17 +32,38 @@ from breezy.plugins.debian.directory import (
     vcs_field_to_bzr_url_converters,
     )
 
+from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
+from breezy.workingtree import WorkingTree
+
 from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
 try:
     from breezy.plugins.debian.builder import BuildFailedError
-except ImportError:
+except ImportError:  # breezy < 3.1
     from breezy.plugins.debian.errors import BuildFailedError
 from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
     )
+
+try:
+    from lintian_brush.detect_gbp_dch import guess_update_changelog
+except ImportError:  # lintian-brush < 0.65
+    from lintian_brush import (
+        guess_update_changelog as old_guess_update_changelog,
+        )
+
+    def guess_update_changelog(tree, path, cl=None):
+        return (old_guess_update_changelog(tree, path, cl), None)
+
+try:
+    from lintian_brush.changelog import add_changelog_entry
+except ImportError:  # lintian-brush < 0.66
+    from lintian_brush import add_changelog_entry as add_changelog_entry_old
+
+    def add_changelog_entry(tree, path, summary):
+        return add_changelog_entry_old(tree, path, summary[0])
 
 from .. import proposal as _mod_proposal
 from ..utils import (
@@ -55,7 +74,7 @@ from ..utils import (
 __all__ = [
     'changelog_add_line',
     'get_source_package',
-    'should_update_changelog',
+    'guess_update_changelog',
     'source_package_vcs',
     'build',
     'BuildFailedError',
@@ -71,7 +90,10 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree, subpath='', builder=None, result_dir=None):
+def build(tree: Tree,
+          subpath: str = '',
+          builder: Optional[str] = None,
+          result_dir: Optional[str] = None) -> None:
     """Build a debian package in a directory.
 
     Args:
@@ -89,7 +111,7 @@ def build(tree, subpath='', builder=None, result_dir=None):
         [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
-def get_source_package(name):
+def get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
     Args:
@@ -102,9 +124,9 @@ def get_source_package(name):
 
     sources = apt_pkg.SourceRecords()
 
-    by_version = {}
+    by_version: Dict[str, Deb822] = {}
     while sources.lookup(name):
-        by_version[sources.version] = sources.record
+        by_version[sources.version] = sources.record  # type: ignore
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -115,74 +137,7 @@ def get_source_package(name):
     return Deb822(by_version[version])
 
 
-def _changelog_stats(branch, history):
-    mixed = 0
-    changelog_only = 0
-    other_only = 0
-    dch_references = 0
-    with branch.lock_read():
-        graph = branch.repository.get_graph()
-        revids = list(itertools.islice(
-            graph.iter_lefthand_ancestry(branch.last_revision()), history))
-        revs = []
-        for revid, rev in branch.repository.iter_revisions(revids):
-            if rev is None:
-                # Ghost
-                continue
-            if 'Git-Dch: ' in rev.message:
-                dch_references += 1
-            revs.append(rev)
-        for delta in branch.repository.get_deltas_for_revisions(revs):
-            if breezy_version >= (3, 1):
-                filenames = set(
-                    [a.path[1] for a in delta.added] +
-                    [r.path[0] for r in delta.removed] +
-                    [r.path[0] for r in delta.renamed] +
-                    [r.path[1] for r in delta.renamed] +
-                    [m.path[0] for m in delta.modified])
-            else:
-                filenames = set([a[0] for a in delta.added] +
-                                [r[0] for r in delta.removed] +
-                                [r[1] for r in delta.renamed] +
-                                [m[0] for m in delta.modified])
-            if not set([f for f in filenames if f.startswith('debian/')]):
-                continue
-            if 'debian/changelog' in filenames:
-                if len(filenames) > 1:
-                    mixed += 1
-                else:
-                    changelog_only += 1
-            else:
-                other_only += 1
-    return (changelog_only, other_only, mixed, dch_references)
-
-
-def should_update_changelog(branch, history=200):
-    """Guess whether the changelog should be updated manually.
-
-    Args:
-      branch: A branch object
-      history: Number of revisions back to analyze
-    Returns:
-      boolean indicating whether changelog should be updated
-    """
-    # Two indications this branch may be doing changelog entries at
-    # release time:
-    # - "Git-Dch: " is used in the commit messages
-    # - The vast majority of lines in changelog get added in
-    #   commits that only touch the changelog
-    (changelog_only, other_only, mixed, dch_references) = _changelog_stats(
-            branch, history)
-    if dch_references:
-        return False
-    if changelog_only > mixed:
-        # Is this a reasonable threshold?
-        return False
-    # Assume yes
-    return True
-
-
-def convert_debian_vcs_url(vcs_type, vcs_url):
+def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
     converters = dict(vcs_field_to_bzr_url_converters)
     try:
         return converters[vcs_type](vcs_url)
@@ -192,14 +147,15 @@ def convert_debian_vcs_url(vcs_type, vcs_url):
         raise ValueError('invalid URL: %s' % e)
 
 
-def split_vcs_url(url):
-    m = re.finditer(r' \[([^] ]+)\]', url)
-    try:
-        m = next(m)
+def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
+    subpath: Optional[str]
+    m = re.search(r' \[([^] ]+)\]', url)
+    if m:
         url = url[:m.start()] + url[m.end():]
         subpath = m.group(1)
-    except StopIteration:
+    else:
         subpath = None
+    branch: Optional[str]
     try:
         (repo_url, branch) = url.split(' -b ', 1)
     except ValueError:
@@ -222,8 +178,8 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
                 'Package %s does not have any VCS information' % location)
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
-        url = location
-        branch_name = None
+        url, params = urlutils.split_segment_parameters(location)
+        branch_name = params.get('branch')
         subpath = ''
     probers = select_probers(vcs_type)
     branch = open_branch(
@@ -257,12 +213,20 @@ class Workspace(_mod_proposal.Workspace):
                      result_dir=result_dir)
 
 
-def debcommit(tree, committer=None, paths=None):
-    message = changelog_commit_message(tree, tree.basis_tree())
+def debcommit(tree, committer=None, subpath='', paths=None):
+    message = changelog_commit_message(
+        tree, tree.basis_tree(),
+        path=os.path.join(subpath, 'debian/changelog'))
+    if paths:
+        specific_files = [os.path.join(subpath, p) for p in paths]
+    elif subpath:
+        specific_files = [subpath]
+    else:
+        specific_files = None
     tree.commit(
         committer=committer,
         message=message,
-        specific_files=paths)
+        specific_files=specific_files)
 
 
 class UnsupportedVCSProber(Prober):
@@ -341,7 +305,7 @@ def select_probers(vcs_type=None):
         return [UnsupportedVCSProber(vcs_type)]
 
 
-def select_preferred_probers(vcs_type=None):
+def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
         try:
@@ -351,8 +315,13 @@ def select_preferred_probers(vcs_type=None):
     return probers
 
 
-def changelog_add_line(tree, line, email):
+def changelog_add_line(
+        tree: WorkingTree,
+        subpath: str,
+        line: str,
+        email: Optional[str] = None) -> None:
     env = {}
     if email:
         env['DEBEMAIL'] = email
-    subprocess.check_call(['dch', '--', line], cwd=tree.basedir, env=env)
+    subprocess.check_call(
+        ['dch', '--', line], cwd=tree.abspath(subpath), env=env)

@@ -82,6 +82,16 @@ def download_snapshot(package, version, output_dir, no_preparation=False):
         cwd=output_dir)
 
 
+class NoMissingVersions(Exception):
+
+    def __init__(self, vcs_version, archive_version):
+        self.vcs_version = vcs_version
+        self.archive_version = archive_version
+        super(NoMissingVersions, self).__init__(
+            'No missing versions after all. Archive has %s, VCS has %s' % (
+                archive_version, vcs_version))
+
+
 class UncommittedChanger(DebianChanger):
 
     @classmethod
@@ -122,7 +132,7 @@ class UncommittedChanger(DebianChanger):
                     'tree version %s does not appear in archive changelog' %
                     tree_cl.version)
             if len(missing_versions) == 0:
-                raise Exception('no missing versions after all')
+                raise NoMissingVersions(tree_cl.version, archive_cl.version)
             note('Missing versions: %s', ', '.join(map(str, missing_versions)))
             ret = []
             dbs = DistributionBranchSet()

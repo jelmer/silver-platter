@@ -35,16 +35,28 @@ from .changer import (
 
 __all__ = [
     'available_lintian_fixers',
+    'calculate_value',
     ]
 
 
 DEFAULT_ADDON_FIXERS = [
+    'debian-changelog-line-too-long',
     'file-contains-trailing-whitespace',
     'out-of-date-standards-version',
     'package-uses-old-debhelper-compat-version',
     'public-upstream-key-not-minimal',
     'no-dh-sequencer',
     ]
+
+DEFAULT_VALUE_LINTIAN_BRUSH_ADDON_ONLY = 10
+DEFAULT_VALUE_LINTIAN_BRUSH = 50
+# Base these scores on the importance as set in Debian?
+LINTIAN_BRUSH_TAG_VALUES = {
+    'file-contains-trailing-whitespace': 0,
+    }
+LINTIAN_BRUSH_TAG_DEFAULT_VALUE = 5
+
+
 BRANCH_NAME = "lintian-fixes"
 
 
@@ -55,6 +67,17 @@ class UnknownFixer(BzrError):
 
     def __init__(self, fixer):
         super(UnknownFixer, self).__init__(fixer=fixer)
+
+
+def calculate_value(tags: Set[str]) -> int:
+    if not (set(tags) - set(DEFAULT_ADDON_FIXERS)):
+        value = DEFAULT_VALUE_LINTIAN_BRUSH_ADDON_ONLY
+    else:
+        value = DEFAULT_VALUE_LINTIAN_BRUSH
+    for tag in tags:
+        value += LINTIAN_BRUSH_TAG_VALUES.get(
+            tag, LINTIAN_BRUSH_TAG_DEFAULT_VALUE)
+    return value
 
 
 def parse_mp_description(description: str) -> List[str]:
@@ -69,8 +92,8 @@ def parse_mp_description(description: str) -> List[str]:
     if len(existing_lines) == 1:
         return existing_lines
     else:
-        return [l[2:].rstrip('\n')
-                for l in existing_lines if l.startswith('* ')]
+        return [line[2:].rstrip('\n')
+                for line in existing_lines if line.startswith('* ')]
 
 
 def create_mp_description(description_format: str, lines: List[str]) -> str:
@@ -92,14 +115,14 @@ def create_mp_description(description_format: str, lines: List[str]) -> str:
     return ''.join(mp_description)
 
 
-def applied_entry_as_line(description_format, fixed_lintian_tags, l):
+def applied_entry_as_line(description_format, fixed_lintian_tags, line):
     if not fixed_lintian_tags:
-        return l
+        return line
     if description_format == 'markdown':
-        return '%s (%s)' % (l, ', '.join(
+        return '%s (%s)' % (line, ', '.join(
             ['[%s](https://lintian.debian.org/tags/%s.html)' % (tag, tag)
              for tag in fixed_lintian_tags]))
-    return '%s (%s)' % (l, ', '.join(fixed_lintian_tags))
+    return '%s (%s)' % (line, ', '.join(fixed_lintian_tags))
 
 
 def update_proposal_description(
@@ -274,6 +297,12 @@ class LintianBrushChanger(DebianChanger):
 
     def tags(self, applied):
         return []
+
+    def value(self, applied):
+        tags = set()
+        for brush_result, unused_summary in applied:
+            tags.update(brush_result.fixed_lintian_tags)
+        return calculate_value(tags)
 
 
 def setup_parser(parser):

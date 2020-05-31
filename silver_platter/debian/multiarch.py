@@ -35,6 +35,22 @@ from breezy.trace import note
 BRANCH_NAME = 'multi-arch-fixes'
 
 
+DEFAULT_VALUE_MULTIARCH_HINT = 50
+MULTIARCH_HINTS_VALUE = {
+    'ma-foreign': 20,
+    'file-conflict': 50,
+    'ma-foreign-library': 20,
+    'dep-any': 20,
+    'ma-same': 20,
+    'arch-all': 20,
+}
+
+
+def calculate_value(hints):
+    return sum(map(MULTIARCH_HINTS_VALUE.__getitem__, hints)) + (
+        DEFAULT_VALUE_MULTIARCH_HINT)
+
+
 class MultiArchHintsChanger(DebianChanger):
 
     name: str = 'apply-multi-arch-hints'
@@ -58,11 +74,11 @@ class MultiArchHintsChanger(DebianChanger):
 
     def __init__(self, minimum_certainty=None, allow_reformatting=None):
         from lintian_brush.multiarch_hints import (
-            download_multiarch_hints,
+            cache_download_multiarch_hints,
             multiarch_hints_by_binary,
             parse_multiarch_hints,
             )
-        with download_multiarch_hints() as f:
+        with cache_download_multiarch_hints() as f:
             self.hints = multiarch_hints_by_binary(parse_multiarch_hints(f))
         self.minimum_certainty = minimum_certainty
         self.allow_reformatting = allow_reformatting
@@ -117,6 +133,12 @@ class MultiArchHintsChanger(DebianChanger):
 
     def tags(self, applied):
         return []
+
+    def value(self, applied):
+        hint_names = []
+        for (binary, hint, description, certainty) in applied.changes:
+            hint_names.append(hint['link'].split('#')[-1])
+        return calculate_value(hint_names)
 
 
 def setup_parser(parser):

@@ -39,9 +39,9 @@ setup(
       classifiers=[
           'Development Status :: 3 - Alpha',
           'License :: OSI Approved :: GNU General Public License (GPL)',
-          'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: Implementation :: CPython',
           'Programming Language :: Python :: Implementation :: PyPy',
           'Operating System :: POSIX',
@@ -58,7 +58,7 @@ setup(
           'breezy',
           'dulwich',
           'testtools',
-          'lintian-brush>=0.42',
+          'lintian-brush>=0.50',
           'pyyaml',  # For reading debian/upstream/metadata
       ],
 )
