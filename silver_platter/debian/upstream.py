@@ -71,16 +71,10 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     PristineTarSource,
     )
-try:
-    from breezy.plugins.quilt.quilt import (
-        QuiltError,
-        QuiltPatches,
-        )
-except ImportError:
-    from breezy.plugins.debian.quilt.quilt import (
-        QuiltError,
-        QuiltPatches,
-        )
+from breezy.plugins.quilt.quilt import (
+    QuiltError,
+    QuiltPatches,
+    )
 
 from breezy.plugins.debian.util import (
     debuild_config,
@@ -546,10 +540,7 @@ def update_packaging(tree, old_tree, subpath='', committer=None):
     notes = []
     tree_delta = tree.changes_from(old_tree, specific_files=[subpath])
     for delta in tree_delta.added:
-        if getattr(delta, 'path', None):
-            path = delta.path[1]
-        else:  # Breezy < 3.1
-            path = delta[0]
+        path = delta.path[1]
         if path is None:
             continue
         if not path.startswith(subpath):

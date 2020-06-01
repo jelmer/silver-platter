@@ -23,10 +23,7 @@ from typing import Any, List, Optional, Dict
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
-try:
-    from breezy.propose import Hoster, MergeProposal
-except ImportError:
-    from breezy.plugins.propose.propose import Hoster, MergeProposal
+from breezy.propose import Hoster, MergeProposal
 from breezy.trace import note, warning, show_error
 from breezy.workingtree import WorkingTree
 

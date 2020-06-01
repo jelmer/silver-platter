@@ -39,10 +39,7 @@ from breezy.workingtree import WorkingTree
 from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
-try:
-    from breezy.plugins.debian.builder import BuildFailedError
-except ImportError:  # breezy < 3.1
-    from breezy.plugins.debian.errors import BuildFailedError
+from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
     )

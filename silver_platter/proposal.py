@@ -40,26 +40,15 @@ from breezy import (
     errors,
     merge as _mod_merge,
     )
-try:
-    from breezy.propose import (
-        get_hoster,
-        hosters,
-        Hoster,
-        MergeProposal,
-        NoSuchProject,
-        UnsupportedHoster,
-        HosterLoginRequired,
-        )
-except ImportError:
-    from breezy.plugins.propose.propose import (
-        get_hoster,
-        hosters,
-        Hoster,
-        MergeProposal,
-        NoSuchProject,
-        UnsupportedHoster,
-        HosterLoginRequired,
-        )
+from breezy.propose import (
+    get_hoster,
+    hosters,
+    Hoster,
+    MergeProposal,
+    NoSuchProject,
+    UnsupportedHoster,
+    HosterLoginRequired,
+    )
 
 import breezy.plugins.propose  # noqa: F401
 
@@ -149,10 +138,7 @@ class DryRunProposal(MergeProposal):
                       source_branch: Optional[Branch] = None) -> MergeProposal:
         if source_branch is None:
             source_branch = open_branch(mp.get_source_branch_url())
-        commit_message = None
-        if getattr(mp, 'get_commit_message', None):
-            # brz >= 3.1 only
-            commit_message = mp.get_commit_message()
+        commit_message = mp.get_commit_message()
         return cls(
             source_branch=source_branch,
             target_branch=open_branch(mp.get_target_branch_url()),
@@ -656,26 +642,19 @@ def propose_changes(
         # causes Launchpad to send emails.
         if resume_proposal.get_description() != mp_description:
             resume_proposal.set_description(mp_description)
-        if getattr(resume_proposal, 'get_commit_message', None):
-            # brz >= 3.1 only
-            if resume_proposal.get_commit_message() != commit_message:
-                try:
-                    resume_proposal.set_commit_message(commit_message)
-                except UnsupportedOperation:
-                    pass
+        if resume_proposal.get_commit_message() != commit_message:
+            try:
+                resume_proposal.set_commit_message(commit_message)
+            except UnsupportedOperation:
+                pass
         return (resume_proposal, False)
     else:
         if not dry_run:
             proposal_builder = hoster.get_proposer(
                     remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
-            if getattr(
-                    hoster, 'supports_merge_proposal_commit_message', False):
-                # brz >= 3.1 only
-                kwargs['commit_message'] = commit_message
-            if getattr(
-                    hoster, 'supports_allow_collaboration', False):
-                kwargs['allow_collaboration'] = allow_collaboration
+            kwargs['commit_message'] = commit_message
+            kwargs['allow_collaboration'] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,

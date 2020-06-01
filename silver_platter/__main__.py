@@ -28,10 +28,7 @@ from breezy.trace import show_error
 
 
 def hosters_main(args: argparse.Namespace) -> Optional[int]:
-    try:
-        from breezy.propose import hosters
-    except ImportError:
-        from breezy.plugins.propose.propose import hosters
+    from breezy.propose import hosters
 
     for name, hoster_cls in hosters.items():
         for instance in hoster_cls.iter_instances():
