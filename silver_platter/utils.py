@@ -25,6 +25,7 @@ from breezy import (
     config as _mod_config,
     errors,
     osutils,
+    urlutils,
     )
 from breezy.branch import (
     Branch,
@@ -223,6 +224,9 @@ def open_branch(url: str,
                 probers: Optional[List[Prober]] = None,
                 name: str = None) -> Branch:
     """Open a branch by URL."""
+    url, params = urlutils.split_segment_parameters(url)
+    if name is None:
+        name = params.get('branch')
     try:
         transport = get_transport(
             url, possible_transports=possible_transports)
