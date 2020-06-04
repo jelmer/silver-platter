@@ -226,7 +226,10 @@ def open_branch(url: str,
     """Open a branch by URL."""
     url, params = urlutils.split_segment_parameters(url)
     if name is None:
-        name = params.get('branch')
+        try:
+            name = urlutils.unquote(params['branch'])
+        except KeyError:
+            name = None
     try:
         transport = get_transport(
             url, possible_transports=possible_transports)
