@@ -27,7 +27,9 @@ from debian.changelog import Changelog
 
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     setup_multi_parser as setup_changer_parser,
     )
 from breezy.trace import note
@@ -168,7 +170,9 @@ class UncommittedChanger(DebianChanger):
                     '%s_%s.dsc' % (package_name, version))
                 tag_name = db.import_package(dsc_path)
                 ret.append((tag_name, version))
-        return ret
+        return ChangerResult(
+            description='Import archive changes missing from the VCS.',
+            mutator=ret)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -213,8 +217,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='import-upload')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(UncommittedChanger))

@@ -37,7 +37,12 @@ from . import (
     changelog_add_line,
     debcommit,
     )
-from .changer import ChangerError, DebianChanger
+from .changer import (
+    run_mutator,
+    ChangerError,
+    DebianChanger,
+    ChangerResult,
+    )
 from breezy.commit import (
     PointlessCommit,
     )
@@ -686,7 +691,10 @@ class NewUpstreamChanger(DebianChanger):
                 raise ChangerError(
                     'Quilt error while refreshing patches: %s', e)
 
-        return merge_upstream_result
+        return ChangerResult(
+            description="Merged new upstream version %s" % (
+                merge_upstream_result.new_upstream_version),
+            mutator=merge_upstream_result)
 
     def get_proposal_description(
             self, merge_upstream_result, description_format, unused_proposal):
@@ -726,7 +734,5 @@ def setup_parser(parser: argparse.ArgumentParser):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='propose-new-upstream')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(NewUpstreamChanger))

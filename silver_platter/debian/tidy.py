@@ -19,7 +19,9 @@ from breezy.trace import note
 
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     setup_multi_parser as setup_changer_parser,
     )
 
@@ -57,7 +59,9 @@ class TidyChanger(DebianChanger):
             result[subchanger] = (
                 subchanger.make_changes(
                     local_tree, subpath, update_changelog, committer))
-        return result
+        return ChangerResult(
+            mutator=result,
+            description='Fix various small issues.')
 
     def get_proposal_description(
             self, result, description_format, existing_proposal):
@@ -114,8 +118,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='tidy')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(TidyChanger))

@@ -17,7 +17,9 @@
 
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     )
 from breezy import osutils
 from breezy.trace import note
@@ -63,7 +65,9 @@ class RulesRequiresRootChanger(DebianChanger):
         local_tree.commit(
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)
-        return result
+        return ChangerResult(
+            description='Set Rules-Requires-Root',
+            mutator=result)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -98,8 +102,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='rules-requires-root')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(RulesRequiresRootChanger))

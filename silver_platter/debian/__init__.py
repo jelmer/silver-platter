@@ -182,7 +182,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     branch = open_branch(
         url, possible_transports=possible_transports, probers=probers,
         name=branch_name)
-    return branch, subpath
+    return branch, subpath or ''
 
 
 def pick_additional_colocated_branches(main_branch):

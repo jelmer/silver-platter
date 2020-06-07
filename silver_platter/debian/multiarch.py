@@ -26,7 +26,9 @@ from lintian_brush.config import Config
 
 from .changer import (
     DebianChanger,
+    ChangerResult,
     run_changer,
+    run_mutator,
     setup_multi_parser as setup_changer_parser,
     )
 
@@ -111,7 +113,8 @@ class MultiArchHintsChanger(DebianChanger):
             subpath=subpath, allow_reformatting=allow_reformatting,
             net_access=True)
 
-        return result
+        return ChangerResult(
+            description="Applied multi-arch hints.", mutator=result)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -152,7 +155,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='multi-arch-hints')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(MultiArchHintsChanger))

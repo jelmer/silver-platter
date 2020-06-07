@@ -23,7 +23,9 @@ from . import (
     )
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     )
 from ..proposal import push_changes
 from breezy import osutils
@@ -40,6 +42,10 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
     from breezy.plugins.propose.gitlabs import GitLab
     salsa = GitLab.probe_from_url('https://salsa.debian.org/')
     # TODO(jelmer): Fork if the old branch was hosted on salsa
+    if dry_run:
+        note('Creating and pushing to salsa project %s/%s',
+             user, name)
+        return
     salsa.create_project('%s/%s' % (user, name))
     target_branch = Branch.open(
         'git+ssh://git@salsa.debian.org/%s/%s.git' % (user, name))
@@ -139,7 +145,9 @@ class OrphanChanger(DebianChanger):
                 local_tree, self.salsa_user, result.package_name,
                 dry_run=self.dry_run)
             result.pushed = True
-        return result
+        return ChangerResult(
+            description='Move package to QA team.',
+            mutator=result)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -199,8 +207,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='orphan')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(OrphanChanger))

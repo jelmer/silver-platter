@@ -21,6 +21,7 @@ from breezy.trace import note
 
 from .changer import (
     ChangerError,
+    ChangerResult,
     DebianChanger,
     run_single_changer,
     setup_single_parser,
@@ -65,7 +66,7 @@ class ScriptChanger(DebianChanger):
                 local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
             raise ChangerError('Script did not make any changes.', e)
-        return description
+        return ChangerResult(description=description, mutator=description)
 
     def get_proposal_description(
             self, description, description_format, existing_proposal):

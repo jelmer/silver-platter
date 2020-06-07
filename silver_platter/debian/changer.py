@@ -123,6 +123,20 @@ class ChangerError(Exception):
         self.original = original
 
 
+class ChangerFailure(Exception):
+
+    def __init__(self, code, description):
+        self.code = code
+        self.description = description
+
+
+class ChangerResult(object):
+
+    def __init__(self, description, mutator):
+        self.description = description
+        self.mutator = mutator
+
+
 def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
@@ -213,7 +227,7 @@ class DebianChanger(object):
     def make_changes(self, local_tree: WorkingTree,
                      subpath: str,
                      update_changelog: bool,
-                     committer: Optional[str]) -> Any:
+                     committer: Optional[str]) -> ChangerResult:
         raise NotImplementedError(self.make_changes)
 
     def get_proposal_description(
@@ -235,7 +249,10 @@ class DebianChanger(object):
 
     def tags(self, applied: Any) -> List[str]:
         """Return list of changes to include."""
-        raise NotImplementedError(self.tags)
+        return []
+
+    def additional_colocated_branches(self, applied: Any) -> List[str]:
+        return []
 
     def value(self, applied: Any) -> Optional[int]:
         """Return indicator of value of changes."""
@@ -274,8 +291,7 @@ def _run_single_changer(
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
         if update_changelog is None:
-            dch_guess = guess_update_changelog(
-                ws.local_tree.branch)
+            dch_guess = guess_update_changelog(ws.local_tree)
             if dch_guess:
                 note(dch_guess[1])
                 update_changelog = dch_guess[0]
@@ -318,18 +334,18 @@ def _run_single_changer(
 
         kwargs: Dict[str, Any] = {}
         if breezy_version_info >= (3, 1):
-            kwargs['tags'] = changer.tags(changer_result)
+            kwargs['tags'] = changer.tags(changer_result.mutator)
 
         try:
             publish_result = publish_changes(
                 ws, mode, branch_name,
                 get_proposal_description=partial(
-                    changer.get_proposal_description, changer_result),
+                    changer.get_proposal_description, changer_result.mutator),
                 get_proposal_commit_message=partial(
-                    changer.get_commit_message, changer_result),
+                    changer.get_commit_message, changer_result.mutator),
                 dry_run=dry_run, hoster=hoster,
                 allow_create_proposal=changer.allow_create_proposal(
-                    changer_result),
+                    changer_result.mutator),
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
                 labels=label,
@@ -356,7 +372,7 @@ def _run_single_changer(
             return False
 
         if publish_result.proposal:
-            changer.describe(changer_result, publish_result)
+            changer.describe(changer_result.mutator, publish_result)
         if diff:
             ws.show_diff(sys.stdout.buffer)
 
@@ -436,3 +452,82 @@ def run_single_changer(
         return 1
     else:
         return 0
+
+
+def run_mutator(changer_cls, argv=None):
+    import json
+    import argparse
+    import os
+    from breezy.workingtree import WorkingTree
+    parser = argparse.ArgumentParser()
+    changer_cls.setup_parser(parser)
+    args = parser.parse_args(argv)
+    wt, subpath = WorkingTree.open_containing('.')
+    changer = changer_cls.from_args(args)
+    try:
+        update_changelog_str = os.environ['UPDATE_CHANGELOG'],
+    except KeyError:
+        update_changelog = None
+    else:
+        if update_changelog_str == 'leave_changelog':
+            update_changelog = False
+        elif update_changelog_str == 'update_changelog':
+            update_changelog = True
+        else:
+            # TODO(jelmer): Warn
+            update_changelog = None
+
+    try:
+        base_metadata_path = os.environ['BASE_METADATA']
+    except KeyError:
+        existing_proposal = None
+    else:
+        with open(base_metadata_path, 'r') as f:
+            base_metadata = json.load(f)
+
+        class PreviousProposal(MergeProposal):
+
+            def __init__(self, metadata):
+                self.metadata = metadata
+
+            def get_description(self):
+                return self.metadata.get('description')
+
+            def get_commit_message(self):
+                return self.metadata.get('commit-message')
+
+        existing_proposal = PreviousProposal(base_metadata['merge-proposal'])
+
+    mutator_metadata = {}
+    try:
+        result = changer.make_changes(
+            wt, subpath, update_changelog=update_changelog,
+            committer=os.environ.get('COMMITTER'))
+    except ChangerFailure as e:
+        result_json = {
+            'result-code': e.code,
+            'description': e.description,
+        }
+    else:
+        result_json = {
+            'result-code': None,
+            'description': result.description,
+            'suggested-branch-name': changer.suggest_branch_name(),
+            'tags': changer.tags(result.mutator),
+            'auxiliary-branches':
+                changer.additional_colocated_branches(result.mutator),
+            'value': changer.value(result.mutator),
+            'mutator': mutator_metadata,
+            'merge-proposal': {
+                'sufficient': changer.allow_create_proposal(result.mutator),
+                'commit-message': changer.get_commit_message(
+                    result.mutator, existing_proposal),
+                'title': None,
+                'description-plain': changer.get_proposal_description(
+                    result.mutator, 'plain', existing_proposal),
+                'description-markdown': changer.get_proposal_description(
+                    result.mutator, 'markdown', existing_proposal),
+            }
+        }
+    json.dump(result_json, sys.stdout, indent=4)
+    return 0

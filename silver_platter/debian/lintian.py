@@ -30,7 +30,9 @@ from lintian_brush.config import Config
 from .changer import (
     run_changer,
     DebianChanger,
+    ChangerResult,
     setup_multi_parser as setup_changer_parser,
+    run_mutator,
     )
 
 __all__ = [
@@ -253,7 +255,7 @@ class LintianBrushChanger(DebianChanger):
         if minimum_certainty is None:
             minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
 
-        applied, failed = run_lintian_fixers(
+        overall_result = run_lintian_fixers(
                 local_tree, self.fixers,
                 committer=committer,
                 update_changelog=update_changelog,
@@ -262,10 +264,17 @@ class LintianBrushChanger(DebianChanger):
                 minimum_certainty=minimum_certainty,
                 subpath=subpath)
 
-        if failed:
-            note('some fixers failed to run: %r', set(failed))
+        if overall_result.failed_fixers:
+            note('some fixers failed to run: %r',
+                 set(overall_result.failed_fixers))
 
-        return applied
+        tags = set()
+        for result, summary in overall_result.success:
+            tags.update(result.fixed_lintian_tags)
+
+        return ChangerResult(
+            description='Applied fixes for %r' % tags,
+            mutator=overall_result.success)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -321,8 +330,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(LintianBrushChanger))

@@ -19,7 +19,9 @@ import subprocess
 
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     )
 from breezy.trace import note
 
@@ -58,8 +60,7 @@ class CMEChanger(DebianChanger):
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
         local_tree.commit('Run cme.')
-        result = CMEResult()
-        return result
+        return ChangerResult(description=None, mutator=None)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -94,8 +95,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='cme-fix')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(CMEChanger))

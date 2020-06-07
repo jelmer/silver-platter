@@ -21,6 +21,7 @@ import sys
 from typing import Optional, List, Tuple, Callable
 from . import (
     run,
+    mutators,
     version_string,
     )
 
@@ -97,6 +98,7 @@ subcommands: List[Tuple[
     ('login', login_setup_parser, login_main),
     ('proposals', proposals_setup_parser, proposals_main),
     ('run', run.setup_parser, run.main),
+    ('mutators', mutators.setup_parser, mutators.main),
     ]
 
 
