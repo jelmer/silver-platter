@@ -86,9 +86,6 @@ class RulesRequiresRootChanger(DebianChanger):
         else:
             note('No changes for package %s', result.package_name)
 
-    def tags(self, result):
-        return []
-
 
 def main(args):
     changer = RulesRequiresRootChanger.from_args(args)

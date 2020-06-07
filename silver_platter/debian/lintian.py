@@ -304,9 +304,6 @@ class LintianBrushChanger(DebianChanger):
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
 
-    def tags(self, applied):
-        return []
-
     def value(self, applied):
         tags = set()
         for brush_result, unused_summary in applied:

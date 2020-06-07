@@ -134,9 +134,6 @@ class MultiArchHintsChanger(DebianChanger):
         for binary, hint, description, certainty in applied.changes:
             note('* %s: %s', binary['Package'], description)
 
-    def tags(self, applied):
-        return []
-
     def value(self, applied):
         hint_names = []
         for (binary, hint, description, certainty) in applied.changes:

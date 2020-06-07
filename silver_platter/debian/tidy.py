@@ -55,13 +55,21 @@ class TidyChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer):
         result = {}
+        tags = set()
+        auxiliary_branches = set()
         for subchanger in self.subchangers:
-            result[subchanger] = (
+            subresult = (
                 subchanger.make_changes(
                     local_tree, subpath, update_changelog, committer))
+            result[subchanger] = subresult.mutator
+            if subresult.tags:
+                tags.update(subresult.tags)
+            if tags.auxiliary_branches:
+                auxiliary_branches.update(subresult.auxiliary_branches)
         return ChangerResult(
             mutator=result,
-            description='Fix various small issues.')
+            description='Fix various small issues.',
+            tags=tags, auxiliary_branches=auxiliary_branches)
 
     def get_proposal_description(
             self, result, description_format, existing_proposal):
@@ -95,15 +103,6 @@ class TidyChanger(DebianChanger):
             note('Updated proposal %s', publish_result.proposal.url)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-    def tags(self, result):
-        ret = []
-        for subchanger, memo in result.items():
-            subret = subchanger.tags(memo)
-            if subret is None:
-                return None
-            ret.extend(subret)
-        return ret
 
 
 def main(args):

@@ -132,9 +132,11 @@ class ChangerFailure(Exception):
 
 class ChangerResult(object):
 
-    def __init__(self, description, mutator):
+    def __init__(self, description, mutator, auxiliary_branches=[], tags=[]):
         self.description = description
         self.mutator = mutator
+        self.auxiliary_branches = auxiliary_branches
+        self.tags = tags
 
 
 def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
@@ -247,13 +249,6 @@ class DebianChanger(object):
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
 
-    def tags(self, applied: Any) -> List[str]:
-        """Return list of changes to include."""
-        return []
-
-    def additional_colocated_branches(self, applied: Any) -> List[str]:
-        return []
-
     def value(self, applied: Any) -> Optional[int]:
         """Return indicator of value of changes."""
         return None
@@ -334,7 +329,7 @@ def _run_single_changer(
 
         kwargs: Dict[str, Any] = {}
         if breezy_version_info >= (3, 1):
-            kwargs['tags'] = changer.tags(changer_result.mutator)
+            kwargs['tags'] = changer_result.tags
 
         try:
             publish_result = publish_changes(
@@ -513,9 +508,8 @@ def run_mutator(changer_cls, argv=None):
             'result-code': None,
             'description': result.description,
             'suggested-branch-name': changer.suggest_branch_name(),
-            'tags': changer.tags(result.mutator),
-            'auxiliary-branches':
-                changer.additional_colocated_branches(result.mutator),
+            'tags': result.tags,
+            'auxiliary-branches': result.auxiliary_branches,
             'value': changer.value(result.mutator),
             'mutator': mutator_metadata,
             'merge-proposal': {

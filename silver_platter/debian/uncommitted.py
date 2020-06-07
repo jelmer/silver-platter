@@ -112,6 +112,7 @@ class UncommittedChanger(DebianChanger):
             DistributionBranch,
             DistributionBranchSet,
             )
+        tags = set()
         cl_path = os.path.join(subpath, 'debian/changelog')
         with local_tree.get_file(cl_path) as f:
             tree_cl = Changelog(f)
@@ -169,10 +170,13 @@ class UncommittedChanger(DebianChanger):
                     version_path[version],
                     '%s_%s.dsc' % (package_name, version))
                 tag_name = db.import_package(dsc_path)
+                tags.add(tag_name)
                 ret.append((tag_name, version))
+        # TODO(jelmer): Include upstream tags
+        # TODO(jelmer): Include auxiliary branches for upstream/pristine-tar
         return ChangerResult(
             description='Import archive changes missing from the VCS.',
-            mutator=ret)
+            mutator=ret, tags=tags)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -198,10 +202,6 @@ class UncommittedChanger(DebianChanger):
         else:
             note('No new versions imported for proposal %s',
                  publish_result.proposal.url)
-
-    def tags(self, applied):
-        # TODO(jelmer): Include tags for upstream parts
-        return [t for t, v in applied]
 
 
 def main(args):

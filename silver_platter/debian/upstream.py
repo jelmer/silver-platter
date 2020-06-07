@@ -691,10 +691,13 @@ class NewUpstreamChanger(DebianChanger):
                 raise ChangerError(
                     'Quilt error while refreshing patches: %s', e)
 
+        tags = set()
+        tags.add('upstream/%s' % merge_upstream_result.new_upstream_version)
+        # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
         return ChangerResult(
             description="Merged new upstream version %s" % (
                 merge_upstream_result.new_upstream_version),
-            mutator=merge_upstream_result)
+            mutator=merge_upstream_result, tags=tags)
 
     def get_proposal_description(
             self, merge_upstream_result, description_format, unused_proposal):
@@ -716,9 +719,6 @@ class NewUpstreamChanger(DebianChanger):
             else:
                 note('Updated merge proposal %s.',
                      publish_result.proposal.url)
-
-    def tags(self, applied):
-        return ['upstream/%s' % applied.new_upstream_version]
 
 
 def main(args: argparse.Namespace):
