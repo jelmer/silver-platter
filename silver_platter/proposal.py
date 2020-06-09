@@ -722,7 +722,7 @@ def iter_all_mps(statuses: Optional[List[str]] = None
 
 
 def iter_conflicted(branch_name: str) -> Iterator[
-                  Tuple[str, Branch, str, Branch, Hoster, MergeProposal, bool]]:
+              Tuple[str, Branch, str, Branch, Hoster, MergeProposal, bool]]:
     """Find conflicted branches owned by the current user.
 
     Args:
