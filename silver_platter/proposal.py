@@ -722,7 +722,12 @@ def iter_all_mps(statuses: Optional[List[str]] = None
 
 
 def iter_conflicted(branch_name: str) -> Iterator[
-                  Tuple[str, Branch, Branch, Hoster, MergeProposal, bool]]:
+                  Tuple[str, Branch, str, Branch, Hoster, MergeProposal, bool]]:
+    """Find conflicted branches owned by the current user.
+
+    Args:
+      branch_name: Branch name to search for
+    """
     possible_transports: List[Transport] = []
     for hoster, mp, status in iter_all_mps(['open']):
         try:
@@ -741,5 +746,7 @@ def iter_conflicted(branch_name: str) -> Iterator[
             not resume_branch.name and
                 resume_branch.user_url.endswith(branch_name)):
             continue
-        yield (resume_branch.user_url, main_branch, resume_branch, hoster, mp,
-               True)
+        # TODO(jelmer): Find out somehow whether we need to modify a subpath?
+        subpath = ''
+        yield (resume_branch.user_url, main_branch, subpath, resume_branch,
+               hoster, mp, True)
