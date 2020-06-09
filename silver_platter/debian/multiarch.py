@@ -113,8 +113,13 @@ class MultiArchHintsChanger(DebianChanger):
             subpath=subpath, allow_reformatting=allow_reformatting,
             net_access=True)
 
+        hint_names = []
+        for (binary, hint, description, certainty) in result.changes:
+            hint_names.append(hint['link'].split('#')[-1])
+
         return ChangerResult(
-            description="Applied multi-arch hints.", mutator=result)
+            description="Applied multi-arch hints.", mutator=result,
+            value=calculate_value(hint_names))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -133,12 +138,6 @@ class MultiArchHintsChanger(DebianChanger):
         note('Applied multi-arch hints.')
         for binary, hint, description, certainty in applied.changes:
             note('* %s: %s', binary['Package'], description)
-
-    def value(self, applied):
-        hint_names = []
-        for (binary, hint, description, certainty) in applied.changes:
-            hint_names.append(hint['link'].split('#')[-1])
-        return calculate_value(hint_names)
 
 
 def setup_parser(parser):

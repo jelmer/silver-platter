@@ -274,7 +274,8 @@ class LintianBrushChanger(DebianChanger):
 
         return ChangerResult(
             description='Applied fixes for %r' % tags,
-            mutator=overall_result.success)
+            mutator=overall_result.success,
+            value=calculate_value(tags))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -303,12 +304,6 @@ class LintianBrushChanger(DebianChanger):
                  publish_result.proposal.url, tags)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-    def value(self, applied):
-        tags = set()
-        for brush_result, unused_summary in applied:
-            tags.update(brush_result.fixed_lintian_tags)
-        return calculate_value(tags)
 
 
 def setup_parser(parser):

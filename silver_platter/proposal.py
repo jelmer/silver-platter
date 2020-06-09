@@ -371,7 +371,7 @@ class Workspace(object):
 
     def push_derived(self,
                      name: str, hoster: Optional[Hoster] = None,
-                     overwrite_existing: bool = False,
+                     overwrite_existing: Optional[bool] = False,
                      tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
         """Push a derived branch.
 
@@ -438,7 +438,7 @@ def publish_changes(
         hoster: Optional[Hoster] = None,
         allow_create_proposal: bool = True,
         labels: Optional[List[str]] = None,
-        overwrite_existing: bool = True,
+        overwrite_existing: Optional[bool] = True,
         existing_proposal: Optional[MergeProposal] = None,
         reviewers: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
@@ -698,7 +698,7 @@ def merge_directive_changes(
 
 def push_derived_changes(
         local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
-        overwrite_existing: bool = False,
+        overwrite_existing: Optional[bool] = False,
         tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:

@@ -19,12 +19,13 @@ import argparse
 from functools import partial
 import itertools
 import sys
-from typing import Any, List, Optional, Dict
+from typing import Any, List, Optional, Dict, Iterable, Tuple
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
 from breezy.propose import Hoster, MergeProposal
 from breezy.trace import note, warning, show_error
+from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
 from . import (
@@ -55,13 +56,18 @@ from ..utils import (
     )
 
 
-def get_package(package, branch_name, overwrite_unrelated=False,
-                refresh=False, possible_transports=None,
-                possible_hosters=None):
+def get_package(package: str, branch_name: str,
+                overwrite_unrelated: bool = False,
+                refresh: bool = False,
+                possible_transports: Optional[List[Transport]] = None,
+                possible_hosters: Optional[List[Hoster]] = None
+                ) -> Tuple[str, Branch, str, Optional[Branch],
+                           Optional[Hoster], Optional[MergeProposal],
+                           Optional[bool]]:
     main_branch, subpath = open_packaging_branch(
         package, possible_transports=possible_transports)
 
-    overwrite = False
+    overwrite: Optional[bool] = False
 
     try:
         hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
@@ -85,8 +91,9 @@ def get_package(package, branch_name, overwrite_unrelated=False,
         existing_proposal, overwrite)
 
 
-def iter_packages(packages, branch_name, overwrite_unrelated=False,
-                  refresh=False):
+def iter_packages(packages: Iterable[str], branch_name: str,
+                  overwrite_unrelated: bool = False,
+                  refresh: bool = False):
     """Iterate over relevant branches for a set of packages.
 
     Args:
@@ -100,8 +107,8 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
          hoster (None if the hoster is not supported),
          existing_proposal, whether to overwrite the branch)
     """
-    possible_transports = []
-    possible_hosters = []
+    possible_transports: List[Transport] = []
+    possible_hosters: List[Hoster] = []
 
     for pkg in packages:
         note('Processing: %s', pkg)
@@ -132,11 +139,15 @@ class ChangerFailure(Exception):
 
 class ChangerResult(object):
 
-    def __init__(self, description, mutator, auxiliary_branches=[], tags=[]):
+    def __init__(self, description: Optional[str], mutator: Any,
+                 auxiliary_branches: Optional[List[str]] = [],
+                 tags: Optional[List[str]] = [],
+                 value: Optional[int] = None):
         self.description = description
         self.mutator = mutator
         self.auxiliary_branches = auxiliary_branches
         self.tags = tags
+        self.value = value
 
 
 def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
@@ -249,10 +260,6 @@ class DebianChanger(object):
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
 
-    def value(self, applied: Any) -> Optional[int]:
-        """Return indicator of value of changes."""
-        return None
-
 
 def _run_single_changer(
         changer: DebianChanger,
@@ -262,7 +269,8 @@ def _run_single_changer(
         resume_branch: Optional[Branch],
         hoster: Optional[Hoster],
         existing_proposal: Optional[MergeProposal],
-        overwrite: bool, mode: str, branch_name: str, diff: bool = False,
+        overwrite: Optional[bool], mode: str, branch_name: str,
+        diff: bool = False,
         committer: Optional[str] = None, build_verify: bool = False,
         pre_check: Optional[str] = None, post_check: Optional[str] = None,
         builder: str = DEFAULT_BUILDER, dry_run: bool = False,
@@ -510,7 +518,7 @@ def run_mutator(changer_cls, argv=None):
             'suggested-branch-name': changer.suggest_branch_name(),
             'tags': result.tags,
             'auxiliary-branches': result.auxiliary_branches,
-            'value': changer.value(result.mutator),
+            'value': result.value,
             'mutator': mutator_metadata,
             'merge-proposal': {
                 'sufficient': changer.allow_create_proposal(result.mutator),
