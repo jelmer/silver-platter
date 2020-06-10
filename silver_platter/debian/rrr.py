@@ -53,7 +53,8 @@ class RulesRequiresRootChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         with ControlUpdater.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])
@@ -67,17 +68,13 @@ class RulesRequiresRootChanger(DebianChanger):
             allow_pointless=False)
         return ChangerResult(
             description='Set Rules-Requires-Root',
-            mutator=result)
+            mutator=result,
+            sufficient_for_proposal=True,
+            proposed_commit_message='Set Rules-Requires-Root.')
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return 'Set Rules-Requires-Root.'
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Set Rules-Requires-Root.'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:

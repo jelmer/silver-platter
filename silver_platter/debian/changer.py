@@ -142,12 +142,20 @@ class ChangerResult(object):
     def __init__(self, description: Optional[str], mutator: Any,
                  auxiliary_branches: Optional[List[str]] = [],
                  tags: Optional[List[str]] = [],
-                 value: Optional[int] = None):
+                 value: Optional[int] = None,
+                 proposed_commit_message: Optional[str] = None,
+                 title: Optional[str] = None,
+                 labels: Optional[List[str]] = None,
+                 sufficient_for_proposal: bool = True):
         self.description = description
         self.mutator = mutator
         self.auxiliary_branches = auxiliary_branches
         self.tags = tags
         self.value = value
+        self.proposed_commit_message = proposed_commit_message
+        self.title = title
+        self.labels = labels
+        self.sufficient_for_proposal = sufficient_for_proposal
 
 
 def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
@@ -240,7 +248,9 @@ class DebianChanger(object):
     def make_changes(self, local_tree: WorkingTree,
                      subpath: str,
                      update_changelog: bool,
-                     committer: Optional[str]) -> ChangerResult:
+                     committer: Optional[str],
+                     base_proposal: Optional[MergeProposal] = None
+                     ) -> ChangerResult:
         raise NotImplementedError(self.make_changes)
 
     def get_proposal_description(
@@ -248,14 +258,6 @@ class DebianChanger(object):
             description_format: str,
             existing_proposal: MergeProposal) -> str:
         raise NotImplementedError(self.get_proposal_description)
-
-    def get_commit_message(self,
-                           applied: Any,
-                           existing_proposal: MergeProposal) -> str:
-        raise NotImplementedError(self.get_commit_message)
-
-    def allow_create_proposal(self, applied: Any) -> bool:
-        raise NotImplementedError(self.allow_create_proposal)
 
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
@@ -344,11 +346,10 @@ def _run_single_changer(
                 ws, mode, branch_name,
                 get_proposal_description=partial(
                     changer.get_proposal_description, changer_result.mutator),
-                get_proposal_commit_message=partial(
-                    changer.get_commit_message, changer_result.mutator),
+                get_proposal_commit_message=(
+                    lambda oldmp: changer_result.proposed_commit_message),
                 dry_run=dry_run, hoster=hoster,
-                allow_create_proposal=changer.allow_create_proposal(
-                    changer_result.mutator),
+                allow_create_proposal=changer_result.sufficient_for_proposal,
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
                 labels=label,
@@ -505,7 +506,8 @@ def run_mutator(changer_cls, argv=None):
     try:
         result = changer.make_changes(
             wt, subpath, update_changelog=update_changelog,
-            committer=os.environ.get('COMMITTER'))
+            committer=os.environ.get('COMMITTER'),
+            base_proposal=existing_proposal)
     except ChangerFailure as e:
         result_json = {
             'result-code': e.code,
@@ -521,10 +523,10 @@ def run_mutator(changer_cls, argv=None):
             'value': result.value,
             'mutator': mutator_metadata,
             'merge-proposal': {
-                'sufficient': changer.allow_create_proposal(result.mutator),
-                'commit-message': changer.get_commit_message(
-                    result.mutator, existing_proposal),
-                'title': None,
+                'sufficient': changer.sufficient_for_proposal,
+                'commit-message': result.proposed_commit_message,
+                'title': result.title,
+                'labels': result.labels,
                 'description-plain': changer.get_proposal_description(
                     result.mutator, 'plain', existing_proposal),
                 'description-markdown': changer.get_proposal_description(

@@ -614,7 +614,8 @@ class NewUpstreamChanger(DebianChanger):
                    update_packaging=args.update_packaging,
                    dist_command=args.dist_command)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         try:
             merge_upstream_result = merge_upstream(
                 tree=local_tree, snapshot=self.snapshot,
@@ -694,22 +695,20 @@ class NewUpstreamChanger(DebianChanger):
         tags = set()
         tags.add('upstream/%s' % merge_upstream_result.new_upstream_version)
         # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
+        proposed_commit_message = (
+            "Merge new upstream release %s" %
+            merge_upstream_result.new_upstream_version)
         return ChangerResult(
             description="Merged new upstream version %s" % (
                 merge_upstream_result.new_upstream_version),
-            mutator=merge_upstream_result, tags=tags)
+            mutator=merge_upstream_result, tags=tags,
+            sufficient_for_proposal=True,
+            proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(
             self, merge_upstream_result, description_format, unused_proposal):
         return ("Merge new upstream release %s" %
                 merge_upstream_result.new_upstream_version)
-
-    def get_commit_message(self, merge_upstream_result, unused_proposal):
-        return ("Merge new upstream release %s" %
-                merge_upstream_result.new_upstream_version)
-
-    def allow_create_proposal(self, merge_upstream_result):
-        return True
 
     def describe(self, merge_upstream_result, publish_result):
         if publish_result.proposal:

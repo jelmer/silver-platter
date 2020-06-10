@@ -51,7 +51,8 @@ class CMEChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         cwd = local_tree.abspath(subpath or '')
         subprocess.check_call(
             ['/usr/bin/cme', 'modify', 'dpkg', '-save'],
@@ -60,17 +61,14 @@ class CMEChanger(DebianChanger):
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
         local_tree.commit('Run cme.')
-        return ChangerResult(description=None, mutator=None)
+        return ChangerResult(
+            description=None, mutator=None,
+            proposed_commit_message='Run cme.',
+            sufficient_for_proposal=True)
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return 'Run cme.'
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Run cme'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:

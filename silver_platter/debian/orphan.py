@@ -101,7 +101,8 @@ class OrphanChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         def set_maintainer(source):
             source['Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
             try:
@@ -147,17 +148,14 @@ class OrphanChanger(DebianChanger):
             result.pushed = True
         return ChangerResult(
             description='Move package to QA team.',
-            mutator=result)
+            mutator=result,
+            sufficient_for_proposal=True,
+            proposed_commit_message=(
+                'Set the package maintainer to the QA team.'))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return 'Set the package maintainer to the QA team.'
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Set the package maintainer to the QA team.'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:

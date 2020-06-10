@@ -230,7 +230,8 @@ class LintianBrushChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 
@@ -272,26 +273,25 @@ class LintianBrushChanger(DebianChanger):
         for result, summary in overall_result.success:
             tags.update(result.fixed_lintian_tags)
 
+        if not has_nontrivial_changes(
+                overall_result.success, self.propose_addon_only):
+            note('only add-on fixers found')
+            sufficient_for_proposal = False
+        else:
+            sufficient_for_proposal = True
+
         return ChangerResult(
             description='Applied fixes for %r' % tags,
             mutator=overall_result.success,
-            value=calculate_value(tags))
+            value=calculate_value(tags),
+            sufficient_for_proposal=sufficient_for_proposal,
+            proposed_commit_message=update_proposal_commit_message(
+                base_proposal, overall_result.success))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return update_proposal_description(
             description_format, existing_proposal, applied)
-
-    def get_commit_message(self, applied, existing_proposal):
-        return update_proposal_commit_message(
-            existing_proposal, applied)
-
-    def allow_create_proposal(self, applied):
-        if not has_nontrivial_changes(applied, self.propose_addon_only):
-            note('only add-on fixers found')
-            return False
-        else:
-            return True
 
     def describe(self, applied, publish_result):
         tags = set()

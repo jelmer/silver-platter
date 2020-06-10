@@ -88,7 +88,8 @@ class MultiArchHintsChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
             )
@@ -119,7 +120,9 @@ class MultiArchHintsChanger(DebianChanger):
 
         return ChangerResult(
             description="Applied multi-arch hints.", mutator=result,
-            value=calculate_value(hint_names))
+            value=calculate_value(hint_names),
+            sufficient_for_proposal=True,
+            proposed_commit_message='Apply multi-arch hints.')
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -127,12 +130,6 @@ class MultiArchHintsChanger(DebianChanger):
         for binary, hint, description, certainty in applied.changes:
             ret.append('* %s: %s\n' % (binary['Package'], description))
         return ''.join(ret)
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Apply multi-arch hints.'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, applied, publish_result):
         note('Applied multi-arch hints.')

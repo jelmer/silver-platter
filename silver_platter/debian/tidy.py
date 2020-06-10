@@ -53,23 +53,38 @@ class TidyChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         result = {}
         tags = set()
+        sufficient_for_proposal = False
         auxiliary_branches = set()
         for subchanger in self.subchangers:
             subresult = (
                 subchanger.make_changes(
                     local_tree, subpath, update_changelog, committer))
             result[subchanger] = subresult.mutator
+            if subresult.sufficient_for_proposal:
+                sufficient_for_proposal = True
             if subresult.tags:
                 tags.update(subresult.tags)
             if tags.auxiliary_branches:
                 auxiliary_branches.update(subresult.auxiliary_branches)
+
+        commit_items = []
+        for subchanger in result:
+            if isinstance(subchanger, LintianBrushChanger):
+                commit_items.append('fix some lintian tags')
+            if isinstance(subchanger, MultiArchHintsChanger):
+                commit_items.append('apply multi-arch hints')
+        proposed_commit_message = (', '.join(commit_items) + '.').capitalize()
+
         return ChangerResult(
             mutator=result,
             description='Fix various small issues.',
-            tags=tags, auxiliary_branches=auxiliary_branches)
+            tags=tags, auxiliary_branches=auxiliary_branches,
+            sufficient_for_proposal=sufficient_for_proposal,
+            proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(
             self, result, description_format, existing_proposal):
@@ -79,22 +94,6 @@ class TidyChanger(DebianChanger):
             entries.append(subchanger.get_proposal_description(
                 memo, description_format, existing_proposal))
         return '\n'.join(entries)
-
-    def get_commit_message(self, result, existing_proposal):
-        ret = []
-        for subchanger in result:
-            if isinstance(subchanger, LintianBrushChanger):
-                ret.append('fix some lintian tags')
-            if isinstance(subchanger, MultiArchHintsChanger):
-                ret.append('apply multi-arch hints')
-        return (', '.join(ret) + '.').capitalize()
-
-    def allow_create_proposal(self, result):
-        for subchanger, memo in result.items():
-            if subchanger.allow_create_proposal(memo):
-                return True
-        else:
-            return False
 
     def describe(self, result, publish_result):
         if publish_result.is_new:

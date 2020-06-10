@@ -60,13 +60,17 @@ class ScriptChanger(DebianChanger):
             args.commit_pending]
         return cls(script=args.script, commit_pending=commit_pending)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         try:
             description = script_runner(
                 local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
             raise ChangerError('Script did not make any changes.', e)
-        return ChangerResult(description=description, mutator=description)
+        return ChangerResult(
+            description=description, mutator=description,
+            sufficient_for_proposal=True,
+            proposed_commit_message=None)
 
     def get_proposal_description(
             self, description, description_format, existing_proposal):
@@ -75,12 +79,6 @@ class ScriptChanger(DebianChanger):
         if existing_proposal is not None:
             return existing_proposal.get_description()
         raise ValueError("No description available")
-
-    def get_commit_message(self, applied, existing_proposal):
-        return None
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, description, publish_result):
         note('%s', description)

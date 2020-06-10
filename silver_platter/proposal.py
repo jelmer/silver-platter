@@ -83,6 +83,10 @@ SUPPORTED_MODES: List[str] = [
     ]
 
 
+class MergeProposalDescriptionMissing(Exception):
+    """No description specified for merge proposal."""
+
+
 def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
     """Check whether two branches are conflicted when merged.
 
@@ -431,9 +435,9 @@ class PublishResult(object):
 def publish_changes(
         ws: Workspace, mode: str, name: str,
         get_proposal_description: Callable[
-            [str, Optional[MergeProposal]], str],
+            [str, Optional[MergeProposal]], Optional[str]],
         get_proposal_commit_message: Callable[
-            [Optional[MergeProposal]], str] = None,
+            [Optional[MergeProposal]], Optional[str]] = None,
         dry_run: bool = False,
         hoster: Optional[Hoster] = None,
         allow_create_proposal: bool = True,
@@ -510,6 +514,8 @@ def publish_changes(
     if get_proposal_commit_message is not None:
         commit_message = get_proposal_commit_message(
             existing_proposal if ws.resume_branch else None)
+    if not mp_description:
+        raise MergeProposalDescriptionMissing()
     (proposal, is_new) = ws.propose(
         name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
