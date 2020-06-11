@@ -26,7 +26,9 @@ from lintian_brush.config import Config
 
 from .changer import (
     DebianChanger,
+    ChangerResult,
     run_changer,
+    run_mutator,
     setup_multi_parser as setup_changer_parser,
     )
 
@@ -86,7 +88,8 @@ class MultiArchHintsChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
             )
@@ -111,7 +114,15 @@ class MultiArchHintsChanger(DebianChanger):
             subpath=subpath, allow_reformatting=allow_reformatting,
             net_access=True)
 
-        return result
+        hint_names = []
+        for (binary, hint, description, certainty) in result.changes:
+            hint_names.append(hint['link'].split('#')[-1])
+
+        return ChangerResult(
+            description="Applied multi-arch hints.", mutator=result,
+            value=calculate_value(hint_names),
+            sufficient_for_proposal=True,
+            proposed_commit_message='Apply multi-arch hints.')
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
@@ -120,25 +131,10 @@ class MultiArchHintsChanger(DebianChanger):
             ret.append('* %s: %s\n' % (binary['Package'], description))
         return ''.join(ret)
 
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Apply multi-arch hints.'
-
-    def allow_create_proposal(self, applied):
-        return True
-
     def describe(self, applied, publish_result):
         note('Applied multi-arch hints.')
         for binary, hint, description, certainty in applied.changes:
             note('* %s: %s', binary['Package'], description)
-
-    def tags(self, applied):
-        return []
-
-    def value(self, applied):
-        hint_names = []
-        for (binary, hint, description, certainty) in applied.changes:
-            hint_names.append(hint['link'].split('#')[-1])
-        return calculate_value(hint_names)
 
 
 def setup_parser(parser):
@@ -152,7 +148,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='multi-arch-hints')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(MultiArchHintsChanger))

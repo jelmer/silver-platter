@@ -17,7 +17,9 @@
 
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     )
 from breezy import osutils
 from breezy.trace import note
@@ -51,7 +53,8 @@ class RulesRequiresRootChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         with ControlUpdater.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])
@@ -63,17 +66,15 @@ class RulesRequiresRootChanger(DebianChanger):
         local_tree.commit(
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)
-        return result
+        return ChangerResult(
+            description='Set Rules-Requires-Root',
+            mutator=result,
+            sufficient_for_proposal=True,
+            proposed_commit_message='Set Rules-Requires-Root.')
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return 'Set Rules-Requires-Root.'
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Set Rules-Requires-Root.'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
@@ -81,9 +82,6 @@ class RulesRequiresRootChanger(DebianChanger):
                  publish_result.proposal.url)
         else:
             note('No changes for package %s', result.package_name)
-
-    def tags(self, result):
-        return []
 
 
 def main(args):
@@ -98,8 +96,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='rules-requires-root')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(RulesRequiresRootChanger))

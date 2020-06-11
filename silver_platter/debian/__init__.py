@@ -39,31 +39,13 @@ from breezy.workingtree import WorkingTree
 from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
-try:
-    from breezy.plugins.debian.builder import BuildFailedError
-except ImportError:  # breezy < 3.1
-    from breezy.plugins.debian.errors import BuildFailedError
+from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.errors import (
     MissingUpstreamTarball,
     )
 
-try:
-    from lintian_brush.detect_gbp_dch import guess_update_changelog
-except ImportError:  # lintian-brush < 0.65
-    from lintian_brush import (
-        guess_update_changelog as old_guess_update_changelog,
-        )
-
-    def guess_update_changelog(tree, path, cl=None):
-        return (old_guess_update_changelog(tree, path, cl), None)
-
-try:
-    from lintian_brush.changelog import add_changelog_entry
-except ImportError:  # lintian-brush < 0.66
-    from lintian_brush import add_changelog_entry as add_changelog_entry_old
-
-    def add_changelog_entry(tree, path, summary):
-        return add_changelog_entry_old(tree, path, summary[0])
+from lintian_brush.detect_gbp_dch import guess_update_changelog
+from lintian_brush.changelog import add_changelog_entry
 
 from .. import proposal as _mod_proposal
 from ..utils import (
@@ -72,6 +54,7 @@ from ..utils import (
 
 
 __all__ = [
+    'add_changelog_entry',
     'changelog_add_line',
     'get_source_package',
     'guess_update_changelog',
@@ -185,7 +168,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     branch = open_branch(
         url, possible_transports=possible_transports, probers=probers,
         name=branch_name)
-    return branch, subpath
+    return branch, subpath or ''
 
 
 def pick_additional_colocated_branches(main_branch):

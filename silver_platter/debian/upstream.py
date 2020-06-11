@@ -37,7 +37,12 @@ from . import (
     changelog_add_line,
     debcommit,
     )
-from .changer import ChangerError, DebianChanger
+from .changer import (
+    run_mutator,
+    ChangerError,
+    DebianChanger,
+    ChangerResult,
+    )
 from breezy.commit import (
     PointlessCommit,
     )
@@ -71,16 +76,10 @@ from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     PristineTarSource,
     )
-try:
-    from breezy.plugins.quilt.quilt import (
-        QuiltError,
-        QuiltPatches,
-        )
-except ImportError:
-    from breezy.plugins.debian.quilt.quilt import (
-        QuiltError,
-        QuiltPatches,
-        )
+from breezy.plugins.quilt.quilt import (
+    QuiltError,
+    QuiltPatches,
+    )
 
 from breezy.plugins.debian.util import (
     debuild_config,
@@ -546,10 +545,7 @@ def update_packaging(tree, old_tree, subpath='', committer=None):
     notes = []
     tree_delta = tree.changes_from(old_tree, specific_files=[subpath])
     for delta in tree_delta.added:
-        if getattr(delta, 'path', None):
-            path = delta.path[1]
-        else:  # Breezy < 3.1
-            path = delta[0]
+        path = delta.path[1]
         if path is None:
             continue
         if not path.startswith(subpath):
@@ -618,7 +614,8 @@ class NewUpstreamChanger(DebianChanger):
                    update_packaging=args.update_packaging,
                    dist_command=args.dist_command)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         try:
             merge_upstream_result = merge_upstream(
                 tree=local_tree, snapshot=self.snapshot,
@@ -695,19 +692,23 @@ class NewUpstreamChanger(DebianChanger):
                 raise ChangerError(
                     'Quilt error while refreshing patches: %s', e)
 
-        return merge_upstream_result
+        tags = set()
+        tags.add('upstream/%s' % merge_upstream_result.new_upstream_version)
+        # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
+        proposed_commit_message = (
+            "Merge new upstream release %s" %
+            merge_upstream_result.new_upstream_version)
+        return ChangerResult(
+            description="Merged new upstream version %s" % (
+                merge_upstream_result.new_upstream_version),
+            mutator=merge_upstream_result, tags=tags,
+            sufficient_for_proposal=True,
+            proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(
             self, merge_upstream_result, description_format, unused_proposal):
         return ("Merge new upstream release %s" %
                 merge_upstream_result.new_upstream_version)
-
-    def get_commit_message(self, merge_upstream_result, unused_proposal):
-        return ("Merge new upstream release %s" %
-                merge_upstream_result.new_upstream_version)
-
-    def allow_create_proposal(self, merge_upstream_result):
-        return True
 
     def describe(self, merge_upstream_result, publish_result):
         if publish_result.proposal:
@@ -717,9 +718,6 @@ class NewUpstreamChanger(DebianChanger):
             else:
                 note('Updated merge proposal %s.',
                      publish_result.proposal.url)
-
-    def tags(self, applied):
-        return ['upstream/%s' % applied.new_upstream_version]
 
 
 def main(args: argparse.Namespace):
@@ -735,7 +733,5 @@ def setup_parser(parser: argparse.ArgumentParser):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='propose-new-upstream')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(NewUpstreamChanger))

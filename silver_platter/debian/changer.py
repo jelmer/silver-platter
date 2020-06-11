@@ -19,15 +19,13 @@ import argparse
 from functools import partial
 import itertools
 import sys
-from typing import Any, List, Optional, Dict
+from typing import Any, List, Optional, Dict, Iterable, Tuple
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
-try:
-    from breezy.propose import Hoster, MergeProposal
-except ImportError:
-    from breezy.plugins.propose.propose import Hoster, MergeProposal
+from breezy.propose import Hoster, MergeProposal
 from breezy.trace import note, warning, show_error
+from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
 from . import (
@@ -58,13 +56,18 @@ from ..utils import (
     )
 
 
-def get_package(package, branch_name, overwrite_unrelated=False,
-                refresh=False, possible_transports=None,
-                possible_hosters=None):
+def get_package(package: str, branch_name: str,
+                overwrite_unrelated: bool = False,
+                refresh: bool = False,
+                possible_transports: Optional[List[Transport]] = None,
+                possible_hosters: Optional[List[Hoster]] = None
+                ) -> Tuple[str, Branch, str, Optional[Branch],
+                           Optional[Hoster], Optional[MergeProposal],
+                           Optional[bool]]:
     main_branch, subpath = open_packaging_branch(
         package, possible_transports=possible_transports)
 
-    overwrite = False
+    overwrite: Optional[bool] = False
 
     try:
         hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
@@ -88,8 +91,9 @@ def get_package(package, branch_name, overwrite_unrelated=False,
         existing_proposal, overwrite)
 
 
-def iter_packages(packages, branch_name, overwrite_unrelated=False,
-                  refresh=False):
+def iter_packages(packages: Iterable[str], branch_name: str,
+                  overwrite_unrelated: bool = False,
+                  refresh: bool = False):
     """Iterate over relevant branches for a set of packages.
 
     Args:
@@ -103,8 +107,8 @@ def iter_packages(packages, branch_name, overwrite_unrelated=False,
          hoster (None if the hoster is not supported),
          existing_proposal, whether to overwrite the branch)
     """
-    possible_transports = []
-    possible_hosters = []
+    possible_transports: List[Transport] = []
+    possible_hosters: List[Hoster] = []
 
     for pkg in packages:
         note('Processing: %s', pkg)
@@ -124,6 +128,34 @@ class ChangerError(Exception):
     def __init__(self, summary: str, original: Optional[Exception]):
         self.summary = summary
         self.original = original
+
+
+class ChangerFailure(Exception):
+
+    def __init__(self, code, description):
+        self.code = code
+        self.description = description
+
+
+class ChangerResult(object):
+
+    def __init__(self, description: Optional[str], mutator: Any,
+                 auxiliary_branches: Optional[List[str]] = [],
+                 tags: Optional[List[str]] = [],
+                 value: Optional[int] = None,
+                 proposed_commit_message: Optional[str] = None,
+                 title: Optional[str] = None,
+                 labels: Optional[List[str]] = None,
+                 sufficient_for_proposal: bool = True):
+        self.description = description
+        self.mutator = mutator
+        self.auxiliary_branches = auxiliary_branches
+        self.tags = tags
+        self.value = value
+        self.proposed_commit_message = proposed_commit_message
+        self.title = title
+        self.labels = labels
+        self.sufficient_for_proposal = sufficient_for_proposal
 
 
 def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
@@ -216,7 +248,9 @@ class DebianChanger(object):
     def make_changes(self, local_tree: WorkingTree,
                      subpath: str,
                      update_changelog: bool,
-                     committer: Optional[str]) -> Any:
+                     committer: Optional[str],
+                     base_proposal: Optional[MergeProposal] = None
+                     ) -> ChangerResult:
         raise NotImplementedError(self.make_changes)
 
     def get_proposal_description(
@@ -225,24 +259,8 @@ class DebianChanger(object):
             existing_proposal: MergeProposal) -> str:
         raise NotImplementedError(self.get_proposal_description)
 
-    def get_commit_message(self,
-                           applied: Any,
-                           existing_proposal: MergeProposal) -> str:
-        raise NotImplementedError(self.get_commit_message)
-
-    def allow_create_proposal(self, applied: Any) -> bool:
-        raise NotImplementedError(self.allow_create_proposal)
-
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
-
-    def tags(self, applied: Any) -> List[str]:
-        """Return list of changes to include."""
-        raise NotImplementedError(self.tags)
-
-    def value(self, applied: Any) -> Optional[int]:
-        """Return indicator of value of changes."""
-        return None
 
 
 def _run_single_changer(
@@ -253,7 +271,8 @@ def _run_single_changer(
         resume_branch: Optional[Branch],
         hoster: Optional[Hoster],
         existing_proposal: Optional[MergeProposal],
-        overwrite: bool, mode: str, branch_name: str, diff: bool = False,
+        overwrite: Optional[bool], mode: str, branch_name: str,
+        diff: bool = False,
         committer: Optional[str] = None, build_verify: bool = False,
         pre_check: Optional[str] = None, post_check: Optional[str] = None,
         builder: str = DEFAULT_BUILDER, dry_run: bool = False,
@@ -277,8 +296,7 @@ def _run_single_changer(
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
         if update_changelog is None:
-            dch_guess = guess_update_changelog(
-                ws.local_tree.branch)
+            dch_guess = guess_update_changelog(ws.local_tree)
             if dch_guess:
                 note(dch_guess[1])
                 update_changelog = dch_guess[0]
@@ -321,18 +339,17 @@ def _run_single_changer(
 
         kwargs: Dict[str, Any] = {}
         if breezy_version_info >= (3, 1):
-            kwargs['tags'] = changer.tags(changer_result)
+            kwargs['tags'] = changer_result.tags
 
         try:
             publish_result = publish_changes(
                 ws, mode, branch_name,
                 get_proposal_description=partial(
-                    changer.get_proposal_description, changer_result),
-                get_proposal_commit_message=partial(
-                    changer.get_commit_message, changer_result),
+                    changer.get_proposal_description, changer_result.mutator),
+                get_proposal_commit_message=(
+                    lambda oldmp: changer_result.proposed_commit_message),
                 dry_run=dry_run, hoster=hoster,
-                allow_create_proposal=changer.allow_create_proposal(
-                    changer_result),
+                allow_create_proposal=changer_result.sufficient_for_proposal,
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
                 labels=label,
@@ -359,7 +376,7 @@ def _run_single_changer(
             return False
 
         if publish_result.proposal:
-            changer.describe(changer_result, publish_result)
+            changer.describe(changer_result.mutator, publish_result)
         if diff:
             ws.show_diff(sys.stdout.buffer)
 
@@ -439,3 +456,82 @@ def run_single_changer(
         return 1
     else:
         return 0
+
+
+def run_mutator(changer_cls, argv=None):
+    import json
+    import argparse
+    import os
+    from breezy.workingtree import WorkingTree
+    parser = argparse.ArgumentParser()
+    changer_cls.setup_parser(parser)
+    args = parser.parse_args(argv)
+    wt, subpath = WorkingTree.open_containing('.')
+    changer = changer_cls.from_args(args)
+    try:
+        update_changelog_str = os.environ['UPDATE_CHANGELOG'],
+    except KeyError:
+        update_changelog = None
+    else:
+        if update_changelog_str == 'leave_changelog':
+            update_changelog = False
+        elif update_changelog_str == 'update_changelog':
+            update_changelog = True
+        else:
+            # TODO(jelmer): Warn
+            update_changelog = None
+
+    try:
+        base_metadata_path = os.environ['BASE_METADATA']
+    except KeyError:
+        existing_proposal = None
+    else:
+        with open(base_metadata_path, 'r') as f:
+            base_metadata = json.load(f)
+
+        class PreviousProposal(MergeProposal):
+
+            def __init__(self, metadata):
+                self.metadata = metadata
+
+            def get_description(self):
+                return self.metadata.get('description')
+
+            def get_commit_message(self):
+                return self.metadata.get('commit-message')
+
+        existing_proposal = PreviousProposal(base_metadata['merge-proposal'])
+
+    mutator_metadata = {}
+    try:
+        result = changer.make_changes(
+            wt, subpath, update_changelog=update_changelog,
+            committer=os.environ.get('COMMITTER'),
+            base_proposal=existing_proposal)
+    except ChangerFailure as e:
+        result_json = {
+            'result-code': e.code,
+            'description': e.description,
+        }
+    else:
+        result_json = {
+            'result-code': None,
+            'description': result.description,
+            'suggested-branch-name': changer.suggest_branch_name(),
+            'tags': result.tags,
+            'auxiliary-branches': result.auxiliary_branches,
+            'value': result.value,
+            'mutator': mutator_metadata,
+            'merge-proposal': {
+                'sufficient': changer.sufficient_for_proposal,
+                'commit-message': result.proposed_commit_message,
+                'title': result.title,
+                'labels': result.labels,
+                'description-plain': changer.get_proposal_description(
+                    result.mutator, 'plain', existing_proposal),
+                'description-markdown': changer.get_proposal_description(
+                    result.mutator, 'markdown', existing_proposal),
+            }
+        }
+    json.dump(result_json, sys.stdout, indent=4)
+    return 0

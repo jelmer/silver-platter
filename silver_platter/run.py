@@ -30,12 +30,7 @@ from breezy import errors
 from breezy.commit import PointlessCommit
 from breezy.trace import note, warning, show_error
 from breezy.workingtree import WorkingTree
-try:
-    from breezy import propose as _mod_propose
-except ImportError:
-    from breezy.plugins.propose import (
-        propose as _mod_propose,
-        )
+from breezy import propose as _mod_propose
 from .proposal import (
     UnsupportedHoster,
     enable_tag_pushing,
