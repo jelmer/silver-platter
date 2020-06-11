@@ -625,49 +625,70 @@ class NewUpstreamChanger(DebianChanger):
                 dist_command=self.dist_command)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
+                'upstream-already-imported',
                 'Last upstream version %s already imported.' % e.version, e)
         except NewUpstreamMissing as e:
-            raise ChangerError('Unable to find new upstream.', e)
+            raise ChangerError(
+                'new-upstream-missing',
+                'Unable to find new upstream.', e)
         except UpstreamAlreadyMerged as e:
             raise ChangerError(
+                'upstream-already-merged',
                 'Last upstream version %s already merged.' % e.version, e)
         except PreviousVersionTagMissing as e:
             raise ChangerError(
+                'previous-upstream-missing',
                 'Unable to find tag %s for previous upstream version %s.' % (
                     e.tag_name, e.version), e)
         except InvalidFormatUpstreamVersion as e:
             raise ChangerError(
+                'invalid-upstream-version-format',
                 '%r reported invalid format version string %s.' % (
                     e.source, e.version), e)
         except PristineTarError as e:
-            raise ChangerError('Pristine tar error: %s' % e, e)
+            raise ChangerError(
+                'pristine-tar-error', 'Pristine tar error: %s' % e, e)
         except UpstreamBranchUnavailable as e:
             raise ChangerError(
+                'upstream-branch-unavailable',
                 'Upstream branch %s unavailable: %s. ' % (e.location, e.error),
                 e)
         except UpstreamBranchUnknown as e:
             raise ChangerError(
+                'upstream-branch-unknown',
                 'Upstream branch location unknown. '
                 'Set \'Repository\' field in debian/upstream/metadata?', e)
         except UpstreamMergeConflicted as e:
-            raise ChangerError('Merging upstream resulted in conflicts.', e)
+            raise ChangerError(
+                'upstream-merged-conflicts',
+                'Merging upstream resulted in conflicts.', e)
         except PackageIsNative as e:
             raise ChangerError(
+                'native-package',
                 'Package %s is native; unable to merge new upstream.' % (
                     e.package, ), e)
         except InconsistentSourceFormatError as e:
-            raise ChangerError('Inconsistencies in type of package: %s' % e,
-                               e)
+            raise ChangerError(
+                'inconsistent-source-format',
+                'Inconsistencies in type of package: %s' % e, e)
         except UScanError as e:
-            raise ChangerError('UScan failed: %s' % e, e)
+            raise ChangerError(
+                'uscan-error',
+                'UScan failed: %s' % e, e)
         except UpstreamMetadataSyntaxError as e:
-            raise ChangerError('Unable to parse %s' % e.path, e)
+            raise ChangerError(
+                'upstream-metadata-syntax-error',
+                'Unable to parse %s' % e.path, e)
         except MissingChangelogError as e:
-            raise ChangerError('Missing changelog %s' % e, e)
+            raise ChangerError(
+                'missing-changelog', 'Missing changelog %s' % e, e)
         except DistCommandFailed as e:
-            raise ChangerError('Dist command failed: %s' % e, e)
+            raise ChangerError(
+                'dist-command-failed', 'Dist command failed: %s' % e, e)
         except MissingUpstreamTarball as e:
-            raise ChangerError('Missing upstream tarball: %s' % e, e)
+            raise ChangerError(
+                'missing-upstream-tarball',
+                'Missing upstream tarball: %s' % e, e)
         else:
             note('Merged new upstream version %s (previous: %s)',
                  merge_upstream_result.new_upstream_version,
@@ -690,6 +711,7 @@ class NewUpstreamChanger(DebianChanger):
                     new_version=merge_upstream_result.new_upstream_version)
             except QuiltError as e:
                 raise ChangerError(
+                    'quilt-refresh-error',
                     'Quilt error while refreshing patches: %s', e)
 
         tags = set()

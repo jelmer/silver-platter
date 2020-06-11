@@ -125,16 +125,11 @@ def iter_packages(packages: Iterable[str], branch_name: str,
 
 class ChangerError(Exception):
 
-    def __init__(self, summary: str, original: Optional[Exception]):
+    def __init__(self, category: str, summary: str,
+                 original: Optional[Exception] = None):
+        self.category = category
         self.summary = summary
         self.original = original
-
-
-class ChangerFailure(Exception):
-
-    def __init__(self, code, description):
-        self.code = code
-        self.description = description
 
 
 class ChangerResult(object):
@@ -508,10 +503,10 @@ def run_mutator(changer_cls, argv=None):
             wt, subpath, update_changelog=update_changelog,
             committer=os.environ.get('COMMITTER'),
             base_proposal=existing_proposal)
-    except ChangerFailure as e:
+    except ChangerError as e:
         result_json = {
-            'result-code': e.code,
-            'description': e.description,
+            'result-code': e.category,
+            'description': e.summary,
         }
     else:
         result_json = {
