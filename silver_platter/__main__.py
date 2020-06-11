@@ -55,12 +55,13 @@ def login_main(args: argparse.Namespace) -> Optional[int]:
     if hoster is None:
         hoster = 'gitlab'
 
-    from breezy.plugins.propose.cmds import cmd_github_login, cmd_gitlab_login
     if hoster == 'gitlab':
+        from breezy.plugins.gitlab.cmds import cmd_gitlab_login
         cmd = cmd_gitlab_login()
         cmd._setup_outf()
         return cmd.run(args.url)
     elif hoster == 'github':
+        from breezy.plugins.github.cmds import cmd_github_login
         cmd = cmd_github_login()
         cmd._setup_outf()
         return cmd.run()

@@ -37,10 +37,7 @@ from breezy.revision import NULL_REVISION
 from breezy.transport import Transport, get_transport
 from breezy.workingtree import WorkingTree
 
-try:
-    from breezy.transport import UnusableRedirect
-except ImportError:
-    UnusableRedirect = None
+from breezy.transport import UnusableRedirect
 
 
 def create_temp_sprout(

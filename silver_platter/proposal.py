@@ -50,12 +50,10 @@ from breezy.propose import (
     HosterLoginRequired,
     )
 
-try:
-    import breezy.plugins.gitlab  # noqa: F401
-    import breezy.plugins.github  # noqa: F401
-    import breezy.plugins.launchpad  # noqa: F401
-except ImportError:  # breezy < 3.1.0
-    import breezy.plugins.propose  # noqa: F401
+import breezy.plugins.gitlab  # noqa: F401
+import breezy.plugins.github  # noqa: F401
+import breezy.plugins.launchpad  # noqa: F401
+
 
 from .utils import (
     create_temp_sprout,
