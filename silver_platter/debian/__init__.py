@@ -54,6 +54,7 @@ from ..utils import (
 
 
 __all__ = [
+    'add_changelog_entry',
     'changelog_add_line',
     'get_source_package',
     'guess_update_changelog',
