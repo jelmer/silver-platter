@@ -25,6 +25,7 @@ from breezy import (
     config as _mod_config,
     errors,
     osutils,
+    urlutils,
     )
 from breezy.branch import (
     Branch,
@@ -36,10 +37,7 @@ from breezy.revision import NULL_REVISION
 from breezy.transport import Transport, get_transport
 from breezy.workingtree import WorkingTree
 
-try:
-    from breezy.transport import UnusableRedirect
-except ImportError:
-    UnusableRedirect = None
+from breezy.transport import UnusableRedirect
 
 
 def create_temp_sprout(
@@ -223,6 +221,12 @@ def open_branch(url: str,
                 probers: Optional[List[Prober]] = None,
                 name: str = None) -> Branch:
     """Open a branch by URL."""
+    url, params = urlutils.split_segment_parameters(url)
+    if name is None:
+        try:
+            name = urlutils.unquote(params['branch'])
+        except KeyError:
+            name = None
     try:
         transport = get_transport(
             url, possible_transports=possible_transports)

@@ -28,10 +28,7 @@ from breezy.trace import show_error
 
 
 def hosters_main(args: argparse.Namespace) -> Optional[int]:
-    try:
-        from breezy.propose import hosters
-    except ImportError:
-        from breezy.plugins.propose.propose import hosters
+    from breezy.propose import hosters
 
     for name, hoster_cls in hosters.items():
         for instance in hoster_cls.iter_instances():
@@ -58,12 +55,13 @@ def login_main(args: argparse.Namespace) -> Optional[int]:
     if hoster is None:
         hoster = 'gitlab'
 
-    from breezy.plugins.propose.cmds import cmd_github_login, cmd_gitlab_login
     if hoster == 'gitlab':
+        from breezy.plugins.gitlab.cmds import cmd_gitlab_login
         cmd = cmd_gitlab_login()
         cmd._setup_outf()
         return cmd.run(args.url)
     elif hoster == 'github':
+        from breezy.plugins.github.cmds import cmd_github_login
         cmd = cmd_github_login()
         cmd._setup_outf()
         return cmd.run()

@@ -23,7 +23,9 @@ from . import (
     )
 from .changer import (
     run_changer,
+    run_mutator,
     DebianChanger,
+    ChangerResult,
     )
 from ..proposal import push_changes
 from breezy import osutils
@@ -40,6 +42,10 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
     from breezy.plugins.propose.gitlabs import GitLab
     salsa = GitLab.probe_from_url('https://salsa.debian.org/')
     # TODO(jelmer): Fork if the old branch was hosted on salsa
+    if dry_run:
+        note('Creating and pushing to salsa project %s/%s',
+             user, name)
+        return
     salsa.create_project('%s/%s' % (user, name))
     target_branch = Branch.open(
         'git+ssh://git@salsa.debian.org/%s/%s.git' % (user, name))
@@ -95,7 +101,8 @@ class OrphanChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         def set_maintainer(source):
             source['Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
             try:
@@ -139,17 +146,16 @@ class OrphanChanger(DebianChanger):
                 local_tree, self.salsa_user, result.package_name,
                 dry_run=self.dry_run)
             result.pushed = True
-        return result
+        return ChangerResult(
+            description='Move package to QA team.',
+            mutator=result,
+            sufficient_for_proposal=True,
+            proposed_commit_message=(
+                'Set the package maintainer to the QA team.'))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return 'Set the package maintainer to the QA team.'
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Set the package maintainer to the QA team.'
-
-    def allow_create_proposal(self, applied):
-        return True
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
@@ -164,9 +170,6 @@ class OrphanChanger(DebianChanger):
                     result.package_name, result.salsa_user, result.old_vcs_url,
                     result.new_vcs_url):
                 note('%s', line)
-
-    def tags(self, result):
-        return []
 
 
 def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
@@ -199,8 +202,5 @@ def setup_parser(parser):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='orphan')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(OrphanChanger))

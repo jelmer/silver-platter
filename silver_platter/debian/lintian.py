@@ -30,7 +30,9 @@ from lintian_brush.config import Config
 from .changer import (
     run_changer,
     DebianChanger,
+    ChangerResult,
     setup_multi_parser as setup_changer_parser,
+    run_mutator,
     )
 
 __all__ = [
@@ -228,7 +230,8 @@ class LintianBrushChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(self, local_tree, subpath, update_changelog, committer,
+                     base_proposal=None):
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 
@@ -253,7 +256,7 @@ class LintianBrushChanger(DebianChanger):
         if minimum_certainty is None:
             minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
 
-        applied, failed = run_lintian_fixers(
+        overall_result = run_lintian_fixers(
                 local_tree, self.fixers,
                 committer=committer,
                 update_changelog=update_changelog,
@@ -262,26 +265,33 @@ class LintianBrushChanger(DebianChanger):
                 minimum_certainty=minimum_certainty,
                 subpath=subpath)
 
-        if failed:
-            note('some fixers failed to run: %r', set(failed))
+        if overall_result.failed_fixers:
+            note('some fixers failed to run: %r',
+                 set(overall_result.failed_fixers))
 
-        return applied
+        tags = set()
+        for result, summary in overall_result.success:
+            tags.update(result.fixed_lintian_tags)
+
+        if not has_nontrivial_changes(
+                overall_result.success, self.propose_addon_only):
+            note('only add-on fixers found')
+            sufficient_for_proposal = False
+        else:
+            sufficient_for_proposal = True
+
+        return ChangerResult(
+            description='Applied fixes for %r' % tags,
+            mutator=overall_result.success,
+            value=calculate_value(tags),
+            sufficient_for_proposal=sufficient_for_proposal,
+            proposed_commit_message=update_proposal_commit_message(
+                base_proposal, overall_result.success))
 
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         return update_proposal_description(
             description_format, existing_proposal, applied)
-
-    def get_commit_message(self, applied, existing_proposal):
-        return update_proposal_commit_message(
-            existing_proposal, applied)
-
-    def allow_create_proposal(self, applied):
-        if not has_nontrivial_changes(applied, self.propose_addon_only):
-            note('only add-on fixers found')
-            return False
-        else:
-            return True
 
     def describe(self, applied, publish_result):
         tags = set()
@@ -294,15 +304,6 @@ class LintianBrushChanger(DebianChanger):
                  publish_result.proposal.url, tags)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-    def tags(self, applied):
-        return []
-
-    def value(self, applied):
-        tags = set()
-        for brush_result, unused_summary in applied:
-            tags.update(brush_result.fixed_lintian_tags)
-        return calculate_value(tags)
 
 
 def setup_parser(parser):
@@ -321,8 +322,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='propose-lintian-fixes')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    import sys
+    sys.exit(run_mutator(LintianBrushChanger))

@@ -40,28 +40,20 @@ from breezy import (
     errors,
     merge as _mod_merge,
     )
-try:
-    from breezy.propose import (
-        get_hoster,
-        hosters,
-        Hoster,
-        MergeProposal,
-        NoSuchProject,
-        UnsupportedHoster,
-        HosterLoginRequired,
-        )
-except ImportError:
-    from breezy.plugins.propose.propose import (
-        get_hoster,
-        hosters,
-        Hoster,
-        MergeProposal,
-        NoSuchProject,
-        UnsupportedHoster,
-        HosterLoginRequired,
-        )
+from breezy.propose import (
+    get_hoster,
+    hosters,
+    Hoster,
+    MergeProposal,
+    NoSuchProject,
+    UnsupportedHoster,
+    HosterLoginRequired,
+    )
 
-import breezy.plugins.propose  # noqa: F401
+import breezy.plugins.gitlab  # noqa: F401
+import breezy.plugins.github  # noqa: F401
+import breezy.plugins.launchpad  # noqa: F401
+
 
 from .utils import (
     create_temp_sprout,
@@ -87,6 +79,10 @@ SUPPORTED_MODES: List[str] = [
     'propose',
     'push-derived',
     ]
+
+
+class MergeProposalDescriptionMissing(Exception):
+    """No description specified for merge proposal."""
 
 
 def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
@@ -149,10 +145,7 @@ class DryRunProposal(MergeProposal):
                       source_branch: Optional[Branch] = None) -> MergeProposal:
         if source_branch is None:
             source_branch = open_branch(mp.get_source_branch_url())
-        commit_message = None
-        if getattr(mp, 'get_commit_message', None):
-            # brz >= 3.1 only
-            commit_message = mp.get_commit_message()
+        commit_message = mp.get_commit_message()
         return cls(
             source_branch=source_branch,
             target_branch=open_branch(mp.get_target_branch_url()),
@@ -380,7 +373,7 @@ class Workspace(object):
 
     def push_derived(self,
                      name: str, hoster: Optional[Hoster] = None,
-                     overwrite_existing: bool = False,
+                     overwrite_existing: Optional[bool] = False,
                      tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
         """Push a derived branch.
 
@@ -440,14 +433,14 @@ class PublishResult(object):
 def publish_changes(
         ws: Workspace, mode: str, name: str,
         get_proposal_description: Callable[
-            [str, Optional[MergeProposal]], str],
+            [str, Optional[MergeProposal]], Optional[str]],
         get_proposal_commit_message: Callable[
-            [Optional[MergeProposal]], str] = None,
+            [Optional[MergeProposal]], Optional[str]] = None,
         dry_run: bool = False,
         hoster: Optional[Hoster] = None,
         allow_create_proposal: bool = True,
         labels: Optional[List[str]] = None,
-        overwrite_existing: bool = True,
+        overwrite_existing: Optional[bool] = True,
         existing_proposal: Optional[MergeProposal] = None,
         reviewers: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
@@ -519,6 +512,8 @@ def publish_changes(
     if get_proposal_commit_message is not None:
         commit_message = get_proposal_commit_message(
             existing_proposal if ws.resume_branch else None)
+    if not mp_description:
+        raise MergeProposalDescriptionMissing()
     (proposal, is_new) = ws.propose(
         name, mp_description, hoster=hoster,
         existing_proposal=existing_proposal,
@@ -656,26 +651,19 @@ def propose_changes(
         # causes Launchpad to send emails.
         if resume_proposal.get_description() != mp_description:
             resume_proposal.set_description(mp_description)
-        if getattr(resume_proposal, 'get_commit_message', None):
-            # brz >= 3.1 only
-            if resume_proposal.get_commit_message() != commit_message:
-                try:
-                    resume_proposal.set_commit_message(commit_message)
-                except UnsupportedOperation:
-                    pass
+        if resume_proposal.get_commit_message() != commit_message:
+            try:
+                resume_proposal.set_commit_message(commit_message)
+            except UnsupportedOperation:
+                pass
         return (resume_proposal, False)
     else:
         if not dry_run:
             proposal_builder = hoster.get_proposer(
                     remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
-            if getattr(
-                    hoster, 'supports_merge_proposal_commit_message', False):
-                # brz >= 3.1 only
-                kwargs['commit_message'] = commit_message
-            if getattr(
-                    hoster, 'supports_allow_collaboration', False):
-                kwargs['allow_collaboration'] = allow_collaboration
+            kwargs['commit_message'] = commit_message
+            kwargs['allow_collaboration'] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
@@ -714,7 +702,7 @@ def merge_directive_changes(
 
 def push_derived_changes(
         local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
-        overwrite_existing: bool = False,
+        overwrite_existing: Optional[bool] = False,
         tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
@@ -738,7 +726,12 @@ def iter_all_mps(statuses: Optional[List[str]] = None
 
 
 def iter_conflicted(branch_name: str) -> Iterator[
-                  Tuple[str, Branch, Branch, Hoster, MergeProposal, bool]]:
+              Tuple[str, Branch, str, Branch, Hoster, MergeProposal, bool]]:
+    """Find conflicted branches owned by the current user.
+
+    Args:
+      branch_name: Branch name to search for
+    """
     possible_transports: List[Transport] = []
     for hoster, mp, status in iter_all_mps(['open']):
         try:
@@ -757,5 +750,7 @@ def iter_conflicted(branch_name: str) -> Iterator[
             not resume_branch.name and
                 resume_branch.user_url.endswith(branch_name)):
             continue
-        yield (resume_branch.user_url, main_branch, resume_branch, hoster, mp,
-               True)
+        # TODO(jelmer): Find out somehow whether we need to modify a subpath?
+        subpath = ''
+        yield (resume_branch.user_url, main_branch, subpath, resume_branch,
+               hoster, mp, True)
