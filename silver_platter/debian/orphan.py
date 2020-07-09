@@ -31,7 +31,7 @@ from ..proposal import push_changes
 from breezy import osutils
 from breezy.trace import note
 
-from lintian_brush.control import update_control
+from debmutate.control import ControlEditor
 
 
 BRANCH_NAME = 'orphan'
@@ -103,33 +103,31 @@ class OrphanChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
-        def set_maintainer(source):
-            source['Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
+        with ControlEditor(
+                path=local_tree.abspath(
+                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
+            editor.source[
+                'Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
             try:
-                del source['Uploaders']
+                del editor.source['Uploaders']
             except KeyError:
                 pass
-        update_control(
-            path=local_tree.abspath(
-                osutils.pathjoin(subpath, 'debian/control')),
-            source_package_cb=set_maintainer)
 
         result = OrphanResult()
 
-        def set_vcs(source):
-            result.package_name = source['Source']
-            result.old_vcs_url = source.get('Vcs-Git')
-            source['Vcs-Git'] = 'https://salsa.debian.org/%s/%s.git' % (
-                self.salsa_user, result.package_name)
-            result.new_vcs_url = source['Vcs-Git']
-            source['Vcs-Browser'] = 'https://salsa.debian.org/%s/%s' % (
-                self.salsa_user, result.package_name)
-            result.salsa_user = self.salsa_user
         if self.update_vcs:
-            update_control(
-                path=local_tree.abspath(
-                    osutils.pathjoin(subpath, 'debian/control')),
-                source_package_cb=set_vcs)
+            with ControlEditor(path=local_tree.abspath(
+                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
+                result.package_name = editor.source['Source']
+                result.old_vcs_url = editor.source.get('Vcs-Git')
+                editor.source['Vcs-Git'] = (
+                    'https://salsa.debian.org/%s/%s.git' % (
+                        self.salsa_user, result.package_name))
+                result.new_vcs_url = editor.source['Vcs-Git']
+                editor.source['Vcs-Browser'] = (
+                    'https://salsa.debian.org/%s/%s' % (
+                        self.salsa_user, result.package_name))
+                result.salsa_user = self.salsa_user
             if result.old_vcs_url == result.new_vcs_url:
                 result.old_vcs_url = result.new_vcs_url = None
         if update_changelog in (True, None):
