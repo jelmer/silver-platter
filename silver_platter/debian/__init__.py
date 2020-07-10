@@ -16,9 +16,10 @@
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import os
-import re
 import subprocess
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Dict, List
+
+from debmutate.vcs import split_vcs_url
 
 from breezy import urlutils
 from breezy.branch import Branch
@@ -128,23 +129,6 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
         raise ValueError('unknown vcs %s' % vcs_type)
     except InvalidURL as e:
         raise ValueError('invalid URL: %s' % e)
-
-
-def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
-    subpath: Optional[str]
-    m = re.search(r' \[([^] ]+)\]', url)
-    if m:
-        url = url[:m.start()] + url[m.end():]
-        subpath = m.group(1)
-    else:
-        subpath = None
-    branch: Optional[str]
-    try:
-        (repo_url, branch) = url.split(' -b ', 1)
-    except ValueError:
-        branch = None
-        repo_url = url
-    return (repo_url, branch, subpath)
 
 
 def open_packaging_branch(location, possible_transports=None, vcs_type=None):
