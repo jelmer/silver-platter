@@ -15,6 +15,7 @@
 
 from debian.deb822 import Deb822
 from debian.changelog import Version
+from debmutate.vcs import split_vcs_url
 import os
 import subprocess
 from typing import Optional, Dict, List
