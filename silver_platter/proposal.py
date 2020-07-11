@@ -721,8 +721,11 @@ def iter_all_mps(statuses: Optional[List[str]] = None
     for name, hoster_cls in hosters.items():
         for instance in hoster_cls.iter_instances():
             for status in statuses:
-                for mp in instance.iter_my_proposals(status=status):
-                    yield instance, mp, status
+                try:
+                    for mp in instance.iter_my_proposals(status=status):
+                        yield instance, mp, status
+                except HosterLoginRequired:
+                    pass
 
 
 def iter_conflicted(branch_name: str) -> Iterator[
