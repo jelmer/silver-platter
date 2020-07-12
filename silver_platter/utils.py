@@ -32,6 +32,7 @@ from breezy.branch import (
     BranchWriteLockResult,
     )
 from breezy.controldir import ControlDir, Prober
+from breezy.git.remote import RemoteGitError
 from breezy.lock import _RelockDebugMixin, LogicalLockResult
 from breezy.revision import NULL_REVISION
 from breezy.transport import Transport, get_transport
@@ -213,6 +214,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.UnknownFormatError):
         return BranchUnsupported(url, str(e))
+    if isinstance(e, RemoteGitError):
+        return BranchUnavailable(url, str(e))
     return None
 
 
