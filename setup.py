@@ -57,8 +57,15 @@ setup(
     install_requires=[
         'breezy>=3.1',
         'dulwich',
-        'testtools',
-        'lintian-brush>=0.50',
-        'pyyaml',  # For reading debian/upstream/metadata
     ],
+    extras_require={
+        'debian': [
+            'pyyaml',  # For reading debian/upstream/metadata
+            'debmutate',
+            'lintian-brush>=0.50',
+            'debmutate',
+            'debian',
+        ],
+    },
+    tests_require=['testtools'],
 )
