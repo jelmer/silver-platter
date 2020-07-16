@@ -61,9 +61,8 @@ setup(
     extras_require={
         'debian': [
             'pyyaml',  # For reading debian/upstream/metadata
-            'debmutate',
+            'debmutate>=0.3',
             'lintian-brush>=0.50',
-            'debmutate',
             'debian',
         ],
     },
