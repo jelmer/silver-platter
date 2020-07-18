@@ -25,6 +25,7 @@ import os
 import re
 import ssl
 import tempfile
+from typing import List, Optional, Callable
 
 from ..utils import (
     open_branch,
@@ -100,7 +101,9 @@ from breezy.plugins.debian.upstream import (
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
     DistCommandFailed,
+    run_dist_command,
     )
+from breezy.tree import Tree
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
 from lintian_brush.upstream_metadata import (
@@ -199,8 +202,9 @@ ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
 
 
-def refresh_quilt_patches(local_tree, old_version, new_version,
-                          committer=None, subpath=''):
+def refresh_quilt_patches(
+        local_tree: Tree, old_version: Version, new_version: Version,
+        committer: Optional[str] = None, subpath: str = '') -> None:
     # TODO(jelmer):
     # Find patch base branch.
     #   If it exists, rebase it onto the new upstream.
@@ -269,16 +273,21 @@ class MergeUpstreamResult(object):
         return (self.old_upstream_version, self.new_upstream_version)
 
 
-def merge_upstream(tree, snapshot=False, location=None,
-                   new_upstream_version=None, force=False,
-                   distribution_name=DEFAULT_DISTRIBUTION,
-                   allow_ignore_upstream_branch=True,
-                   trust_package=False, committer=None,
-                   update_changelog=True, subpath='', dist_command=None):
+def merge_upstream(tree: Tree, snapshot: bool = False,
+                   location: Optional[str] = None,
+                   new_upstream_version: Optional[str] = None,
+                   force: bool = False,
+                   distribution_name: str = DEFAULT_DISTRIBUTION,
+                   allow_ignore_upstream_branch: bool = True,
+                   trust_package: bool = False,
+                   committer: Optional[str] = None,
+                   update_changelog: bool = True,
+                   subpath: str = '',
+                   create_dist: Optional[Callable[
+                       [Tree, str, Version, str],
+                       bool]] = None) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
-    Args:
-      dist_command: Command to run to create upstream tarball from source tree
     Raises:
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
@@ -355,7 +364,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         try:
             upstream_branch_source = UpstreamBranchSource.from_branch(
                 upstream_branch, config=config, local_dir=tree.controldir,
-                dist_command=dist_command)
+                create_dist=create_dist)
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
         except ssl.SSLError as e:
@@ -372,7 +381,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         else:
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 branch, config=config,
-                local_dir=tree.controldir, dist_command=dist_command)
+                local_dir=tree.controldir, create_dist=create_dist)
     else:
         if snapshot:
             if upstream_branch_source is None:
@@ -510,7 +519,7 @@ def merge_upstream(tree, snapshot=False, location=None,
         upstream_revisions=upstream_revisions)
 
 
-def override_dh_autoreconf_add_arguments(basedir, args):
+def override_dh_autoreconf_add_arguments(basedir: str, args):
     from lintian_brush.rules import update_rules
 
     # TODO(jelmer): Make sure dh-autoreconf is installed,
@@ -534,7 +543,9 @@ def override_dh_autoreconf_add_arguments(basedir, args):
         path=os.path.join(basedir, 'debian', 'rules'))
 
 
-def update_packaging(tree, old_tree, subpath='', committer=None):
+def update_packaging(
+        tree: Tree, old_tree: Tree, subpath: str = '',
+        committer: Optional[str] = None) -> List[str]:
     """Update packaging to take in changes between upstream trees.
 
     Args:
@@ -566,7 +577,7 @@ def update_packaging(tree, old_tree, subpath='', committer=None):
         elif path.startswith('LICENSE') or path.startswith('COPYING'):
             notes.append(
                 'License file %s has changed.' % os.path.join(subpath, path))
-        return notes
+    return notes
 
 
 class NewUpstreamChanger(DebianChanger):
@@ -616,13 +627,21 @@ class NewUpstreamChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
+
+        if self.dist_command:
+            def create_dist(tree, package, version, target_filename):
+                run_dist_command(
+                    tree, package, version, target_filename, self.dist_command)
+        else:
+            create_dist = None
+
         try:
             merge_upstream_result = merge_upstream(
                 tree=local_tree, snapshot=self.snapshot,
                 trust_package=self.trust_package,
                 update_changelog=update_changelog,
                 subpath=subpath, committer=committer,
-                dist_command=self.dist_command)
+                create_dist=create_dist)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
                 'upstream-already-imported',
