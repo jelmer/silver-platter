@@ -44,6 +44,15 @@ from .changer import (
     DebianChanger,
     ChangerResult,
     )
+from .import_upstream import (
+    get_upstream_branch_location,
+    InvalidFormatUpstreamVersion,
+    UpstreamBranchUnknown,
+    NewUpstreamMissing,
+    UpstreamBranchUnavailable,
+    UpstreamVersionMissingInUpstreamBranch,
+    PackageIsNative,
+    )
 from breezy.commit import (
     PointlessCommit,
     )
@@ -134,18 +143,6 @@ __all__ = [
 ]
 
 
-class NewUpstreamMissing(Exception):
-    """Unable to find upstream version to merge."""
-
-
-class UpstreamBranchUnavailable(Exception):
-    """Snapshot merging was requested by upstream branch is unavailable."""
-
-    def __init__(self, location, error):
-        self.location = location
-        self.error = error
-
-
 class UpstreamMergeConflicted(Exception):
     """The upstream merge resulted in conflicts."""
 
@@ -159,34 +156,6 @@ class UpstreamAlreadyMerged(Exception):
 
     def __init__(self, upstream_version):
         self.version = upstream_version
-
-
-class UpstreamVersionMissingInUpstreamBranch(Exception):
-    """The upstream version is missing in the upstream branch."""
-
-    def __init__(self, upstream_branch, upstream_version):
-        self.branch = upstream_branch
-        self.version = upstream_version
-
-
-class UpstreamBranchUnknown(Exception):
-    """The location of the upstream branch is unknown."""
-
-
-class PackageIsNative(Exception):
-    """Unable to merge upstream version."""
-
-    def __init__(self, package, version):
-        self.package = package
-        self.version = version
-
-
-class InvalidFormatUpstreamVersion(Exception):
-    """Invalid format upstream version string."""
-
-    def __init__(self, version, source):
-        self.version = version
-        self.source = source
 
 
 class QuiltPatchPushFailure(Exception):
@@ -327,24 +296,9 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
     if build_type == BUILD_TYPE_NATIVE:
         raise PackageIsNative(changelog.package, changelog.version)
 
-    if config.upstream_branch is not None:
-        note("Using upstream branch %s (from configuration)",
-             config.upstream_branch)
-        # TODO(jelmer): Make brz-debian sanitize the URL?
-        upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
-        upstream_branch_browse = getattr(
-            config, 'upstream_branch_browse', None)
-    else:
-        guessed_upstream_metadata = guess_upstream_metadata(
-            tree.abspath(subpath), trust_package=trust_package,
-            net_access=True, consult_external_directory=False)
-        upstream_branch_location = guessed_upstream_metadata.get(
-            'Repository')
-        upstream_branch_browse = guessed_upstream_metadata.get(
-            'Repository-Browse')
-        if upstream_branch_location:
-            note("Using upstream branch %s (guessed)",
-                 upstream_branch_location)
+    upstream_branch_location, upstream_branch_browse = (
+        get_upstream_branch_location(
+            tree, subpath, config, trust_package=trust_package))
 
     if upstream_branch_location:
         try:
@@ -507,7 +461,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         tree.commit(
             committer=committer,
             message='Merge new upstream release %s.' % new_upstream_version,
-            specific_files=[subpath])
+            specific_files=[subpath] if len(tree.get_parent_ids()) <= 1 else None)
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,
@@ -580,7 +534,7 @@ def update_packaging(
     return notes
 
 
-class NewUpstreamChanger(DebianChanger):
+class MergeNewUpstreamChanger(DebianChanger):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
                  update_packaging, dist_command):
@@ -763,16 +717,16 @@ class NewUpstreamChanger(DebianChanger):
 
 def main(args: argparse.Namespace):
     from .changer import run_changer
-    changer = NewUpstreamChanger.from_args(args)
+    changer = MergeNewUpstreamChanger.from_args(args)
     return run_changer(changer, args)
 
 
 def setup_parser(parser: argparse.ArgumentParser):
     from .changer import setup_multi_parser
     setup_multi_parser(parser)
-    NewUpstreamChanger.setup_parser(parser)
+    MergeNewUpstreamChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':
     import sys
-    sys.exit(run_mutator(NewUpstreamChanger))
+    sys.exit(run_mutator(MergeNewUpstreamChanger))
