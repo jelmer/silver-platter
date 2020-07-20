@@ -25,7 +25,7 @@ from breezy import osutils
 from breezy.trace import note
 
 from . import add_changelog_entry
-from lintian_brush.control import ControlUpdater
+from debmutate.control import ControlEditor
 
 
 BRANCH_NAME = 'rules-requires-root'
@@ -55,7 +55,7 @@ class RulesRequiresRootChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
-        with ControlUpdater.from_tree(local_tree, subpath) as updater:
+        with ControlEditor.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])
         if update_changelog in (True, None):
