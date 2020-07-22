@@ -44,15 +44,6 @@ from .changer import (
     DebianChanger,
     ChangerResult,
     )
-from .import_upstream import (
-    get_upstream_branch_location,
-    InvalidFormatUpstreamVersion,
-    UpstreamBranchUnknown,
-    NewUpstreamMissing,
-    UpstreamBranchUnavailable,
-    UpstreamVersionMissingInUpstreamBranch,
-    PackageIsNative,
-    )
 from breezy.commit import (
     PointlessCommit,
     )
@@ -165,10 +156,79 @@ class QuiltPatchPushFailure(Exception):
         self.actual_error = actual_error
 
 
+class InvalidFormatUpstreamVersion(Exception):
+    """Invalid format upstream version string."""
+
+    def __init__(self, version, source):
+        self.version = version
+        self.source = source
+
+
+class UpstreamBranchUnknown(Exception):
+    """The location of the upstream branch is unknown."""
+
+
+class NewUpstreamMissing(Exception):
+    """Unable to find upstream version to merge."""
+
+
+class UpstreamBranchUnavailable(Exception):
+    """Snapshot merging was requested by upstream branch is unavailable."""
+
+    def __init__(self, location, error):
+        self.location = location
+        self.error = error
+
+
+class UpstreamVersionMissingInUpstreamBranch(Exception):
+    """The upstream version is missing in the upstream branch."""
+
+    def __init__(self, upstream_branch, upstream_version):
+        self.branch = upstream_branch
+        self.version = upstream_version
+
+
+class PackageIsNative(Exception):
+    """Unable to merge upstream version."""
+
+    def __init__(self, package, version):
+        self.package = package
+        self.version = version
+
+
+class UpstreamNotBundled(Exception):
+    """Packaging branch does not carry upstream sources."""
+
+    def __init__(self, package):
+        self.package = package
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
+
+
+def get_upstream_branch_location(tree, subpath, config, trust_package=False):
+    if config.upstream_branch is not None:
+        note("Using upstream branch %s (from configuration)",
+             config.upstream_branch)
+        # TODO(jelmer): Make brz-debian sanitize the URL?
+        upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
+        upstream_branch_browse = getattr(
+            config, 'upstream_branch_browse', None)
+    else:
+        guessed_upstream_metadata = guess_upstream_metadata(
+            tree.abspath(subpath), trust_package=trust_package,
+            net_access=True, consult_external_directory=False)
+        upstream_branch_location = guessed_upstream_metadata.get(
+            'Repository')
+        upstream_branch_browse = guessed_upstream_metadata.get(
+            'Repository-Browse')
+        if upstream_branch_location:
+            note("Using upstream branch %s (guessed)",
+                 upstream_branch_location)
+    return (upstream_branch_location, upstream_branch_browse)
 
 
 def refresh_quilt_patches(
@@ -537,12 +597,13 @@ def update_packaging(
 class MergeNewUpstreamChanger(DebianChanger):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
-                 update_packaging, dist_command):
+                 update_packaging, dist_command, import_only=False):
         self.snapshot = snapshot
         self.trust_package = trust_package
         self.refresh_patches = refresh_patches
         self.update_packaging = update_packaging
         self.dist_command = dist_command
+        self.import_only = import_only
 
     @classmethod
     def setup_parser(cls, parser):
@@ -550,6 +611,9 @@ class MergeNewUpstreamChanger(DebianChanger):
             '--trust-package', action='store_true',
             default=False,
             help=argparse.SUPPRESS)
+        parser.add_argument(
+            '--import-only', action='store_true',
+            help='Only import a new version, do not merge.')
         parser.add_argument(
             '--update-packaging', action='store_true',
             default=False,
@@ -577,7 +641,8 @@ class MergeNewUpstreamChanger(DebianChanger):
                    trust_package=args.trust_package,
                    refresh_patches=args.refresh_patches,
                    update_packaging=args.update_packaging,
-                   dist_command=args.dist_command)
+                   dist_command=args.dist_command,
+                   import_only=args.import_only)
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):

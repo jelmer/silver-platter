@@ -36,8 +36,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         rrr,
         tidy,
         uncommitted,
-        import_upstream as debian_import_upstream,
-        merge_upstream as debian_merge_upstream,
+        upstream as debian_upstream,
         uploader as debian_uploader,
         )
     from ..__main__ import subcommands as main_subcommands
@@ -46,10 +45,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
             Tuple[str, Optional[Callable[[argparse.ArgumentParser], None]],
                   Callable[[argparse.Namespace], Optional[int]]]] = [
         ('run', debian_run.setup_parser, debian_run.main),
-        ('merge-new-upstream', debian_merge_upstream.setup_parser,
-         debian_merge_upstream.main),
-        ('import-new-upstream', debian_import_upstream.setup_parser,
-         debian_import_upstream.main),
+        ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
         ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
         ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
         ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
