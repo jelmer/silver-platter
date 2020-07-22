@@ -130,7 +130,8 @@ class DryRunProposal(MergeProposal):
                  labels: Optional[List[str]] = None,
                  description: Optional[str] = None,
                  commit_message: Optional[str] = None,
-                 reviewers: Optional[List[str]] = None):
+                 reviewers: Optional[List[str]] = None,
+                 owner: Optional[str] = None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
@@ -139,6 +140,7 @@ class DryRunProposal(MergeProposal):
         self.commit_message = commit_message
         self.url = None
         self.reviewers = reviewers
+        self.owner = owner
 
     @classmethod
     def from_existing(cls, mp: MergeProposal,
@@ -218,7 +220,8 @@ def push_result(
 
 
 def find_existing_proposed(main_branch: Branch, hoster: Hoster, name: str,
-                           overwrite_unrelated: bool = False
+                           overwrite_unrelated: bool = False,
+                           owner: Optional[str] = None
                            ) -> Tuple[
         Optional[Branch], Optional[bool], Optional[MergeProposal]]:
     """Find an existing derived branch with the specified name, and proposal.
@@ -235,7 +238,8 @@ def find_existing_proposed(main_branch: Branch, hoster: Hoster, name: str,
       means there is an existing branch in place that should be overwritten.
     """
     try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name)
+        existing_branch = hoster.get_derived_branch(
+            main_branch, name=name, owner=owner)
     except errors.NotBranchError:
         return (None, None, None)
     else:
@@ -358,6 +362,7 @@ class Workspace(object):
                 commit_message: Optional[str] = None,
                 reviewers: Optional[List[str]] = None,
                 tags: Optional[List[str]] = None,
+                owner: Optional[str] = None,
                 allow_collaboration: bool = False) -> MergeProposal:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
@@ -367,13 +372,14 @@ class Workspace(object):
             resume_proposal=existing_proposal,
             overwrite_existing=(overwrite_existing or False), labels=labels,
             dry_run=dry_run, commit_message=commit_message,
-            reviewers=reviewers,
+            reviewers=reviewers, owner=owner,
             additional_colocated_branches=self.additional_colocated_branches,
             tags=tags, allow_collaboration=allow_collaboration)
 
     def push_derived(self,
                      name: str, hoster: Optional[Hoster] = None,
                      overwrite_existing: Optional[bool] = False,
+                     owner: Optional[str] = None,
                      tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
         """Push a derived branch.
 
@@ -382,6 +388,7 @@ class Workspace(object):
           hoster: Optional hoster to use
           overwrite_existing: Whether to overwrite an existing branch
           tags: Tags list to push
+          owner: Owner name
         Returns:
           tuple with remote_branch and public_branch_url
         """
@@ -391,7 +398,7 @@ class Workspace(object):
             self.local_tree.branch,
             self.main_branch, hoster, name,
             overwrite_existing=overwrite_existing,
-            tags=tags)
+            owner=owner, tags=tags)
 
     def orig_tree(self) -> Tree:
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
@@ -444,6 +451,7 @@ def publish_changes(
         existing_proposal: Optional[MergeProposal] = None,
         reviewers: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
+        derived_owner: Optional[str] = None,
         allow_collaboration: bool = False) -> PublishResult:
     """Publish a set of changes.
 
@@ -461,6 +469,7 @@ def publish_changes(
       existing_proposal: Existing proposal to update
       reviewers: List of reviewers for merge proposal
       tags: Tags to push (None for default behaviour)
+      derived_owner: Name of any derived branch
       allow_collaboration: Whether to allow target branch owners to modify
         source branch.
     """
@@ -485,7 +494,7 @@ def publish_changes(
     if mode == 'push-derived':
         (remote_branch, public_url) = ws.push_derived(
             name=name, overwrite_existing=overwrite_existing,
-            tags=tags)
+            tags=tags, owner=derived_owner)
         return PublishResult(mode)
 
     if mode in ('push', 'attempt-push'):
@@ -519,7 +528,8 @@ def publish_changes(
         existing_proposal=existing_proposal,
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
         commit_message=commit_message, reviewers=reviewers,
-        tags=tags, allow_collaboration=allow_collaboration)
+        tags=tags, allow_collaboration=allow_collaboration,
+        owner=derived_owner)
 
     return PublishResult(mode, proposal, is_new)
 
@@ -581,7 +591,7 @@ def propose_changes(
         dry_run: bool = False, commit_message: Optional[str] = None,
         additional_colocated_branches: Optional[List[str]] = None,
         allow_empty: bool = False, reviewers: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None, owner: Optional[str] = None,
         allow_collaboration: bool = False) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
 
@@ -600,6 +610,7 @@ def propose_changes(
       allow_empty: Whether to allow empty merge proposals
       reviewers: List of reviewers
       tags: Tags to push (None for default behaviour)
+      owner: Derived branch owner
       allow_collaboration: Allow target branch owners to modify source branch
     Returns:
       Tuple with (proposal, is_new)
@@ -619,7 +630,7 @@ def propose_changes(
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing,
-                **push_kwargs)
+                owner=owner, **push_kwargs)
         for colocated_branch_name in (additional_colocated_branches or []):
             try:
                 local_colo_branch = local_branch.controldir.open_branch(
@@ -659,15 +670,14 @@ def propose_changes(
         return (resume_proposal, False)
     else:
         if not dry_run:
-            proposal_builder = hoster.get_proposer(
-                    remote_branch, main_branch)
+            proposal_builder = hoster.get_proposer(remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
             kwargs['commit_message'] = commit_message
             kwargs['allow_collaboration'] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
-                    reviewers=reviewers, **kwargs)
+                    reviewers=reviewers, owners=owners, **kwargs)
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
@@ -676,7 +686,7 @@ def propose_changes(
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
                 description=mp_description, commit_message=commit_message,
-                reviewers=reviewers)
+                reviewers=reviewers, owner=owner)
         return (mp, True)
 
 
@@ -703,12 +713,14 @@ def merge_directive_changes(
 def push_derived_changes(
         local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
         overwrite_existing: Optional[bool] = False,
+        owner: Optional[str] = None,
         tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
         kwargs['tag_selector'] = tags.__contains__
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing,
+        owner=owner,
         **kwargs)
     return remote_branch, public_branch_url
 

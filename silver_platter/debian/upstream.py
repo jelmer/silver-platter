@@ -346,8 +346,9 @@ def import_upstream(
     if build_type == BUILD_TYPE_NATIVE:
         raise PackageIsNative(changelog.package, changelog.version)
 
-    upstream_branch_location, upstream_branch_browse = get_upstream_branch_location(
-        tree, subpath, config, trust_package=trust_package)
+    upstream_branch_location, upstream_branch_browse = (
+        get_upstream_branch_location(
+            tree, subpath, config, trust_package=trust_package))
 
     if upstream_branch_location:
         try:
@@ -721,7 +722,8 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         tree.commit(
             committer=committer,
             message='Merge new upstream release %s.' % new_upstream_version,
-            specific_files=[subpath] if len(tree.get_parent_ids()) <= 1 else None)
+            specific_files=(
+                [subpath] if len(tree.get_parent_ids()) <= 1 else None))
 
     return MergeUpstreamResult(
         old_upstream_version=old_upstream_version,

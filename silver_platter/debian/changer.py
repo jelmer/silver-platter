@@ -60,7 +60,8 @@ def get_package(package: str, branch_name: str,
                 overwrite_unrelated: bool = False,
                 refresh: bool = False,
                 possible_transports: Optional[List[Transport]] = None,
-                possible_hosters: Optional[List[Hoster]] = None
+                possible_hosters: Optional[List[Hoster]] = None,
+                owner: Optional[str] = None
                 ) -> Tuple[str, Branch, str, Optional[Branch],
                            Optional[Hoster], Optional[MergeProposal],
                            Optional[bool]]:
@@ -80,7 +81,7 @@ def get_package(package: str, branch_name: str,
     else:
         (resume_branch, overwrite, existing_proposal) = (
             find_existing_proposed(
-                main_branch, hoster, branch_name,
+                main_branch, hoster, branch_name, owner=owner,
                 overwrite_unrelated=overwrite_unrelated))
     if refresh:
         overwrite = True
@@ -93,7 +94,8 @@ def get_package(package: str, branch_name: str,
 
 def iter_packages(packages: Iterable[str], branch_name: str,
                   overwrite_unrelated: bool = False,
-                  refresh: bool = False):
+                  refresh: bool = False,
+                  derived_owner: Optional[str] = None):
     """Iterate over relevant branches for a set of packages.
 
     Args:
@@ -117,7 +119,7 @@ def iter_packages(packages: Iterable[str], branch_name: str,
          overwrite) = get_package(
                 pkg, branch_name, overwrite_unrelated=overwrite_unrelated,
                 refresh=refresh, possible_transports=possible_transports,
-                possible_hosters=possible_hosters)
+                possible_hosters=possible_hosters, owner=derived_owner)
 
         yield (pkg, main_branch, subpath, resume_branch, hoster,
                existing_proposal, overwrite)
@@ -219,6 +221,9 @@ def setup_parser_common(parser: argparse.ArgumentParser) -> None:
         '--name', type=str,
         help='Proposed branch name', default=None)
     parser.add_argument(
+        '--derived-owner', type=str, default=None,
+        help='Owner for derived branches.')
+    parser.add_argument(
         '--label', type=str,
         help='Label to attach', action="append", default=[])
 
@@ -273,6 +278,7 @@ def _run_single_changer(
         builder: str = DEFAULT_BUILDER, dry_run: bool = False,
         update_changelog: Optional[bool] = None,
         label: Optional[List[str]] = None,
+        derived_owner: Optional[str] = None,
         build_target_dir: Optional[str] = None) -> Optional[bool]:
     from breezy import errors
     from . import (
@@ -347,7 +353,7 @@ def _run_single_changer(
                 allow_create_proposal=changer_result.sufficient_for_proposal,
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
-                labels=label,
+                derived_owner=derived_owner, labels=label,
                 **kwargs)
         except UnsupportedHoster as e:
             show_error(
@@ -389,7 +395,8 @@ def run_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
         branch_name = changer.suggest_branch_name()
 
     package_iter = iter_packages(
-        args.packages, branch_name, args.overwrite, args.refresh)
+        args.packages, branch_name, args.overwrite, args.refresh,
+        derived_owner=args.derived_owner)
     if args.fix_conflicted:
         package_iter = itertools.chain(
             package_iter, iter_conflicted(branch_name))
@@ -405,7 +412,7 @@ def run_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
                     pre_check=args.pre_check, builder=args.builder,
                     post_check=args.post_check, dry_run=args.dry_run,
                     update_changelog=args.update_changelog,
-                    label=args.label,
+                    label=args.label, owner=args.derived_owner,
                     build_target_dir=args.build_target_dir) is False:
                 ret = 1
         except NoSuchPackage:
@@ -430,7 +437,7 @@ def run_single_changer(
         (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
          overwrite) = get_package(
                 args.package, branch_name, overwrite_unrelated=args.overwrite,
-                refresh=args.refresh)
+                refresh=args.refresh, owner=args.owner)
     except NoSuchPackage:
         note('%s: no such package', args.package)
         return 1
@@ -446,7 +453,7 @@ def run_single_changer(
             pre_check=args.pre_check, builder=args.builder,
             post_check=args.post_check, dry_run=args.dry_run,
             update_changelog=args.update_changelog,
-            label=args.label,
+            label=args.label, derived_owner=args.derived_owner,
             build_target_dir=args.build_target_dir) is False:
         return 1
     else:

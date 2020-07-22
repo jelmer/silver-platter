@@ -99,6 +99,8 @@ def derived_branch_name(script: str) -> str:
 def setup_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('url', help='URL of branch to work on.', type=str)
+    parser.add_argument('--derived-owner', type=str, default=None,
+                        help='Owner for derived branches.')
     parser.add_argument('--refresh', action="store_true",
                         help='Refresh changes if branch already exists')
     parser.add_argument('--label', type=str,
@@ -151,7 +153,8 @@ def main(args: argparse.Namespace) -> Optional[int]:
                 e, main_branch.user_url)
     else:
         (resume_branch, resume_overwrite, existing_proposal) = (
-            find_existing_proposed(main_branch, hoster, name))
+            find_existing_proposed(
+                main_branch, hoster, name, owner=args.derived_owner))
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if args.refresh:
@@ -179,6 +182,7 @@ def main(args: argparse.Namespace) -> Optional[int]:
                 get_proposal_description=get_description,
                 dry_run=args.dry_run, hoster=hoster,
                 labels=args.label, overwrite_existing=overwrite,
+                derived_owner=args.derived_owner,
                 existing_proposal=existing_proposal)
         except UnsupportedHoster as e:
             show_error('No known supported hoster for %s. Run \'svp login\'?',
