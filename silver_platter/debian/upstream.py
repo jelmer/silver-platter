@@ -69,6 +69,7 @@ from breezy.trace import note, warning
 
 from breezy.plugins.debian.merge_upstream import (
     changelog_add_new_version,
+    do_import,
     do_merge,
     get_tarballs,
     PreviousVersionTagMissing,
@@ -270,6 +271,205 @@ def refresh_quilt_patches(
             'Refresh patches.', committer=committer, allow_pointless=False)
     except PointlessCommit:
         pass
+
+
+class ImportUpstreamResult(object):
+    """Object representing the result of an import_upstream operation."""
+
+    __slots__ = [
+            'old_upstream_version',
+            'new_upstream_version',
+            'upstream_branch',
+            'upstream_branch_browse',
+            'upstream_revisions',
+            ]
+
+    def __init__(self, old_upstream_version, new_upstream_version,
+                 upstream_branch, upstream_branch_browse,
+                 upstream_revisions):
+        self.old_upstream_version = old_upstream_version
+        self.new_upstream_version = new_upstream_version
+        self.upstream_branch = upstream_branch
+        self.upstream_branch_browse = upstream_branch_browse
+        self.upstream_revisions = upstream_revisions
+
+
+def import_upstream(
+        tree: Tree, snapshot: bool = False,
+        location: Optional[str] = None,
+        new_upstream_version: Optional[str] = None,
+        force: bool = False, distribution_name: str = DEFAULT_DISTRIBUTION,
+        allow_ignore_upstream_branch: bool = True,
+        trust_package: bool = False,
+        committer: Optional[str] = None,
+        subpath: str = '',
+        create_dist: Optional[Callable[[Tree, str, Version, str], bool]] = None
+        ) -> ImportUpstreamResult:
+    """Import a new upstream version into a tree.
+
+    Raises:
+      InvalidFormatUpstreamVersion
+      PreviousVersionTagMissing
+      DistCommandFailed
+      MissingChangelogError
+      MissingUpstreamTarball
+      NewUpstreamMissing
+      UpstreamBranchUnavailable
+      UpstreamAlreadyImported
+      QuiltError
+      UpstreamVersionMissingInUpstreamBranch
+      UpstreamBranchUnknown
+      PackageIsNative
+      InconsistentSourceFormatError
+      UnparseableChangelog
+      UScanError
+      UpstreamMetadataSyntaxError
+      UpstreamNotBundled
+    Returns:
+      ImportUpstreamResult object
+    """
+    if subpath is None:
+        subpath = ''
+    config = debuild_config(tree, subpath)
+    (changelog, top_level) = find_changelog(
+        tree, subpath, merge=False, max_blocks=2)
+    old_upstream_version = changelog.version.upstream_version
+    package = changelog.package
+    contains_upstream_source = tree_contains_upstream_source(tree, subpath)
+    build_type = config.build_type
+    if build_type is None:
+        build_type = guess_build_type(
+            tree, changelog.version, subpath,
+            contains_upstream_source=contains_upstream_source)
+    if build_type == BUILD_TYPE_MERGE:
+        raise UpstreamNotBundled(changelog.package)
+    if build_type == BUILD_TYPE_NATIVE:
+        raise PackageIsNative(changelog.package, changelog.version)
+
+    upstream_branch_location, upstream_branch_browse = get_upstream_branch_location(
+        tree, subpath, config, trust_package=trust_package)
+
+    if upstream_branch_location:
+        try:
+            upstream_branch = open_branch(upstream_branch_location)
+        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
+            if not snapshot and allow_ignore_upstream_branch:
+                warning('Upstream branch %s inaccessible; ignoring. %s',
+                        upstream_branch_location, e)
+            else:
+                raise UpstreamBranchUnavailable(upstream_branch_location, e)
+            upstream_branch = None
+            upstream_branch_browse = None
+    else:
+        upstream_branch = None
+
+    if upstream_branch is not None:
+        try:
+            upstream_branch_source = UpstreamBranchSource.from_branch(
+                upstream_branch, config=config, local_dir=tree.controldir,
+                create_dist=create_dist)
+        except InvalidHttpResponse as e:
+            raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
+        except ssl.SSLError as e:
+            raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
+    else:
+        upstream_branch_source = None
+
+    if location is not None:
+        try:
+            branch = open_branch(location)
+        except (BranchUnavailable, BranchMissing, BranchUnsupported):
+            primary_upstream_source = TarfileSource(
+                location, new_upstream_version)
+        else:
+            primary_upstream_source = UpstreamBranchSource.from_branch(
+                branch, config=config,
+                local_dir=tree.controldir, create_dist=create_dist)
+    else:
+        if snapshot:
+            if upstream_branch_source is None:
+                raise UpstreamBranchUnknown()
+            primary_upstream_source = upstream_branch_source
+        else:
+            primary_upstream_source = UScanSource(tree, top_level)
+
+    if new_upstream_version is None and primary_upstream_source is not None:
+        new_upstream_version = primary_upstream_source.get_latest_version(
+            package, old_upstream_version)
+        try:
+            Version(new_upstream_version)
+        except ValueError:
+            raise InvalidFormatUpstreamVersion(
+                new_upstream_version, primary_upstream_source)
+
+    if new_upstream_version is None:
+        raise NewUpstreamMissing()
+    note("Using version string %s.", new_upstream_version)
+
+    # Look up the revision id from the version string
+    if upstream_branch_source is not None:
+        try:
+            upstream_revisions = upstream_branch_source.version_as_revisions(
+                package, new_upstream_version)
+        except PackageVersionNotPresent:
+            if upstream_branch_source is primary_upstream_source:
+                # The branch is our primary upstream source, so if it can't
+                # find the version then there's nothing we can do.
+                raise UpstreamVersionMissingInUpstreamBranch(
+                    upstream_branch, new_upstream_version)
+            elif not allow_ignore_upstream_branch:
+                raise UpstreamVersionMissingInUpstreamBranch(
+                    upstream_branch, new_upstream_version)
+            else:
+                warning(
+                    'Upstream version %s is not in upstream branch %s. '
+                    'Not merging from upstream branch. ',
+                    new_upstream_version, upstream_branch)
+                upstream_revisions = None
+                upstream_branch_source = None
+    else:
+        upstream_revisions = None
+
+    try:
+        files_excluded = get_files_excluded(tree, subpath, top_level)
+    except NoSuchFile:
+        files_excluded = None
+    with tempfile.TemporaryDirectory() as target_dir:
+        try:
+            locations = primary_upstream_source.fetch_tarballs(
+                package, new_upstream_version, target_dir,
+                components=[None])
+        except PackageVersionNotPresent:
+            if upstream_revisions is not None:
+                locations = upstream_branch_source.fetch_tarballs(
+                    package, new_upstream_version, target_dir,
+                    components=[None], revisions=upstream_revisions)
+            else:
+                raise
+        try:
+            tarball_filenames = get_tarballs(
+                ORIG_DIR, tree, package, new_upstream_version,
+                upstream_branch, upstream_revisions, locations)
+        except FileExists as e:
+            raise AssertionError(
+                "The target file %s already exists, and is either "
+                "different to the new upstream tarball, or they "
+                "are of different formats. Either delete the target "
+                "file, or use it as the argument to import."
+                % e.path)
+        do_import(
+            tree, subpath, tarball_filenames, package,
+            new_upstream_version, old_upstream_version,
+            upstream_branch, upstream_revisions, merge_type=None,
+            force=force, committer=committer,
+            files_excluded=files_excluded)
+
+    return ImportUpstreamResult(
+        old_upstream_version=old_upstream_version,
+        new_upstream_version=new_upstream_version,
+        upstream_branch=upstream_branch,
+        upstream_branch_browse=upstream_branch_browse,
+        upstream_revisions=upstream_revisions)
 
 
 class MergeUpstreamResult(object):
@@ -655,12 +855,19 @@ class MergeNewUpstreamChanger(DebianChanger):
             create_dist = None
 
         try:
-            merge_upstream_result = merge_upstream(
-                tree=local_tree, snapshot=self.snapshot,
-                trust_package=self.trust_package,
-                update_changelog=update_changelog,
-                subpath=subpath, committer=committer,
-                create_dist=create_dist)
+            if not self.import_only:
+                merge_upstream_result = merge_upstream(
+                    tree=local_tree, snapshot=self.snapshot,
+                    trust_package=self.trust_package,
+                    update_changelog=update_changelog,
+                    subpath=subpath, committer=committer,
+                    create_dist=create_dist)
+            else:
+                import_upstream_result = import_upstream(
+                    tree=local_tree, snapshot=self.snapshot,
+                    trust_package=self.trust_package,
+                    subpath=subpath, committer=committer,
+                    create_dist=create_dist)
         except UpstreamAlreadyImported as e:
             raise ChangerError(
                 'upstream-already-imported',
@@ -727,43 +934,57 @@ class MergeNewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 'missing-upstream-tarball',
                 'Missing upstream tarball: %s' % e, e)
+
+        if self.import_only:
+            note('Imported new upstream version %s (previous: %s)',
+                 import_upstream_result.new_upstream_version,
+                 import_upstream_result.old_upstream_version)
+            tags = set()
+            tags.add(
+                'upstream/%s' % import_upstream_result.new_upstream_version)
+            return ChangerResult(
+                description="Import new upstream version %s" % (
+                    import_upstream_result.new_upstream_version),
+                mutator=import_upstream_result, tags=tags,
+                sufficient_for_proposal=True)
         else:
             note('Merged new upstream version %s (previous: %s)',
                  merge_upstream_result.new_upstream_version,
                  merge_upstream_result.old_upstream_version)
 
-        if self.update_packaging:
-            old_tree = local_tree.branch.repository.revision_tree(
-                merge_upstream_result.old_revision)
-            notes = update_packaging(local_tree, old_tree)
-            for n in notes:
-                note('%s', n)
+            if self.update_packaging:
+                old_tree = local_tree.branch.repository.revision_tree(
+                    merge_upstream_result.old_revision)
+                notes = update_packaging(local_tree, old_tree)
+                for n in notes:
+                    note('%s', n)
 
-        if self.refresh_patches and \
-                local_tree.has_filename('debian/patches/series'):
-            note('Refresh quilt patches.')
-            try:
-                refresh_quilt_patches(
-                    local_tree,
-                    old_version=merge_upstream_result.old_upstream_version,
-                    new_version=merge_upstream_result.new_upstream_version)
-            except QuiltError as e:
-                raise ChangerError(
-                    'quilt-refresh-error',
-                    'Quilt error while refreshing patches: %s', e)
+            if self.refresh_patches and \
+                    local_tree.has_filename('debian/patches/series'):
+                note('Refresh quilt patches.')
+                try:
+                    refresh_quilt_patches(
+                        local_tree,
+                        old_version=merge_upstream_result.old_upstream_version,
+                        new_version=merge_upstream_result.new_upstream_version)
+                except QuiltError as e:
+                    raise ChangerError(
+                        'quilt-refresh-error',
+                        'Quilt error while refreshing patches: %s', e)
+            tags = set()
+            tags.add(
+                'upstream/%s' % merge_upstream_result.new_upstream_version)
 
-        tags = set()
-        tags.add('upstream/%s' % merge_upstream_result.new_upstream_version)
-        # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
-        proposed_commit_message = (
-            "Merge new upstream release %s" %
-            merge_upstream_result.new_upstream_version)
-        return ChangerResult(
-            description="Merged new upstream version %s" % (
-                merge_upstream_result.new_upstream_version),
-            mutator=merge_upstream_result, tags=tags,
-            sufficient_for_proposal=True,
-            proposed_commit_message=proposed_commit_message)
+            # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
+            proposed_commit_message = (
+                "Merge new upstream release %s" %
+                merge_upstream_result.new_upstream_version)
+            return ChangerResult(
+                description="Merged new upstream version %s" % (
+                    merge_upstream_result.new_upstream_version),
+                mutator=merge_upstream_result, tags=tags,
+                sufficient_for_proposal=True,
+                proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(
             self, merge_upstream_result, description_format, unused_proposal):
