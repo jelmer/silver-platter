@@ -412,7 +412,7 @@ def run_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
                     pre_check=args.pre_check, builder=args.builder,
                     post_check=args.post_check, dry_run=args.dry_run,
                     update_changelog=args.update_changelog,
-                    label=args.label, owner=args.derived_owner,
+                    label=args.label, derived_owner=args.derived_owner,
                     build_target_dir=args.build_target_dir) is False:
                 ret = 1
         except NoSuchPackage:

@@ -76,7 +76,7 @@ from breezy.plugins.debian.merge_upstream import (
     )
 from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
-    PristineTarSource,
+    get_pristine_tar_source,
     )
 from breezy.plugins.quilt.quilt import (
     QuiltError,
@@ -695,8 +695,8 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 # TODO(jelmer): Perhaps reconcile these two exceptions?
                 raise UpstreamAlreadyMerged(new_upstream_version)
             except UpstreamAlreadyImported:
-                pristine_tar_source = PristineTarSource.from_tree(
-                    tree.branch, tree)
+                pristine_tar_source = get_pristine_tar_source(
+                    tree, tree.branch)
                 try:
                     conflicts = tree.merge_from_branch(
                         pristine_tar_source.branch,
