@@ -677,7 +677,7 @@ def propose_changes(
             try:
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
-                    reviewers=reviewers, owners=owner, **kwargs)
+                    reviewers=reviewers, owner=owner, **kwargs)
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
