@@ -124,6 +124,7 @@ __all__ = [
     'UpstreamAlreadyMerged',
     'UpstreamAlreadyImported',
     'UpstreamMergeConflicted',
+    'NewUpstreamTarballMissing',
     'QuiltError',
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
@@ -202,6 +203,14 @@ class UpstreamNotBundled(Exception):
 
     def __init__(self, package):
         self.package = package
+
+
+class NewUpstreamTarballMissing(Exception):
+
+    def __init__(self, package, version, upstream):
+        self.package = package
+        self.version = version
+        self.upstream = upstream
 
 
 RELEASE_BRANCH_NAME = "new-upstream-release"
@@ -325,6 +334,7 @@ def import_upstream(
       UScanError
       UpstreamMetadataSyntaxError
       UpstreamNotBundled
+      NewUpstreamTarballMissing
     Returns:
       ImportUpstreamResult object
     """
@@ -654,13 +664,15 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 locations = primary_upstream_source.fetch_tarballs(
                     package, new_upstream_version, target_dir,
                     components=[None])
-            except PackageVersionNotPresent:
+            except PackageVersionNotPresent as e:
                 if upstream_revisions is not None:
                     locations = upstream_branch_source.fetch_tarballs(
                         package, new_upstream_version, target_dir,
                         components=[None], revisions=upstream_revisions)
                 else:
-                    raise
+                    raise NewUpstreamTarballMissing(
+                        e.package, e.version, e.upstream)
+
             try:
                 tarball_filenames = get_tarballs(
                     ORIG_DIR, tree, package, new_upstream_version,
@@ -936,6 +948,11 @@ class MergeNewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 'missing-upstream-tarball',
                 'Missing upstream tarball: %s' % e, e)
+        except NewUpstreamTarballMissing as e:
+            raise ChangerError(
+                'new-upstream-tarball-retrieval-error',
+                'Tarball missing for new upstream version: %s '
+                '(%s: %s in %r)' % (e, e.package, e.version, e.upstream))
 
         if self.import_only:
             note('Imported new upstream version %s (previous: %s)',
