@@ -27,6 +27,11 @@ from breezy import (
     osutils,
     urlutils,
     )
+try:
+    from breezy.bzr import LineEndingError
+except ImportError:  # brz < 3.1.1
+    from breezy.errors import LineEndingError
+
 from breezy.branch import (
     Branch,
     BranchWriteLockResult,
@@ -215,6 +220,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, errors.UnknownFormatError):
         return BranchUnsupported(url, str(e))
     if isinstance(e, RemoteGitError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, LineEndingError):
         return BranchUnavailable(url, str(e))
     return None
 
