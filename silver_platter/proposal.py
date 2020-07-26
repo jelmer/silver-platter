@@ -24,6 +24,7 @@ from breezy.diff import show_diff_trees
 from breezy.errors import (
     DivergedBranches,
     PermissionDenied,
+    UnrelatedBranches,
     UnsupportedOperation,
     )
 from breezy.merge_directive import (
@@ -108,9 +109,14 @@ def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
     old_file_content_mergers = _mod_merge.Merger.hooks['merge_file_content']
     _mod_merge.Merger.hooks['merge_file_content'] = []
     try:
-        merger = _mod_merge.Merger.from_revision_ids(
+        try:
+            merger = _mod_merge.Merger.from_revision_ids(
                 other_branch.basis_tree(), other_branch=other_branch,
                 other=main_branch.last_revision(), tree_branch=other_branch)
+        except UnrelatedBranches:
+            # Unrelated branches don't technically *have* to lead to
+            # conflicts, but there's not a lot to be salvaged here, either.
+            return True
         merger.merge_type = _mod_merge.Merge3Merger
         tree_merger = merger.make_merger()
         with tree_merger.make_preview_transform():
