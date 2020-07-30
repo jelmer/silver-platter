@@ -43,6 +43,7 @@ from breezy import (
     )
 from breezy.propose import (
     get_hoster,
+    iter_hoster_instances,
     hosters,
     Hoster,
     MergeProposal,
@@ -736,14 +737,13 @@ def iter_all_mps(statuses: Optional[List[str]] = None
     """iterate over all existing merge proposals."""
     if statuses is None:
         statuses = ['open', 'merged', 'closed']
-    for name, hoster_cls in hosters.items():
-        for instance in hoster_cls.iter_instances():
-            for status in statuses:
-                try:
-                    for mp in instance.iter_my_proposals(status=status):
-                        yield instance, mp, status
-                except HosterLoginRequired:
-                    pass
+    for instance in iter_hoster_instances():
+        for status in statuses:
+            try:
+                for mp in instance.iter_my_proposals(status=status):
+                    yield instance, mp, status
+            except HosterLoginRequired:
+                pass
 
 
 def iter_conflicted(branch_name: str) -> Iterator[
