@@ -95,9 +95,12 @@ from breezy.plugins.debian.util import (
 )
 
 from breezy.plugins.debian.upstream import (
-    UScanSource,
     TarfileSource,
+    )
+from breezy.plugins.debian.upstream.uscan import (
+    UScanSource,
     UScanError,
+    NoWatchFile,
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
@@ -123,6 +126,7 @@ __all__ = [
     'UpstreamBranchUnavailable',
     'UpstreamAlreadyMerged',
     'UpstreamAlreadyImported',
+    'NoWatchFile',
     'UpstreamMergeConflicted',
     'NewUpstreamTarballMissing',
     'QuiltError',
@@ -335,6 +339,7 @@ def import_upstream(
       UpstreamMetadataSyntaxError
       UpstreamNotBundled
       NewUpstreamTarballMissing
+      NoWatchFile
     Returns:
       ImportUpstreamResult object
     """
@@ -402,7 +407,13 @@ def import_upstream(
                 raise UpstreamBranchUnknown()
             primary_upstream_source = upstream_branch_source
         else:
-            primary_upstream_source = UScanSource(tree, top_level)
+            try:
+                primary_upstream_source = UScanSource.from_tree(
+                    tree, subpath, top_level)
+            except NoWatchFile:
+                if upstream_branch_source is None:
+                    raise
+                primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
