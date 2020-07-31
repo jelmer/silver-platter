@@ -58,8 +58,6 @@ from breezy.plugins.debian.config import (
     )
 from breezy.plugins.debian.errors import (
     InconsistentSourceFormatError,
-    MissingUpstreamTarball,
-    PackageVersionNotPresent,
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
     UnparseableChangelog,
@@ -74,6 +72,7 @@ from breezy.plugins.debian.merge_upstream import (
     get_tarballs,
     PreviousVersionTagMissing,
     )
+
 from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
     get_pristine_tar_source,
@@ -96,6 +95,8 @@ from breezy.plugins.debian.util import (
 
 from breezy.plugins.debian.upstream import (
     TarfileSource,
+    MissingUpstreamTarball,
+    PackageVersionNotPresent,
     )
 from breezy.plugins.debian.upstream.uscan import (
     UScanSource,

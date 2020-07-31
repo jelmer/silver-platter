@@ -41,7 +41,7 @@ from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
 from breezy.plugins.debian.builder import BuildFailedError
-from breezy.plugins.debian.errors import (
+from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
     )
 
