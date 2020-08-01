@@ -27,6 +27,7 @@ from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
+from breezy.git.repository import GitRepository
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
@@ -168,7 +169,7 @@ def pick_additional_colocated_branches(main_branch):
 class Workspace(_mod_proposal.Workspace):
 
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
-        if getattr(main_branch.repository, '_git', None):
+        if isinstance(main_branch.repository, GitRepository):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
                 pick_additional_colocated_branches(main_branch))
