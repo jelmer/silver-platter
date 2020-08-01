@@ -304,6 +304,21 @@ class Workspace(object):
         self._dir = dir
         self._path = path
 
+    def __str__(self):
+        if self._path is None:
+            return "Workspace for %s" % self.main_branch.user_url
+        else:
+            return "Workspace for %s at %s" (
+                self.main_branch.user_url, self._path)
+
+    def __repr__(self):
+        return (
+            "%s(%r, resume_branch=%r, cached_branch=%r, "
+            "additional_colocated_branches=%r, dir=%r, path=%r)" % (
+                type(self).__name__, self.main_branch, self.resume_branch,
+                self.cached_branch, self.additional_colocated_branches,
+                self._dir, self._path))
+
     def __enter__(self) -> Any:
         self.local_tree, self._destroy = create_temp_sprout(
             self.cached_branch or self.resume_branch or self.main_branch,
