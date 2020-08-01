@@ -33,7 +33,7 @@ from .changer import (
     setup_multi_parser as setup_changer_parser,
     )
 from breezy.trace import note
-from breezy.plugins.debian.errors import PackageVersionNotPresent
+from breezy.plugins.debian.upstream import PackageVersionNotPresent
 
 
 BRANCH_NAME = 'missing-commits'

@@ -220,7 +220,6 @@ class NewUpstreamTarballMissing(Exception):
 
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
-ORIG_DIR = '..'
 DEFAULT_DISTRIBUTION = 'unstable'
 
 
@@ -458,6 +457,8 @@ def import_upstream(
     except NoSuchFile:
         files_excluded = None
     with tempfile.TemporaryDirectory() as target_dir:
+        initial_path = os.path.join(target_dir, 'initial')
+        os.mkdir(initial_path)
         try:
             locations = primary_upstream_source.fetch_tarballs(
                 package, new_upstream_version, target_dir,
@@ -465,13 +466,14 @@ def import_upstream(
         except PackageVersionNotPresent:
             if upstream_revisions is not None:
                 locations = upstream_branch_source.fetch_tarballs(
-                    package, new_upstream_version, target_dir,
+                    package, new_upstream_version, initial_path,
                     components=[None], revisions=upstream_revisions)
             else:
                 raise
+        orig_path = os.path.join(target_dir, 'orig')
         try:
             tarball_filenames = get_tarballs(
-                ORIG_DIR, tree, package, new_upstream_version,
+                orig_path, tree, package, new_upstream_version,
                 upstream_branch, upstream_revisions, locations)
         except FileExists as e:
             raise AssertionError(
@@ -672,22 +674,27 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         except NoSuchFile:
             files_excluded = None
         with tempfile.TemporaryDirectory() as target_dir:
+            initial_path = os.path.join(target_dir, 'initial')
+            os.mkdir(initial_path)
+
             try:
                 locations = primary_upstream_source.fetch_tarballs(
-                    package, new_upstream_version, target_dir,
+                    package, new_upstream_version, initial_path,
                     components=[None])
             except PackageVersionNotPresent as e:
                 if upstream_revisions is not None:
                     locations = upstream_branch_source.fetch_tarballs(
-                        package, new_upstream_version, target_dir,
+                        package, new_upstream_version, initial_path,
                         components=[None], revisions=upstream_revisions)
                 else:
                     raise NewUpstreamTarballMissing(
                         e.package, e.version, e.upstream)
 
+            orig_path = os.path.join(target_dir, 'orig')
+            os.mkdir(orig_path)
             try:
                 tarball_filenames = get_tarballs(
-                    ORIG_DIR, tree, package, new_upstream_version,
+                    orig_path, tree, package, new_upstream_version,
                     upstream_branch, upstream_revisions, locations)
             except FileExists as e:
                 raise AssertionError(
