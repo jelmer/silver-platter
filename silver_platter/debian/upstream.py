@@ -72,6 +72,9 @@ from breezy.plugins.debian.merge_upstream import (
     get_tarballs,
     PreviousVersionTagMissing,
     )
+from breezy.plugins.debian.repack_tarball import (
+    UnsupportedRepackFormat,
+    )
 
 from breezy.plugins.debian.upstream.pristinetar import (
     PristineTarError,
@@ -125,6 +128,7 @@ __all__ = [
     'MissingUpstreamTarball',
     'NewUpstreamMissing',
     'UpstreamBranchUnavailable',
+    'UnsupportedRepackFormat',
     'UpstreamAlreadyMerged',
     'UpstreamAlreadyImported',
     'NoWatchFile',
@@ -323,6 +327,7 @@ def import_upstream(
     Raises:
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
+      UnsupportedRepackFormat
       DistCommandFailed
       MissingChangelogError
       MissingUpstreamTarball
@@ -545,6 +550,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
     Raises:
       InvalidFormatUpstreamVersion
       PreviousVersionTagMissing
+      UnsupportedRepackFormat
       DistCommandFailed
       MissingChangelogError
       MissingUpstreamTarball
