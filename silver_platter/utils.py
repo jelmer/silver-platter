@@ -27,7 +27,10 @@ from breezy import (
     osutils,
     urlutils,
     )
-from breezy.bzr import LineEndingError
+try:
+    from breezy.bzr import LineEndingError
+except ImportError:  # brz < 3.1.1
+    from breezy.errors import LineEndingError
 
 from breezy.branch import (
     Branch,
