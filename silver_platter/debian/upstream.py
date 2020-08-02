@@ -395,7 +395,7 @@ def import_upstream(
         try:
             upstream_branch_source = UpstreamBranchSource.from_branch(
                 upstream_branch, config=config, local_dir=tree.controldir,
-                create_dist=create_dist)
+                create_dist=create_dist, snapshot=snapshot)
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
         except ssl.SSLError as e:
@@ -412,7 +412,8 @@ def import_upstream(
         else:
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 branch, config=config,
-                local_dir=tree.controldir, create_dist=create_dist)
+                local_dir=tree.controldir, create_dist=create_dist,
+                snapshot=snapshot)
     else:
         if snapshot:
             if upstream_branch_source is None:
@@ -617,7 +618,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         try:
             upstream_branch_source = UpstreamBranchSource.from_branch(
                 upstream_branch, config=config, local_dir=tree.controldir,
-                create_dist=create_dist)
+                create_dist=create_dist, snapshot=snapshot)
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
         except ssl.SSLError as e:
@@ -634,7 +635,8 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         else:
             primary_upstream_source = UpstreamBranchSource.from_branch(
                 branch, config=config,
-                local_dir=tree.controldir, create_dist=create_dist)
+                local_dir=tree.controldir, create_dist=create_dist,
+                snapshot=snapshot)
     else:
         if snapshot:
             if upstream_branch_source is None:
