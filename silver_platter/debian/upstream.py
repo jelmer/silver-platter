@@ -134,7 +134,7 @@ __all__ = [
     'UpstreamMergeConflicted',
     'NewUpstreamTarballMissing',
     'QuiltError',
-    'NoUpstreamSourceKnown',
+    'NoUpstreamLocationsKnown',
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
     'PackageIsNative',
@@ -222,7 +222,8 @@ class NewUpstreamTarballMissing(Exception):
         self.upstream = upstream
 
 
-class NoUpstreamSourceKnown(Exception):
+class NoUpstreamLocationsKnown(Exception):
+    """No upstream locations (uscan/repository) for the package are known."""
 
     def __init__(self, package):
         self.package = package
@@ -350,7 +351,7 @@ def import_upstream(
       UpstreamMetadataSyntaxError
       UpstreamNotBundled
       NewUpstreamTarballMissing
-      NoUpstreamSourceKnown
+      NoUpstreamLocationsKnown
     Returns:
       ImportUpstreamResult object
     """
@@ -423,7 +424,7 @@ def import_upstream(
                     tree, subpath, top_level)
             except NoWatchFile:
                 if upstream_branch_source is None:
-                    raise NoUpstreamSourceKnown(package)
+                    raise NoUpstreamLocationsKnown(package)
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
@@ -572,7 +573,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
       InconsistentSourceFormatError
       UnparseableChangelog
       UScanError
-      NoUpstreamSourceKnown
+      NoUpstreamLocationsKnown
       UpstreamMetadataSyntaxError
     Returns:
       MergeUpstreamResult object
@@ -645,7 +646,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                     tree, top_level)
             except NoWatchFile:
                 if upstream_branch_source is None:
-                    raise NoUpstreamSourceKnown(package)
+                    raise NoUpstreamLocationsKnown(package)
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
@@ -991,9 +992,9 @@ class MergeNewUpstreamChanger(DebianChanger):
                 'new-upstream-tarball-retrieval-error',
                 'Tarball missing for new upstream version: %s '
                 '(%s: %s in %r)' % (e, e.package, e.version, e.upstream), e)
-        except NoUpstreamSourceKnown as e:
+        except NoUpstreamLocationsKnown as e:
             raise ChangerError(
-                'no-upstream-source-known',
+                'no-upstream-locations-known',
                 'No debian/watch file or Repository in '
                 'debian/upstream/metadata to retrieve new upstream version'
                 'from.', e)
