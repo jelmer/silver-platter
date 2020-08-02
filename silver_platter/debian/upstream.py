@@ -131,10 +131,10 @@ __all__ = [
     'UnsupportedRepackFormat',
     'UpstreamAlreadyMerged',
     'UpstreamAlreadyImported',
-    'NoWatchFile',
     'UpstreamMergeConflicted',
     'NewUpstreamTarballMissing',
     'QuiltError',
+    'NoUpstreamSourceKnown',
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
     'PackageIsNative',
@@ -220,6 +220,12 @@ class NewUpstreamTarballMissing(Exception):
         self.package = package
         self.version = version
         self.upstream = upstream
+
+
+class NoUpstreamSourceKnown(Exception):
+
+    def __init__(self, package):
+        self.package = package
 
 
 RELEASE_BRANCH_NAME = "new-upstream-release"
@@ -344,7 +350,7 @@ def import_upstream(
       UpstreamMetadataSyntaxError
       UpstreamNotBundled
       NewUpstreamTarballMissing
-      NoWatchFile
+      NoUpstreamSourceKnown
     Returns:
       ImportUpstreamResult object
     """
@@ -417,7 +423,7 @@ def import_upstream(
                     tree, subpath, top_level)
             except NoWatchFile:
                 if upstream_branch_source is None:
-                    raise
+                    raise NoUpstreamSourceKnown(package)
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
@@ -566,6 +572,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
       InconsistentSourceFormatError
       UnparseableChangelog
       UScanError
+      NoUpstreamSourceKnown
       UpstreamMetadataSyntaxError
     Returns:
       MergeUpstreamResult object
@@ -633,7 +640,13 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 raise UpstreamBranchUnknown()
             primary_upstream_source = upstream_branch_source
         else:
-            primary_upstream_source = UScanSource(tree, top_level)
+            try:
+                primary_upstream_source = UScanSource.from_tree(
+                    tree, top_level)
+            except NoWatchFile:
+                if upstream_branch_source is None:
+                    raise NoUpstreamSourceKnown(package)
+                primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
@@ -977,7 +990,13 @@ class MergeNewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 'new-upstream-tarball-retrieval-error',
                 'Tarball missing for new upstream version: %s '
-                '(%s: %s in %r)' % (e, e.package, e.version, e.upstream))
+                '(%s: %s in %r)' % (e, e.package, e.version, e.upstream), e)
+        except NoUpstreamSourceKnown as e:
+            raise ChangerError(
+                'no-upstream-source-known',
+                'No debian/watch file or Repository in '
+                'debian/upstream/metadata to retrieve new upstream version'
+                'from.', e)
 
         if self.import_only:
             note('Imported new upstream version %s (previous: %s)',
