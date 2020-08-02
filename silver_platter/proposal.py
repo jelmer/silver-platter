@@ -67,7 +67,7 @@ import breezy.plugins.launchpad  # noqa: F401
 from .utils import (
     create_temp_sprout,
     open_branch,
-    MinimalMemoryBranch,
+    MemoryBranch,
     )
 
 
