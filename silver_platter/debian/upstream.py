@@ -327,7 +327,8 @@ def import_upstream(
         trust_package: bool = False,
         committer: Optional[str] = None,
         subpath: str = '',
-        create_dist: Optional[Callable[[Tree, str, Version, str], bool]] = None
+        create_dist: Optional[
+            Callable[[Tree, str, Version, str], Optional[str]]] = None
         ) -> ImportUpstreamResult:
     """Import a new upstream version into a tree.
 
@@ -552,7 +553,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                    subpath: str = '',
                    create_dist: Optional[Callable[
                        [Tree, str, Version, str],
-                       bool]] = None) -> MergeUpstreamResult:
+                       Optional[str]]] = None) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
     Raises:
@@ -647,6 +648,8 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 primary_upstream_source = UScanSource.from_tree(
                     tree, top_level)
             except NoWatchFile:
+                # TODO(jelmer): Call out to lintian_brush.watch to generate a
+                # watch file.
                 if upstream_branch_source is None:
                     raise NoUpstreamLocationsKnown(package)
                 primary_upstream_source = upstream_branch_source
@@ -903,9 +906,9 @@ class MergeNewUpstreamChanger(DebianChanger):
                      base_proposal=None):
 
         if self.dist_command:
-            def create_dist(tree, package, version, target_filename):
-                run_dist_command(
-                    tree, package, version, target_filename, self.dist_command)
+            def create_dist(tree, package, version, target_dir):
+                return run_dist_command(
+                    tree, package, version, target_dir, self.dist_command)
         else:
             create_dist = None
 
