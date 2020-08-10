@@ -598,7 +598,7 @@ def check_proposal_diff(other_branch: Branch, main_branch: Branch) -> None:
         merger = _mod_merge.Merger.from_revision_ids(
                 main_tree, other_branch=other_branch,
                 other=other_branch.last_revision(),
-                tree_branch=MinimalMemoryBranch(
+                tree_branch=MemoryBranch(
                     other_branch.repository,
                     (None, main_branch.last_revision()), None),
                 revision_graph=revision_graph)
