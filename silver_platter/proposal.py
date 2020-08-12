@@ -296,6 +296,7 @@ class Workspace(object):
 
     _destroy: Optional[Callable[[], None]]
     local_tree: WorkingTree
+    main_branch_revid: Optional[bytes]
 
     def __init__(self, main_branch: Branch,
                  resume_branch: Optional[Branch] = None,
@@ -304,7 +305,7 @@ class Workspace(object):
                  dir: Optional[str] = None,
                  path: Optional[str] = None) -> None:
         self.main_branch = main_branch
-        self.main_branch_revid = main_branch.last_revision()
+        self.main_branch_revid = None
         self.cached_branch = cached_branch
         self.resume_branch = resume_branch
         self.additional_colocated_branches = (
@@ -333,6 +334,7 @@ class Workspace(object):
             self.cached_branch or self.resume_branch or self.main_branch,
             self.additional_colocated_branches,
             dir=self._dir, path=self._path)
+        self.main_branch_revid = self.main_branch.last_revision()
         self.refreshed = False
         with self.local_tree.branch.lock_write():
             if self.cached_branch:
