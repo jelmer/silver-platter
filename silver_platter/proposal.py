@@ -49,6 +49,7 @@ from breezy.propose import (
     NoSuchProject,
     UnsupportedHoster,
     HosterLoginRequired,
+    SourceNotDerivedFromTarget,
     )
 
 try:
@@ -76,6 +77,7 @@ __all__ = [
     'UnsupportedHoster',
     'PermissionDenied',
     'NoSuchProject',
+    'SourceNotDerivedFromTarget',
     'get_hoster',
     'hosters',
     'iter_all_mps',
