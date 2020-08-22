@@ -105,6 +105,7 @@ from breezy.plugins.debian.upstream.uscan import (
     UScanSource,
     UScanError,
     NoWatchFile,
+    WatchLineWithoutMatches,
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
@@ -142,6 +143,7 @@ __all__ = [
     'UScanError',
     'UpstreamMetadataSyntaxError',
     'QuiltPatchPushFailure',
+    'WatchLineWithoutMatches',
 ]
 
 
@@ -974,6 +976,10 @@ class MergeNewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 'inconsistent-source-format',
                 'Inconsistencies in type of package: %s' % e, e)
+        except WatchLineWithoutMatches as e:
+            raise ChangerError(
+                'uscan-watch-line-no-matches',
+                'UScan did not find matches for line %r' % e.line)
         except UScanError as e:
             raise ChangerError(
                 'uscan-error',
