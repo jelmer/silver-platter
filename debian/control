@@ -3,7 +3,7 @@ Section: vcs
 Priority: optional
 Maintainer: Jelmer Vernooĳ <jelmer@debian.org>
 Build-Depends: dh-python,
-               brz-debian (>= 2.8.34),
+               brz-debian (>= 2.8.41),
                python3-all,
                python3-breezy (>= 3.1.0),
                python3-breezy.tests,
@@ -23,7 +23,7 @@ Vcs-Browser: https://salsa.debian.org/jelmer/silver-platter
 Package: silver-platter
 Architecture: all
 Depends: devscripts,
-         brz-debian (>= 2.8.34),
+         brz-debian (>= 2.8.41),
          python3-breezy (>= 3.1.0),
          python3-dulwich (>= 0.19.7),
          python3-distro-info,

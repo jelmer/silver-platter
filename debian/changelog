@@ -1,3 +1,11 @@
+silver-platter (0.3.0+git20200822.4aa3cc6-1) UNRELEASED; urgency=medium
+
+  * New upstream snapshot.
+  * Fixes compatibility with newer versions of breezy-debian. Closes:
+    #969665
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 06 Sep 2020 19:38:02 +0000
+
 silver-platter (0.3.0+git20200611.b4292bf-1) unstable; urgency=medium
 
   * New upstream snapshot.

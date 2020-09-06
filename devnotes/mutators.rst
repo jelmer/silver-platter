@@ -36,3 +36,17 @@ For Debian mutators, the following will be set as well:
  * PACKAGE: Source package name
  * UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
  * COMMITTER: Set to a committer identity (optional)
+
+Required Changes
+================
+
+1) mutators can be installed in /usr/lib/silver-platter and /usr/lib/silver-platter/debian, possibly just symlinks?
+ + Also, with an environment variable to override?
+ + Possibly also just allow specifying the mutator path as an argument? "debian-svp ../lintian-brush"
+2) "debian-svp --help" will list all relevant mutators
+3) start running current mutators as scripts from within svp itself
+4) move all logic for lintian-brush into actual lintian-brush binary
+ + Add Enhances: silver-platter to lintian-brush
+5) move detect_gbp_dch out of lintian-brush
+6) avoid add_changelog_entry from lintian-brush in rrr and orphan
+7) add ability to specify candidate list to debian-svp and svp
