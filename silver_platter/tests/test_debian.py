@@ -25,6 +25,7 @@ from breezy.git import RemoteGitProber
 
 from ..debian import (
     select_probers,
+    convert_debian_vcs_url,
     UnsupportedVCSProber,
     )
 
@@ -43,3 +44,16 @@ class SelectProbersTests(TestCase):
 
     def test_unsupported(self):
         self.assertEqual([UnsupportedVCSProber('foo')], select_probers('foo'))
+
+
+class ConvertDebianVcsUrlTests(TestCase):
+
+    def test_git(self):
+        self.assertEqual(
+            'https://salsa.debian.org/jelmer/blah.git',
+            convert_debian_vcs_url(
+                'Git', 'https://salsa.debian.org/jelmer/blah.git'))
+        self.assertEqual(
+            'ssh://git@git.kali.org/jelmer/blah.git',
+            convert_debian_vcs_url(
+                'Git', 'ssh://git@git.kali.org/jelmer/blah.git'))

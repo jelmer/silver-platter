@@ -16,9 +16,10 @@
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import os
-import re
 import subprocess
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Dict, List
+
+from debmutate.vcs import split_vcs_url
 
 from breezy import urlutils
 from breezy.branch import Branch
@@ -26,6 +27,7 @@ from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
+from breezy.git.repository import GitRepository
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
@@ -40,7 +42,7 @@ from breezy.plugins.debian.changelog import (
     changelog_commit_message,
     )
 from breezy.plugins.debian.builder import BuildFailedError
-from breezy.plugins.debian.errors import (
+from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
     )
 
@@ -130,23 +132,6 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
         raise ValueError('invalid URL: %s' % e)
 
 
-def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
-    subpath: Optional[str]
-    m = re.search(r' \[([^] ]+)\]', url)
-    if m:
-        url = url[:m.start()] + url[m.end():]
-        subpath = m.group(1)
-    else:
-        subpath = None
-    branch: Optional[str]
-    try:
-        (repo_url, branch) = url.split(' -b ', 1)
-    except ValueError:
-        branch = None
-        repo_url = url
-    return (repo_url, branch, subpath)
-
-
 def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     """Open a packaging branch from a location string.
 
@@ -184,7 +169,7 @@ def pick_additional_colocated_branches(main_branch):
 class Workspace(_mod_proposal.Workspace):
 
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
-        if getattr(main_branch.repository, '_git', None):
+        if isinstance(main_branch.repository, GitRepository):
             kwargs['additional_colocated_branches'] = (
                 kwargs.get('additional_colocated_branches', []) +
                 pick_additional_colocated_branches(main_branch))

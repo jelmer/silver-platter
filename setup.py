@@ -55,10 +55,16 @@ setup(
     },
     test_suite='silver_platter.tests.test_suite',
     install_requires=[
-        'breezy>=3.1',
+        'breezy>=3.1.1',
         'dulwich',
-        'testtools',
-        'lintian-brush>=0.50',
-        'pyyaml',  # For reading debian/upstream/metadata
     ],
+    extras_require={
+        'debian': [
+            'pyyaml',  # For reading debian/upstream/metadata
+            'debmutate>=0.3',
+            'lintian-brush>=0.50',
+            'debian',
+        ],
+    },
+    tests_require=['testtools'],
 )

@@ -66,7 +66,8 @@ class ScriptChanger(DebianChanger):
             description = script_runner(
                 local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
-            raise ChangerError('Script did not make any changes.', e)
+            raise ChangerError(
+                'nothing-to-do', 'Script did not make any changes.', e)
         return ChangerResult(
             description=description, mutator=description,
             sufficient_for_proposal=True,
