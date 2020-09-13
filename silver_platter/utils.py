@@ -346,5 +346,5 @@ def full_branch_url(branch):
     if branch.name is None:
         return branch.user_url
     url, params = urlutils.split_segment_parameters(branch.user_url)
-    params['branch'] = branch.name
+    params['branch'] = urlutils.quote(branch.name, '')
     return urlutils.join_segment_parameters(url, params)
