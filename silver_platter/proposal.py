@@ -72,6 +72,7 @@ from .utils import (
     create_temp_sprout,
     open_branch,
     MemoryBranch,
+    full_branch_url,
     )
 
 
@@ -193,11 +194,11 @@ class DryRunProposal(MergeProposal):
 
     def get_source_branch_url(self) -> str:
         """Return the source branch."""
-        return self.source_branch.user_url
+        return full_branch_url(self.source_branch)
 
     def get_target_branch_url(self) -> str:
         """Return the target branch."""
-        return self.target_branch.user_url
+        return full_branch_url(self.target_branch)
 
     def close(self) -> None:
         """Close the merge proposal (without merging it)."""
@@ -228,7 +229,7 @@ def push_result(
             remote_branch, overwrite=False, **kwargs)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
-        raise PermissionDenied(path=remote_branch.user_url, extra=e)
+        raise PermissionDenied(path=full_branch_url(remote_branch), extra=e)
     for branch_name in additional_colocated_branches or []:
         try:
             add_branch = local_branch.controldir.open_branch(name=branch_name)
@@ -264,7 +265,7 @@ def find_existing_proposed(main_branch: Branch, hoster: Hoster, name: str,
         return (None, None, None)
     else:
         note('Branch %s already exists (branch at %s)', name,
-             existing_branch.user_url)
+             full_branch_url(existing_branch))
         # If there is an open or rejected merge proposal, resume that.
         merged_proposal = None
         for mp in hoster.iter_proposals(
@@ -320,10 +321,10 @@ class Workspace(object):
 
     def __str__(self):
         if self._path is None:
-            return "Workspace for %s" % self.main_branch.user_url
+            return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
             return "Workspace for %s at %s" (
-                self.main_branch.user_url, self._path)
+                full_branch_url(self.main_branch), self._path)
 
     def __repr__(self):
         return (
@@ -803,5 +804,5 @@ def iter_conflicted(branch_name: str) -> Iterator[
             continue
         # TODO(jelmer): Find out somehow whether we need to modify a subpath?
         subpath = ''
-        yield (resume_branch.user_url, main_branch, subpath, resume_branch,
-               hoster, mp, True)
+        yield (full_branch_url(resume_branch), main_branch, subpath,
+               resume_branch, hoster, mp, True)

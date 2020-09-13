@@ -271,7 +271,7 @@ try:
 except ImportError:   # breezy < 3.1.1
     from breezy.lock import _RelockDebugMixin, LogicalLockResult
 
-    class MemoryBranch(Branch, _RelockDebugMixin):
+    class MemoryBranch(Branch, _RelockDebugMixin):  # type: ignore
 
         def __init__(self, repository, last_revision_info, tags):
             from breezy.tag import DisabledTags, MemoryTags
@@ -332,4 +332,19 @@ except ImportError:   # breezy < 3.1.1
                     if len(self._partial_revision_history_cache) <= \
                             distance_from_last:
                         self._extend_partial_history(distance_from_last)
-                    return self._partial_revision_history_cache[distance_from_last]
+                    return self._partial_revision_history_cache[
+                        distance_from_last]
+
+
+def full_branch_url(branch):
+    """Get the full URL for a branch.
+
+    Ideally this should just return Branch.user_url,
+    but that currently exclude the branch name
+    in some situations.
+    """
+    if branch.name is None:
+        return branch.user_url
+    url, params = urlutils.split_segment_parameters(branch.user_url)
+    params['branch'] = branch.name
+    return urlutils.join_segment_parameters(url, params)

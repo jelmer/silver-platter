@@ -45,6 +45,7 @@ from .utils import (
     BranchMissing,
     BranchUnsupported,
     BranchUnavailable,
+    full_branch_url,
 )
 
 
@@ -150,7 +151,7 @@ def main(args: argparse.Namespace) -> Optional[int]:
         resume_branch = None
         existing_proposal = None
         warning('Unsupported hoster (%s), will attempt to push to %s',
-                e, main_branch.user_url)
+                e, full_branch_url(main_branch))
     else:
         (resume_branch, resume_overwrite, existing_proposal) = (
             find_existing_proposed(
@@ -186,7 +187,7 @@ def main(args: argparse.Namespace) -> Optional[int]:
                 existing_proposal=existing_proposal)
         except UnsupportedHoster as e:
             show_error('No known supported hoster for %s. Run \'svp login\'?',
-                       e.branch.user_url)
+                       full_branch_url(e.branch))
             return 1
         except _mod_propose.HosterLoginRequired as e:
             show_error(

@@ -53,6 +53,7 @@ from ..utils import (
     run_pre_check,
     run_post_check,
     PostCheckFailed,
+    full_branch_url,
     )
 
 
@@ -289,7 +290,7 @@ def _run_single_changer(
 
     if hoster is None and mode == 'attempt-push':
         warning('Unsupported hoster; will attempt to push to %s',
-                main_branch.user_url)
+                full_branch_url(main_branch))
         mode = 'push'
     with Workspace(main_branch, resume_branch=resume_branch) as ws, \
             ws.local_tree.lock_write():
@@ -358,7 +359,7 @@ def _run_single_changer(
         except UnsupportedHoster as e:
             show_error(
                 '%s: No known supported hoster for %s. Run \'svp login\'?',
-                pkg, e.branch.user_url)
+                pkg, full_branch_url(e.branch))
             return False
         except NoSuchProject as e:
             note('%s: project %s was not found', pkg, e.project)
