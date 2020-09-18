@@ -123,7 +123,7 @@ def import_uncommitted(tree, subpath):
     with contextlib.ExitStack() as es:
         archive_source = es.enter_context(tempfile.TemporaryDirectory())
         subprocess.check_call(
-            ['apt-get', 'source', package_name], cwd=archive_source)
+            ['apt', 'source', package_name], cwd=archive_source)
         [subdir] = [
             e.path for e in os.scandir(archive_source) if e.is_dir()]
         with open(os.path.join(subdir, 'debian', 'changelog'), 'r') as f:
