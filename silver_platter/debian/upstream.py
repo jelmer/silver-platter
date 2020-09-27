@@ -1076,18 +1076,6 @@ class MergeNewUpstreamChanger(DebianChanger):
                      publish_result.proposal.url)
 
 
-def main(args: argparse.Namespace):
-    from .changer import run_changer
-    changer = MergeNewUpstreamChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser: argparse.ArgumentParser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    MergeNewUpstreamChanger.setup_parser(parser)
-
-
 if __name__ == '__main__':
     import sys
     sys.exit(run_mutator(MergeNewUpstreamChanger))

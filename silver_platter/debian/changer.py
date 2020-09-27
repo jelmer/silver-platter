@@ -438,7 +438,7 @@ def run_single_changer(
         (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
          overwrite) = get_package(
                 args.package, branch_name, overwrite_unrelated=args.overwrite,
-                refresh=args.refresh, owner=args.owner)
+                refresh=args.refresh, owner=args.derived_owner)
     except NoSuchPackage:
         note('%s: no such package', args.package)
         return 1

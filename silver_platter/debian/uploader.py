@@ -157,39 +157,6 @@ def prepare_upload_package(
     return target_changes
 
 
-def setup_parser(parser):
-    parser.add_argument("packages", nargs='*')
-    parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Dry run changes.')
-    parser.add_argument(
-        '--acceptable-keys',
-        help='List of acceptable GPG keys',
-        action='append', default=[], type=str)
-    parser.add_argument(
-        '--no-gpg-verification',
-        help='Do not verify GPG signatures', action='store_true')
-    parser.add_argument(
-        '--min-commit-age',
-        help='Minimum age of the last commit, in days',
-        type=int, default=0)
-    parser.add_argument(
-        '--builder',
-        type=str,
-        help='Build command',
-        default=(DEFAULT_BUILDER + ' --source --source-only-changes '
-                 '--debbuildopt=-v${LAST_VERSION}'))
-    parser.add_argument(
-        '--maintainer',
-        type=str,
-        action='append',
-        help='Select all packages maintainer by specified maintainer.')
-    parser.add_argument(
-        '--vcswatch',
-        action='store_true',
-        help='Use vcswatch to determine what packages need uploading.')
-
-
 def select_apt_packages(package_names, maintainer):
     packages = []
     import apt_pkg
@@ -241,7 +208,43 @@ def select_vcswatch_packages(packages, maintainer):
     return packages
 
 
-def main(args):
+def main(argv):
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(prog='upload-pending-commits')
+    parser.add_argument("packages", nargs='*')
+    parser.add_argument(
+        '--dry-run', action='store_true',
+        help='Dry run changes.')
+    parser.add_argument(
+        '--acceptable-keys',
+        help='List of acceptable GPG keys',
+        action='append', default=[], type=str)
+    parser.add_argument(
+        '--no-gpg-verification',
+        help='Do not verify GPG signatures', action='store_true')
+    parser.add_argument(
+        '--min-commit-age',
+        help='Minimum age of the last commit, in days',
+        type=int, default=0)
+    parser.add_argument(
+        '--builder',
+        type=str,
+        help='Build command',
+        default=(DEFAULT_BUILDER + ' --source --source-only-changes '
+                 '--debbuildopt=-v${LAST_VERSION}'))
+    parser.add_argument(
+        '--maintainer',
+        type=str,
+        action='append',
+        help='Select all packages maintainer by specified maintainer.')
+    parser.add_argument(
+        '--vcswatch',
+        action='store_true',
+        help='Use vcswatch to determine what packages need uploading.')
+
+    # TODO(jelmer): Support requiring that autopkgtest is present and passing
+    args = parser.parse_args(argv)
     ret = 0
 
     if args.vcswatch:
@@ -300,10 +303,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    import argparse
     import sys
-    parser = argparse.ArgumentParser(prog='upload-pending-commits')
-    setup_parser(parser)
-    # TODO(jelmer): Support requiring that autopkgtest is present and passing
-    args = parser.parse_args()
-    sys.exit(main(args))
+    sys.exit(main(sys.argv))

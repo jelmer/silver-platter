@@ -22,7 +22,6 @@ from . import (
     add_changelog_entry,
     )
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
@@ -186,17 +185,6 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
         yield ''
         yield '    git clone %s %s' % (old_vcs_url, package_name)
         yield '    salsa --group=%s push_repo %s' % (salsa_user, package_name)
-
-
-def main(args):
-    changer = OrphanChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    OrphanChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':

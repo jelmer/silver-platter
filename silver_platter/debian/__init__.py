@@ -137,7 +137,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
     location can either be a package name or a full URL
     """
-    if '/' not in location:
+    if '/' not in location and ':' not in location:
         pkg_source = get_source_package(location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)

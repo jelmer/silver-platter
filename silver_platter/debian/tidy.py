@@ -18,7 +18,7 @@
 from breezy.trace import note
 
 from .changer import (
-    run_changer,
+    run_single_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
@@ -102,17 +102,6 @@ class TidyChanger(DebianChanger):
             note('Updated proposal %s', publish_result.proposal.url)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-
-def main(args):
-    changer = TidyChanger.from_args(args)
-
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    TidyChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':

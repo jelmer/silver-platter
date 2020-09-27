@@ -218,18 +218,6 @@ class UncommittedChanger(DebianChanger):
                  publish_result.proposal.url)
 
 
-def main(args):
-    if not args.packages:
-        args.packages = select_vcswatch_packages()
-    changer = UncommittedChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    UncommittedChanger.setup_parser(parser)
-
-
 if __name__ == '__main__':
     import sys
     sys.exit(run_mutator(UncommittedChanger))

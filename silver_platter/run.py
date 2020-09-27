@@ -21,7 +21,7 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import Optional
+from typing import Optional, List
 
 import silver_platter  # noqa: F401
 
@@ -97,7 +97,8 @@ def derived_branch_name(script: str) -> str:
     return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
 
 
-def setup_parser(parser: argparse.ArgumentParser) -> None:
+def main(argv: List[str]) -> Optional[int]:
+    parser = argparse.ArgumentParser()
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('--derived-owner', type=str, default=None,
@@ -123,9 +124,8 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
+    args = parser.parse_args(argv)
 
-
-def main(args: argparse.Namespace) -> Optional[int]:
     try:
         main_branch = open_branch(args.url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -211,7 +211,4 @@ def main(args: argparse.Namespace) -> Optional[int]:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    sys.exit(main(sys.argv))

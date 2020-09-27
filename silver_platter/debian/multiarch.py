@@ -27,9 +27,7 @@ from lintian_brush.config import Config
 from .changer import (
     DebianChanger,
     ChangerResult,
-    run_changer,
     run_mutator,
-    setup_multi_parser as setup_changer_parser,
     )
 
 from breezy.trace import note
@@ -135,16 +133,6 @@ class MultiArchHintsChanger(DebianChanger):
         note('Applied multi-arch hints.')
         for binary, hint, description, certainty in applied.changes:
             note('* %s: %s', binary['Package'], description)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    MultiArchHintsChanger.setup_parser(parser)
-
-
-def main(args):
-    changer = MultiArchHintsChanger()
-    return run_changer(changer, args)
 
 
 if __name__ == '__main__':

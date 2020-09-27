@@ -23,19 +23,12 @@ from .changer import (
     ChangerError,
     ChangerResult,
     DebianChanger,
-    run_single_changer,
-    setup_single_parser,
     )
 from ..run import (
     ScriptMadeNoChanges,
     derived_branch_name,
     script_runner,
     )
-
-
-def setup_parser(parser):
-    setup_single_parser(parser)
-    ScriptChanger.setup_parser(parser)
 
 
 class ScriptChanger(DebianChanger):
@@ -86,8 +79,3 @@ class ScriptChanger(DebianChanger):
 
     def suggest_branch_name(self):
         return derived_branch_name(self.script)
-
-
-def main(args):
-    changer = ScriptChanger(args)
-    return run_single_changer(changer, args)

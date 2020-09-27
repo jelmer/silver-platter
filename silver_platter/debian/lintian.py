@@ -24,15 +24,15 @@ from lintian_brush import (
     available_lintian_fixers,
     run_lintian_fixers,
     DEFAULT_MINIMUM_CERTAINTY,
+    NotDebianPackage,
     )
 from lintian_brush.config import Config
 
 from .changer import (
-    run_changer,
     DebianChanger,
     ChangerResult,
-    setup_multi_parser as setup_changer_parser,
     run_mutator,
+    ChangerError,
     )
 
 __all__ = [
@@ -256,14 +256,17 @@ class LintianBrushChanger(DebianChanger):
         if minimum_certainty is None:
             minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
 
-        overall_result = run_lintian_fixers(
-                local_tree, self.fixers,
-                committer=committer,
-                update_changelog=update_changelog,
-                compat_release=compat_release,
-                allow_reformatting=allow_reformatting,
-                minimum_certainty=minimum_certainty,
-                subpath=subpath)
+        try:
+            overall_result = run_lintian_fixers(
+                    local_tree, self.fixers,
+                    committer=committer,
+                    update_changelog=update_changelog,
+                    compat_release=compat_release,
+                    allow_reformatting=allow_reformatting,
+                    minimum_certainty=minimum_certainty,
+                    subpath=subpath)
+        except NotDebianPackage:
+            raise ChangerError('not-debian-package', 'Not a Debian package')
 
         if overall_result.failed_fixers:
             note('some fixers failed to run: %r',
@@ -275,7 +278,8 @@ class LintianBrushChanger(DebianChanger):
 
         if not has_nontrivial_changes(
                 overall_result.success, self.propose_addon_only):
-            note('only add-on fixers found')
+            if overall_result.success:
+                note('only add-on fixers found')
             sufficient_for_proposal = False
         else:
             sufficient_for_proposal = True
@@ -304,21 +308,6 @@ class LintianBrushChanger(DebianChanger):
                  publish_result.proposal.url, tags)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-
-def setup_parser(parser):
-    LintianBrushChanger.setup_parser(parser)
-    setup_changer_parser(parser)
-
-
-def main(args):
-    try:
-        changer = LintianBrushChanger.from_args(args)
-    except UnknownFixer as e:
-        note('Unknown fixer: %s', e.fixer)
-        return 1
-
-    return run_changer(changer, args)
 
 
 if __name__ == '__main__':
