@@ -72,7 +72,7 @@ class ScrubObsoleteChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
-        from lintian_brush.scrub_obsolete import drop_old_relations
+        from lintian_brush.scrub_obsolete import scrub_obsolete
         allow_reformatting = self.allow_reformatting
         try:
             cfg = Config.from_workingtree(local_tree, subpath)
@@ -84,14 +84,15 @@ class ScrubObsoleteChanger(DebianChanger):
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
 
-        control_path = os.path.join(subpath, 'debian/control')
-        with ControlEditor(local_tree.abspath(control_path)) as editor:
-            dropped = drop_old_relations(editor, self.upgrade_release)
+        result = scrub_obsolete(local_tree, subpath, self.upgrade_release)
 
-        result = {'control': dropped}
+        result_json = {
+            'control': result.control_removed,
+            'maintscript': result.maintscript_removed,
+            }
 
         return ChangerResult(
-            description="Scrub obsolete settings.", mutator=result,
+            description="Scrub obsolete settings.", mutator=result_json,
             value=calculate_value(result),
             sufficient_for_proposal=True,
             proposed_commit_message='Scrub obsolete settings.')
