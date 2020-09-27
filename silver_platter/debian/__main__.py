@@ -44,6 +44,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         multiarch,
         orphan,
         rrr,
+        scrub_obsolete,
         tidy,
         uncommitted,
         upstream as debian_upstream,
@@ -66,6 +67,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         'rules-requires-root': rrr.RulesRequiresRootChanger,
         'orphan': orphan.OrphanChanger,
         'import-upload': uncommitted.UncommittedChanger,
+        'scrub-obsolete', scrub_obsolete.ScrubObsoleteChanger,
     }
 
     parser = argparse.ArgumentParser(prog='debian-svp', add_help=False)
