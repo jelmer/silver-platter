@@ -15,9 +15,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+__all__ = ['iter_conflicted']
+
 import argparse
 from functools import partial
-import itertools
 import sys
 from typing import Any, List, Optional, Dict, Iterable, Tuple
 
@@ -154,19 +155,6 @@ class ChangerResult(object):
         self.title = title
         self.labels = labels
         self.sufficient_for_proposal = sufficient_for_proposal
-
-
-def setup_multi_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("packages", nargs='*')
-    parser.add_argument(
-        '--fix-conflicted', action='store_true',
-        help='Fix existing merge proposals that are conflicted.')
-    setup_parser_common(parser)
-
-
-def setup_single_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("package")
-    setup_parser_common(parser)
 
 
 def setup_parser_common(parser: argparse.ArgumentParser) -> None:
@@ -383,46 +371,6 @@ def _run_single_changer(
             ws.show_diff(sys.stdout.buffer)
 
         return True
-
-
-def run_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
-    import silver_platter   # noqa: F401
-
-    ret = 0
-
-    if args.name:
-        branch_name = args.name
-    else:
-        branch_name = changer.suggest_branch_name()
-
-    package_iter = iter_packages(
-        args.packages, branch_name, args.overwrite, args.refresh,
-        derived_owner=args.derived_owner)
-    if args.fix_conflicted:
-        package_iter = itertools.chain(
-            package_iter, iter_conflicted(branch_name))
-
-    for (pkg, main_branch, subpath, resume_branch, hoster, existing_proposal,
-         overwrite) in package_iter:
-        try:
-            if _run_single_changer(
-                    changer, pkg, main_branch, subpath, resume_branch, hoster,
-                    existing_proposal, overwrite, args.mode,
-                    branch_name, diff=args.diff,
-                    committer=args.committer, build_verify=args.build_verify,
-                    pre_check=args.pre_check, builder=args.builder,
-                    post_check=args.post_check, dry_run=args.dry_run,
-                    update_changelog=args.update_changelog,
-                    label=args.label, derived_owner=args.derived_owner,
-                    build_target_dir=args.build_target_dir) is False:
-                ret = 1
-        except NoSuchPackage:
-            note('%s: no such package', pkg)
-            ret = 1
-        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-            note('%s: ignoring: %s', pkg, e)
-            ret = 1
-    return ret
 
 
 def run_single_changer(

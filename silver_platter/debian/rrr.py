@@ -16,7 +16,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
@@ -82,17 +81,6 @@ class RulesRequiresRootChanger(DebianChanger):
                  publish_result.proposal.url)
         else:
             note('No changes for package %s', result.package_name)
-
-
-def main(args):
-    changer = RulesRequiresRootChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    RulesRequiresRootChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':
