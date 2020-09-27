@@ -18,11 +18,9 @@
 from breezy.trace import note
 
 from .changer import (
-    run_single_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
-    setup_multi_parser as setup_changer_parser,
     )
 
 from .lintian import LintianBrushChanger

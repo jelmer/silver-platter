@@ -26,11 +26,9 @@ from urllib.request import urlopen
 from debian.changelog import Changelog
 
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
-    setup_multi_parser as setup_changer_parser,
     )
 from breezy.trace import note
 from breezy.plugins.debian.upstream import PackageVersionNotPresent

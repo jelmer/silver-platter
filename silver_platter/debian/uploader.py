@@ -210,7 +210,6 @@ def select_vcswatch_packages(packages, maintainer):
 
 def main(argv):
     import argparse
-    import sys
     parser = argparse.ArgumentParser(prog='upload-pending-commits')
     parser.add_argument("packages", nargs='*')
     parser.add_argument(
