@@ -40,9 +40,11 @@ DEFAULT_VALUE_MULTIARCH_HINT = 30
 
 def calculate_value(result):
     value = DEFAULT_VALUE_MULTIARCH_HINT
-    for para, changes in result.get('control', []):
+    for para, changes in result.control_removed:
         for field, packages in changes:
             value += len(packages) * 2
+    for path, removed in result.maintscript_removed:
+        value += len(removed)
     return value
 
 
@@ -100,12 +102,14 @@ class ScrubObsoleteChanger(DebianChanger):
     def get_proposal_description(
             self, applied, description_format, existing_proposal):
         ret = ['Scrub obsolete settings.\n']
-        for binary, hint, description, certainty in applied.changes:
-            ret.append('* %s: %s\n' % (binary['Package'], description))
+        for line in applied.itemize():
+            ret.append('* %s\n' % ret)
         return ''.join(ret)
 
     def describe(self, applied, publish_result):
         note('Scrub obsolete settings.')
+        for line in applied.itemize():
+            note('* %s', line)
 
 
 if __name__ == '__main__':

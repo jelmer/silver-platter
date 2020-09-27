@@ -67,7 +67,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         'rules-requires-root': rrr.RulesRequiresRootChanger,
         'orphan': orphan.OrphanChanger,
         'import-upload': uncommitted.UncommittedChanger,
-        'scrub-obsolete', scrub_obsolete.ScrubObsoleteChanger,
+        'scrub-obsolete': scrub_obsolete.ScrubObsoleteChanger,
     }
 
     parser = argparse.ArgumentParser(prog='debian-svp', add_help=False)
