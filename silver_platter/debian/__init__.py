@@ -293,3 +293,15 @@ def changelog_add_line(
         env['DEBEMAIL'] = email
     subprocess.check_call(
         ['dch', '--', line], cwd=tree.abspath(subpath), env=env)
+
+
+def control_files_in_root(tree: Tree, subpath: str) -> bool:
+    debian_path = os.path.join(subpath, 'debian')
+    if tree.has_filename(debian_path):
+        return False
+    control_path = os.path.join(subpath, 'control')
+    if tree.has_filename(control_path):
+        return True
+    if tree.has_filename(control_path + '.in'):
+        return True
+    return False
