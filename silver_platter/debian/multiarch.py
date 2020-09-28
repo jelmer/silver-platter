@@ -23,10 +23,14 @@ import silver_platter  # noqa: F401
 
 from lintian_brush import run_lintian_fixer, SUPPORTED_CERTAINTIES
 from lintian_brush.config import Config
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
+
+from . import control_files_in_root
 
 from .changer import (
     DebianChanger,
     ChangerResult,
+    ChangerError,
     run_mutator,
     )
 
@@ -53,7 +57,7 @@ def calculate_value(hints):
 
 class MultiArchHintsChanger(DebianChanger):
 
-    name: str = 'apply-multi-arch-hints'
+    name: str = 'apply-multiarch-hints'
 
     @classmethod
     def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
@@ -88,6 +92,7 @@ class MultiArchHintsChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
+        from lintian_brush import NoChanges
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
             )
@@ -105,16 +110,40 @@ class MultiArchHintsChanger(DebianChanger):
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
 
-        result, summary = run_lintian_fixer(
-            local_tree, MultiArchHintFixer(self.hints),
-            update_changelog=update_changelog,
-            minimum_certainty=minimum_certainty,
-            subpath=subpath, allow_reformatting=allow_reformatting,
-            net_access=True)
+        if control_files_in_root(local_tree, subpath):
+            raise ChangerError(
+                'control-files-in-root',
+                'control files live in root rather than debian/ '
+                '(LarstIQ mode)')
 
+        try:
+            result, summary = run_lintian_fixer(
+                local_tree, MultiArchHintFixer(self.hints),
+                update_changelog=update_changelog,
+                minimum_certainty=minimum_certainty,
+                subpath=subpath, allow_reformatting=allow_reformatting,
+                net_access=True)
+        except NoChanges:
+            raise ChangerError('nothing-to-do', 'no hints to apply')
+        except FormattingUnpreservable:
+            raise ChangerError(
+                'formatting-unpreservable',
+                'unable to preserve formatting while editing')
+        except GeneratedFile as e:
+            raise ChangerError(
+                'generated-file',
+                'unable to edit generated file: %r' % e)
+
+        result_json = {}
         hint_names = []
         for (binary, hint, description, certainty) in result.changes:
             hint_names.append(hint['link'].split('#')[-1])
+            entry = dict(hint.items())
+            hint_names.append(entry['link'].split('#')[-1])
+            entry['action'] = description
+            entry['certainty'] = certainty
+            result_json['applied-hints'].append(entry)
+            note('%s: %s' % (binary['Package'], description))
 
         return ChangerResult(
             description="Applied multi-arch hints.", mutator=result,
