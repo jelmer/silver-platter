@@ -29,6 +29,7 @@ from .changer import (
     run_mutator,
     DebianChanger,
     ChangerResult,
+    ChangerError,
     )
 from breezy.trace import note
 from breezy.plugins.debian.upstream import PackageVersionNotPresent
@@ -186,7 +187,15 @@ class UncommittedChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
-        ret = import_uncommitted(local_tree, subpath)
+        try:
+            ret = import_uncommitted(local_tree, subpath)
+        except TreeUpstreamVersionMissing as e:
+            raise ChangerError('tree-upstream-version-missing', str(e))
+        except TreeVersionNotInArchiveChangelog as e:
+            raise ChangerError(
+                'tree-version-not-in-archive-changelog', str(e))
+        except NoMissingVersions as e:
+            raise ChangerError('nothing-to-do', str(e))
         tags = set([tag_name for (tag_name, version) in ret])
         # TODO(jelmer): Include upstream tags
         # TODO(jelmer): Include auxiliary branches for upstream/pristine-tar
