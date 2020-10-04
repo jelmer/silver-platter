@@ -73,7 +73,7 @@ class ScrubObsoleteChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         from lintian_brush.scrub_obsolete import scrub_obsolete
         allow_reformatting = self.allow_reformatting
         try:

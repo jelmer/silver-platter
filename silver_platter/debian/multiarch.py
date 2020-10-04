@@ -91,7 +91,7 @@ class MultiArchHintsChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         from lintian_brush import NoChanges
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
@@ -134,7 +134,7 @@ class MultiArchHintsChanger(DebianChanger):
                 'generated-file',
                 'unable to edit generated file: %r' % e)
 
-        result_json = {}
+        result_json = {'applied-hints': []}
         hint_names = []
         for (binary, hint, description, certainty) in result.changes:
             hint_names.append(hint['link'].split('#')[-1])

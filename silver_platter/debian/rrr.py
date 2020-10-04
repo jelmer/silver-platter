@@ -53,7 +53,7 @@ class RulesRequiresRootChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         with ControlEditor.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])

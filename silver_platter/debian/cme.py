@@ -51,7 +51,7 @@ class CMEChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         cwd = local_tree.abspath(subpath or '')
         subprocess.check_call(
             ['/usr/bin/cme', 'modify', 'dpkg', '-save'],

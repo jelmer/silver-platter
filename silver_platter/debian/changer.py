@@ -234,11 +234,13 @@ class DebianChanger(object):
     def suggest_branch_name(self) -> str:
         raise NotImplementedError(self.suggest_branch_name)
 
-    def make_changes(self, local_tree: WorkingTree,
+    def make_changes(self,
+                     local_tree: WorkingTree,
                      subpath: str,
                      update_changelog: bool,
                      committer: Optional[str],
-                     base_proposal: Optional[MergeProposal] = None
+                     base_proposal: Optional[MergeProposal] = None,
+                     metadata: Optional[Dict[str, Any]] = None,
                      ) -> ChangerResult:
         raise NotImplementedError(self.make_changes)
 

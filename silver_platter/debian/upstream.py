@@ -905,7 +905,7 @@ class MergeNewUpstreamChanger(DebianChanger):
                    import_only=args.import_only)
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
 
         if self.dist_command:
             def create_dist(tree, package, version, target_dir):

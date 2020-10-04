@@ -103,7 +103,7 @@ class OrphanChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         control_path = local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control'))
         try:

@@ -54,7 +54,7 @@ class ScriptChanger(DebianChanger):
         return cls(script=args.script, commit_pending=commit_pending)
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         try:
             description = script_runner(
                 local_tree, self.script, self.commit_pending)

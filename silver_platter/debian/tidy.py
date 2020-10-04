@@ -52,7 +52,7 @@ class TidyChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         result = {}
         tags = set()
         sufficient_for_proposal = False

@@ -186,7 +186,7 @@ class UncommittedChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+                     base_proposal=None, metadata=None):
         try:
             ret = import_uncommitted(local_tree, subpath)
         except TreeUpstreamVersionMissing as e:
@@ -201,6 +201,8 @@ class UncommittedChanger(DebianChanger):
         # TODO(jelmer): Include auxiliary branches for upstream/pristine-tar
         proposed_commit_message = "Import missing uploads: %s." % (
             ', '.join([str(v) for t, v in ret]))
+        metadata['tags'] = [
+            (tag_name, str(version)) for (tag_name, version) in ret]
         return ChangerResult(
             description='Import archive changes missing from the VCS.',
             mutator=ret, tags=tags, sufficient_for_proposal=True,
