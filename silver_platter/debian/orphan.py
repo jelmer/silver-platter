@@ -24,6 +24,7 @@ from . import (
 from .changer import (
     run_mutator,
     DebianChanger,
+    ChangerError,
     ChangerResult,
     )
 from ..proposal import push_changes
@@ -31,6 +32,7 @@ from breezy import osutils
 from breezy.trace import note
 
 from debmutate.control import ControlEditor
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 BRANCH_NAME = 'orphan'
@@ -102,41 +104,49 @@ class OrphanChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, committer,
                      base_proposal=None):
-        with ControlEditor(
-                path=local_tree.abspath(
-                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
-            editor.source[
-                'Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
-            try:
-                del editor.source['Uploaders']
-            except KeyError:
-                pass
+        control_path = local_tree.abspath(
+                osutils.pathjoin(subpath, 'debian/control'))
+        try:
+            with ControlEditor(path=control_path) as editor:
+                editor.source[
+                    'Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
+                try:
+                    del editor.source['Uploaders']
+                except KeyError:
+                    pass
 
-        result = OrphanResult()
+            result = OrphanResult()
 
-        if self.update_vcs:
-            with ControlEditor(path=local_tree.abspath(
-                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
-                result.package_name = editor.source['Source']
-                result.old_vcs_url = editor.source.get('Vcs-Git')
-                editor.source['Vcs-Git'] = (
-                    'https://salsa.debian.org/%s/%s.git' % (
-                        self.salsa_user, result.package_name))
-                result.new_vcs_url = editor.source['Vcs-Git']
-                editor.source['Vcs-Browser'] = (
-                    'https://salsa.debian.org/%s/%s' % (
-                        self.salsa_user, result.package_name))
-                result.salsa_user = self.salsa_user
-            if result.old_vcs_url == result.new_vcs_url:
-                result.old_vcs_url = result.new_vcs_url = None
-        if update_changelog in (True, None):
-            add_changelog_entry(
-                local_tree,
-                osutils.pathjoin(subpath, 'debian/changelog'),
-                ['QA Upload.', 'Move package to QA team.'])
-        local_tree.commit(
-            'Move package to QA team.', committer=committer,
-            allow_pointless=False)
+            if self.update_vcs:
+                with ControlEditor(path=control_path) as editor:
+                    result.package_name = editor.source['Source']
+                    result.old_vcs_url = editor.source.get('Vcs-Git')
+                    editor.source['Vcs-Git'] = (
+                        'https://salsa.debian.org/%s/%s.git' % (
+                            self.salsa_user, result.package_name))
+                    result.new_vcs_url = editor.source['Vcs-Git']
+                    editor.source['Vcs-Browser'] = (
+                        'https://salsa.debian.org/%s/%s' % (
+                            self.salsa_user, result.package_name))
+                    result.salsa_user = self.salsa_user
+                if result.old_vcs_url == result.new_vcs_url:
+                    result.old_vcs_url = result.new_vcs_url = None
+            if update_changelog in (True, None):
+                add_changelog_entry(
+                    local_tree,
+                    osutils.pathjoin(subpath, 'debian/changelog'),
+                    ['QA Upload.', 'Move package to QA team.'])
+            local_tree.commit(
+                'Move package to QA team.', committer=committer,
+                allow_pointless=False)
+        except FormattingUnpreservable:
+            raise ChangerError(
+                'formatting-unpreservable',
+                'unable to preserve formatting while editing')
+        except GeneratedFile as e:
+            raise ChangerError(
+                'generated-file',
+                'unable to edit generated file: %r' % e)
 
         if self.update_vcs and self.salsa_push and result.new_vcs_url:
             push_to_salsa(
