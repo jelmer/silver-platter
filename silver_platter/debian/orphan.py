@@ -153,6 +153,11 @@ class OrphanChanger(DebianChanger):
                 local_tree, self.salsa_user, result.package_name,
                 dry_run=self.dry_run)
             result.pushed = True
+        if metadata is not None:
+            metadata['old_vcs_url'] = result.old_vcs_url
+            metadata['new_vcs_url'] = result.new_vcs_url
+            metadata['pushed'] = result.pushed
+
         return ChangerResult(
             description='Move package to QA team.',
             mutator=result,
