@@ -323,7 +323,7 @@ class Workspace(object):
         if self._path is None:
             return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
-            return "Workspace for %s at %s" (
+            return "Workspace for %s at %s" % (
                 full_branch_url(self.main_branch), self._path)
 
     def __repr__(self):

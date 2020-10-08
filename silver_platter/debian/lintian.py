@@ -15,8 +15,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import argparse
 from typing import List, Set
 
+from debian.changelog import ChangelogCreateError
+
+import breezy
 from breezy.errors import BzrError
 from breezy.trace import note
 
@@ -24,10 +28,17 @@ from lintian_brush import (
     available_lintian_fixers,
     run_lintian_fixers,
     DEFAULT_MINIMUM_CERTAINTY,
+    SUPPORTED_CERTAINTIES,
     NotDebianPackage,
+    version_string as lintian_brush_version_string,
     )
 from lintian_brush.config import Config
 
+import silver_platter
+
+from . import (
+    control_files_in_root,
+    )
 from .changer import (
     DebianChanger,
     ChangerResult,
@@ -202,11 +213,21 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
 
 class LintianBrushChanger(DebianChanger):
 
-    def __init__(self, names=None, exclude=None, propose_addon_only=None):
+    def __init__(
+            self, names=None, exclude=None, propose_addon_only=None,
+            compat_release=None, allow_reformatting=None,
+            minimum_certainty=None, tags=None,
+            opinionated=False, trust_package=False, diligence=0):
         self.fixers = get_fixers(
             available_lintian_fixers(), names=names,
-            exclude=exclude)
+            tags=tags, exclude=exclude)
         self.propose_addon_only = propose_addon_only or []
+        self.compat_release = compat_release
+        self.allow_reformatting = allow_reformatting
+        self.minimum_certainty = minimum_certainty
+        self.opinionated = opinionated
+        self.trust_package = trust_package
+        self.diligence = diligence
 
     @classmethod
     def setup_parser(cls, parser):
@@ -221,22 +242,56 @@ class LintianBrushChanger(DebianChanger):
             help='Fixers that should be considered add-on-only.',
             type=str, action='append',
             default=DEFAULT_ADDON_FIXERS)
+        parser.add_argument(
+            '--compat-release', type=str, default=None,
+            help='Oldest Debian release to be compatible with.')
+        parser.add_argument(
+            '--allow-reformatting', default=None, action='store_true',
+            help='Whether to allow reformatting.')
+        parser.add_argument(
+            '--minimum-certainty',
+            type=str,
+            choices=SUPPORTED_CERTAINTIES,
+            default=None,
+            help=argparse.SUPPRESS)
+        parser.add_argument(
+            '--opinionated', action='store_true',
+            help='Make opinionated changes')
+        parser.add_argument(
+            '--diligence', type=int, default=10,
+            help=argparse.SUPPRESS)
+        parser.add_argument(
+            '--trust-package', action='store_true',
+            help='Trust package.')
+        parser.add_argument("tags", nargs='*')
 
     @classmethod
     def from_args(cls, args):
         return cls(names=args.fixers, exclude=args.exclude,
-                   propose_addon_only=args.propose_addon_only)
+                   propose_addon_only=args.propose_addon_only,
+                   compat_release=args.compat_release,
+                   allow_reformatting=args.allow_reformatting,
+                   minimum_certainty=args.minimum_certainty,
+                   tags=args.tags, opinionated=args.opinionated,
+                   diligence=args.diligence,
+                   trust_package=args.trust_package)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
 
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
+        reporter.report_metadata('versions', {
+            'lintian-brush': lintian_brush_version_string,
+            'silver-platter': silver_platter.version_string,
+            'breezy': breezy.version_string,
+        })
+
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 
-        compat_release = None
-        allow_reformatting = None
+        compat_release = self.compat_release
+        allow_reformatting = self.allow_reformatting
         minimum_certainty = None
         try:
             cfg = Config.from_workingtree(local_tree, subpath)
@@ -256,33 +311,75 @@ class LintianBrushChanger(DebianChanger):
         if minimum_certainty is None:
             minimum_certainty = DEFAULT_MINIMUM_CERTAINTY
 
-        try:
-            overall_result = run_lintian_fixers(
-                    local_tree, self.fixers,
-                    committer=committer,
-                    update_changelog=update_changelog,
-                    compat_release=compat_release,
-                    allow_reformatting=allow_reformatting,
-                    minimum_certainty=minimum_certainty,
-                    subpath=subpath)
-        except NotDebianPackage:
-            raise ChangerError('not-debian-package', 'Not a Debian package')
+        with local_tree.lock_write():
+            if control_files_in_root(local_tree, subpath):
+                raise ChangerError(
+                    'control-files-in-root',
+                    'control files live in root rather than debian/ '
+                    '(LarstIQ mode)')
+
+            try:
+                overall_result = run_lintian_fixers(
+                        local_tree, self.fixers,
+                        committer=committer,
+                        update_changelog=update_changelog,
+                        compat_release=compat_release,
+                        allow_reformatting=allow_reformatting,
+                        minimum_certainty=minimum_certainty,
+                        subpath=subpath, diligence=self.diligence,
+                        opinionated=self.opinionated,
+                        trust_package=self.trust_package)
+            except NotDebianPackage:
+                raise ChangerError(
+                    'not-debian-package', 'Not a Debian package')
+            except ChangelogCreateError as e:
+                raise ChangerError(
+                    'changelog-create-error',
+                    'Error creating changelog entry: %s' % e)
+
+        applied = []
+        base_applied = reporter.get_base_metadata('applied', [])
+        if base_applied:
+            applied.extend(base_applied)
+        for result, summary in overall_result.success:
+            applied.append({
+                'summary': summary,
+                'description': result.description,
+                'fixed_lintian_tags': result.fixed_lintian_tags,
+                'revision_id': result.revision_id.decode('utf-8'),
+                'certainty': result.certainty})
+        reporter.report_metadata('applied', applied)
 
         if overall_result.failed_fixers:
-            note('some fixers failed to run: %r',
-                 set(overall_result.failed_fixers))
+            for fixer_name, failure in overall_result.failed_fixers.items():
+                note('Fixer %r failed to run:', fixer_name)
+                sys.stderr.write(str(failure))
+        reporter.report_metadata(
+            'failed', {
+                name: str(e)
+                for (name, e) in overall_result.failed_fixers.items()})
+
+        if not overall_result.success:
+            raise ChangerError('nothing-to-do', 'no fixers to apply')
 
         tags = set()
         for result, summary in overall_result.success:
             tags.update(result.fixed_lintian_tags)
 
-        if not has_nontrivial_changes(
-                overall_result.success, self.propose_addon_only):
+        add_on_only = not has_nontrivial_changes(
+            overall_result.success, self.propose_addon_only)
+
+        if not reporter.get_base_metadata('add_on_only', False):
+            add_on_only = False
+
+        if not add_on_only:
             if overall_result.success:
                 note('only add-on fixers found')
             sufficient_for_proposal = False
+            reporter.report_metadata('add_on_only', True)
         else:
             sufficient_for_proposal = True
+            reporter.report_metadata('add_on_only', False)
 
         return ChangerResult(
             description='Applied fixes for %r' % tags,

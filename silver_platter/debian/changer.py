@@ -135,6 +135,9 @@ class ChangerReporter(object):
     def report_metadata(self, key, value):
         raise NotImplementedError(self.report_metadata)
 
+    def get_base_metadata(self, key, default_value=None):
+        raise NotImplementedError(self.get_base_metadata)
+
 
 class ChangerError(Exception):
 
@@ -270,6 +273,9 @@ class DummyChangerReporter(ChangerReporter):
 
     def report_metadata(self, key, value):
         pass
+
+    def get_base_metadata(self, key, default_value=None):
+        return None
 
 
 def _run_single_changer(
@@ -409,6 +415,9 @@ def run_single_changer(
                 refresh=args.refresh, owner=args.derived_owner)
     except NoSuchPackage:
         note('%s: no such package', args.package)
+        return 1
+    except NoSuchProject as e:
+        note('%s: unable to find project: %s', args.package, e.project)
         return 1
     except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
         note('%s: ignoring: %s', args.package, e)
