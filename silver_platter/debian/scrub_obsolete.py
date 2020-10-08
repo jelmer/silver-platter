@@ -18,9 +18,6 @@
 """Support for scrubbing obsolete settings."""
 
 import argparse
-import os
-
-from debmutate.control import ControlEditor
 
 import silver_platter  # noqa: F401
 
