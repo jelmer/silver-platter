@@ -102,8 +102,8 @@ class OrphanChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None, metadata=None):
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
         control_path = local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control'))
         try:
@@ -153,10 +153,9 @@ class OrphanChanger(DebianChanger):
                 local_tree, self.salsa_user, result.package_name,
                 dry_run=self.dry_run)
             result.pushed = True
-        if metadata is not None:
-            metadata['old_vcs_url'] = result.old_vcs_url
-            metadata['new_vcs_url'] = result.new_vcs_url
-            metadata['pushed'] = result.pushed
+            reporter.report_metadata('old_vcs_url', result.old_vcs_url)
+            reporter.report_metadata('new_vcs_url', result.new_vcs_url)
+            reporter.report_metadata('pushed', result.pushed)
 
         return ChangerResult(
             description='Move package to QA team.',

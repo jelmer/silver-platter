@@ -51,8 +51,8 @@ class TidyChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None, metadata=None):
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
         result = {}
         tags = set()
         sufficient_for_proposal = False

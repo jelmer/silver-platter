@@ -25,9 +25,11 @@ import os
 import re
 import ssl
 import tempfile
+import traceback
 from typing import List, Optional, Callable
 
 from ..utils import (
+    full_branch_url,
     open_branch,
     BranchMissing,
     BranchUnavailable,
@@ -37,6 +39,7 @@ from ..utils import (
 from . import (
     changelog_add_line,
     debcommit,
+    control_files_in_root,
     )
 from .changer import (
     run_mutator,
@@ -49,9 +52,11 @@ from breezy.commit import (
     )
 from breezy.errors import (
     FileExists,
+    InvalidNormalization,
     NoSuchFile,
     PointlessMerge,
     InvalidHttpResponse,
+    NoRoundtrippingSupport,
     )
 from breezy.plugins.debian.config import (
     UpstreamMetadataSyntaxError
@@ -64,6 +69,7 @@ from breezy.plugins.debian.errors import (
     )
 
 from breezy.trace import note, warning
+from breezy.transform import MalformedTransform
 
 from breezy.plugins.debian.merge_upstream import (
     changelog_add_new_version,
@@ -854,7 +860,7 @@ def update_packaging(
     return notes
 
 
-class MergeNewUpstreamChanger(DebianChanger):
+class NewUpstreamChanger(DebianChanger):
 
     def __init__(self, snapshot, trust_package, refresh_patches,
                  update_packaging, dist_command, import_only=False):
@@ -867,6 +873,9 @@ class MergeNewUpstreamChanger(DebianChanger):
 
     @classmethod
     def setup_parser(cls, parser):
+        parser.add_argument(
+            '--chroot', type=str, help="Name of chroot",
+            default=os.environ.get('CHROOT'))
         parser.add_argument(
             '--trust-package', action='store_true',
             default=False,
@@ -904,47 +913,72 @@ class MergeNewUpstreamChanger(DebianChanger):
                    dist_command=args.dist_command,
                    import_only=args.import_only)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None, metadata=None):
+    def create_dist_from_command(self, tree, package, version, target_dir):
+        return run_dist_command(
+            tree, package, version, target_dir, self.dist_command)
+
+    def make_changes(self, local_tree, subpath, update_changelog, reporter,
+                     committer, base_proposal=None):
+
+        if control_files_in_root(local_tree, subpath):
+            raise ChangerError(
+                'control-files-in-root',
+                'control files live in root rather than debian/ '
+                '(LarstIQ mode)')
 
         if self.dist_command:
-            def create_dist(tree, package, version, target_dir):
-                return run_dist_command(
-                    tree, package, version, target_dir, self.dist_command)
+            create_dist = self.create_dist_from_command
         else:
             create_dist = None
 
         try:
             if not self.import_only:
-                merge_upstream_result = merge_upstream(
-                    tree=local_tree, snapshot=self.snapshot,
-                    trust_package=self.trust_package,
-                    update_changelog=update_changelog,
-                    subpath=subpath, committer=committer,
-                    create_dist=create_dist)
+                try:
+                    result = merge_upstream(
+                        tree=local_tree, snapshot=self.snapshot,
+                        trust_package=self.trust_package,
+                        update_changelog=update_changelog,
+                        subpath=subpath, committer=committer,
+                        create_dist=create_dist)
+                except MalformedTransform:
+                    traceback.print_exc()
+                    error_description = (
+                        'Malformed tree transform during new upstream merge')
+                    error_code = 'malformed-transform'
+                    raise ChangerError(error_code, error_description)
             else:
-                import_upstream_result = import_upstream(
+                result = import_upstream(
                     tree=local_tree, snapshot=self.snapshot,
                     trust_package=self.trust_package,
                     subpath=subpath, committer=committer,
                     create_dist=create_dist)
         except UpstreamAlreadyImported as e:
+            reporter.report_context(e.version)
+            reporter.report_metadata('upstream_version', e.version)
             raise ChangerError(
-                'upstream-already-imported',
+                'nothing-to-do',
                 'Last upstream version %s already imported.' % e.version, e)
+        except UnsupportedRepackFormat as e:
+            error_description = (
+                'Unable to repack file %s to supported tarball format.' % (
+                    os.path.basename(e.location)))
+            raise ChangerError(
+                'unsupported-repack-format', error_description)
         except NewUpstreamMissing as e:
             raise ChangerError(
                 'new-upstream-missing',
-                'Unable to find new upstream.', e)
+                'Unable to find new upstream source.', e)
         except UpstreamAlreadyMerged as e:
+            reporter.report_context(e.version)
+            reporter.report_metadata('upstream_version', e.version)
             raise ChangerError(
-                'upstream-already-merged',
+                'nothing-to-do',
                 'Last upstream version %s already merged.' % e.version, e)
         except PreviousVersionTagMissing as e:
             raise ChangerError(
                 'previous-upstream-missing',
-                'Unable to find tag %s for previous upstream version %s.' % (
-                    e.tag_name, e.version), e)
+                'Previous upstream version %s missing (tag: %s).' % (
+                    e.version, e.tag_name), e)
         except InvalidFormatUpstreamVersion as e:
             raise ChangerError(
                 'invalid-upstream-version-format',
@@ -954,40 +988,84 @@ class MergeNewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 'pristine-tar-error', 'Pristine tar error: %s' % e, e)
         except UpstreamBranchUnavailable as e:
-            raise ChangerError(
-                'upstream-branch-unavailable',
-                'Upstream branch %s unavailable: %s. ' % (e.location, e.error),
-                e)
+            error_description = (
+                "The upstream branch at %s was unavailable: %s" % (
+                    e.location, e.error))
+            error_code = 'upstream-branch-unavailable'
+            if 'Fossil branches are not yet supported' in str(e.error):
+                error_code = 'upstream-unsupported-vcs-fossil'
+            if 'Mercurial branches are not yet supported.' in str(e.error):
+                error_code = 'upstream-unsupported-vcs-hg'
+            if 'Subversion branches are not yet supported.' in str(
+                    e.error):
+                error_code = 'upstream-unsupported-vcs-svn'
+            if 'Darcs branches are not yet supported' in str(e.error):
+                error_code = 'upstream-unsupported-vcs-darcs'
+            if 'Unsupported protocol for url' in str(e.error):
+                if 'svn://' in str(e.error):
+                    error_code = 'upstream-unsupported-vcs-svn'
+                elif 'cvs+pserver://' in str(e.error):
+                    error_code = 'upstream-unsupported-vcs-cvs'
+                else:
+                    error_code = 'upstream-unsupported-vcs'
+            raise ChangerError(error_code, error_description, e)
         except UpstreamBranchUnknown as e:
             raise ChangerError(
                 'upstream-branch-unknown',
                 'Upstream branch location unknown. '
                 'Set \'Repository\' field in debian/upstream/metadata?', e)
         except UpstreamMergeConflicted as e:
+            reporter.report_context(e.version)
+            reporter.report_metadata('upstream_version', e.version)
+            reporter.report_metadata('conflicts', e.conflicts)
             raise ChangerError(
                 'upstream-merged-conflicts',
-                'Merging upstream resulted in conflicts.', e)
+                'Merging upstream version %s resulted in conflicts.'
+                % e.version, e)
         except PackageIsNative as e:
             raise ChangerError(
                 'native-package',
                 'Package %s is native; unable to merge new upstream.' % (
                     e.package, ), e)
+        except UnparseableChangelog as e:
+            error_description = str(e)
+            error_code = 'unparseable-changelog'
+            raise ChangerError(error_code, error_description, e)
+        except UpstreamVersionMissingInUpstreamBranch as e:
+            error_description = (
+                'Upstream version %s not in upstream branch %r' % (
+                    e.version, e.branch))
+            error_code = 'upstream-version-missing-in-upstream-branch'
+            raise ChangerError(error_code, error_description, e)
         except InconsistentSourceFormatError as e:
             raise ChangerError(
                 'inconsistent-source-format',
                 'Inconsistencies in type of package: %s' % e, e)
         except WatchLineWithoutMatches as e:
             raise ChangerError(
-                'uscan-watch-line-no-matches',
+                'uscan-watch-line-without-matches',
                 'UScan did not find matches for line %r' % e.line)
+        except NoRoundtrippingSupport:
+            error_description = (
+                'Unable to import upstream repository into '
+                'packaging repository.')
+            error_code = 'roundtripping-error'
+            raise ChangerError(error_code, error_description)
         except UScanError as e:
-            raise ChangerError(
-                'uscan-error',
-                'UScan failed: %s' % e, e)
+            error_description = str(e)
+            if e.errors == 'OpenPGP signature did not verify.':
+                error_code = 'upstream-pgp-signature-verification-failed'
+            else:
+                error_code = 'uscan-error'
+            raise ChangerError(error_code, error_description, e)
         except UpstreamMetadataSyntaxError as e:
             raise ChangerError(
                 'upstream-metadata-syntax-error',
-                'Unable to parse %s' % e.path, e)
+                'Unable to parse %s: %s' % (e.path, e.error), e)
+        except InvalidNormalization as e:
+            error_description = str(e)
+            error_code = 'invalid-path-normalization'
+            raise ChangerError(error_code, error_description)
         except MissingChangelogError as e:
             raise ChangerError(
                 'missing-changelog', 'Missing changelog %s' % e, e)
@@ -999,10 +1077,13 @@ class MergeNewUpstreamChanger(DebianChanger):
                 'missing-upstream-tarball',
                 'Missing upstream tarball: %s' % e, e)
         except NewUpstreamTarballMissing as e:
+            reporter.report_context(e.version)
+            reporter.report_metadata('upstream_version', e.version)
             raise ChangerError(
-                'new-upstream-tarball-retrieval-error',
-                'Tarball missing for new upstream version: %s '
-                '(%s: %s in %r)' % (e, e.package, e.version, e.upstream), e)
+                'new-upstream-tarball-missing',
+                'New upstream version (%s/%s) found, but was missing '
+                'when retrieved as tarball from %r.' % (
+                    e.package, e.version, e.upstream))
         except NoUpstreamLocationsKnown as e:
             raise ChangerError(
                 'no-upstream-locations-known',
@@ -1010,54 +1091,79 @@ class MergeNewUpstreamChanger(DebianChanger):
                 'debian/upstream/metadata to retrieve new upstream version'
                 'from.', e)
 
+        reporter.report_metadata(
+            'old_upstream_version', result.old_upstream_version)
+        reporter.report_metadata(
+            'upstream_version', result.new_upstream_version)
+        if result.upstream_branch:
+            reporter.report_metadata(
+                'upstream_branch_url',
+                full_branch_url(result.upstream_branch))
+            reporter.report_metadata(
+                'upstream_branch_browse',
+                result.upstream_branch_browse)
+
+        reporter.report_context(result.new_upstream_version)
+
         if self.import_only:
             note('Imported new upstream version %s (previous: %s)',
-                 import_upstream_result.new_upstream_version,
-                 import_upstream_result.old_upstream_version)
+                 result.new_upstream_version,
+                 result.old_upstream_version)
             tags = set()
             tags.add(
-                'upstream/%s' % import_upstream_result.new_upstream_version)
+                'upstream/%s' % result.new_upstream_version)
             return ChangerResult(
-                description="Import new upstream version %s" % (
-                    import_upstream_result.new_upstream_version),
-                mutator=import_upstream_result, tags=tags,
+                description="Imported new upstream version %s" % (
+                    result.new_upstream_version),
+                mutator=result, tags=tags,
                 sufficient_for_proposal=True)
         else:
             note('Merged new upstream version %s (previous: %s)',
-                 merge_upstream_result.new_upstream_version,
-                 merge_upstream_result.old_upstream_version)
+                 result.new_upstream_version, result.old_upstream_version)
 
             if self.update_packaging:
                 old_tree = local_tree.branch.repository.revision_tree(
-                    merge_upstream_result.old_revision)
+                    result.old_revision)
                 notes = update_packaging(local_tree, old_tree)
+                reporter.report_metadata('notes', notes)
                 for n in notes:
                     note('%s', n)
 
+            patch_series_path = os.path.join(
+                subpath, 'debian/patches/series')
             if self.refresh_patches and \
-                    local_tree.has_filename('debian/patches/series'):
+                    local_tree.has_filename(patch_series_path):
                 note('Refresh quilt patches.')
                 try:
                     refresh_quilt_patches(
                         local_tree,
-                        old_version=merge_upstream_result.old_upstream_version,
-                        new_version=merge_upstream_result.new_upstream_version)
+                        old_version=result.old_upstream_version,
+                        new_version=result.new_upstream_version,
+                        committer=committer,
+                        subpath=subpath)
                 except QuiltError as e:
-                    raise ChangerError(
-                        'quilt-refresh-error',
-                        'Quilt error while refreshing patches: %s', e)
+                    error_description = (
+                        "An error (%d) occurred refreshing quilt patches: "
+                        "%s%s" % (e.retcode, e.stderr, e.extra))
+                    error_code = 'quilt-refresh-error'
+                    raise ChangerError(error_code, error_description, e)
+                except QuiltPatchPushFailure as e:
+                    error_description = (
+                        "An error occurred refreshing quilt patch %s: %s"
+                        % (e.patch_name, e.actual_error.extra))
+                    error_code = 'quilt-refresh-error'
+                    raise ChangerError(error_code, error_description, e)
+
             tags = set()
-            tags.add(
-                'upstream/%s' % merge_upstream_result.new_upstream_version)
+            tags.add('upstream/%s' % result.new_upstream_version)
 
             # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
             proposed_commit_message = (
-                "Merge new upstream release %s" %
-                merge_upstream_result.new_upstream_version)
+                "Merge new upstream release %s" % result.new_upstream_version)
             return ChangerResult(
                 description="Merged new upstream version %s" % (
-                    merge_upstream_result.new_upstream_version),
-                mutator=merge_upstream_result, tags=tags,
+                    result.new_upstream_version),
+                mutator=result, tags=tags,
                 sufficient_for_proposal=True,
                 proposed_commit_message=proposed_commit_message)
 
@@ -1078,4 +1184,4 @@ class MergeNewUpstreamChanger(DebianChanger):
 
 if __name__ == '__main__':
     import sys
-    sys.exit(run_mutator(MergeNewUpstreamChanger))
+    sys.exit(run_mutator(NewUpstreamChanger))

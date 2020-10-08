@@ -230,8 +230,8 @@ class LintianBrushChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None, metadata=None):
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
         import distro_info
         debian_info = distro_info.DebianDistroInfo()
 

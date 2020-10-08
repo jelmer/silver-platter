@@ -127,6 +127,15 @@ def iter_packages(packages: Iterable[str], branch_name: str,
                existing_proposal, overwrite)
 
 
+class ChangerReporter(object):
+
+    def report_context(self, context):
+        raise NotImplementedError(self.report_context)
+
+    def report_metadata(self, key, value):
+        raise NotImplementedError(self.report_metadata)
+
+
 class ChangerError(Exception):
 
     def __init__(self, category: str, summary: str,
@@ -238,9 +247,9 @@ class DebianChanger(object):
                      local_tree: WorkingTree,
                      subpath: str,
                      update_changelog: bool,
+                     reporter: ChangerReporter,
                      committer: Optional[str],
                      base_proposal: Optional[MergeProposal] = None,
-                     metadata: Optional[Dict[str, Any]] = None,
                      ) -> ChangerResult:
         raise NotImplementedError(self.make_changes)
 
@@ -252,6 +261,15 @@ class DebianChanger(object):
 
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
+
+
+class DummyChangerReporter(ChangerReporter):
+
+    def report_context(self, context):
+        pass
+
+    def report_metadata(self, key, value):
+        pass
 
 
 def _run_single_changer(
@@ -299,7 +317,7 @@ def _run_single_changer(
             changer_result = changer.make_changes(
                 ws.local_tree, subpath=subpath,
                 update_changelog=update_changelog,
-                committer=committer)
+                committer=committer, reporter=DummyChangerReporter())
         except ChangerError as e:
             show_error(e.summary)
             return False
@@ -460,7 +478,8 @@ def run_mutator(changer_cls, argv=None):
         result = changer.make_changes(
             wt, subpath, update_changelog=update_changelog,
             committer=os.environ.get('COMMITTER'),
-            base_proposal=existing_proposal)
+            base_proposal=existing_proposal,
+            reporter=DummyChangerReporter())
     except ChangerError as e:
         result_json = {
             'result-code': e.category,

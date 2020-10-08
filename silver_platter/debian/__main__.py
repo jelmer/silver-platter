@@ -61,7 +61,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         'run': debian_run.ScriptChanger,
         'lintian-brush': debian_lintian.LintianBrushChanger,
         'tidy': tidy.TidyChanger,
-        'new-upstream': debian_upstream.MergeNewUpstreamChanger,
+        'new-upstream': debian_upstream.NewUpstreamChanger,
         'cme-fix': cme.CMEChanger,
         'apply-multi-arch-hints': multiarch.MultiArchHintsChanger,
         'rules-requires-root': rrr.RulesRequiresRootChanger,
