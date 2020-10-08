@@ -63,7 +63,7 @@ setup(
             'pyyaml',  # For reading debian/upstream/metadata
             'debmutate>=0.3',
             'lintian-brush>=0.50',
-            'debian',
+            'python_debian',
         ],
     },
     tests_require=['testtools'],
