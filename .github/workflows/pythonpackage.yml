@@ -20,9 +20,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        sudo apt install devscripts cython3 bzr python3-debmutate python3-testtools python3-yaml lintian-brush
+        sudo apt install devscripts cython3 bzr python3-testtools python3-yaml
         python -m pip install --upgrade pip
-        pip install -U pip setuptools flake8 mypy
+        pip install -U pip setuptools flake8 mypy debmutate
         python setup.py develop
         mkdir $HOME/.config/breezy/plugins -p
         bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
