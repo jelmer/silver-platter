@@ -25,6 +25,7 @@ from urllib.request import urlopen
 
 from debian.changelog import Changelog
 
+from . import NoAptSources
 from .changer import (
     run_mutator,
     DebianChanger,
@@ -36,10 +37,6 @@ from breezy.plugins.debian.upstream import PackageVersionNotPresent
 
 
 BRANCH_NAME = 'missing-commits'
-
-
-class NoAptSources(Exception):
-    """No apt sources were configured."""
 
 
 class AptSourceError(Exception):
@@ -123,8 +120,9 @@ class TreeUpstreamVersionMissing(Exception):
 
 def retrieve_source(package_name, target):
     try:
-        subprocess.check_call(
+        subprocess.run(
             ['apt', 'source', package_name], cwd=target,
+            check=True,
             stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
         stderr = e.stderr.splitlines()
@@ -132,8 +130,17 @@ def retrieve_source(package_name, target):
                 b'E: You must put some \'source\' URIs in your '
                 b'sources.list'):
             raise NoAptSources()
+        CS = b"\x1b[1;31mE: \x1b[0m"
+        CE = b"\x1b[0m"
+        if stderr[-1] == (
+                CS +
+                b"You must put some 'deb-src' URIs in your sources.list" +
+                CE):
+            raise NoAptSources()
         if stderr[-1].startswith(b'E: '):
             raise AptSourceError(stderr[-1][3:].decode())
+        if stderr[-1].startswith(CS):
+            raise AptSourceError(stderr[-1][len(CS):-len(CE)])
         raise AptSourceError(
             [line.decode('utf-8', 'surrogateescape') for line in stderr])
 

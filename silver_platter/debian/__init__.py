@@ -96,6 +96,10 @@ def build(tree: Tree,
         [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
+class NoAptSources(Exception):
+    """No apt sources were configured."""
+
+
 def get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
@@ -107,7 +111,13 @@ def get_source_package(name: str) -> Deb822:
     import apt_pkg
     apt_pkg.init()
 
-    sources = apt_pkg.SourceRecords()
+    try:
+        sources = apt_pkg.SourceRecords()
+    except apt_pkg.Error as e:
+        if e.args[0] == (
+                'E:You must put some \'deb-src\' URIs in your sources.list'):
+            raise NoAptSources()
+        raise
 
     by_version: Dict[str, Deb822] = {}
     while sources.lookup(name):

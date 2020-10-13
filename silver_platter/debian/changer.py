@@ -33,6 +33,7 @@ from . import (
     open_packaging_branch,
     guess_update_changelog,
     NoSuchPackage,
+    NoAptSources,
     DEFAULT_BUILDER,
     )
 from ..proposal import (
@@ -421,6 +422,10 @@ def run_single_changer(
         return 1
     except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
         note('%s: ignoring: %s', args.package, e)
+        return 1
+    except NoAptSources:
+        note('%s: no apt sources configured, unable to get package metadata.',
+             args.package)
         return 1
 
     if _run_single_changer(
