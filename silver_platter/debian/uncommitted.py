@@ -38,6 +38,17 @@ from breezy.plugins.debian.upstream import PackageVersionNotPresent
 BRANCH_NAME = 'missing-commits'
 
 
+class NoAptSources(Exception):
+    """No apt sources were configured."""
+
+
+class AptSourceError(Exception):
+    """An error occured while running 'apt source'."""
+
+    def __init__(self, reason):
+        self.reason = reason
+
+
 def select_vcswatch_packages():
     import psycopg2
     conn = psycopg2.connect(
@@ -110,6 +121,23 @@ class TreeUpstreamVersionMissing(Exception):
             'unable to find upstream version %r' % upstream_version)
 
 
+def retrieve_source(package_name, target):
+    try:
+        subprocess.check_call(
+            ['apt', 'source', package_name], cwd=target,
+            stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.splitlines()
+        if stderr[-1] == (
+                b'E: You must put some \'source\' URIs in your '
+                b'sources.list'):
+            raise NoAptSources()
+        if stderr[-1].startswith(b'E: '):
+            raise AptSourceError(stderr[-1][3:].decode())
+        raise AptSourceError(
+            [line.decode('utf-8', 'surrogateescape') for line in stderr])
+
+
 def import_uncommitted(tree, subpath):
     from breezy.plugins.debian.import_dsc import (
         DistributionBranch,
@@ -121,8 +149,18 @@ def import_uncommitted(tree, subpath):
         package_name = tree_cl.package
     with contextlib.ExitStack() as es:
         archive_source = es.enter_context(tempfile.TemporaryDirectory())
-        subprocess.check_call(
-            ['apt', 'source', package_name], cwd=archive_source)
+        try:
+            retrieve_source(package_name, archive_source)
+        except AptSourceError as e:
+            if isinstance(e.reason, list):
+                reason = e.reason[-1]
+            else:
+                reason = e.reason
+            raise ChangerError('apt-source-error', reason)
+        except NoAptSources:
+            raise ChangerError(
+                'no-apt-sources',
+                'No sources configured in /etc/apt/sources.list')
         [subdir] = [
             e.path for e in os.scandir(archive_source) if e.is_dir()]
         with open(os.path.join(subdir, 'debian', 'changelog'), 'r') as f:
