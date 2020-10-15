@@ -134,7 +134,7 @@ class MultiArchHintsChanger(DebianChanger):
                 'generated-file',
                 'unable to edit generated file: %r' % e)
 
-        result_json = {'applied-hints': []}
+        applied_hints = []
         hint_names = []
         for (binary, hint, description, certainty) in result.changes:
             hint_names.append(hint['link'].split('#')[-1])
@@ -142,8 +142,10 @@ class MultiArchHintsChanger(DebianChanger):
             hint_names.append(entry['link'].split('#')[-1])
             entry['action'] = description
             entry['certainty'] = certainty
-            result_json['applied-hints'].append(entry)
+            applied_hints.append(entry)
             note('%s: %s' % (binary['Package'], description))
+
+        reporter.report_metadata('applied-hints', applied_hints)
 
         return ChangerResult(
             description="Applied multi-arch hints.", mutator=result,
