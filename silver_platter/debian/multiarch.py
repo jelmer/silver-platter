@@ -122,7 +122,7 @@ class MultiArchHintsChanger(DebianChanger):
                 update_changelog=update_changelog,
                 minimum_certainty=minimum_certainty,
                 subpath=subpath, allow_reformatting=allow_reformatting,
-                net_access=True)
+                net_access=True, committer=committer)
         except NoChanges:
             raise ChangerError('nothing-to-do', 'no hints to apply')
         except FormattingUnpreservable:
