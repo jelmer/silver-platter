@@ -49,6 +49,7 @@ from breezy.propose import (
     NoSuchProject,
     UnsupportedHoster,
     HosterLoginRequired,
+    MergeProposalExists,
     )
 
 try:
@@ -694,19 +695,7 @@ def propose_changes(
         except ReopenFailed:
             note('Reopening existing proposal failed. Creating new proposal.')
             resume_proposal = None
-    if resume_proposal is not None:
-        # Check that the proposal doesn't already has this description.
-        # Setting the description (regardless of whether it changes)
-        # causes Launchpad to send emails.
-        if resume_proposal.get_description() != mp_description:
-            resume_proposal.set_description(mp_description)
-        if resume_proposal.get_commit_message() != commit_message:
-            try:
-                resume_proposal.set_commit_message(commit_message)
-            except UnsupportedOperation:
-                pass
-        return (resume_proposal, False)
-    else:
+    if resume_proposal is None:
         if not dry_run:
             proposal_builder = hoster.get_proposer(remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
@@ -716,16 +705,34 @@ def propose_changes(
                 mp = proposal_builder.create_proposal(
                     description=mp_description, labels=labels,
                     reviewers=reviewers, **kwargs)
+            except MergeProposalExists as e:
+                if getattr(e, 'existing_proposal', None) is None:
+                    # Hoster didn't tell us where the actual proposal is.
+                    raise
+                resume_proposal = e.existing_proposal
             except PermissionDenied:
                 note('Permission denied while trying to create '
                      'proposal.')
                 raise
+            else:
+                return (mp, True)
         else:
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
                 description=mp_description, commit_message=commit_message,
                 reviewers=reviewers, owner=owner)
-        return (mp, True)
+            return (mp, True)
+    # Check that the proposal doesn't already has this description.
+    # Setting the description (regardless of whether it changes)
+    # causes Launchpad to send emails.
+    if resume_proposal.get_description() != mp_description:
+        resume_proposal.set_description(mp_description)
+    if resume_proposal.get_commit_message() != commit_message:
+        try:
+            resume_proposal.set_commit_message(commit_message)
+        except UnsupportedOperation:
+            pass
+    return (resume_proposal, False)
 
 
 def merge_directive_changes(
