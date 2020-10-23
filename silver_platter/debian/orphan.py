@@ -139,10 +139,10 @@ class OrphanChanger(DebianChanger):
             local_tree.commit(
                 'Move package to QA team.', committer=committer,
                 allow_pointless=False)
-        except FormattingUnpreservable:
+        except FormattingUnpreservable as e:
             raise ChangerError(
                 'formatting-unpreservable',
-                'unable to preserve formatting while editing')
+                'unable to preserve formatting while editing %s' % e.path)
         except GeneratedFile as e:
             raise ChangerError(
                 'generated-file',

@@ -126,10 +126,10 @@ class MultiArchHintsChanger(DebianChanger):
                 changes_by='apply-multiarch-hints')
         except NoChanges:
             raise ChangerError('nothing-to-do', 'no hints to apply')
-        except FormattingUnpreservable:
+        except FormattingUnpreservable as e:
             raise ChangerError(
                 'formatting-unpreservable',
-                'unable to preserve formatting while editing')
+                'unable to preserve formatting while editing %s' % e.path)
         except GeneratedFile as e:
             raise ChangerError(
                 'generated-file',
