@@ -409,5 +409,4 @@ class LintianBrushChanger(DebianChanger):
 
 
 if __name__ == '__main__':
-    import sys
     sys.exit(run_mutator(LintianBrushChanger))
