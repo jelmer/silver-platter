@@ -21,6 +21,7 @@ import silver_platter   # noqa: F401
 
 import datetime
 import subprocess
+import sys
 import tempfile
 
 from breezy import gpg
@@ -85,7 +86,6 @@ def check_revision(rev, min_commit_age):
     Raises:
       RecentCommits: When there are commits younger than min_commit_age
     """
-    print("checking %r" % rev)
     # TODO(jelmer): deal with timezone
     if min_commit_age is not None:
         commit_time = datetime.datetime.fromtimestamp(rev.timestamp)
@@ -123,7 +123,7 @@ def prepare_upload_package(
             "version in branch: %r > %r" % (
                 last_uploaded_version, previous_version_in_branch))
 
-    print("Checking revisions since %s" % last_uploaded_version)
+    note("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
         last_release_revid = find_last_release_revid(
                 local_tree.branch, last_uploaded_version)
@@ -131,9 +131,10 @@ def prepare_upload_package(
         revids = list(graph.iter_lefthand_ancestry(
             local_tree.branch.last_revision(), [last_release_revid]))
         if not revids:
-            print("No pending changes")
+            note("No pending changes")
             return
         if gpg_strategy:
+            note('Verifying GPG signatures...')
             count, result, all_verifiables = gpg.bulk_verify_signatures(
                     local_tree.branch.repository, revids,
                     gpg_strategy)
@@ -220,8 +221,8 @@ def main(argv):
         help='List of acceptable GPG keys',
         action='append', default=[], type=str)
     parser.add_argument(
-        '--no-gpg-verification',
-        help='Do not verify GPG signatures', action='store_true')
+        '--gpg-verification',
+        help='Verify GPG signatures on commits', action='store_true')
     parser.add_argument(
         '--min-commit-age',
         help='Minimum age of the last commit, in days',
@@ -240,11 +241,16 @@ def main(argv):
     parser.add_argument(
         '--vcswatch',
         action='store_true',
+        default=False,
         help='Use vcswatch to determine what packages need uploading.')
 
     # TODO(jelmer): Support requiring that autopkgtest is present and passing
     args = parser.parse_args(argv)
     ret = 0
+
+    if not args.packages and not args.maintainer:
+        parser.print_usage()
+        sys.exit(1)
 
     if args.vcswatch:
         packages = select_vcswatch_packages(
@@ -261,11 +267,14 @@ def main(argv):
     note('Uploading packages: %s', ', '.join(packages))
 
     for package in packages:
+        note('Uploading pending commits to %s', package)
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)
         vcs_type, vcs_url = source_package_vcs(pkg_source)
         (location, branch_name, subpath) = split_vcs_url(vcs_url)
+        if subpath is None:
+            subpath = ''
         probers = select_probers(vcs_type)
         try:
             main_branch = open_branch(
@@ -276,9 +285,7 @@ def main(argv):
             continue
         with Workspace(main_branch) as ws:
             branch_config = ws.local_tree.branch.get_config_stack()
-            if args.no_gpg_verification:
-                gpg_strategy = None
-            else:
+            if args.gpg_verification:
                 gpg_strategy = gpg.GPGStrategy(branch_config)
                 if args.acceptable_keys:
                     acceptable_keys = args.acceptable_keys
@@ -286,6 +293,8 @@ def main(argv):
                     acceptable_keys = list(get_maintainer_keys(
                         gpg_strategy.context))
                 gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
+            else:
+                gpg_strategy = None
 
             target_changes = prepare_upload_package(
                 ws.local_tree, subpath,

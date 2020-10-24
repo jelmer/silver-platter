@@ -27,6 +27,7 @@ from .changer import setup_parser_common, DebianChanger, run_single_changer
 
 def changer_subcommand(name, changer_cls, argv, changer_args):
     parser = argparse.ArgumentParser(prog='debian-svp %s URL' % name)
+    parser.add_argument('package', type=str, nargs='?')
     changer_cls.setup_parser(parser)
     args = parser.parse_args(argv)
     changer = changer_cls.from_args(args)
@@ -84,7 +85,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     parser.add_argument(
         'subcommand', type=str,
         choices=list(subcommands.keys()) + list(changer_subcommands.keys()))
-    parser.add_argument('package', type=str, nargs='?')
     args, rest = parser.parse_known_args()
     if args.help:
         if args.subcommand is None:
