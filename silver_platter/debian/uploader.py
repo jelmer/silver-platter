@@ -264,10 +264,11 @@ def main(argv):
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
 
-    note('Uploading packages: %s', ', '.join(packages))
+    if len(packages) > 1:
+        note('Uploading packages: %s', ', '.join(packages))
 
     for package in packages:
-        note('Uploading pending commits to %s', package)
+        note('Processing %s', package)
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)
@@ -296,11 +297,15 @@ def main(argv):
             else:
                 gpg_strategy = None
 
-            target_changes = prepare_upload_package(
-                ws.local_tree, subpath,
-                pkg_source["Package"], pkg_source["Version"],
-                builder=args.builder, gpg_strategy=gpg_strategy,
-                min_commit_age=args.min_commit_age)
+            try:
+                target_changes = prepare_upload_package(
+                    ws.local_tree, subpath,
+                    pkg_source["Package"], pkg_source["Version"],
+                    builder=args.builder, gpg_strategy=gpg_strategy,
+                    min_commit_age=args.min_commit_age)
+            except NoUnuploadedChanges:
+                note('%s: No unuploaded changes, skipping.', pkg_source['Package'])
+                continue
 
             # TODO(jelmer): Upload the right tags
 
