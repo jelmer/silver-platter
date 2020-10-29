@@ -1,4 +1,4 @@
-Mutators live in /usr/share/silver-platter/mutators.
+Mutators live in /usr/share/silver-platter/mutators or $(dirname debian-svp)/debian-mutators.
 
 Each mutators is a binary that will be run in a clean VCS checkout, where
 they can make changes as they deem fit. Changes should be committed; pending

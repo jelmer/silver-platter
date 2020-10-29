@@ -40,6 +40,8 @@ from breezy.plugins.debian.util import (
     )
 from breezy.trace import note, show_error
 
+from debian.changelog import get_maintainer
+
 from . import (
     get_source_package,
     source_package_vcs,
@@ -249,8 +251,13 @@ def main(argv):
     ret = 0
 
     if not args.packages and not args.maintainer:
-        parser.print_usage()
-        sys.exit(1)
+        (name, email) = get_maintainer()
+        if email:
+            note('Processing packages maintained by %s', email)
+            args.maintainer = email
+        else:
+            parser.print_usage()
+            sys.exit(1)
 
     if args.vcswatch:
         packages = select_vcswatch_packages(
@@ -260,6 +267,11 @@ def main(argv):
              'vcswatch found pending commits.')
         packages = select_apt_packages(
             args.packages, args.maintainer)
+
+    if not packages:
+        note('No packages found.')
+        parser.print_usage()
+        sys.exit(1)
 
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
@@ -272,7 +284,13 @@ def main(argv):
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         pkg_source = get_source_package(package)
-        vcs_type, vcs_url = source_package_vcs(pkg_source)
+        try:
+            vcs_type, vcs_url = source_package_vcs(pkg_source)
+        except KeyError:
+            note('%s: no declared vcs location, skipping',
+                 pkg_source['Package'])
+            ret = 1
+            continue
         (location, branch_name, subpath) = split_vcs_url(vcs_url)
         if subpath is None:
             subpath = ''
@@ -304,17 +322,18 @@ def main(argv):
                     builder=args.builder, gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age)
             except NoUnuploadedChanges:
-                note('%s: No unuploaded changes, skipping.', pkg_source['Package'])
+                note('%s: No unuploaded changes, skipping.',
+                     pkg_source['Package'])
                 continue
 
             # TODO(jelmer): Upload the right tags
+            tags = []
 
-            ws.push(dry_run=args.dry_run)
+            ws.push(dry_run=args.dry_run, tags=tags)
             if not args.dry_run:
                 dput_changes(target_changes)
     return ret
 
 
 if __name__ == '__main__':
-    import sys
     sys.exit(main(sys.argv))
