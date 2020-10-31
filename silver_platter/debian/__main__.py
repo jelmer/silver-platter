@@ -23,6 +23,19 @@ import argparse
 import sys
 
 from .changer import setup_parser_common, DebianChanger, run_single_changer
+from . import (
+    lintian as debian_lintian,
+    cme,
+    run as debian_run,
+    multiarch,
+    orphan,
+    rrr,
+    scrub_obsolete,
+    tidy,
+    uncommitted,
+    upstream as debian_upstream,
+    uploader as debian_uploader,
+    )
 
 
 def changer_subcommand(name, changer_cls, argv, changer_args):
@@ -34,42 +47,31 @@ def changer_subcommand(name, changer_cls, argv, changer_args):
     return run_single_changer(changer, changer_args)
 
 
+# TODO(jelmer): Allow registration of these
+changer_subcommands: Dict[str, Type[DebianChanger]] = {
+    'run': debian_run.ScriptChanger,
+    'lintian-brush': debian_lintian.LintianBrushChanger,
+    'tidy': tidy.TidyChanger,
+    'new-upstream': debian_upstream.NewUpstreamChanger,
+    'cme-fix': cme.CMEChanger,
+    'apply-multi-arch-hints': multiarch.MultiArchHintsChanger,
+    'rules-requires-root': rrr.RulesRequiresRootChanger,
+    'orphan': orphan.OrphanChanger,
+    'import-upload': uncommitted.UncommittedChanger,
+    'scrub-obsolete': scrub_obsolete.ScrubObsoleteChanger,
+}
+
+
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
     breezy.initialize()
 
-    from . import (
-        lintian as debian_lintian,
-        cme,
-        run as debian_run,
-        multiarch,
-        orphan,
-        rrr,
-        scrub_obsolete,
-        tidy,
-        uncommitted,
-        upstream as debian_upstream,
-        uploader as debian_uploader,
-        )
     from ..__main__ import subcommands as main_subcommands
 
     subcommands: Dict[
             str, Callable[[List[str]], Optional[int]]] = {
         'upload-pending': debian_uploader.main,
         }
-
-    changer_subcommands: Dict[str, Type[DebianChanger]] = {
-        'run': debian_run.ScriptChanger,
-        'lintian-brush': debian_lintian.LintianBrushChanger,
-        'tidy': tidy.TidyChanger,
-        'new-upstream': debian_upstream.NewUpstreamChanger,
-        'cme-fix': cme.CMEChanger,
-        'apply-multi-arch-hints': multiarch.MultiArchHintsChanger,
-        'rules-requires-root': rrr.RulesRequiresRootChanger,
-        'orphan': orphan.OrphanChanger,
-        'import-upload': uncommitted.UncommittedChanger,
-        'scrub-obsolete': scrub_obsolete.ScrubObsoleteChanger,
-    }
 
     parser = argparse.ArgumentParser(prog='debian-svp', add_help=False)
     parser.add_argument(
