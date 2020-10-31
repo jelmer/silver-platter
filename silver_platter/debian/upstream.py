@@ -862,6 +862,8 @@ def update_packaging(
 
 class NewUpstreamChanger(DebianChanger):
 
+    name = 'new-upstream'
+
     def __init__(self, snapshot, trust_package, refresh_patches,
                  update_packaging, dist_command, import_only=False):
         self.snapshot = snapshot
