@@ -219,6 +219,8 @@ def import_uncommitted(tree, subpath):
 
 class UncommittedChanger(DebianChanger):
 
+    name = 'uncommitted'
+
     @classmethod
     def setup_parser(cls, parser):
         pass

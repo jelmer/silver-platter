@@ -71,6 +71,8 @@ class OrphanResult(object):
 
 class OrphanChanger(DebianChanger):
 
+    name = 'orphan'
+
     def __init__(self, update_vcs=True, salsa_push=True,
                  salsa_user='debian', dry_run=False):
         self.update_vcs = update_vcs

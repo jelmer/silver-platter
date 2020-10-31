@@ -214,6 +214,8 @@ def get_fixers(available_fixers, names=None, tags=None, exclude=None):
 
 class LintianBrushChanger(DebianChanger):
 
+    name = 'lintian-brush'
+
     def __init__(
             self, names=None, exclude=None, propose_addon_only=None,
             compat_release=None, allow_reformatting=None,

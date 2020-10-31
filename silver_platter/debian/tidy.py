@@ -32,6 +32,8 @@ BRANCH_NAME = 'tidy'
 
 class TidyChanger(DebianChanger):
 
+    name = 'tidy'
+
     SUBCHANGERS = [
         LintianBrushChanger,
         MultiArchHintsChanger,

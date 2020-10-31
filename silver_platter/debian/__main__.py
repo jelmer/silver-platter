@@ -47,19 +47,24 @@ def changer_subcommand(name, changer_cls, argv, changer_args):
     return run_single_changer(changer, changer_args)
 
 
+changer_clses: List[Type[DebianChanger]] = [
+    debian_run.ScriptChanger,
+    debian_lintian.LintianBrushChanger,
+    tidy.TidyChanger,
+    debian_upstream.NewUpstreamChanger,
+    cme.CMEChanger,
+    multiarch.MultiArchHintsChanger,
+    rrr.RulesRequiresRootChanger,
+    orphan.OrphanChanger,
+    uncommitted.UncommittedChanger,
+    scrub_obsolete.ScrubObsoleteChanger,
+    ]
+
+
 # TODO(jelmer): Allow registration of these
 changer_subcommands: Dict[str, Type[DebianChanger]] = {
-    'run': debian_run.ScriptChanger,
-    'lintian-brush': debian_lintian.LintianBrushChanger,
-    'tidy': tidy.TidyChanger,
-    'new-upstream': debian_upstream.NewUpstreamChanger,
-    'cme-fix': cme.CMEChanger,
-    'apply-multi-arch-hints': multiarch.MultiArchHintsChanger,
-    'rules-requires-root': rrr.RulesRequiresRootChanger,
-    'orphan': orphan.OrphanChanger,
-    'import-upload': uncommitted.UncommittedChanger,
-    'scrub-obsolete': scrub_obsolete.ScrubObsoleteChanger,
-}
+    changer_cls.name: changer_cls
+    for changer_cls in changer_clses}
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:

@@ -38,6 +38,8 @@ class RulesRequiresRootResult(object):
 
 class RulesRequiresRootChanger(DebianChanger):
 
+    name = 'rules-requires-root'
+
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
 

@@ -33,6 +33,8 @@ from ..run import (
 
 class ScriptChanger(DebianChanger):
 
+    name = 'run'
+
     def _init__(self, script, commit_pending=None):
         self.script = script
         self.commit_pending = commit_pending
