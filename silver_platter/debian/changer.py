@@ -235,6 +235,7 @@ class DebianChanger(object):
     """
 
     name: str
+    description: str
 
     @classmethod
     def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
