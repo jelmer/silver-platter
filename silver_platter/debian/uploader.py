@@ -151,6 +151,7 @@ def prepare_upload_package(
 
         if cl.distributions != "UNRELEASED":
             raise Exception("Nothing left to release")
+    # TODO(jelmer): Add "QA Upload" or "Team Upload"
     release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
