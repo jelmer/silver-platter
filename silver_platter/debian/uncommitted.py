@@ -219,7 +219,7 @@ def import_uncommitted(tree, subpath):
 
 class UncommittedChanger(DebianChanger):
 
-    name = 'uncommitted'
+    name = 'import-upload'
 
     @classmethod
     def setup_parser(cls, parser):
