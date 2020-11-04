@@ -321,6 +321,10 @@ def main(argv):
                     pkg_source["Package"], pkg_source["Version"],
                     builder=args.builder, gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age)
+            except RecentCommits as e:
+                note('%s: Recent commits (%d days), skipping.',
+                     pkg_source['Package'], e.commit_age)
+                continue
             except NoUnuploadedChanges:
                 note('%s: No unuploaded changes, skipping.',
                      pkg_source['Package'])
