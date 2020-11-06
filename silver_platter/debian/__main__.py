@@ -22,49 +22,28 @@ import silver_platter  # noqa: F401
 import argparse
 import sys
 
-from .changer import setup_parser_common, DebianChanger, run_single_changer
-from . import (
-    lintian as debian_lintian,
-    cme,
-    run as debian_run,
-    multiarch,
-    orphan,
-    rrr,
-    scrub_obsolete,
-    tidy,
-    uncommitted,
-    upstream as debian_upstream,
-    uploader as debian_uploader,
+from .changer import (
+    setup_parser_common,
+    run_single_changer,
+    changer_subcommands,
+    changer_subcommand,
     )
 
+from . import uploader as debian_uploader
 
-def changer_subcommand(name, changer_cls, argv, changer_args):
-    parser = argparse.ArgumentParser(prog='debian-svp %s URL' % name)
+
+def run_changer_subcommand(name, changer_cls, argv, changer_args):
+    parser = argparse.ArgumentParser(prog='debian-svp %s URL|package' % name)
     parser.add_argument('package', type=str, nargs='?')
     changer_cls.setup_parser(parser)
     args = parser.parse_args(argv)
+    if args.package is None:
+        parser.print_usage()
+        return 1
+    args.dry_run = changer_args.dry_run
     changer = changer_cls.from_args(args)
+    changer_args.package = args.package
     return run_single_changer(changer, changer_args)
-
-
-changer_clses: List[Type[DebianChanger]] = [
-    debian_run.ScriptChanger,
-    debian_lintian.LintianBrushChanger,
-    tidy.TidyChanger,
-    debian_upstream.NewUpstreamChanger,
-    cme.CMEChanger,
-    multiarch.MultiArchHintsChanger,
-    rrr.RulesRequiresRootChanger,
-    orphan.OrphanChanger,
-    uncommitted.UncommittedChanger,
-    scrub_obsolete.ScrubObsoleteChanger,
-    ]
-
-
-# TODO(jelmer): Allow registration of these
-changer_subcommands: Dict[str, Type[DebianChanger]] = {
-    changer_cls.name: changer_cls
-    for changer_cls in changer_clses}
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
@@ -89,9 +68,11 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
     subcommands.update(main_subcommands.items())
 
+    del subcommands['run']
+
     parser.add_argument(
         'subcommand', type=str,
-        choices=list(subcommands.keys()) + list(changer_subcommands.keys()))
+        choices=list(subcommands.keys()) + changer_subcommands())
     args, rest = parser.parse_known_args()
     if args.help:
         if args.subcommand is None:
@@ -104,14 +85,15 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         parser.print_usage()
         return 1
     if args.subcommand in subcommands:
+        if args.dry_run:
+            rest.append('--dry-run')
         return subcommands[args.subcommand](rest)
-    if args.subcommand in changer_subcommands:
-        if args.package is None:
-            parser.print_usage()
-            return 1
-        return changer_subcommand(
-            args.subcommand,
-            changer_subcommands[args.subcommand], rest, args)
+    try:
+        subcmd = changer_subcommand(args.subcommand)
+    except KeyError:
+        pass
+    else:
+        return run_changer_subcommand(args.subcommand, subcmd, rest, args)
     parser.print_usage()
     return 1
 

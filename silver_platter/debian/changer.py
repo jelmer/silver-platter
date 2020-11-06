@@ -19,8 +19,9 @@ __all__ = ['iter_conflicted']
 
 import argparse
 from functools import partial
+import pkg_resources
 import sys
-from typing import Any, List, Optional, Dict, Iterable, Tuple
+from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
@@ -442,6 +443,60 @@ def run_single_changer(
         return 1
     else:
         return 0
+
+
+BUILTIN_ENTRYPOINTS = [
+    pkg_resources.EntryPoint(
+        'run', 'silver_platter.debian.run', attrs=('ScriptChanger', )),
+    pkg_resources.EntryPoint(
+        'lintian-brush', 'silver_platter.debian.lintian',
+        attrs=('LintianBrushChanger', )),
+    pkg_resources.EntryPoint(
+        'tidy', 'silver_platter.debian.tidy',
+        attrs=('TidyChanger', )),
+    pkg_resources.EntryPoint(
+        'new-upstream', 'silver_platter.debian.upstream',
+        attrs=('NewUpstreamChanger', )),
+    pkg_resources.EntryPoint(
+        'cme', 'silver_platter.debian.cme',
+        attrs=('CMEChanger', )),
+    pkg_resources.EntryPoint(
+        'apply-multiarch-hints',
+        'silver_platter.debian.multiarch', attrs=('MultiArchHintsChanger', )),
+    pkg_resources.EntryPoint(
+        'rules-requires-root',
+        'silver_platter.debian.rrr', attrs=('RulesRequiresRootChanger', )),
+    pkg_resources.EntryPoint(
+        'orphan',
+        'silver_platter.debian.orphan', attrs=('OrphanChanger', )),
+    pkg_resources.EntryPoint(
+        'uncommitted',
+        'silver_platter.debian.uncommitted', attrs=('UncommittedChanger', )),
+    pkg_resources.EntryPoint(
+        'scrub-obsolete',
+        'silver_platter.debian.scrub_obsolete',
+        attrs=('ScrubObsoleteChanger', )),
+]
+
+
+def changer_subcommands() -> List[str]:
+    endpoints = pkg_resources.iter_entry_points(
+        'silver_platter.debian.changer')
+    ret = []
+    for ep in BUILTIN_ENTRYPOINTS + list(endpoints):
+        ret.append(ep.name)
+    return ret
+
+
+def changer_subcommand(name: str) -> Type[DebianChanger]:
+    for ep in BUILTIN_ENTRYPOINTS:
+        if ep.name == name:
+            return ep.resolve()
+    endpoints = pkg_resources.iter_entry_points(
+        'silver_platter.debian.changer', name)
+    for ep in endpoints:
+        return ep.load()
+    raise KeyError(name)
 
 
 def run_mutator(changer_cls, argv=None):

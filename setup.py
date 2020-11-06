@@ -52,6 +52,10 @@ setup(
             'svp=silver_platter.__main__:main',
             'debian-svp=silver_platter.debian.__main__:main',
         ],
+        'silver_platter.debian.changer': [
+            'lintian-brush = '
+            'silver_platter.debian.lintian:LintianBrushChanger',
+        ],
     },
     test_suite='silver_platter.tests.test_suite',
     install_requires=[
