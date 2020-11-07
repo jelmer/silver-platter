@@ -60,7 +60,12 @@ class ScrubObsoleteChanger(DebianChanger):
 
     @classmethod
     def from_args(cls, args):
-        return cls(args.allow_reformatting, args.upgrade_release)
+        import distro_info
+        debian_info = distro_info.DebianDistroInfo()
+        upgrade_release = debian_info.codename(args.upgrade_release)
+        return cls(
+            allow_reformatting=args.allow_reformatting,
+            upgrade_release=upgrade_release)
 
     def __init__(self, upgrade_release, allow_reformatting=None):
         self.allow_reformatting = allow_reformatting
@@ -83,29 +88,26 @@ class ScrubObsoleteChanger(DebianChanger):
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
 
-        result = scrub_obsolete(local_tree, subpath, self.upgrade_release)
-
-        result_json = {
-            'control': result.control_removed,
-            'maintscript': result.maintscript_removed,
-            }
+        result = scrub_obsolete(
+            local_tree, subpath, self.upgrade_release,
+            update_changelog=update_changelog)
 
         return ChangerResult(
-            description="Scrub obsolete settings.", mutator=result_json,
+            description="Scrub obsolete settings.", mutator=result,
             value=calculate_value(result),
             sufficient_for_proposal=True,
             proposed_commit_message='Scrub obsolete settings.')
 
     def get_proposal_description(
-            self, applied, description_format, existing_proposal):
-        ret = ['Scrub obsolete settings.\n']
-        for line in applied.itemize():
-            ret.append('* %s\n' % ret)
+            self, result, description_format, existing_proposal):
+        ret = [
+            'Remove constraints unnecessary since %s.' % self.upgrade_release,
+            ''] + ['* ' + line for line in result.itemized()]
         return ''.join(ret)
 
     def describe(self, applied, publish_result):
         note('Scrub obsolete settings.')
-        for line in applied.itemize():
+        for line in applied.itemized():
             note('* %s', line)
 
 
