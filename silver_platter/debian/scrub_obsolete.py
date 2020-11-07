@@ -19,6 +19,8 @@
 
 import argparse
 
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
+
 import silver_platter  # noqa: F401
 
 from lintian_brush.config import Config
@@ -89,9 +91,18 @@ class ScrubObsoleteChanger(DebianChanger):
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
 
-        result = scrub_obsolete(
-            local_tree, subpath, self.upgrade_release,
-            update_changelog=update_changelog)
+        try:
+            result = scrub_obsolete(
+                local_tree, subpath, self.upgrade_release,
+                update_changelog=update_changelog)
+        except FormattingUnpreservable as e:
+            raise ChangerError(
+                'formatting-unpreservable',
+                'unable to preserve formatting while editing %s' % e.path)
+        except GeneratedFile as e:
+            raise ChangerError(
+                'generated-file',
+                'unable to edit generated file: %r' % e)
 
         if not result:
             raise ChangerError('nothing-to-do', 'no obsolete constraints')
