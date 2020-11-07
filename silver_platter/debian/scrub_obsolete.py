@@ -25,6 +25,7 @@ from lintian_brush.config import Config
 
 from .changer import (
     DebianChanger,
+    ChangerError,
     ChangerResult,
     run_mutator,
     )
@@ -91,6 +92,9 @@ class ScrubObsoleteChanger(DebianChanger):
         result = scrub_obsolete(
             local_tree, subpath, self.upgrade_release,
             update_changelog=update_changelog)
+
+        if not result:
+            raise ChangerError('nothing-to-do', 'no obsolete constraints')
 
         return ChangerResult(
             description="Scrub obsolete settings.", mutator=result,
