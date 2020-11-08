@@ -279,8 +279,11 @@ def main(argv):
         action='store_true',
         default=False,
         help='Use vcswatch to determine what packages need uploading.')
+    parser.add_argument(
+        '--autopkgtest-only',
+        action='store_true',
+        help='Only process packages with autopkgtests.')
 
-    # TODO(jelmer): Support requiring that autopkgtest is present and passing
     args = parser.parse_args(argv)
     ret = 0
 
@@ -337,6 +340,13 @@ def main(argv):
             ret = 1
             continue
         with Workspace(main_branch) as ws:
+            if (args.autopkgtest_only and
+                    'Testsuite' not in pkg_source and
+                    not ws.local_tree.has_filename(
+                        os.path.join(subpath, 'debian/tests/control'))):
+                note('%s: Skipping, package has no autopkgtest.',
+                     pkg_source['Testsuite'])
+                continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
                 gpg_strategy = gpg.GPGStrategy(branch_config)
