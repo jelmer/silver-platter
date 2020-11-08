@@ -35,6 +35,7 @@ from debmutate.control import ControlEditor
 from breezy import gpg
 from breezy.errors import NoSuchTag
 from breezy.commit import NullCommitReporter
+from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
     DistributionBranch,
@@ -382,6 +383,12 @@ def main(argv):
                     pkg_source["Package"], pkg_source["Version"],
                     builder=args.builder, gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age)
+            except BuildFailedError as e:
+                warning(
+                    '%s: package failed to build: %s',
+                    pkg_source['Package'], e)
+                ret = 1
+                continue
             except LastReleaseRevisionNotFound as e:
                 warning(
                     '%s: Unable to find revision matching last release '
@@ -404,7 +411,9 @@ def main(argv):
             if not args.dry_run:
                 dput_changes(target_changes)
             if args.diff:
+                sys.stdout.flush()
                 ws.show_diff(sys.stdout.buffer)
+                sys.stdout.buffer.flush()
 
     return ret
 
