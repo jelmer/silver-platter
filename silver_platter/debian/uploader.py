@@ -33,6 +33,7 @@ from debmutate.changelog import (
 from debmutate.control import ControlEditor
 
 from breezy import gpg
+from breezy.errors import NoSuchTag
 from breezy.commit import NullCommitReporter
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -47,7 +48,7 @@ from breezy.plugins.debian.util import (
     find_changelog,
     debsign,
     )
-from breezy.trace import note, show_error
+from breezy.trace import note, show_error, warning
 
 from debian.changelog import get_maintainer
 
@@ -86,6 +87,17 @@ class RecentCommits(Exception):
         super(RecentCommits, self).__init__(
             "Last commit is only %d days old (< %d)" % (
                 self.commit_age, self.min_commit_age))
+
+
+class LastReleaseRevisionNotFound(Exception):
+    """The revision for the last uploaded release can't be found."""
+
+    def __init__(self, package, version):
+        self.package = package
+        self.version = version
+        super(LastReleaseRevisionNotFound, self).__init__(
+            "Unable to find revision matching version %r for %s" % (
+                version, package))
 
 
 def check_revision(rev, min_commit_age):
@@ -138,8 +150,11 @@ def prepare_upload_package(
 
     note("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
-        last_release_revid = find_last_release_revid(
-                local_tree.branch, last_uploaded_version)
+        try:
+            last_release_revid = find_last_release_revid(
+                    local_tree.branch, last_uploaded_version)
+        except NoSuchTag:
+            raise LastReleaseRevisionNotFound(pkg, last_uploaded_version)
         graph = local_tree.branch.repository.get_graph()
         revids = list(graph.iter_lefthand_ancestry(
             local_tree.branch.last_revision(), [last_release_revid]))
@@ -367,6 +382,12 @@ def main(argv):
                     pkg_source["Package"], pkg_source["Version"],
                     builder=args.builder, gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age)
+            except LastReleaseRevisionNotFound as e:
+                warning(
+                    '%s: Unable to find revision matching last release '
+                    '%s, skipping.', pkg_source['Package'], e.version)
+                ret = 1
+                continue
             except RecentCommits as e:
                 note('%s: Recent commits (%d days), skipping.',
                      pkg_source['Package'], e.commit_age)
