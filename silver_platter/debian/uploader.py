@@ -20,11 +20,20 @@
 import silver_platter   # noqa: F401
 
 import datetime
+from email.utils import parseaddr
+import os
 import subprocess
 import sys
 import tempfile
 
+from debmutate.changelog import (
+    ChangelogEditor,
+    changeblock_ensure_first_line,
+    )
+from debmutate.control import ControlEditor
+
 from breezy import gpg
+from breezy.commit import NullCommitReporter
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
     DistributionBranch,
@@ -113,7 +122,7 @@ def get_maintainer_keys(context):
 def prepare_upload_package(
         local_tree, subpath, pkg, last_uploaded_version, builder,
         gpg_strategy=None, min_commit_age=None):
-    if local_tree.has_filename('debian/gbp.conf'):
+    if local_tree.has_filename(os.path.join(subpath, 'debian/gbp.conf')):
         subprocess.check_call(['gbp', 'dch'], cwd=local_tree.abspath('.'))
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
@@ -151,7 +160,28 @@ def prepare_upload_package(
 
         if cl.distributions != "UNRELEASED":
             raise Exception("Nothing left to release")
-    # TODO(jelmer): Add "QA Upload" or "Team Upload"
+    qa_upload = False
+    team_upload = False
+    control_path = local_tree.abspath(os.path.join(subpath, 'debian/control'))
+    with ControlEditor(control_path) as e:
+        maintainer = parseaddr(e.source['Maintainer'])
+        if maintainer[1] == 'packages@qa.debian.org':
+            qa_upload = True
+        # TODO(jelmer): Check whether this is a team upload
+        # TODO(jelmer): determine whether this is a NMU upload
+    if qa_upload or team_upload:
+        changelog_path = local_tree.abspath(
+            os.path.join(subpath, 'debian/changelog'))
+        with ChangelogEditor(changelog_path) as e:
+            if qa_upload:
+                changeblock_ensure_first_line(e[0], 'QA upload.')
+            elif team_upload:
+                changeblock_ensure_first_line(e[0], 'Team upload.')
+        local_tree.commit(
+            specific_files=[os.path.join(subpath, 'debian/changelog')],
+            message='Mention QA Upload.',
+            allow_pointless=False,
+            reporter=NullCommitReporter())
     release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
@@ -164,7 +194,6 @@ def prepare_upload_package(
 def select_apt_packages(package_names, maintainer):
     packages = []
     import apt_pkg
-    from email.utils import parseaddr
     apt_pkg.init()
     sources = apt_pkg.SourceRecords()
     while sources.step():
@@ -230,6 +259,10 @@ def main(argv):
         '--min-commit-age',
         help='Minimum age of the last commit, in days',
         type=int, default=0)
+    parser.add_argument(
+        '--diff',
+        action='store_true',
+        help='Show diff.')
     parser.add_argument(
         '--builder',
         type=str,
@@ -337,6 +370,9 @@ def main(argv):
             ws.push(dry_run=args.dry_run, tags=tags)
             if not args.dry_run:
                 dput_changes(target_changes)
+            if args.diff:
+                ws.show_diff(sys.stdout.buffer)
+
     return ret
 
 

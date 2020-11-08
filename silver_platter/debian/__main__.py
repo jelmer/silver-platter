@@ -34,6 +34,7 @@ from . import uploader as debian_uploader
 
 def run_changer_subcommand(name, changer_cls, argv, changer_args):
     parser = argparse.ArgumentParser(prog='debian-svp %s URL|package' % name)
+    setup_parser_common(parser)
     parser.add_argument('package', type=str, nargs='?')
     changer_cls.setup_parser(parser)
     args = parser.parse_args(argv)
@@ -64,10 +65,10 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     parser.add_argument(
         '--help', action='store_true',
         help='show this help message and exit')
-    setup_parser_common(parser)
 
     subcommands.update(main_subcommands.items())
 
+    # We have a debian-specific run command
     del subcommands['run']
 
     parser.add_argument(
@@ -85,8 +86,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         parser.print_usage()
         return 1
     if args.subcommand in subcommands:
-        if args.dry_run:
-            rest.append('--dry-run')
         return subcommands[args.subcommand](rest)
     try:
         subcmd = changer_subcommand(args.subcommand)
