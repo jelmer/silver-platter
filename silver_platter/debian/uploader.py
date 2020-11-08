@@ -123,7 +123,9 @@ def prepare_upload_package(
         local_tree, subpath, pkg, last_uploaded_version, builder,
         gpg_strategy=None, min_commit_age=None):
     if local_tree.has_filename(os.path.join(subpath, 'debian/gbp.conf')):
-        subprocess.check_call(['gbp', 'dch'], cwd=local_tree.abspath('.'))
+        subprocess.check_call(
+            ['gbp', 'dch', '--ignore-branch'],
+            cwd=local_tree.abspath('.'))
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
