@@ -236,7 +236,6 @@ class DebianChanger(object):
     """
 
     name: str
-    description: str
 
     @classmethod
     def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
@@ -267,6 +266,10 @@ class DebianChanger(object):
 
     def describe(self, applied: Any, publish_result: PublishResult) -> None:
         raise NotImplementedError(self.describe)
+
+    @classmethod
+    def describe_command(cls, command):
+        return cls.name
 
 
 class DummyChangerReporter(ChangerReporter):

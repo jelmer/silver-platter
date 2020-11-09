@@ -78,6 +78,10 @@ class CMEChanger(DebianChanger):
         else:
             note('No changes for package %s', result.package_name)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Apply Configuration Model Editor (CME) fixes"
+
 
 if __name__ == '__main__':
     import sys

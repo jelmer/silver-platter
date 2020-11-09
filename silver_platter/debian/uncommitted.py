@@ -273,6 +273,10 @@ class UncommittedChanger(DebianChanger):
             note('No new versions imported for proposal %s',
                  publish_result.proposal.url)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Import archive changes missing from VCS"
+
 
 if __name__ == '__main__':
     import sys

@@ -166,6 +166,10 @@ class MultiArchHintsChanger(DebianChanger):
         for binary, hint, description, certainty in applied.changes:
             note('* %s: %s', binary['Package'], description)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Apply multi-arch hints"
+
 
 if __name__ == '__main__':
     import sys

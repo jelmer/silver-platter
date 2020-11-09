@@ -125,6 +125,10 @@ class ScrubObsoleteChanger(DebianChanger):
         for line in applied.itemized():
             note('* %s', line)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Remove obsolete dependencies"
+
 
 if __name__ == '__main__':
     import sys

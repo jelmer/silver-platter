@@ -84,6 +84,10 @@ class RulesRequiresRootChanger(DebianChanger):
         else:
             note('No changes for package %s', result.package_name)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Set rules-requires-root"
+
 
 if __name__ == '__main__':
     import sys
