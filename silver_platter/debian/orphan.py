@@ -159,9 +159,14 @@ class OrphanChanger(DebianChanger):
             reporter.report_metadata('new_vcs_url', result.new_vcs_url)
             reporter.report_metadata('pushed', result.pushed)
 
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        tags = []
+
         return ChangerResult(
             description='Move package to QA team.',
-            mutator=result,
+            mutator=result, branches=branches, tags=tags,
             sufficient_for_proposal=True,
             proposed_commit_message=(
                 'Set the package maintainer to the QA team.'))

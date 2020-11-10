@@ -365,9 +365,9 @@ class LintianBrushChanger(DebianChanger):
         if not overall_result.success:
             raise ChangerError('nothing-to-do', 'no fixers to apply')
 
-        tags = set()
+        fixed_lintian_tags = set()
         for result, summary in overall_result.success:
-            tags.update(result.fixed_lintian_tags)
+            fixed_lintian_tags.update(result.fixed_lintian_tags)
 
         add_on_only = not has_nontrivial_changes(
             overall_result.success, self.propose_addon_only)
@@ -384,10 +384,14 @@ class LintianBrushChanger(DebianChanger):
             sufficient_for_proposal = True
             reporter.report_metadata('add_on_only', False)
 
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
         return ChangerResult(
-            description='Applied fixes for %r' % tags,
+            description='Applied fixes for %r' % fixed_lintian_tags,
             mutator=overall_result.success,
-            value=calculate_value(tags),
+            branches=branches, tags=[],
+            value=calculate_value(fixed_lintian_tags),
             sufficient_for_proposal=sufficient_for_proposal,
             proposed_commit_message=update_proposal_commit_message(
                 base_proposal, overall_result.success))

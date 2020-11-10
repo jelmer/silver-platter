@@ -1111,13 +1111,20 @@ class NewUpstreamChanger(DebianChanger):
             note('Imported new upstream version %s (previous: %s)',
                  result.new_upstream_version,
                  result.old_upstream_version)
-            tags = set()
-            tags.add(
-                'upstream/%s' % result.new_upstream_version)
+            tags = [
+                (('upstream', result.new_upstream_version),
+                 'upstream/%s' % result.new_upstream_version,
+                 result.upstream_revisions[None])]
+
+            # TODO(jelmer): Use actual branch name
+
+            branches = [
+                ('upstream', 'upstream', result.upstream_revisions[None])]
+
             return ChangerResult(
                 description="Imported new upstream version %s" % (
                     result.new_upstream_version),
-                mutator=result, tags=tags,
+                mutator=result, tags=tags, branches=branches,
                 sufficient_for_proposal=True)
         else:
             note('Merged new upstream version %s (previous: %s)',
@@ -1156,16 +1163,22 @@ class NewUpstreamChanger(DebianChanger):
                     error_code = 'quilt-refresh-error'
                     raise ChangerError(error_code, error_description, e)
 
-            tags = set()
-            tags.add('upstream/%s' % result.new_upstream_version)
+            tags = [
+                (('upstream', result.new_upstream_version), 
+                 'upstream/%s' % result.new_upstream_version,
+                 result.upstream_revisions[None])]
 
-            # TODO(jelmer): Include upstream/pristine-tar in auxiliary_branches
+            # TODO(jelmer): Include upstream/pristine-tar in branches
+            branches = [
+                ('main', local_tree.branch.name, local_tree.last_revision())]
+
             proposed_commit_message = (
                 "Merge new upstream release %s" % result.new_upstream_version)
             return ChangerResult(
                 description="Merged new upstream version %s" % (
                     result.new_upstream_version),
                 mutator=result, tags=tags,
+                branches=branches,
                 sufficient_for_proposal=True,
                 proposed_commit_message=proposed_commit_message)
 

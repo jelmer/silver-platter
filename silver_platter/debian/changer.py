@@ -153,8 +153,8 @@ class ChangerError(Exception):
 class ChangerResult(object):
 
     def __init__(self, description: Optional[str], mutator: Any,
-                 auxiliary_branches: Optional[List[str]] = [],
-                 tags: Optional[List[str]] = [],
+                 branches: Optional[List[Tuple[str, str, bytes]]] = [],
+                 tags: Optional[Dict[str, bytes]] = None,
                  value: Optional[int] = None,
                  proposed_commit_message: Optional[str] = None,
                  title: Optional[str] = None,
@@ -162,8 +162,8 @@ class ChangerResult(object):
                  sufficient_for_proposal: bool = True):
         self.description = description
         self.mutator = mutator
-        self.auxiliary_branches = auxiliary_branches
-        self.tags = tags
+        self.branches = branches or []
+        self.tags = tags or {}
         self.value = value
         self.proposed_commit_message = proposed_commit_message
         self.title = title
@@ -564,7 +564,7 @@ def run_mutator(changer_cls, argv=None):
             'description': result.description,
             'suggested-branch-name': changer.suggest_branch_name(),
             'tags': result.tags,
-            'auxiliary-branches': result.auxiliary_branches,
+            'branches': result.branches,
             'value': result.value,
             'mutator': mutator_metadata,
             'merge-proposal': {

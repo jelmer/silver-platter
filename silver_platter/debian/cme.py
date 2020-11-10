@@ -61,10 +61,12 @@ class CMEChanger(DebianChanger):
         local_tree.commit('Reformat for cme.')
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
-        local_tree.commit('Run cme.')
+        revid = local_tree.commit('Run cme.')
+        branches = [('main', local_tree.branch.name, revid)]
+        tags = []
         return ChangerResult(
-            description=None, mutator=None,
-            proposed_commit_message='Run cme.',
+            description=None, mutator=None, branches=branches,
+            tags=tags, proposed_commit_message='Run cme.',
             sufficient_for_proposal=True)
 
     def get_proposal_description(

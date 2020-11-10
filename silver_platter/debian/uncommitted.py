@@ -213,7 +213,8 @@ def import_uncommitted(tree, subpath):
                 version_path[version],
                 '%s_%s.dsc' % (package_name, version))
             tag_name = db.import_package(dsc_path)
-            ret.append((tag_name, version))
+            revision = db.version_as_revisions(version)
+            ret.append((tag_name, version, revision))
     return ret
 
 
@@ -243,16 +244,22 @@ class UncommittedChanger(DebianChanger):
                 'tree-version-not-in-archive-changelog', str(e))
         except NoMissingVersions as e:
             raise ChangerError('nothing-to-do', str(e))
-        tags = set([tag_name for (tag_name, version) in ret])
+        tags = [(None, tag_name, revid) for (tag_name, version, revid) in ret]
         # TODO(jelmer): Include upstream tags
-        # TODO(jelmer): Include auxiliary branches for upstream/pristine-tar
         proposed_commit_message = "Import missing uploads: %s." % (
             ', '.join([str(v) for t, v in ret]))
         reporter.report_metadata('tags', [
-            (tag_name, str(version)) for (tag_name, version) in ret])
+            (tag_name, str(version)) for (tag_name, version, revid) in ret])
+
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        # TODO(jelmer): Include branches for upstream/pristine-tar
+
         return ChangerResult(
             description='Import archive changes missing from the VCS.',
-            mutator=ret, tags=tags, sufficient_for_proposal=True,
+            branches=branches, mutator=ret, tags=tags,
+            sufficient_for_proposal=True,
             proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(

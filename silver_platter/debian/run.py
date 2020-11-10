@@ -63,9 +63,17 @@ class ScriptChanger(DebianChanger):
         except ScriptMadeNoChanges as e:
             raise ChangerError(
                 'nothing-to-do', 'Script did not make any changes.', e)
+
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        tags = []
+
+        # TODO(jelmer): Compare old and new tags/branches?
+
         return ChangerResult(
             description=description, mutator=description,
-            sufficient_for_proposal=True,
+            sufficient_for_proposal=True, branches=branches, tags=tags,
             proposed_commit_message=None)
 
     def get_proposal_description(

@@ -148,8 +148,14 @@ class MultiArchHintsChanger(DebianChanger):
 
         reporter.report_metadata('applied-hints', applied_hints)
 
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        tags = []
+
         return ChangerResult(
             description="Applied multi-arch hints.", mutator=result,
+            branches=branches, tags=tags,
             value=calculate_value(hint_names),
             sufficient_for_proposal=True,
             proposed_commit_message='Apply multi-arch hints.')

@@ -160,8 +160,15 @@ class BackportChanger(DebianChanger):
             if not self.dry_run:
                 dput_changes(target_changes)
 
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        # TODO(jelmer): Add debian/... tag
+        tags = []
+
         return ChangerResult(
-            description=None, mutator=None,
+            description=None, mutator=None, branches=branches,
+            tags=tags,
             proposed_commit_message='Backport to %s.' % self.target_release,
             sufficient_for_proposal=True)
 

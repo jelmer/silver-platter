@@ -56,9 +56,9 @@ class TidyChanger(DebianChanger):
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
         result = {}
-        tags = set()
+        tags = []
         sufficient_for_proposal = False
-        auxiliary_branches = set()
+        branches = []
         for subchanger in self.subchangers:
             subresult = (
                 subchanger.make_changes(
@@ -67,9 +67,11 @@ class TidyChanger(DebianChanger):
             if subresult.sufficient_for_proposal:
                 sufficient_for_proposal = True
             if subresult.tags:
-                tags.update(subresult.tags)
-            if tags.auxiliary_branches:
-                auxiliary_branches.update(subresult.auxiliary_branches)
+                tags.extend(subresult.tags)
+            if subresult.branches:
+                branches.extend(
+                    [entry for entry in subresult.branches
+                     if entry[0] != 'main'])
 
         commit_items = []
         for subchanger in result:
@@ -79,10 +81,13 @@ class TidyChanger(DebianChanger):
                 commit_items.append('apply multi-arch hints')
         proposed_commit_message = (', '.join(commit_items) + '.').capitalize()
 
+        branches.insert(
+            0, ('main', local_tree.branch.name, local_tree.last_revision()))
+
         return ChangerResult(
             mutator=result,
             description='Fix various small issues.',
-            tags=tags, auxiliary_branches=auxiliary_branches,
+            tags=tags, branches=branches,
             sufficient_for_proposal=sufficient_for_proposal,
             proposed_commit_message=proposed_commit_message)
 

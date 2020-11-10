@@ -107,8 +107,14 @@ class ScrubObsoleteChanger(DebianChanger):
         if not result:
             raise ChangerError('nothing-to-do', 'no obsolete constraints')
 
+        branches = [
+            ('main', local_tree.branch.name, local_tree.last_revision())]
+
+        tags = []
+
         return ChangerResult(
             description="Scrub obsolete settings.", mutator=result,
+            branches=branches, tags=tags,
             value=calculate_value(result),
             sufficient_for_proposal=True,
             proposed_commit_message='Scrub obsolete settings.')

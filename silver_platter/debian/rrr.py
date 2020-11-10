@@ -64,12 +64,17 @@ class RulesRequiresRootChanger(DebianChanger):
                 local_tree,
                 osutils.pathjoin(subpath, 'debian/changelog'),
                 ['Set Rules-Requires-Root: no.'])
-        local_tree.commit(
+        revid = local_tree.commit(
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)
+
+        branches = [('main', local_tree.branch.name, revid)]
+
+        tags = []
+
         return ChangerResult(
             description='Set Rules-Requires-Root',
-            mutator=result,
+            mutator=result, branches=branches, tags=tags,
             sufficient_for_proposal=True,
             proposed_commit_message='Set Rules-Requires-Root.')
 
