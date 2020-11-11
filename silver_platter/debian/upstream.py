@@ -315,7 +315,7 @@ class ImportUpstreamResult(object):
             'upstream_branch',
             'upstream_branch_browse',
             'upstream_revisions',
-            'improted_revisions',
+            'imported_revisions',
             ]
 
     def __init__(self, old_upstream_version, new_upstream_version,
