@@ -32,7 +32,7 @@ from .changer import (
 from . import uploader as debian_uploader
 
 
-def run_changer_subcommand(name, changer_cls, argv, changer_args):
+def run_changer_subcommand(name, changer_cls, argv):
     parser = argparse.ArgumentParser(prog='debian-svp %s URL|package' % name)
     setup_parser_common(parser)
     parser.add_argument('package', type=str, nargs='?')
@@ -41,10 +41,8 @@ def run_changer_subcommand(name, changer_cls, argv, changer_args):
     if args.package is None:
         parser.print_usage()
         return 1
-    args.dry_run = changer_args.dry_run
     changer = changer_cls.from_args(args)
-    changer_args.package = args.package
-    return run_single_changer(changer, changer_args)
+    return run_single_changer(changer, args)
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
@@ -92,7 +90,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        return run_changer_subcommand(args.subcommand, subcmd, rest, args)
+        return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1
 
