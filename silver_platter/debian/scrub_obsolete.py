@@ -80,6 +80,7 @@ class ScrubObsoleteChanger(DebianChanger):
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
         from lintian_brush.scrub_obsolete import scrub_obsolete
+        base_revid = local_tree.last_revision()
         allow_reformatting = self.allow_reformatting
         try:
             cfg = Config.from_workingtree(local_tree, subpath)
@@ -108,7 +109,8 @@ class ScrubObsoleteChanger(DebianChanger):
             raise ChangerError('nothing-to-do', 'no obsolete constraints')
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         tags = []
 

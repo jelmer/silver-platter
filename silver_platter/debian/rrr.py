@@ -56,6 +56,7 @@ class RulesRequiresRootChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         with ControlEditor.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])
@@ -68,7 +69,8 @@ class RulesRequiresRootChanger(DebianChanger):
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)
 
-        branches = [('main', local_tree.branch.name, revid)]
+        branches = [
+            ('main', local_tree.branch.name, base_revid, revid)]
 
         tags = []
 

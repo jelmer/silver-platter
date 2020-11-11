@@ -284,6 +284,8 @@ class LintianBrushChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
+
         reporter.report_metadata('versions', {
             'lintian-brush': lintian_brush_version_string,
             'silver-platter': silver_platter.version_string,
@@ -385,7 +387,8 @@ class LintianBrushChanger(DebianChanger):
             reporter.report_metadata('add_on_only', False)
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         return ChangerResult(
             description='Applied fixes for %r' % fixed_lintian_tags,

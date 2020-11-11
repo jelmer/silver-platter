@@ -96,6 +96,7 @@ class MultiArchHintsChanger(DebianChanger):
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
             )
+        base_revid = local_tree.last_revision()
         minimum_certainty = self.minimum_certainty
         allow_reformatting = self.allow_reformatting
         try:
@@ -149,7 +150,8 @@ class MultiArchHintsChanger(DebianChanger):
         reporter.report_metadata('applied-hints', applied_hints)
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         tags = []
 

@@ -57,6 +57,8 @@ class ScriptChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, reporter,
                      committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
+
         try:
             description = script_runner(
                 local_tree, self.script, self.commit_pending)
@@ -65,7 +67,8 @@ class ScriptChanger(DebianChanger):
                 'nothing-to-do', 'Script did not make any changes.', e)
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         tags = []
 

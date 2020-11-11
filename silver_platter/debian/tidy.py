@@ -55,6 +55,7 @@ class TidyChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         result = {}
         tags = []
         sufficient_for_proposal = False
@@ -82,7 +83,8 @@ class TidyChanger(DebianChanger):
         proposed_commit_message = (', '.join(commit_items) + '.').capitalize()
 
         branches.insert(
-            0, ('main', local_tree.branch.name, local_tree.last_revision()))
+            0, ('main', local_tree.branch.name, base_revid,
+                local_tree.last_revision()))
 
         return ChangerResult(
             mutator=result,

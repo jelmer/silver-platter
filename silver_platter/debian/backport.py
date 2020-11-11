@@ -147,6 +147,8 @@ class BackportChanger(DebianChanger):
     def make_changes(self, local_tree, subpath, update_changelog, reporter,
                      committer, base_proposal=None):
 
+        base_revision = local_tree.last_revision()
+
         since_version = backport_package(
             local_tree, subpath, self.target_release, author=committer)
 
@@ -161,7 +163,8 @@ class BackportChanger(DebianChanger):
                 dput_changes(target_changes)
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revision,
+             local_tree.last_revision())]
 
         # TODO(jelmer): Add debian/... tag
         tags = []

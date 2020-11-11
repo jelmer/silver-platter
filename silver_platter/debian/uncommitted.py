@@ -235,6 +235,7 @@ class UncommittedChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, reporter,
                      committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         try:
             ret = import_uncommitted(local_tree, subpath)
         except TreeUpstreamVersionMissing as e:
@@ -252,7 +253,8 @@ class UncommittedChanger(DebianChanger):
             (tag_name, str(version)) for (tag_name, version, revid) in ret])
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         # TODO(jelmer): Include branches for upstream/pristine-tar
 

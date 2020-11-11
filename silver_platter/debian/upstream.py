@@ -54,6 +54,7 @@ from breezy.errors import (
     FileExists,
     InvalidNormalization,
     NoSuchFile,
+    NotBranchError,
     PointlessMerge,
     InvalidHttpResponse,
     NoRoundtrippingSupport,
@@ -314,16 +315,18 @@ class ImportUpstreamResult(object):
             'upstream_branch',
             'upstream_branch_browse',
             'upstream_revisions',
+            'improted_revisions',
             ]
 
     def __init__(self, old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
-                 upstream_revisions):
+                 upstream_revisions, imported_revisions):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
         self.upstream_branch_browse = upstream_branch_browse
         self.upstream_revisions = upstream_revisions
+        self.imported_revisions = imported_revisions
 
 
 def import_upstream(
@@ -504,7 +507,7 @@ def import_upstream(
                 "are of different formats. Either delete the target "
                 "file, or use it as the argument to import."
                 % e.path)
-        do_import(
+        imported_revisions = do_import(
             tree, subpath, tarball_filenames, package,
             new_upstream_version, old_upstream_version,
             upstream_branch, upstream_revisions, merge_type=None,
@@ -516,7 +519,8 @@ def import_upstream(
         new_upstream_version=new_upstream_version,
         upstream_branch=upstream_branch,
         upstream_branch_browse=upstream_branch_browse,
-        upstream_revisions=upstream_revisions)
+        upstream_revisions=upstream_revisions,
+        imported_revisions=imported_revisions)
 
 
 class MergeUpstreamResult(object):
@@ -530,12 +534,13 @@ class MergeUpstreamResult(object):
             'upstream_revisions',
             'old_revision',
             'new_revision',
+            'imported_revisions',
             ]
 
     def __init__(self, old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
                  upstream_revisions, old_revision,
-                 new_revision):
+                 new_revision, imported_revisions):
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
@@ -543,6 +548,7 @@ class MergeUpstreamResult(object):
         self.upstream_revisions = upstream_revisions
         self.old_revision = old_revision
         self.new_revision = new_revision
+        self.imported_revisions = imported_revisions
 
     def __tuple__(self):
         # Backwards compatibility
@@ -654,7 +660,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         else:
             try:
                 primary_upstream_source = UScanSource.from_tree(
-                    tree, top_level)
+                    tree, subpath, top_level)
             except NoWatchFile:
                 # TODO(jelmer): Call out to lintian_brush.watch to generate a
                 # watch file.
@@ -737,7 +743,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                     "file, or use it as the argument to import."
                     % e.path)
             try:
-                conflicts = do_merge(
+                conflicts, imported_revids = do_merge(
                     tree, subpath, tarball_filenames, package,
                     new_upstream_version, old_upstream_version,
                     upstream_branch, upstream_revisions, merge_type=None,
@@ -758,6 +764,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                     raise UpstreamAlreadyMerged(new_upstream_version)
     else:
         conflicts = 0
+        imported_revids = []
 
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
@@ -796,7 +803,8 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         new_revision=tree.last_revision(),
         upstream_branch=upstream_branch,
         upstream_branch_browse=upstream_branch_browse,
-        upstream_revisions=upstream_revisions)
+        upstream_revisions=upstream_revisions,
+        imported_revisions=imported_revids)
 
 
 def override_dh_autoreconf_add_arguments(basedir: str, args):
@@ -921,6 +929,10 @@ class NewUpstreamChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, reporter,
                      committer, base_proposal=None):
+
+        base_revids = {
+            b.name: b.last_revision()
+            for b in local_tree.controldir.list_branches()}
 
         if control_files_in_root(local_tree, subpath):
             raise ChangerError(
@@ -1107,19 +1119,44 @@ class NewUpstreamChanger(DebianChanger):
 
         reporter.report_context(result.new_upstream_version)
 
+        tags = [
+            (('upstream', result.new_upstream_version, component),
+             tag, revid)
+            for (component, tag, revid,
+                 pristine_tar_imported) in result.imported_revisions]
+
+        branches = []
+
+        try:
+            pristine_tar_branch = local_tree.controldir.open_branch(
+                'pristine-tar')
+        except NotBranchError:
+            pass
+        else:
+            base_revision = base_revids.get('pristine-tar')
+            new_revision = pristine_tar_branch.last_revision()
+            if base_revision != new_revision:
+                branches.append((
+                    'pristine-tar', 'pristine-tar',
+                    base_revision, new_revision))
+
+        # TODO(jelmer): ideally, the branch name would be provided by do_merge
+        # / do_import
+        try:
+            upstream_branch = local_tree.controldir.open_branch('upstream')
+        except NotBranchError:
+            pass
+        else:
+            base_revision = base_revids.get('upstream')
+            new_revision = upstream_branch.last_revision()
+            if base_revision != new_revision:
+                branches.append(
+                    ('upstream', 'upstream', base_revision, new_revision))
+
         if self.import_only:
             note('Imported new upstream version %s (previous: %s)',
                  result.new_upstream_version,
                  result.old_upstream_version)
-            tags = [
-                (('upstream', result.new_upstream_version),
-                 'upstream/%s' % result.new_upstream_version,
-                 result.upstream_revisions[None])]
-
-            # TODO(jelmer): Use actual branch name
-
-            branches = [
-                ('upstream', 'upstream', result.upstream_revisions[None])]
 
             return ChangerResult(
                 description="Imported new upstream version %s" % (
@@ -1163,14 +1200,10 @@ class NewUpstreamChanger(DebianChanger):
                     error_code = 'quilt-refresh-error'
                     raise ChangerError(error_code, error_description, e)
 
-            tags = [
-                (('upstream', result.new_upstream_version), 
-                 'upstream/%s' % result.new_upstream_version,
-                 result.upstream_revisions[None])]
-
-            # TODO(jelmer): Include upstream/pristine-tar in branches
-            branches = [
-                ('main', local_tree.branch.name, local_tree.last_revision())]
+            branches.append(
+                ('main', local_tree.branch.name,
+                 base_revids[local_tree.branch.name],
+                 local_tree.last_revision()))
 
             proposed_commit_message = (
                 "Merge new upstream release %s" % result.new_upstream_version)

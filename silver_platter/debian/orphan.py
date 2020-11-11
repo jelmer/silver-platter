@@ -106,6 +106,7 @@ class OrphanChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         control_path = local_tree.abspath(
                 osutils.pathjoin(subpath, 'debian/control'))
         try:
@@ -160,7 +161,8 @@ class OrphanChanger(DebianChanger):
             reporter.report_metadata('pushed', result.pushed)
 
         branches = [
-            ('main', local_tree.branch.name, local_tree.last_revision())]
+            ('main', local_tree.branch.name, base_revid,
+             local_tree.last_revision())]
 
         tags = []
 

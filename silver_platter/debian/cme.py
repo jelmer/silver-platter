@@ -54,6 +54,7 @@ class CMEChanger(DebianChanger):
 
     def make_changes(self, local_tree, subpath, update_changelog, reporter,
                      committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         cwd = local_tree.abspath(subpath or '')
         subprocess.check_call(
             ['/usr/bin/cme', 'modify', 'dpkg', '-save'],
@@ -62,7 +63,7 @@ class CMEChanger(DebianChanger):
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
         revid = local_tree.commit('Run cme.')
-        branches = [('main', local_tree.branch.name, revid)]
+        branches = [('main', local_tree.branch.name, base_revid, revid)]
         tags = []
         return ChangerResult(
             description=None, mutator=None, branches=branches,
