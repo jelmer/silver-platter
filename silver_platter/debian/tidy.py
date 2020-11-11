@@ -83,7 +83,7 @@ class TidyChanger(DebianChanger):
         proposed_commit_message = (', '.join(commit_items) + '.').capitalize()
 
         branches.insert(
-            0, ('main', local_tree.branch.name, base_revid,
+            0, ('main', None, base_revid,
                 local_tree.last_revision()))
 
         return ChangerResult(

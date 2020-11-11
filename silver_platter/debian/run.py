@@ -67,7 +67,7 @@ class ScriptChanger(DebianChanger):
                 'nothing-to-do', 'Script did not make any changes.', e)
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         tags = []

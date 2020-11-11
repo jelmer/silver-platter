@@ -1201,7 +1201,7 @@ class NewUpstreamChanger(DebianChanger):
                     raise ChangerError(error_code, error_description, e)
 
             branches.append(
-                ('main', local_tree.branch.name,
+                ('main', None,
                  base_revids[local_tree.branch.name],
                  local_tree.last_revision()))
 

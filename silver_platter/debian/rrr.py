@@ -70,7 +70,7 @@ class RulesRequiresRootChanger(DebianChanger):
             allow_pointless=False)
 
         branches = [
-            ('main', local_tree.branch.name, base_revid, revid)]
+            ('main', None, base_revid, revid)]
 
         tags = []
 

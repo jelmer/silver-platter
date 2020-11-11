@@ -63,7 +63,7 @@ class CMEChanger(DebianChanger):
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
         revid = local_tree.commit('Run cme.')
-        branches = [('main', local_tree.branch.name, base_revid, revid)]
+        branches = [('main', None, base_revid, revid)]
         tags = []
         return ChangerResult(
             description=None, mutator=None, branches=branches,

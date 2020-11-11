@@ -161,7 +161,7 @@ class OrphanChanger(DebianChanger):
             reporter.report_metadata('pushed', result.pushed)
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         tags = []

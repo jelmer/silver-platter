@@ -387,7 +387,7 @@ class LintianBrushChanger(DebianChanger):
             reporter.report_metadata('add_on_only', False)
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         return ChangerResult(

@@ -150,7 +150,7 @@ class MultiArchHintsChanger(DebianChanger):
         reporter.report_metadata('applied-hints', applied_hints)
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         tags = []

@@ -109,7 +109,7 @@ class ScrubObsoleteChanger(DebianChanger):
             raise ChangerError('nothing-to-do', 'no obsolete constraints')
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         tags = []

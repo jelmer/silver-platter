@@ -163,7 +163,7 @@ class BackportChanger(DebianChanger):
                 dput_changes(target_changes)
 
         branches = [
-            ('main', local_tree.branch.name, base_revision,
+            ('main', None, base_revision,
              local_tree.last_revision())]
 
         # TODO(jelmer): Add debian/... tag

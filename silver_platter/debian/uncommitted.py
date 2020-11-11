@@ -253,7 +253,7 @@ class UncommittedChanger(DebianChanger):
             (tag_name, str(version)) for (tag_name, version, revid) in ret])
 
         branches = [
-            ('main', local_tree.branch.name, base_revid,
+            ('main', None, base_revid,
              local_tree.last_revision())]
 
         # TODO(jelmer): Include branches for upstream/pristine-tar
