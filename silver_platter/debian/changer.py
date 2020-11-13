@@ -473,7 +473,7 @@ BUILTIN_ENTRYPOINTS = [
         'orphan',
         'silver_platter.debian.orphan', attrs=('OrphanChanger', )),
     pkg_resources.EntryPoint(
-        'uncommitted',
+        'import-upload',
         'silver_platter.debian.uncommitted', attrs=('UncommittedChanger', )),
     pkg_resources.EntryPoint(
         'scrub-obsolete',
