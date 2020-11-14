@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from typing import List
 
 from debmutate.changelog import (
     ChangelogEditor,
@@ -228,7 +229,7 @@ def select_apt_packages(package_names, maintainer):
     return packages
 
 
-def select_vcswatch_packages(packages, maintainer):
+def select_vcswatch_packages(packages: List[str], maintainer: List[str]):
     import psycopg2
     conn = psycopg2.connect(
         database="udd",
@@ -309,7 +310,7 @@ def main(argv):
         (name, email) = get_maintainer()
         if email:
             note('Processing packages maintained by %s', email)
-            args.maintainer = email
+            args.maintainer = [email]
         else:
             parser.print_usage()
             sys.exit(1)
