@@ -17,6 +17,7 @@
 
 from typing import (
     List, Optional, Tuple, Iterator, BinaryIO, Callable, Dict, Any,
+    Union,
     )
 
 from breezy.branch import Branch
@@ -96,6 +97,11 @@ SUPPORTED_MODES: List[str] = [
     'propose',
     'push-derived',
     ]
+
+
+def _tag_selector_from_tags(tags):
+    # TODO(jelmer): Select dict
+    return tags.__contains__
 
 
 class MergeProposalDescriptionMissing(Exception):
@@ -221,10 +227,11 @@ def push_result(
         local_branch: Branch,
         remote_branch: Branch,
         additional_colocated_branches: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None) -> None:
+        tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+        ) -> None:
     kwargs = {}
     if tags is not None:
-        kwargs['tag_selector'] = tags.__contains__
+        kwargs['tag_selector'] = _tag_selector_from_tags(tags)
     try:
         local_branch.push(
             remote_branch, overwrite=False, **kwargs)
@@ -384,7 +391,8 @@ class Workspace(object):
         return self.orig_revid != self.local_tree.branch.last_revision()
 
     def push(self, hoster: Optional[Hoster] = None, dry_run: bool = False,
-             tags: Optional[List[str]] = None) -> None:
+             tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+             ) -> None:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return push_changes(
@@ -400,7 +408,7 @@ class Workspace(object):
                 dry_run: bool = False,
                 commit_message: Optional[str] = None,
                 reviewers: Optional[List[str]] = None,
-                tags: Optional[List[str]] = None,
+                tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
                 owner: Optional[str] = None,
                 allow_collaboration: bool = False) -> MergeProposal:
         if hoster is None:
@@ -419,7 +427,8 @@ class Workspace(object):
                      name: str, hoster: Optional[Hoster] = None,
                      overwrite_existing: Optional[bool] = False,
                      owner: Optional[str] = None,
-                     tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
+                     tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+                     ) -> Tuple[Branch, str]:
         """Push a derived branch.
 
         Args:
@@ -489,7 +498,7 @@ def publish_changes(
         overwrite_existing: Optional[bool] = True,
         existing_proposal: Optional[MergeProposal] = None,
         reviewers: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
         derived_owner: Optional[str] = None,
         allow_collaboration: bool = False) -> PublishResult:
     """Publish a set of changes.
@@ -577,7 +586,8 @@ def push_changes(local_branch: Branch, main_branch: Branch,
                  hoster: Hoster,
                  possible_transports: Optional[List[Transport]] = None,
                  additional_colocated_branches: Optional[List[str]] = None,
-                 dry_run: bool = False, tags: Optional[List[str]] = None
+                 dry_run: bool = False,
+                 tags: Optional[Union[Dict[str, bytes], List[str]]] = None
                  ) -> None:
     """Push changes to a branch."""
     push_url = hoster.get_push_url(main_branch)
@@ -630,7 +640,8 @@ def propose_changes(
         dry_run: bool = False, commit_message: Optional[str] = None,
         additional_colocated_branches: Optional[List[str]] = None,
         allow_empty: bool = False, reviewers: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None, owner: Optional[str] = None,
+        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+        owner: Optional[str] = None,
         allow_collaboration: bool = False) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
 
@@ -658,7 +669,7 @@ def propose_changes(
         check_proposal_diff(local_branch, main_branch)
     push_kwargs = {}
     if tags is not None:
-        push_kwargs['tag_selector'] = tags.__contains__
+        push_kwargs['tag_selector'] = _tag_selector_from_tags(tags)
     if not dry_run:
         if resume_branch is not None:
             local_branch.push(
@@ -759,10 +770,11 @@ def push_derived_changes(
         local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
-        tags: Optional[List[str]] = None) -> Tuple[Branch, str]:
+        tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+        ) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
-        kwargs['tag_selector'] = tags.__contains__
+        kwargs['tag_selector'] = _tag_selector_from_tags(tags)
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing,
         owner=owner,
