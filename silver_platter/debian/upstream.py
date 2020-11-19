@@ -59,6 +59,7 @@ from breezy.errors import (
     InvalidHttpResponse,
     NoRoundtrippingSupport,
     )
+from breezy.revision import NULL_REVISION
 from breezy.plugins.debian.config import (
     UpstreamMetadataSyntaxError
     )
@@ -1133,7 +1134,7 @@ class NewUpstreamChanger(DebianChanger):
         except NotBranchError:
             pass
         else:
-            base_revision = base_revids.get('pristine-tar')
+            base_revision = base_revids.get('pristine-tar', NULL_REVISION)
             new_revision = pristine_tar_branch.last_revision()
             if base_revision != new_revision:
                 branches.append((
@@ -1147,7 +1148,7 @@ class NewUpstreamChanger(DebianChanger):
         except NotBranchError:
             pass
         else:
-            base_revision = base_revids.get('upstream')
+            base_revision = base_revids.get('upstream', NULL_REVISION)
             new_revision = upstream_branch.last_revision()
             if base_revision != new_revision:
                 branches.append(
