@@ -995,7 +995,7 @@ class NewUpstreamChanger(DebianChanger):
                     create_dist=create_dist)
         except UpstreamAlreadyImported as e:
             reporter.report_context(e.version)
-            reporter.report_metadata('upstream_version', e.version)
+            reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'nothing-to-do',
                 'Last upstream version %s already imported.' % e.version, e)
@@ -1011,7 +1011,7 @@ class NewUpstreamChanger(DebianChanger):
                 'Unable to find new upstream source.', e)
         except UpstreamAlreadyMerged as e:
             reporter.report_context(e.version)
-            reporter.report_metadata('upstream_version', e.version)
+            reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'nothing-to-do',
                 'Last upstream version %s already merged.' % e.version, e)
@@ -1057,7 +1057,7 @@ class NewUpstreamChanger(DebianChanger):
                 'Set \'Repository\' field in debian/upstream/metadata?', e)
         except UpstreamMergeConflicted as e:
             reporter.report_context(e.version)
-            reporter.report_metadata('upstream_version', e.version)
+            reporter.report_metadata('upstream_version', str(e.version))
             reporter.report_metadata('conflicts', e.conflicts)
             raise ChangerError(
                 'upstream-merged-conflicts',
@@ -1119,7 +1119,7 @@ class NewUpstreamChanger(DebianChanger):
                 'Missing upstream tarball: %s' % e, e)
         except NewUpstreamTarballMissing as e:
             reporter.report_context(e.version)
-            reporter.report_metadata('upstream_version', e.version)
+            reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'new-upstream-tarball-missing',
                 'New upstream version (%s/%s) found, but was missing '
@@ -1138,9 +1138,11 @@ class NewUpstreamChanger(DebianChanger):
                 'Found: %s' % (e.old_upstream_version, e.new_upstream_version))
 
         reporter.report_metadata(
-            'old_upstream_version', result.old_upstream_version)
+            'old_upstream_version',
+            str(result.old_upstream_version)
+            if result.old_upstream_version else None)
         reporter.report_metadata(
-            'upstream_version', result.new_upstream_version)
+            'upstream_version', str(result.new_upstream_version))
         if result.upstream_branch:
             reporter.report_metadata(
                 'upstream_branch_url',
