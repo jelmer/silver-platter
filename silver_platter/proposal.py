@@ -67,11 +67,10 @@ from .publish import (
     check_proposal_diff,
     DryRunProposal,
     find_existing_proposed,
+    SUPPORTED_MODES,
     )
 from .workspace import (
     Workspace,
-    SUPPORTED_MODES,
-    publish_changes,
     PublishResult,
     )
 
@@ -88,7 +87,6 @@ __all__ = [
     'SUPPORTED_MODES',
     'push_derived_changes',
     'propose_changes',
-    'publish_changes',
     'PublishResult',
     'Workspace',
     'DryRunProposal',

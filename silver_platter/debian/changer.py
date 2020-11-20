@@ -47,8 +47,7 @@ from ..proposal import (
     iter_conflicted,
     )
 
-from ..workspace import (
-    publish_changes,
+from ..publish import (
     PublishResult,
     SUPPORTED_MODES,
     )
@@ -367,8 +366,8 @@ def _run_single_changer(
             kwargs['tags'] = changer_result.tags
 
         try:
-            publish_result = publish_changes(
-                ws, mode, branch_name,
+            publish_result = ws.publish_changes(
+                mode, branch_name,
                 get_proposal_description=partial(
                     changer.get_proposal_description, changer_result.mutator),
                 get_proposal_commit_message=(

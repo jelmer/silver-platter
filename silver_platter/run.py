@@ -36,8 +36,11 @@ from .proposal import (
     enable_tag_pushing,
     find_existing_proposed,
     get_hoster,
-    publish_changes,
+    )
+from .workspace import (
     Workspace,
+    )
+from .publish import (
     SUPPORTED_MODES,
     )
 from .utils import (
@@ -178,8 +181,8 @@ def main(argv: List[str]) -> Optional[int]:
         enable_tag_pushing(ws.local_tree.branch)
 
         try:
-            publish_result = publish_changes(
-                ws, args.mode, name,
+            publish_result = ws.publish_changes(
+                args.mode, name,
                 get_proposal_description=get_description,
                 dry_run=args.dry_run, hoster=hoster,
                 labels=args.label, overwrite_existing=overwrite,

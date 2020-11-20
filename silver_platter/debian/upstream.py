@@ -239,6 +239,14 @@ class NoUpstreamLocationsKnown(Exception):
         self.package = package
 
 
+class NewerUpstreamAlreadyImported(Exception):
+    """A newer upstream version has already been imported."""
+
+    def __init__(self, old_upstream_version, new_upstream_version):
+        self.old_upstream_version = old_upstream_version
+        self.new_upstream_version = new_upstream_version
+
+
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 DEFAULT_DISTRIBUTION = 'unstable'
@@ -330,61 +338,15 @@ class ImportUpstreamResult(object):
         self.imported_revisions = imported_revisions
 
 
-def import_upstream(
-        tree: Tree, snapshot: bool = False,
-        location: Optional[str] = None,
-        new_upstream_version: Optional[Union[Version, str]] = None,
-        force: bool = False, distribution_name: str = DEFAULT_DISTRIBUTION,
-        allow_ignore_upstream_branch: bool = True,
-        trust_package: bool = False,
-        committer: Optional[str] = None,
-        subpath: str = '',
-        create_dist: Optional[
-            Callable[[Tree, str, Version, str], Optional[str]]] = None
-        ) -> ImportUpstreamResult:
-    """Import a new upstream version into a tree.
+def find_new_upstream(
+        tree, subpath, config, package, location=None,
+        old_upstream_version=None, new_upstream_version=None,
+        trust_package=False, snapshot=False,
+        allow_ignore_upstream_branch=False, top_level=False,
+        create_dist=None):
 
-    Raises:
-      InvalidFormatUpstreamVersion
-      PreviousVersionTagMissing
-      UnsupportedRepackFormat
-      DistCommandFailed
-      MissingChangelogError
-      MissingUpstreamTarball
-      NewUpstreamMissing
-      UpstreamBranchUnavailable
-      UpstreamAlreadyImported
-      QuiltError
-      UpstreamVersionMissingInUpstreamBranch
-      UpstreamBranchUnknown
-      PackageIsNative
-      InconsistentSourceFormatError
-      UnparseableChangelog
-      UScanError
-      UpstreamMetadataSyntaxError
-      UpstreamNotBundled
-      NewUpstreamTarballMissing
-      NoUpstreamLocationsKnown
-    Returns:
-      ImportUpstreamResult object
-    """
-    if subpath is None:
-        subpath = ''
-    config = debuild_config(tree, subpath)
-    (changelog, top_level) = find_changelog(
-        tree, subpath, merge=False, max_blocks=2)
-    old_upstream_version = changelog.version.upstream_version
-    package = changelog.package
-    contains_upstream_source = tree_contains_upstream_source(tree, subpath)
-    build_type = config.build_type
-    if build_type is None:
-        build_type = guess_build_type(
-            tree, changelog.version, subpath,
-            contains_upstream_source=contains_upstream_source)
-    if build_type == BUILD_TYPE_MERGE:
-        raise UpstreamNotBundled(changelog.package)
-    if build_type == BUILD_TYPE_NATIVE:
-        raise PackageIsNative(changelog.package, changelog.version)
+    # TODO(jelmer): Find the lastest upstream present in the upstream branch
+    # rather than what's in the changelog.
 
     upstream_branch_location, upstream_branch_browse = (
         get_upstream_branch_location(
@@ -437,6 +399,8 @@ def import_upstream(
                 primary_upstream_source = UScanSource.from_tree(
                     tree, subpath, top_level)
             except NoWatchFile:
+                # TODO(jelmer): Call out to lintian_brush.watch to generate a
+                # watch file.
                 if upstream_branch_source is None:
                     raise NoUpstreamLocationsKnown(package)
                 primary_upstream_source = upstream_branch_source
@@ -453,6 +417,10 @@ def import_upstream(
     except ValueError:
         raise InvalidFormatUpstreamVersion(
             new_upstream_version, primary_upstream_source)
+
+    if old_upstream_version and old_upstream_version >= new_upstream_version:
+        raise NewerUpstreamAlreadyImported(
+            old_upstream_version, new_upstream_version)
 
     note("Using version string %s.", new_upstream_version)
 
@@ -487,6 +455,89 @@ def import_upstream(
         files_excluded = get_files_excluded(tree, subpath, top_level)
     except NoSuchFile:
         files_excluded = None
+
+    return (
+        primary_upstream_source,
+        new_upstream_version,
+        upstream_revisions,
+        upstream_branch,
+        upstream_branch_source,
+        upstream_branch_browse,
+        files_excluded)
+
+
+def import_upstream(
+        tree: Tree, snapshot: bool = False,
+        location: Optional[str] = None,
+        new_upstream_version: Optional[Union[Version, str]] = None,
+        force: bool = False, distribution_name: str = DEFAULT_DISTRIBUTION,
+        allow_ignore_upstream_branch: bool = True,
+        trust_package: bool = False,
+        committer: Optional[str] = None,
+        subpath: str = '',
+        create_dist: Optional[
+            Callable[[Tree, str, Version, str], Optional[str]]] = None
+        ) -> ImportUpstreamResult:
+    """Import a new upstream version into a tree.
+
+    Raises:
+      InvalidFormatUpstreamVersion
+      PreviousVersionTagMissing
+      UnsupportedRepackFormat
+      DistCommandFailed
+      MissingChangelogError
+      MissingUpstreamTarball
+      NewUpstreamMissing
+      UpstreamBranchUnavailable
+      UpstreamAlreadyImported
+      QuiltError
+      UpstreamVersionMissingInUpstreamBranch
+      UpstreamBranchUnknown
+      PackageIsNative
+      InconsistentSourceFormatError
+      UnparseableChangelog
+      UScanError
+      UpstreamMetadataSyntaxError
+      UpstreamNotBundled
+      NewUpstreamTarballMissing
+      NoUpstreamLocationsKnown
+      NewerUpstreamAlreadyImported
+    Returns:
+      ImportUpstreamResult object
+    """
+    if subpath is None:
+        subpath = ''
+    config = debuild_config(tree, subpath)
+    (changelog, top_level) = find_changelog(
+        tree, subpath, merge=False, max_blocks=2)
+    old_upstream_version = changelog.version.upstream_version
+    package = changelog.package
+    contains_upstream_source = tree_contains_upstream_source(tree, subpath)
+    build_type = config.build_type
+    if build_type is None:
+        build_type = guess_build_type(
+            tree, changelog.version, subpath,
+            contains_upstream_source=contains_upstream_source)
+    if build_type == BUILD_TYPE_MERGE:
+        raise UpstreamNotBundled(changelog.package)
+    if build_type == BUILD_TYPE_NATIVE:
+        raise PackageIsNative(changelog.package, changelog.version)
+
+    (primary_upstream_source,
+     new_upstream_version,
+     upstream_revisions,
+     upstream_branch_source,
+     upstream_branch,
+     upstream_branch_browse,
+     files_excluded) = find_new_upstream(
+        tree, subpath, config, package, location=location,
+        old_upstream_version=old_upstream_version,
+        new_upstream_version=new_upstream_version, trust_package=trust_package,
+        snapshot=snapshot,
+        allow_ignore_upstream_branch=allow_ignore_upstream_branch,
+        top_level=top_level,
+        create_dist=create_dist)
+
     with tempfile.TemporaryDirectory() as target_dir:
         initial_path = os.path.join(target_dir, 'initial')
         os.mkdir(initial_path)
@@ -597,6 +648,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
       UScanError
       NoUpstreamLocationsKnown
       UpstreamMetadataSyntaxError
+      NewerUpstreamAlreadyImported
     Returns:
       MergeUpstreamResult object
     """
@@ -606,6 +658,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
     (changelog, top_level) = find_changelog(
         tree, subpath, merge=False, max_blocks=2)
     old_upstream_version = changelog.version.upstream_version
+    old_revision = tree.last_revision()
     package = changelog.package
     contains_upstream_source = tree_contains_upstream_source(tree, subpath)
     build_type = config.build_type
@@ -617,107 +670,22 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
     if build_type == BUILD_TYPE_NATIVE:
         raise PackageIsNative(changelog.package, changelog.version)
 
-    upstream_branch_location, upstream_branch_browse = (
-        get_upstream_branch_location(
-            tree, subpath, config, trust_package=trust_package))
-
-    if upstream_branch_location:
-        try:
-            upstream_branch = open_branch(upstream_branch_location)
-        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-            if not snapshot and allow_ignore_upstream_branch:
-                warning('Upstream branch %s inaccessible; ignoring. %s',
-                        upstream_branch_location, e)
-            else:
-                raise UpstreamBranchUnavailable(upstream_branch_location, e)
-            upstream_branch = None
-            upstream_branch_browse = None
-    else:
-        upstream_branch = None
-
-    if upstream_branch is not None:
-        try:
-            upstream_branch_source = UpstreamBranchSource.from_branch(
-                upstream_branch, config=config, local_dir=tree.controldir,
-                create_dist=create_dist, snapshot=snapshot)
-        except InvalidHttpResponse as e:
-            raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
-        except ssl.SSLError as e:
-            raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
-    else:
-        upstream_branch_source = None
-
-    if location is not None:
-        try:
-            branch = open_branch(location)
-        except (BranchUnavailable, BranchMissing, BranchUnsupported):
-            primary_upstream_source = TarfileSource(
-                location, new_upstream_version)
-        else:
-            primary_upstream_source = UpstreamBranchSource.from_branch(
-                branch, config=config,
-                local_dir=tree.controldir, create_dist=create_dist,
-                snapshot=snapshot)
-    else:
-        if snapshot:
-            if upstream_branch_source is None:
-                raise UpstreamBranchUnknown()
-            primary_upstream_source = upstream_branch_source
-        else:
-            try:
-                primary_upstream_source = UScanSource.from_tree(
-                    tree, subpath, top_level)
-            except NoWatchFile:
-                # TODO(jelmer): Call out to lintian_brush.watch to generate a
-                # watch file.
-                if upstream_branch_source is None:
-                    raise NoUpstreamLocationsKnown(package)
-                primary_upstream_source = upstream_branch_source
-
-    if new_upstream_version is None and primary_upstream_source is not None:
-        new_upstream_version = primary_upstream_source.get_latest_version(
-            package, old_upstream_version)
-        try:
-            Version(new_upstream_version)
-        except ValueError:
-            raise InvalidFormatUpstreamVersion(
-                new_upstream_version, primary_upstream_source)
-
-    if new_upstream_version is None:
-        raise NewUpstreamMissing()
-    note("Using version string %s.", new_upstream_version)
-
-    # Look up the revision id from the version string
-    if upstream_branch_source is not None:
-        try:
-            upstream_revisions = upstream_branch_source.version_as_revisions(
-                package, new_upstream_version)
-        except PackageVersionNotPresent:
-            if upstream_branch_source is primary_upstream_source:
-                # The branch is our primary upstream source, so if it can't
-                # find the version then there's nothing we can do.
-                raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch, new_upstream_version)
-            elif not allow_ignore_upstream_branch:
-                raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch, new_upstream_version)
-            else:
-                warning(
-                    'Upstream version %s is not in upstream branch %s. '
-                    'Not merging from upstream branch. ',
-                    new_upstream_version, upstream_branch)
-                upstream_revisions = None
-                upstream_branch_source = None
-    else:
-        upstream_revisions = None
-
-    old_revision = tree.last_revision()
+    (primary_upstream_source,
+     new_upstream_version,
+     upstream_revisions,
+     upstream_branch_source,
+     upstream_branch,
+     upstream_branch_browse,
+     files_excluded) = find_new_upstream(
+        tree, subpath, config, package, location=location,
+        old_upstream_version=old_upstream_version,
+        new_upstream_version=new_upstream_version, trust_package=trust_package,
+        snapshot=snapshot,
+        allow_ignore_upstream_branch=allow_ignore_upstream_branch,
+        top_level=top_level,
+        create_dist=create_dist)
 
     if need_upstream_tarball:
-        try:
-            files_excluded = get_files_excluded(tree, subpath, top_level)
-        except NoSuchFile:
-            files_excluded = None
         with tempfile.TemporaryDirectory() as target_dir:
             initial_path = os.path.join(target_dir, 'initial')
             os.mkdir(initial_path)
@@ -775,7 +743,6 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
     (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
-    old_upstream_version = changelog.version.upstream_version
     package = changelog.package
 
     if Version(old_upstream_version) >= Version(new_upstream_version):
@@ -1110,6 +1077,11 @@ class NewUpstreamChanger(DebianChanger):
                 'No debian/watch file or Repository in '
                 'debian/upstream/metadata to retrieve new upstream version'
                 'from.', e)
+        except NewerUpstreamAlreadyImported as e:
+            raise ChangerError(
+                'newer-upstream-version-already-imported',
+                'A newer upstream release (%s) has already been imported. '
+                'Found: %s' % (e.old_upstream_version, e.new_upstream_version))
 
         reporter.report_metadata(
             'old_upstream_version', result.old_upstream_version)
