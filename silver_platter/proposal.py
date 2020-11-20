@@ -625,8 +625,12 @@ class EmptyMergeProposal(Exception):
         self.main_branch = main_branch
 
 
-def check_proposal_diff(other_branch: Branch, main_branch: Branch) -> None:
+def check_proposal_diff(
+        other_branch: Branch, main_branch: Branch,
+        stop_revision: Optional[bytes] = None) -> None:
     from breezy import merge as _mod_merge
+    if stop_revision is None:
+        stop_revision = other_branch.last_revision()
     main_revid = main_branch.last_revision()
     other_branch.repository.fetch(main_branch.repository, main_revid)
     with other_branch.lock_read():
@@ -634,10 +638,10 @@ def check_proposal_diff(other_branch: Branch, main_branch: Branch) -> None:
         revision_graph = other_branch.repository.get_graph()
         merger = _mod_merge.Merger.from_revision_ids(
                 main_tree, other_branch=other_branch,
-                other=other_branch.last_revision(),
+                other=stop_revision,
                 tree_branch=MemoryBranch(
                     other_branch.repository,
-                    (None, main_branch.last_revision()), None),
+                    (None, main_revid), None),
                 revision_graph=revision_graph)
         merger.merge_type = _mod_merge.Merge3Merger
         tree_merger = merger.make_merger()
@@ -684,7 +688,7 @@ def propose_changes(
       Tuple with (proposal, is_new)
     """
     if not allow_empty:
-        check_proposal_diff(local_branch, main_branch)
+        check_proposal_diff(local_branch, main_branch, stop_revision)
     push_kwargs = {}
     if tags is not None:
         push_kwargs['tag_selector'] = _tag_selector_from_tags(tags)
