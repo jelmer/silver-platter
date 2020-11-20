@@ -15,7 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from typing import List, Union, Dict, Optional, Tuple, Any
+from typing import List, Union, Dict, Optional, Tuple, Any, Callable
 
 from breezy.branch import Branch
 from breezy import (
@@ -23,6 +23,7 @@ from breezy import (
     merge as _mod_merge,
     )
 from breezy.propose import (
+    get_hoster,
     Hoster,
     MergeProposal,
     MergeProposalExists,
@@ -45,6 +46,18 @@ __all__ = [
     'check_proposal_diff',
     'DryRunProposal',
     'find_existing_proposed',
+    ]
+
+
+MODE_PUSH = 'push'
+MODE_ATTEMPT_PUSH = 'attempt-push'
+MODE_PROPOSE = 'propose'
+MODE_PUSH_DERIVED = 'push-derived'
+SUPPORTED_MODES: List[str] = [
+    MODE_PUSH,
+    MODE_ATTEMPT_PUSH,
+    MODE_PROPOSE,
+    MODE_PUSH_DERIVED,
     ]
 
 
@@ -439,3 +452,133 @@ def merge_conflicts(
     finally:
         _mod_merge.Merger.hooks['merge_file_content'] = (
                 old_file_content_mergers)
+
+
+class PublishResult(object):
+    """A object describing the result of a publish action."""
+
+    def __init__(self, mode: str,
+                 proposal: Optional[MergeProposal] = None,
+                 is_new: bool = False) -> None:
+        self.mode = mode
+        self.proposal = proposal
+        self.is_new = is_new
+
+    def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
+        # Backwards compatibility
+        return (self.proposal, self.is_new)
+
+
+def publish_changes(
+        local_branch: Branch,
+        main_branch: Branch,
+        resume_branch: Optional[Branch],
+        mode: str, name: str,
+        get_proposal_description: Callable[
+            [str, Optional[MergeProposal]], Optional[str]],
+        get_proposal_commit_message: Callable[
+            [Optional[MergeProposal]], Optional[str]] = None,
+        dry_run: bool = False,
+        hoster: Optional[Hoster] = None,
+        allow_create_proposal: bool = True,
+        labels: Optional[List[str]] = None,
+        overwrite_existing: Optional[bool] = True,
+        existing_proposal: Optional[MergeProposal] = None,
+        reviewers: Optional[List[str]] = None,
+        tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
+        derived_owner: Optional[str] = None,
+        allow_collaboration: bool = False,
+        stop_revision: Optional[bytes] = None) -> PublishResult:
+    """Publish a set of changes.
+
+    Args:
+      ws: Workspace to push from
+      mode: Mode to use ('push', 'push-derived', 'propose')
+      name: Branch name to push
+      get_proposal_description: Function to retrieve proposal description
+      get_proposal_commit_message: Function to retrieve proposal commit message
+      dry_run: Whether to dry run
+      hoster: Hoster, if known
+      allow_create_proposal: Whether to allow creating proposals
+      labels: Labels to set for any merge proposals
+      overwrite_existing: Whether to overwrite existing (but unrelated) branch
+      existing_proposal: Existing proposal to update
+      reviewers: List of reviewers for merge proposal
+      tags: Tags to push (None for default behaviour)
+      derived_owner: Name of any derived branch
+      allow_collaboration: Whether to allow target branch owners to modify
+        source branch.
+    """
+    if mode not in SUPPORTED_MODES:
+        raise ValueError("invalid mode %r" % mode)
+
+    if stop_revision is None:
+        stop_revision = local_branch.last_revision()
+
+    if stop_revision == main_branch.last_revision():
+        if existing_proposal is not None:
+            note('closing existing merge proposal - no new revisions')
+            existing_proposal.close()
+        return PublishResult(mode)
+
+    if resume_branch and resume_branch.last_revision() == stop_revision:
+        # No new revisions added on this iteration, but changes since main
+        # branch. We may not have gotten round to updating/creating the
+        # merge proposal last time.
+        note('No changes added; making sure merge proposal is up to date.')
+
+    if hoster is None:
+        hoster = get_hoster(main_branch)
+
+    if mode == MODE_PUSH_DERIVED:
+        (remote_branch, public_url) = push_derived_changes(
+            local_branch, main_branch, hoster=hoster, name=name,
+            overwrite_existing=overwrite_existing, tags=tags,
+            owner=derived_owner, stop_revision=stop_revision)
+        return PublishResult(mode)
+
+    if mode in (MODE_PUSH, MODE_ATTEMPT_PUSH):
+        try:
+            # breezy would do this check too, but we want to be *really* sure.
+            with local_branch.lock_read():
+                graph = local_branch.repository.get_graph()
+                if not graph.is_ancestor(
+                        main_branch.last_revision(),
+                        stop_revision):
+                    raise errors.DivergedBranches(main_branch, local_branch)
+            push_changes(
+                local_branch, main_branch, hoster=hoster,
+                dry_run=dry_run, tags=tags, stop_revision=stop_revision)
+        except errors.PermissionDenied:
+            if mode == MODE_ATTEMPT_PUSH:
+                note('push access denied, falling back to propose')
+                mode = MODE_PROPOSE
+            else:
+                note('permission denied during push')
+                raise
+        else:
+            return PublishResult(mode=mode)
+
+    assert mode == 'propose'
+    if not resume_branch and not allow_create_proposal:
+        # TODO(jelmer): Raise an exception of some sort here?
+        return PublishResult(mode)
+
+    mp_description = get_proposal_description(
+        getattr(hoster, 'merge_proposal_description_format', 'plain'),
+        existing_proposal if resume_branch else None)
+    if get_proposal_commit_message is not None:
+        commit_message = get_proposal_commit_message(
+            existing_proposal if resume_branch else None)
+    (proposal, is_new) = propose_changes(
+            local_branch, main_branch,
+            hoster=hoster, name=name, mp_description=mp_description,
+            resume_branch=resume_branch,
+            resume_proposal=existing_proposal,
+            overwrite_existing=overwrite_existing,
+            labels=labels, dry_run=dry_run,
+            commit_message=commit_message,
+            reviewers=reviewers, tags=tags, owner=derived_owner,
+            allow_collaboration=allow_collaboration,
+            stop_revision=stop_revision)
+    return PublishResult(mode, proposal, is_new)

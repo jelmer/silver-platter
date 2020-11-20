@@ -73,7 +73,6 @@ from .workspace import (
     SUPPORTED_MODES,
     publish_changes,
     PublishResult,
-    MergeProposalDescriptionMissing,
     )
 
 
@@ -92,7 +91,6 @@ __all__ = [
     'publish_changes',
     'PublishResult',
     'Workspace',
-    'MergeProposalDescriptionMissing',
     'DryRunProposal',
     'check_proposal_diff',
     'EmptyMergeProposal',

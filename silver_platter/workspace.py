@@ -40,6 +40,8 @@ from .publish import (
     propose_changes,
     push_changes,
     push_derived_changes,
+    publish_changes as _publish_changes,
+    PublishResult,
     )
 from .utils import (
     create_temp_sprout,
@@ -49,37 +51,7 @@ from .utils import (
 
 __all__ = [
     'Workspace',
-    'publish_changes',
-    'MergeProposalDescriptionMissing',
-    'PublishResult',
     ]
-
-
-SUPPORTED_MODES: List[str] = [
-    'push',
-    'attempt-push',
-    'propose',
-    'push-derived',
-    ]
-
-
-class MergeProposalDescriptionMissing(Exception):
-    """No description specified for merge proposal."""
-
-
-class PublishResult(object):
-    """A object describing the result of a publish action."""
-
-    def __init__(self, mode: str,
-                 proposal: Optional[MergeProposal] = None,
-                 is_new: bool = False) -> None:
-        self.mode = mode
-        self.proposal = proposal
-        self.is_new = is_new
-
-    def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
-        # Backwards compatibility
-        return (self.proposal, self.is_new)
 
 
 class Workspace(object):
@@ -236,6 +208,13 @@ class Workspace(object):
             overwrite_existing=overwrite_existing,
             owner=owner, tags=tags, stop_revision=stop_revision)
 
+    def publish_changes(self, *args, **kwargs) -> PublishResult:
+        """Publish a set of changes.
+        """
+        return _publish_changes(
+            self.local_tree.branch, self.main_branch, self.resume_branch,
+            *args, **kwargs)
+
     def orig_tree(self) -> Tree:
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
 
@@ -251,102 +230,3 @@ class Workspace(object):
             self._destroy()
             self._destroy = None
         return False
-
-
-def publish_changes(
-        ws: Workspace, mode: str, name: str,
-        get_proposal_description: Callable[
-            [str, Optional[MergeProposal]], Optional[str]],
-        get_proposal_commit_message: Callable[
-            [Optional[MergeProposal]], Optional[str]] = None,
-        dry_run: bool = False,
-        hoster: Optional[Hoster] = None,
-        allow_create_proposal: bool = True,
-        labels: Optional[List[str]] = None,
-        overwrite_existing: Optional[bool] = True,
-        existing_proposal: Optional[MergeProposal] = None,
-        reviewers: Optional[List[str]] = None,
-        tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
-        derived_owner: Optional[str] = None,
-        allow_collaboration: bool = False,
-        stop_revision: Optional[bytes] = None) -> PublishResult:
-    """Publish a set of changes.
-
-    Args:
-      ws: Workspace to push from
-      mode: Mode to use ('push', 'push-derived', 'propose')
-      name: Branch name to push
-      get_proposal_description: Function to retrieve proposal description
-      get_proposal_commit_message: Function to retrieve proposal commit message
-      dry_run: Whether to dry run
-      hoster: Hoster, if known
-      allow_create_proposal: Whether to allow creating proposals
-      labels: Labels to set for any merge proposals
-      overwrite_existing: Whether to overwrite existing (but unrelated) branch
-      existing_proposal: Existing proposal to update
-      reviewers: List of reviewers for merge proposal
-      tags: Tags to push (None for default behaviour)
-      derived_owner: Name of any derived branch
-      allow_collaboration: Whether to allow target branch owners to modify
-        source branch.
-    """
-    if mode not in SUPPORTED_MODES:
-        raise ValueError("invalid mode %r" % mode)
-
-    if not ws.changes_since_main():
-        if existing_proposal is not None:
-            note('closing existing merge proposal - no new revisions')
-            existing_proposal.close()
-        return PublishResult(mode)
-
-    if not ws.changes_since_resume():
-        # No new revisions added on this iteration, but changes since main
-        # branch. We may not have gotten round to updating/creating the
-        # merge proposal last time.
-        note('No changes added; making sure merge proposal is up to date.')
-
-    if hoster is None:
-        hoster = get_hoster(ws.main_branch)
-
-    if mode == 'push-derived':
-        (remote_branch, public_url) = ws.push_derived(
-            name=name, overwrite_existing=overwrite_existing,
-            tags=tags, owner=derived_owner, stop_revision=stop_revision)
-        return PublishResult(mode)
-
-    if mode in ('push', 'attempt-push'):
-        try:
-            ws.push(hoster, dry_run=dry_run, tags=tags,
-                    stop_revision=stop_revision)
-        except PermissionDenied:
-            if mode == 'attempt-push':
-                note('push access denied, falling back to propose')
-                mode = 'propose'
-            else:
-                note('permission denied during push')
-                raise
-        else:
-            return PublishResult(mode=mode)
-
-    assert mode == 'propose'
-    if not ws.resume_branch and not allow_create_proposal:
-        # TODO(jelmer): Raise an exception of some sort here?
-        return PublishResult(mode)
-
-    mp_description = get_proposal_description(
-        getattr(hoster, 'merge_proposal_description_format', 'plain'),
-        existing_proposal if ws.resume_branch else None)
-    if get_proposal_commit_message is not None:
-        commit_message = get_proposal_commit_message(
-            existing_proposal if ws.resume_branch else None)
-    if not mp_description:
-        raise MergeProposalDescriptionMissing()
-    (proposal, is_new) = ws.propose(
-        name, mp_description, hoster=hoster,
-        existing_proposal=existing_proposal,
-        labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
-        commit_message=commit_message, reviewers=reviewers,
-        tags=tags, allow_collaboration=allow_collaboration,
-        owner=derived_owner, stop_revision=stop_revision)
-
-    return PublishResult(mode, proposal, is_new)
