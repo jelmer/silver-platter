@@ -41,13 +41,16 @@ from ..proposal import (
     HosterLoginRequired,
     UnsupportedHoster,
     NoSuchProject,
-    SUPPORTED_MODES,
     enable_tag_pushing,
     find_existing_proposed,
     get_hoster,
     iter_conflicted,
+    )
+
+from ..workspace import (
     publish_changes,
     PublishResult,
+    SUPPORTED_MODES,
     )
 from ..utils import (
     BranchMissing,
