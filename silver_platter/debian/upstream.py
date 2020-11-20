@@ -447,9 +447,12 @@ def find_new_upstream(
         raise InvalidFormatUpstreamVersion(
             new_upstream_version, primary_upstream_source)
 
-    if old_upstream_version and old_upstream_version >= new_upstream_version:
-        raise NewerUpstreamAlreadyImported(
-            old_upstream_version, new_upstream_version)
+    if old_upstream_version:
+        if old_upstream_version == new_upstream_version:
+            raise UpstreamAlreadyImported(new_upstream_version)
+        if old_upstream_version > new_upstream_version:
+            raise NewerUpstreamAlreadyImported(
+                old_upstream_version, new_upstream_version)
 
     # TODO(jelmer): Check if new_upstream_version is already imported
 
