@@ -159,7 +159,8 @@ class DryRunProposal(MergeProposal):
                  description: Optional[str] = None,
                  commit_message: Optional[str] = None,
                  reviewers: Optional[List[str]] = None,
-                 owner: Optional[str] = None):
+                 owner: Optional[str] = None,
+                 stop_revision: Optional[bytes] = None):
         self.description = description
         self.closed = False
         self.labels = (labels or [])
@@ -169,6 +170,7 @@ class DryRunProposal(MergeProposal):
         self.url = None
         self.reviewers = reviewers
         self.owner = owner
+        self.stop_revision = stop_revision
 
     @classmethod
     def from_existing(cls, mp: MergeProposal,
@@ -227,14 +229,16 @@ def push_result(
         local_branch: Branch,
         remote_branch: Branch,
         additional_colocated_branches: Optional[List[str]] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+        stop_revision: Optional[bytes] = None
         ) -> None:
     kwargs = {}
     if tags is not None:
         kwargs['tag_selector'] = _tag_selector_from_tags(tags)
     try:
         local_branch.push(
-            remote_branch, overwrite=False, **kwargs)
+            remote_branch, overwrite=False,
+            stop_revision=stop_revision, **kwargs)
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
         raise PermissionDenied(path=full_branch_url(remote_branch), extra=e)
@@ -391,14 +395,14 @@ class Workspace(object):
         return self.orig_revid != self.local_tree.branch.last_revision()
 
     def push(self, hoster: Optional[Hoster] = None, dry_run: bool = False,
-             tags: Optional[Union[Dict[str, bytes], List[str]]] = None
-             ) -> None:
+             tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+             stop_revision: Optional[bytes] = None) -> None:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return push_changes(
             self.local_tree.branch, self.main_branch, hoster=hoster,
             additional_colocated_branches=self.additional_colocated_branches,
-            dry_run=dry_run, tags=tags)
+            dry_run=dry_run, tags=tags, stop_revision=stop_revision)
 
     def propose(self, name: str, description: str,
                 hoster: Optional[Hoster] = None,
@@ -410,7 +414,8 @@ class Workspace(object):
                 reviewers: Optional[List[str]] = None,
                 tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
                 owner: Optional[str] = None,
-                allow_collaboration: bool = False) -> MergeProposal:
+                allow_collaboration: bool = False,
+                stop_revision: Optional[bytes] = None) -> MergeProposal:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
@@ -421,13 +426,15 @@ class Workspace(object):
             dry_run=dry_run, commit_message=commit_message,
             reviewers=reviewers, owner=owner,
             additional_colocated_branches=self.additional_colocated_branches,
-            tags=tags, allow_collaboration=allow_collaboration)
+            tags=tags, allow_collaboration=allow_collaboration,
+            stop_revision=stop_revision)
 
     def push_derived(self,
                      name: str, hoster: Optional[Hoster] = None,
                      overwrite_existing: Optional[bool] = False,
                      owner: Optional[str] = None,
-                     tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+                     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+                     stop_revision: Optional[bytes] = None
                      ) -> Tuple[Branch, str]:
         """Push a derived branch.
 
@@ -446,7 +453,7 @@ class Workspace(object):
             self.local_tree.branch,
             self.main_branch, hoster, name,
             overwrite_existing=overwrite_existing,
-            owner=owner, tags=tags)
+            owner=owner, tags=tags, stop_revision=stop_revision)
 
     def orig_tree(self) -> Tree:
         return self.local_tree.branch.repository.revision_tree(self.orig_revid)
@@ -500,7 +507,8 @@ def publish_changes(
         reviewers: Optional[List[str]] = None,
         tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
         derived_owner: Optional[str] = None,
-        allow_collaboration: bool = False) -> PublishResult:
+        allow_collaboration: bool = False,
+        stop_revision: Optional[bytes] = None) -> PublishResult:
     """Publish a set of changes.
 
     Args:
@@ -542,12 +550,13 @@ def publish_changes(
     if mode == 'push-derived':
         (remote_branch, public_url) = ws.push_derived(
             name=name, overwrite_existing=overwrite_existing,
-            tags=tags, owner=derived_owner)
+            tags=tags, owner=derived_owner, stop_revision=stop_revision)
         return PublishResult(mode)
 
     if mode in ('push', 'attempt-push'):
         try:
-            ws.push(hoster, dry_run=dry_run, tags=tags)
+            ws.push(hoster, dry_run=dry_run, tags=tags,
+                    stop_revision=stop_revision)
         except PermissionDenied:
             if mode == 'attempt-push':
                 note('push access denied, falling back to propose')
@@ -577,7 +586,7 @@ def publish_changes(
         labels=labels, dry_run=dry_run, overwrite_existing=overwrite_existing,
         commit_message=commit_message, reviewers=reviewers,
         tags=tags, allow_collaboration=allow_collaboration,
-        owner=derived_owner)
+        owner=derived_owner, stop_revision=stop_revision)
 
     return PublishResult(mode, proposal, is_new)
 
@@ -587,7 +596,8 @@ def push_changes(local_branch: Branch, main_branch: Branch,
                  possible_transports: Optional[List[Transport]] = None,
                  additional_colocated_branches: Optional[List[str]] = None,
                  dry_run: bool = False,
-                 tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+                 tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+                 stop_revision: Optional[bytes] = None
                  ) -> None:
     """Push changes to a branch."""
     push_url = hoster.get_push_url(main_branch)
@@ -597,7 +607,7 @@ def push_changes(local_branch: Branch, main_branch: Branch,
     if not dry_run:
         push_result(
             local_branch, target_branch, additional_colocated_branches,
-            tags=tags)
+            tags=tags, stop_revision=stop_revision)
 
 
 class EmptyMergeProposal(Exception):
@@ -641,7 +651,7 @@ def propose_changes(
         additional_colocated_branches: Optional[List[str]] = None,
         allow_empty: bool = False, reviewers: Optional[List[str]] = None,
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-        owner: Optional[str] = None,
+        owner: Optional[str] = None, stop_revision: Optional[bytes] = None,
         allow_collaboration: bool = False) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
 
@@ -661,6 +671,7 @@ def propose_changes(
       reviewers: List of reviewers
       tags: Tags to push (None for default behaviour)
       owner: Derived branch owner
+      stop_revision: Revision to stop pushing at
       allow_collaboration: Allow target branch owners to modify source branch
     Returns:
       Tuple with (proposal, is_new)
@@ -674,12 +685,14 @@ def propose_changes(
         if resume_branch is not None:
             local_branch.push(
                 resume_branch, overwrite=overwrite_existing,
+                stop_revision=stop_revision,
                 **push_kwargs)
             remote_branch = resume_branch
         else:
             remote_branch, public_branch_url = hoster.publish_derived(
                 local_branch, main_branch, name=name,
                 overwrite=overwrite_existing,
+                revision_id=stop_revision,
                 owner=owner, **push_kwargs)
         for colocated_branch_name in (additional_colocated_branches or []):
             try:
@@ -731,7 +744,7 @@ def propose_changes(
             mp = DryRunProposal(
                 local_branch, main_branch, labels=labels,
                 description=mp_description, commit_message=commit_message,
-                reviewers=reviewers, owner=owner)
+                reviewers=reviewers, owner=owner, stop_revision=stop_revision)
             return (mp, True)
     # Check that the proposal doesn't already has this description.
     # Setting the description (regardless of whether it changes)
@@ -770,15 +783,15 @@ def push_derived_changes(
         local_branch: Branch, main_branch: Branch, hoster: Hoster, name: str,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None
+        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+        stop_revision: Optional[bytes] = None
         ) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
         kwargs['tag_selector'] = _tag_selector_from_tags(tags)
     remote_branch, public_branch_url = hoster.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing,
-        owner=owner,
-        **kwargs)
+        owner=owner, revision_id=stop_revision, **kwargs)
     return remote_branch, public_branch_url
 
 
