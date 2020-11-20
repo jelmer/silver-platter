@@ -606,7 +606,7 @@ def import_upstream(
                 % e.path)
         imported_revisions = do_import(
             tree, subpath, tarball_filenames, package,
-            new_upstream_version, old_upstream_version,
+            str(new_upstream_version), str(old_upstream_version),
             upstream_branch, upstream_revisions, merge_type=None,
             force=force, committer=committer,
             files_excluded=files_excluded)
