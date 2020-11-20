@@ -108,18 +108,23 @@ class MergeProposalDescriptionMissing(Exception):
     """No description specified for merge proposal."""
 
 
-def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
+def merge_conflicts(
+        main_branch: Branch, other_branch: Branch,
+        other_revision: Optional[bytes] = None) -> bool:
     """Check whether two branches are conflicted when merged.
 
     Args:
       main_branch: Main branch to merge into
       other_branch: Branch to merge (and use for scratch access, needs write
                     access)
+      other_revision: Other revision to check
     Returns:
       boolean indicating whether the merge would result in conflicts
     """
+    if other_revision is None:
+        other_revision = other_branch.last_revision()
     if other_branch.repository.get_graph().is_ancestor(
-            main_branch.last_revision(), other_branch.last_revision()):
+            main_branch.last_revision(), other_revision):
         return False
 
     other_branch.repository.fetch(
@@ -130,10 +135,12 @@ def merge_conflicts(main_branch: Branch, other_branch: Branch) -> bool:
     # conflicted merges that would appear on the hosting site.
     old_file_content_mergers = _mod_merge.Merger.hooks['merge_file_content']
     _mod_merge.Merger.hooks['merge_file_content'] = []
+
+    other_tree = other_branch.repository.revision_tree(other_revision)
     try:
         try:
             merger = _mod_merge.Merger.from_revision_ids(
-                other_branch.basis_tree(), other_branch=other_branch,
+                other_tree, other_branch=other_branch,
                 other=main_branch.last_revision(), tree_branch=other_branch)
         except UnrelatedBranches:
             # Unrelated branches don't technically *have* to lead to
