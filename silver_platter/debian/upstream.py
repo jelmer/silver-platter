@@ -114,6 +114,7 @@ from breezy.plugins.debian.upstream.uscan import (
     UScanError,
     NoWatchFile,
     WatchLineWithoutMatches,
+    WatchLineWithoutMatchingHrefs,
     )
 from breezy.plugins.debian.upstream.branch import (
     UpstreamBranchSource,
@@ -585,7 +586,7 @@ def import_upstream(
             locations = primary_upstream_source.fetch_tarballs(
                 package, new_upstream_version, target_dir,
                 components=[None])
-        except PackageVersionNotPresent:
+        except (PackageVersionNotPresent, WatchLineWithoutMatchingHrefs):
             if upstream_revisions is not None:
                 locations = upstream_branch_source.fetch_tarballs(
                     package, new_upstream_version, initial_path,
