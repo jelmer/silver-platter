@@ -994,7 +994,7 @@ class NewUpstreamChanger(DebianChanger):
                     include_upstream_history=self.include_upstream_history,
                     create_dist=create_dist)
         except UpstreamAlreadyImported as e:
-            reporter.report_context(e.version)
+            reporter.report_context(str(e.version))
             reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'nothing-to-do',
@@ -1010,7 +1010,7 @@ class NewUpstreamChanger(DebianChanger):
                 'new-upstream-missing',
                 'Unable to find new upstream source.', e)
         except UpstreamAlreadyMerged as e:
-            reporter.report_context(e.version)
+            reporter.report_context(str(e.version))
             reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'nothing-to-do',
@@ -1056,7 +1056,7 @@ class NewUpstreamChanger(DebianChanger):
                 'Upstream branch location unknown. '
                 'Set \'Repository\' field in debian/upstream/metadata?', e)
         except UpstreamMergeConflicted as e:
-            reporter.report_context(e.version)
+            reporter.report_context(str(e.version))
             reporter.report_metadata('upstream_version', str(e.version))
             reporter.report_metadata('conflicts', e.conflicts)
             raise ChangerError(
@@ -1118,7 +1118,7 @@ class NewUpstreamChanger(DebianChanger):
                 'missing-upstream-tarball',
                 'Missing upstream tarball: %s' % e, e)
         except NewUpstreamTarballMissing as e:
-            reporter.report_context(e.version)
+            reporter.report_context(str(e.version))
             reporter.report_metadata('upstream_version', str(e.version))
             raise ChangerError(
                 'new-upstream-tarball-missing',
@@ -1132,6 +1132,7 @@ class NewUpstreamChanger(DebianChanger):
                 'debian/upstream/metadata to retrieve new upstream version'
                 'from.', e)
         except NewerUpstreamAlreadyImported as e:
+            reporter.report_context(str(e.new_upstream_version))
             raise ChangerError(
                 'newer-upstream-version-already-imported',
                 'A newer upstream release (%s) has already been imported. '
@@ -1151,10 +1152,10 @@ class NewUpstreamChanger(DebianChanger):
                 'upstream_branch_browse',
                 result.upstream_branch_browse)
 
-        reporter.report_context(result.new_upstream_version)
+        reporter.report_context(str(result.new_upstream_version))
 
         tags = [
-            (('upstream', result.new_upstream_version, component),
+            (('upstream', str(result.new_upstream_version), component),
              tag, revid)
             for (component, tag, revid,
                  pristine_tar_imported) in result.imported_revisions]
