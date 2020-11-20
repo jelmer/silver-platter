@@ -26,7 +26,7 @@ import re
 import ssl
 import tempfile
 import traceback
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Union
 
 from ..utils import (
     full_branch_url,
@@ -333,7 +333,7 @@ class ImportUpstreamResult(object):
 def import_upstream(
         tree: Tree, snapshot: bool = False,
         location: Optional[str] = None,
-        new_upstream_version: Optional[str] = None,
+        new_upstream_version: Optional[Union[Version, str]] = None,
         force: bool = False, distribution_name: str = DEFAULT_DISTRIBUTION,
         allow_ignore_upstream_branch: bool = True,
         trust_package: bool = False,
@@ -444,15 +444,20 @@ def import_upstream(
     if new_upstream_version is None and primary_upstream_source is not None:
         new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version)
-        try:
-            Version(new_upstream_version)
-        except ValueError:
-            raise InvalidFormatUpstreamVersion(
-                new_upstream_version, primary_upstream_source)
 
     if new_upstream_version is None:
         raise NewUpstreamMissing()
+
+    try:
+        new_upstream_version = Version(new_upstream_version)
+    except ValueError:
+        raise InvalidFormatUpstreamVersion(
+            new_upstream_version, primary_upstream_source)
+
     note("Using version string %s.", new_upstream_version)
+
+    # TODO(jelmer): Check if new_upstream_version is already imported, or if
+    # it's older than old_upstream_version.
 
     # Look up the revision id from the version string
     if upstream_branch_source is not None:
@@ -500,7 +505,7 @@ def import_upstream(
         try:
             tarball_filenames = get_tarballs(
                 orig_path, tree, package, new_upstream_version,
-                upstream_branch, upstream_revisions, locations)
+                locations)
         except FileExists as e:
             raise AssertionError(
                 "The target file %s already exists, and is either "
@@ -735,7 +740,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
             try:
                 tarball_filenames = get_tarballs(
                     orig_path, tree, package, new_upstream_version,
-                    upstream_branch, upstream_revisions, locations)
+                    locations)
             except FileExists as e:
                 raise AssertionError(
                     "The target file %s already exists, and is either "
