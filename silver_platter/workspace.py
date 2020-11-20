@@ -25,7 +25,6 @@ from breezy.errors import (
     DivergedBranches,
     NotBranchError,
     NoColocatedBranchSupport,
-    PermissionDenied,
     )
 from breezy.propose import (
     get_hoster,

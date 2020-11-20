@@ -155,7 +155,7 @@ class ChangerError(Exception):
 class ChangerResult(object):
 
     def __init__(self, description: Optional[str], mutator: Any,
-                 branches: Optional[List[Tuple[str, str, bytes]]] = [],
+                 branches: Optional[List[Tuple[str, str, bytes, bytes]]] = [],
                  tags: Optional[Dict[str, bytes]] = None,
                  value: Optional[int] = None,
                  proposed_commit_message: Optional[str] = None,
@@ -171,6 +171,20 @@ class ChangerResult(object):
         self.title = title
         self.labels = labels
         self.sufficient_for_proposal = sufficient_for_proposal
+
+    def show_diff(self, repository, outf, role='main',
+                  old_label: str = 'old/', new_label: str = 'new/') -> None:
+        from breezy.diff import show_diff_trees
+        for (brole, name, base_revision, revision) in self.branches:
+            if role == brole:
+                break
+        else:
+            raise KeyError
+        old_tree = repository.revision_tree(base_revision)
+        new_tree = repository.revision_tree(revision)
+        show_diff_trees(
+            old_tree, new_tree, outf,
+            old_label=old_label, new_label=new_label)
 
 
 def setup_parser_common(parser: argparse.ArgumentParser) -> None:
@@ -402,7 +416,17 @@ def _run_single_changer(
         if publish_result.proposal:
             changer.describe(changer_result.mutator, publish_result)
         if diff:
-            ws.show_diff(sys.stdout.buffer)
+            for entry in changer_result.branches:
+                role = entry[0]
+                if len(changer_result.branches) > 1:
+                    sys.stdout.write('%s\n' % role)
+                    sys.stdout.write(('-' * len(role)) + '\n')
+                sys.stdout.flush()
+                changer_result.show_diff(
+                    ws.local_tree.branch.repository, sys.stdout.buffer,
+                    role=role)
+                if len(changer_result.branches) > 1:
+                    sys.stdout.write('\n')
 
         return True
 

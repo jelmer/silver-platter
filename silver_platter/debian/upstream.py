@@ -338,12 +338,41 @@ class ImportUpstreamResult(object):
         self.imported_revisions = imported_revisions
 
 
+def detect_include_upstream_history(
+        tree, upstream_branch_source, package, old_upstream_version):
+    # Simple heuristic: Find the old upstream version and see if it's present
+    # in the history of the packaging branch
+    try:
+        revision = upstream_branch_source.version_as_revision(
+            package, old_upstream_version)
+    except PackageVersionNotPresent:
+        warning(
+            'Old upstream version %r is not present in upstream '
+            'branch %r. Unable to determine whether upstream history '
+            'is normally included. Assuming no.', old_upstream_version,
+            upstream_branch_source)
+        return False
+
+    graph = tree.branch.repository.get_graph()
+    ret = graph.is_ancestor(revision, tree.last_revision())
+    if ret:
+        note('Including upstream history, since previous upstream version '
+             '(%s) is present in packaging branch history.',
+             old_upstream_version)
+    else:
+        note('Not including upstream history, since previous upstream version '
+             '(%s) is not present in packaging branch history.',
+             old_upstream_version)
+
+    return ret
+
+
 def find_new_upstream(
         tree, subpath, config, package, location=None,
         old_upstream_version=None, new_upstream_version=None,
         trust_package=False, snapshot=False,
         allow_ignore_upstream_branch=False, top_level=False,
-        create_dist=None):
+        create_dist=None, include_upstream_history: Optional[bool] = None):
 
     # TODO(jelmer): Find the lastest upstream present in the upstream branch
     # rather than what's in the changelog.
@@ -422,10 +451,17 @@ def find_new_upstream(
         raise NewerUpstreamAlreadyImported(
             old_upstream_version, new_upstream_version)
 
+    # TODO(jelmer): Check if new_upstream_version is already imported
+
     note("Using version string %s.", new_upstream_version)
 
-    # TODO(jelmer): Check if new_upstream_version is already imported, or if
-    # it's older than old_upstream_version.
+    if include_upstream_history is None:
+        include_upstream_history = detect_include_upstream_history(
+            tree, upstream_branch_source, package, old_upstream_version)
+
+    if include_upstream_history is False:
+        upstream_branch_source = None
+        upstream_branch = None
 
     # Look up the revision id from the version string
     if upstream_branch_source is not None:
@@ -475,6 +511,7 @@ def import_upstream(
         trust_package: bool = False,
         committer: Optional[str] = None,
         subpath: str = '',
+        include_upstream_history: Optional[bool] = None,
         create_dist: Optional[
             Callable[[Tree, str, Version, str], Optional[str]]] = None
         ) -> ImportUpstreamResult:
@@ -535,7 +572,7 @@ def import_upstream(
         new_upstream_version=new_upstream_version, trust_package=trust_package,
         snapshot=snapshot,
         allow_ignore_upstream_branch=allow_ignore_upstream_branch,
-        top_level=top_level,
+        top_level=top_level, include_upstream_history=include_upstream_history,
         create_dist=create_dist)
 
     with tempfile.TemporaryDirectory() as target_dir:
@@ -622,6 +659,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                    committer: Optional[str] = None,
                    update_changelog: bool = True,
                    subpath: str = '',
+                   include_upstream_history: Optional[bool] = None,
                    create_dist: Optional[Callable[
                        [Tree, str, Version, str],
                        Optional[str]]] = None) -> MergeUpstreamResult:
@@ -682,7 +720,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
         new_upstream_version=new_upstream_version, trust_package=trust_package,
         snapshot=snapshot,
         allow_ignore_upstream_branch=allow_ignore_upstream_branch,
-        top_level=top_level,
+        top_level=top_level, include_upstream_history=include_upstream_history,
         create_dist=create_dist)
 
     if need_upstream_tarball:
@@ -719,7 +757,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
             try:
                 conflicts, imported_revids = do_merge(
                     tree, subpath, tarball_filenames, package,
-                    new_upstream_version, old_upstream_version,
+                    str(new_upstream_version), str(old_upstream_version),
                     upstream_branch, upstream_revisions, merge_type=None,
                     force=force, committer=committer,
                     files_excluded=files_excluded)
@@ -846,13 +884,15 @@ class NewUpstreamChanger(DebianChanger):
     name = 'new-upstream'
 
     def __init__(self, snapshot, trust_package, refresh_patches,
-                 update_packaging, dist_command, import_only=False):
+                 update_packaging, dist_command, import_only=False,
+                 include_upstream_history=None):
         self.snapshot = snapshot
         self.trust_package = trust_package
         self.refresh_patches = refresh_patches
         self.update_packaging = update_packaging
         self.dist_command = dist_command
         self.import_only = import_only
+        self.include_upstream_history = include_upstream_history
 
     @classmethod
     def setup_parser(cls, parser):
@@ -880,6 +920,14 @@ class NewUpstreamChanger(DebianChanger):
         parser.add_argument(
             '--dist-command', type=str,
             help="Command to run to create tarball from source tree.")
+        parser.add_argument(
+            '--no-include-upstream-history', action="store_false",
+            default=None, dest="include_upstream_history",
+            help="do not include upstream branch history")
+        parser.add_argument(
+            '--include-upstream-history', action="store_true",
+            dest="include_upstream_history",
+            help="force inclusion of upstream history", default=None)
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -894,7 +942,8 @@ class NewUpstreamChanger(DebianChanger):
                    refresh_patches=args.refresh_patches,
                    update_packaging=args.update_packaging,
                    dist_command=args.dist_command,
-                   import_only=args.import_only)
+                   import_only=args.import_only,
+                   include_upstream_history=args.include_upstream_history)
 
     def create_dist_from_command(self, tree, package, version, target_dir):
         return run_dist_command(
@@ -926,6 +975,7 @@ class NewUpstreamChanger(DebianChanger):
                         trust_package=self.trust_package,
                         update_changelog=update_changelog,
                         subpath=subpath, committer=committer,
+                        include_upstream_history=self.include_upstream_history,
                         create_dist=create_dist)
                 except MalformedTransform:
                     traceback.print_exc()
@@ -938,6 +988,7 @@ class NewUpstreamChanger(DebianChanger):
                     tree=local_tree, snapshot=self.snapshot,
                     trust_package=self.trust_package,
                     subpath=subpath, committer=committer,
+                    include_upstream_history=self.include_upstream_history,
                     create_dist=create_dist)
         except UpstreamAlreadyImported as e:
             reporter.report_context(e.version)
