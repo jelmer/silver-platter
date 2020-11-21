@@ -149,7 +149,7 @@ __all__ = [
     'UpstreamVersionMissingInUpstreamBranch',
     'UpstreamBranchUnknown',
     'PackageIsNative',
-    'UnparseableChangelog',
+    'ChangelogParseError',
     'UScanError',
     'UpstreamMetadataSyntaxError',
     'QuiltPatchPushFailure',
@@ -558,7 +558,7 @@ def import_upstream(
       UpstreamBranchUnknown
       PackageIsNative
       InconsistentSourceFormatError
-      UnparseableChangelog
+      ChangelogParseError
       UScanError
       UpstreamMetadataSyntaxError
       UpstreamNotBundled
@@ -708,7 +708,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
       UpstreamBranchUnknown
       PackageIsNative
       InconsistentSourceFormatError
-      UnparseableChangelog
+      ChangelogParseError
       UScanError
       NoUpstreamLocationsKnown
       UpstreamMetadataSyntaxError
