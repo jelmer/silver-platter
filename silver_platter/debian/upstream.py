@@ -368,6 +368,16 @@ def detect_include_upstream_history(
     return ret
 
 
+def matches_release(upstream_version: str, release_version: str):
+    m = re.match('(.*)([~+-](dfsg|git|bzr|svn|hg).*', upstream_version)
+    if m and m.group(1) == release_version:
+        return True
+    m = re.match('(.*)([~+-]).*', upstream_version)
+    if m and m.group(1) == release_version:
+        return True
+    return False
+
+
 def find_new_upstream(
         tree, subpath, config, package, location=None,
         old_upstream_version=None, new_upstream_version=None,
@@ -452,6 +462,9 @@ def find_new_upstream(
         if old_upstream_version == new_upstream_version:
             raise UpstreamAlreadyImported(new_upstream_version)
         if old_upstream_version > new_upstream_version:
+            if not snapshot and matches_release(
+                    str(old_upstream_version), str(new_upstream_version)):
+                raise UpstreamAlreadyImported(new_upstream_version)
             raise NewerUpstreamAlreadyImported(
                 old_upstream_version, new_upstream_version)
 
