@@ -22,15 +22,25 @@ from breezy import (
     errors,
     merge as _mod_merge,
     )
+from breezy.errors import PermissionDenied
 from breezy.propose import (
     get_hoster,
     Hoster,
     MergeProposal,
     MergeProposalExists,
     NoSuchProject,
+    UnsupportedHoster,
     )
 from breezy.trace import note
 from breezy.transport import Transport
+
+try:
+    from breezy.propose import (
+        SourceNotDerivedFromTarget,
+        )
+except ImportError:  # breezy < 3.1.1
+    SourceNotDerivedFromTarget = None
+
 
 from .utils import (
     open_branch,
@@ -48,6 +58,8 @@ __all__ = [
     'DryRunProposal',
     'find_existing_proposed',
     'NoSuchProject',
+    'PermissionDenied',
+    'UnsupportedHoster',
     ]
 
 
