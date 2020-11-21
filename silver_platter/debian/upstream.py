@@ -272,6 +272,14 @@ def get_upstream_branch_location(tree, subpath, config, trust_package=False):
         if upstream_branch_location:
             note("Using upstream branch %s (guessed)",
                  upstream_branch_location)
+    if upstream_branch_browse is None and upstream_branch_location is not None:
+        try:
+            from lintian_brush.vcs import determine_browser_url
+        except ImportError:
+            pass
+        else:
+            upstream_branch_browse = determine_browser_url(
+                None, upstream_branch_location)
     return (upstream_branch_location, upstream_branch_browse)
 
 
