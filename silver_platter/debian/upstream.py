@@ -1190,6 +1190,9 @@ class NewUpstreamChanger(DebianChanger):
                 'upstream_branch_browse',
                 result.upstream_branch_browse)
 
+        reporter.report_metadata(
+            'include_upstream_history', result.include_upstream_history)
+
         reporter.report_context(str(result.new_upstream_version))
 
         tags = [
