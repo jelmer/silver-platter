@@ -597,12 +597,12 @@ def import_upstream(
         os.mkdir(initial_path)
         try:
             locations = primary_upstream_source.fetch_tarballs(
-                package, new_upstream_version, target_dir,
+                package, str(new_upstream_version), target_dir,
                 components=[None])
         except (PackageVersionNotPresent, WatchLineWithoutMatchingHrefs):
             if upstream_revisions is not None:
                 locations = upstream_branch_source.fetch_tarballs(
-                    package, new_upstream_version, initial_path,
+                    package, str(new_upstream_version), initial_path,
                     components=[None], revisions=upstream_revisions)
             else:
                 raise
@@ -747,12 +747,12 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
 
             try:
                 locations = primary_upstream_source.fetch_tarballs(
-                    package, new_upstream_version, initial_path,
+                    package, str(new_upstream_version), initial_path,
                     components=[None])
             except PackageVersionNotPresent as e:
                 if upstream_revisions is not None:
                     locations = upstream_branch_source.fetch_tarballs(
-                        package, new_upstream_version, initial_path,
+                        package, str(new_upstream_version), initial_path,
                         components=[None], revisions=upstream_revisions)
                 else:
                     raise NewUpstreamTarballMissing(
