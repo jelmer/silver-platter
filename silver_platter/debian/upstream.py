@@ -1086,7 +1086,7 @@ class NewUpstreamChanger(DebianChanger):
         except WatchLineWithoutMatches as e:
             raise ChangerError(
                 'uscan-watch-line-without-matches',
-                'UScan did not find matches for line %r' % e.line)
+                'UScan did not find matches for line: %s' % e.line.strip())
         except NoRoundtrippingSupport:
             error_description = (
                 'Unable to import upstream repository into '
