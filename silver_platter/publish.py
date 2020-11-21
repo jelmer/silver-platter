@@ -134,7 +134,7 @@ def propose_changes(
         hoster: Hoster, name: str, mp_description: str,
         resume_branch: Optional[Branch] = None,
         resume_proposal: Optional[MergeProposal] = None,
-        overwrite_existing: bool = True,
+        overwrite_existing: Optional[bool] = True,
         labels: Optional[List[str]] = None,
         dry_run: bool = False, commit_message: Optional[str] = None,
         additional_colocated_branches: Optional[List[str]] = None,
@@ -475,7 +475,7 @@ def publish_changes(
         resume_branch: Optional[Branch],
         mode: str, name: str,
         get_proposal_description: Callable[
-            [str, Optional[MergeProposal]], Optional[str]],
+            [str, Optional[MergeProposal]], str],
         get_proposal_commit_message: Callable[
             [Optional[MergeProposal]], Optional[str]] = None,
         dry_run: bool = False,
