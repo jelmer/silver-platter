@@ -459,7 +459,7 @@ def find_new_upstream(
 
     note("Using version string %s.", new_upstream_version)
 
-    if include_upstream_history is None:
+    if include_upstream_history is None and upstream_branch_source is not None:
         include_upstream_history = detect_include_upstream_history(
             tree, upstream_branch_source, package, old_upstream_version)
 
@@ -471,7 +471,7 @@ def find_new_upstream(
     if upstream_branch_source is not None:
         try:
             upstream_revisions = upstream_branch_source.version_as_revisions(
-                package, new_upstream_version)
+                package, str(new_upstream_version))
         except PackageVersionNotPresent:
             if upstream_branch_source is primary_upstream_source:
                 # The branch is our primary upstream source, so if it can't
@@ -500,8 +500,8 @@ def find_new_upstream(
         primary_upstream_source,
         new_upstream_version,
         upstream_revisions,
-        upstream_branch,
         upstream_branch_source,
+        upstream_branch,
         upstream_branch_browse,
         files_excluded)
 
