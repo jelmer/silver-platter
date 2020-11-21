@@ -335,9 +335,11 @@ class ImportUpstreamResult(object):
             'upstream_branch_browse',
             'upstream_revisions',
             'imported_revisions',
+            'include_upstream_history',
             ]
 
-    def __init__(self, old_upstream_version, new_upstream_version,
+    def __init__(self, include_upstream_history,
+                 old_upstream_version, new_upstream_version,
                  upstream_branch, upstream_branch_browse,
                  upstream_revisions, imported_revisions):
         self.old_upstream_version = old_upstream_version
@@ -346,6 +348,7 @@ class ImportUpstreamResult(object):
         self.upstream_branch_browse = upstream_branch_browse
         self.upstream_revisions = upstream_revisions
         self.imported_revisions = imported_revisions
+        self.include_upstream_history = include_upstream_history
 
 
 def detect_include_upstream_history(
@@ -527,7 +530,8 @@ def find_new_upstream(
         upstream_branch_source,
         upstream_branch,
         upstream_branch_browse,
-        files_excluded)
+        files_excluded,
+        include_upstream_history)
 
 
 def import_upstream(
@@ -594,7 +598,7 @@ def import_upstream(
      upstream_branch_source,
      upstream_branch,
      upstream_branch_browse,
-     files_excluded) = find_new_upstream(
+     files_excluded, include_upstream_history) = find_new_upstream(
         tree, subpath, config, package, location=location,
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version, trust_package=trust_package,
@@ -639,6 +643,7 @@ def import_upstream(
             files_excluded=files_excluded)
 
     return ImportUpstreamResult(
+        include_upstream_history=include_upstream_history,
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version,
         upstream_branch=upstream_branch,
@@ -659,12 +664,15 @@ class MergeUpstreamResult(object):
             'old_revision',
             'new_revision',
             'imported_revisions',
+            'include_upstream_history',
             ]
 
-    def __init__(self, old_upstream_version, new_upstream_version,
+    def __init__(self, include_upstream_history, old_upstream_version,
+                 new_upstream_version,
                  upstream_branch, upstream_branch_browse,
                  upstream_revisions, old_revision,
                  new_revision, imported_revisions):
+        self.include_upstream_history = include_upstream_history
         self.old_upstream_version = old_upstream_version
         self.new_upstream_version = new_upstream_version
         self.upstream_branch = upstream_branch
@@ -744,7 +752,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
      upstream_branch_source,
      upstream_branch,
      upstream_branch_browse,
-     files_excluded) = find_new_upstream(
+     files_excluded, include_upstream_history) = find_new_upstream(
         tree, subpath, config, package, location=location,
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version, trust_package=trust_package,
@@ -840,6 +848,7 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 [subpath] if len(tree.get_parent_ids()) <= 1 else None))
 
     return MergeUpstreamResult(
+        include_upstream_history=include_upstream_history,
         old_upstream_version=old_upstream_version,
         new_upstream_version=new_upstream_version,
         old_revision=old_revision,
