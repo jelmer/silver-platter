@@ -27,6 +27,7 @@ from breezy.propose import (
     Hoster,
     MergeProposal,
     MergeProposalExists,
+    NoSuchProject,
     )
 from breezy.trace import note
 from breezy.transport import Transport
@@ -46,6 +47,7 @@ __all__ = [
     'check_proposal_diff',
     'DryRunProposal',
     'find_existing_proposed',
+    'NoSuchProject',
     ]
 
 
