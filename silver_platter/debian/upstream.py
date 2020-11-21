@@ -20,7 +20,7 @@
 import silver_platter  # noqa: F401
 
 import argparse
-from debian.changelog import Version
+from debian.changelog import Version, ChangelogParseError
 import os
 import re
 import ssl
@@ -63,11 +63,12 @@ from breezy.revision import NULL_REVISION
 from breezy.plugins.debian.config import (
     UpstreamMetadataSyntaxError
     )
-from breezy.plugins.debian.errors import (
+from breezy.plugins.debian.util import (
     InconsistentSourceFormatError,
+    )
+from breezy.plugins.debian.import_dsc import (
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
-    UnparseableChangelog,
     )
 
 from breezy.trace import note, warning
@@ -1090,7 +1091,7 @@ class NewUpstreamChanger(DebianChanger):
                 'native-package',
                 'Package %s is native; unable to merge new upstream.' % (
                     e.package, ), e)
-        except UnparseableChangelog as e:
+        except ChangelogParseError as e:
             error_description = str(e)
             error_code = 'unparseable-changelog'
             raise ChangerError(error_code, error_description, e)
