@@ -487,7 +487,6 @@ def find_new_upstream(
 
     if include_upstream_history is False:
         upstream_branch_source = None
-        upstream_branch = None
 
     # Look up the revision id from the version string
     if upstream_branch_source is not None:
@@ -499,15 +498,18 @@ def find_new_upstream(
                 # The branch is our primary upstream source, so if it can't
                 # find the version then there's nothing we can do.
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch, new_upstream_version)
+                    upstream_branch_source.upstream_branch,
+                    new_upstream_version)
             elif not allow_ignore_upstream_branch:
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch, new_upstream_version)
+                    upstream_branch_source.upstream_branch,
+                    new_upstream_version)
             else:
                 warning(
                     'Upstream version %s is not in upstream branch %s. '
                     'Not merging from upstream branch. ',
-                    new_upstream_version, upstream_branch)
+                    new_upstream_version,
+                    upstream_branch_source.upstream_branch)
                 upstream_revisions = None
                 upstream_branch_source = None
     else:
@@ -630,7 +632,9 @@ def import_upstream(
         imported_revisions = do_import(
             tree, subpath, tarball_filenames, package,
             str(new_upstream_version), str(old_upstream_version),
-            upstream_branch, upstream_revisions, merge_type=None,
+            upstream_branch_source.upstream_branch
+            if upstream_branch_source else None,
+            upstream_revisions, merge_type=None,
             force=force, committer=committer,
             files_excluded=files_excluded)
 
@@ -784,7 +788,9 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
                 conflicts, imported_revids = do_merge(
                     tree, subpath, tarball_filenames, package,
                     str(new_upstream_version), str(old_upstream_version),
-                    upstream_branch, upstream_revisions, merge_type=None,
+                    upstream_branch_source.upstream_branch
+                    if upstream_branch_source else None,
+                    upstream_revisions, merge_type=None,
                     force=force, committer=committer,
                     files_excluded=files_excluded)
             except UpstreamBranchAlreadyMerged:
