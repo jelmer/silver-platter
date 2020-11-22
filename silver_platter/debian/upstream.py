@@ -381,6 +381,8 @@ def detect_include_upstream_history(
 
 
 def matches_release(upstream_version: str, release_version: str):
+    release_version = release_version.lower()
+    upstream_version = upstream_version.lower()
     m = re.match('(.*)([~+-])(dfsg|git|bzr|svn|hg).*', upstream_version)
     if m and m.group(1) == release_version:
         return True
