@@ -117,14 +117,19 @@ class MultiArchHintsChanger(DebianChanger):
                 'control files live in root rather than debian/ '
                 '(LarstIQ mode)')
 
+        if not control_files_in_root(local_tree, subpath):
+            raise ChangerError(
+                'missing-control-file', 'Unable to find debian/control')
+
         try:
-            result, summary = run_lintian_fixer(
-                local_tree, MultiArchHintFixer(self.hints),
-                update_changelog=update_changelog,
-                minimum_certainty=minimum_certainty,
-                subpath=subpath, allow_reformatting=allow_reformatting,
-                net_access=True, committer=committer,
-                changes_by='apply-multiarch-hints')
+            with local_tree.lock_write():
+                result, summary = run_lintian_fixer(
+                    local_tree, MultiArchHintFixer(self.hints),
+                    update_changelog=update_changelog,
+                    minimum_certainty=minimum_certainty,
+                    subpath=subpath, allow_reformatting=allow_reformatting,
+                    net_access=True, committer=committer,
+                    changes_by='apply-multiarch-hints')
         except NoChanges:
             raise ChangerError('nothing-to-do', 'no hints to apply')
         except FormattingUnpreservable as e:
