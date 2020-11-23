@@ -20,6 +20,7 @@
 import silver_platter  # noqa: F401
 
 import argparse
+import errno
 from debian.changelog import Version, ChangelogParseError
 import os
 import re
@@ -1177,6 +1178,10 @@ class NewUpstreamChanger(DebianChanger):
                 'newer-upstream-version-already-imported',
                 'A newer upstream release (%s) has already been imported. '
                 'Found: %s' % (e.old_upstream_version, e.new_upstream_version))
+        except OSError as e:
+            if e.errno == errno.ENOSPC:
+                raise ChangerError('no-space-on-device', str(e))
+            raise
 
         reporter.report_metadata(
             'old_upstream_version',
