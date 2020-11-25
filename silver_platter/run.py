@@ -21,7 +21,7 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import Optional
+from typing import Optional, List
 
 import silver_platter  # noqa: F401
 
@@ -36,8 +36,11 @@ from .proposal import (
     enable_tag_pushing,
     find_existing_proposed,
     get_hoster,
-    publish_changes,
+    )
+from .workspace import (
     Workspace,
+    )
+from .publish import (
     SUPPORTED_MODES,
     )
 from .utils import (
@@ -45,6 +48,7 @@ from .utils import (
     BranchMissing,
     BranchUnsupported,
     BranchUnavailable,
+    full_branch_url,
 )
 
 
@@ -96,7 +100,8 @@ def derived_branch_name(script: str) -> str:
     return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
 
 
-def setup_parser(parser: argparse.ArgumentParser) -> None:
+def main(argv: List[str]) -> Optional[int]:
+    parser = argparse.ArgumentParser()
     parser.add_argument('script', help='Path to script to run.', type=str)
     parser.add_argument('url', help='URL of branch to work on.', type=str)
     parser.add_argument('--derived-owner', type=str, default=None,
@@ -122,9 +127,8 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
         "--dry-run",
         help="Create branches but don't push or propose anything.",
         action="store_true", default=False)
+    args = parser.parse_args(argv)
 
-
-def main(args: argparse.Namespace) -> Optional[int]:
     try:
         main_branch = open_branch(args.url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -150,7 +154,7 @@ def main(args: argparse.Namespace) -> Optional[int]:
         resume_branch = None
         existing_proposal = None
         warning('Unsupported hoster (%s), will attempt to push to %s',
-                e, main_branch.user_url)
+                e, full_branch_url(main_branch))
     else:
         (resume_branch, resume_overwrite, existing_proposal) = (
             find_existing_proposed(
@@ -177,8 +181,8 @@ def main(args: argparse.Namespace) -> Optional[int]:
         enable_tag_pushing(ws.local_tree.branch)
 
         try:
-            publish_result = publish_changes(
-                ws, args.mode, name,
+            publish_result = ws.publish_changes(
+                args.mode, name,
                 get_proposal_description=get_description,
                 dry_run=args.dry_run, hoster=hoster,
                 labels=args.label, overwrite_existing=overwrite,
@@ -186,7 +190,7 @@ def main(args: argparse.Namespace) -> Optional[int]:
                 existing_proposal=existing_proposal)
         except UnsupportedHoster as e:
             show_error('No known supported hoster for %s. Run \'svp login\'?',
-                       e.branch.user_url)
+                       full_branch_url(e.branch))
             return 1
         except _mod_propose.HosterLoginRequired as e:
             show_error(
@@ -210,7 +214,4 @@ def main(args: argparse.Namespace) -> Optional[int]:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    sys.exit(main(sys.argv))

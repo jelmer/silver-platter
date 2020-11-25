@@ -18,7 +18,6 @@
 import subprocess
 
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
@@ -37,6 +36,8 @@ class CMEResult(object):
 
 class CMEChanger(DebianChanger):
 
+    name = 'cme'
+
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
 
@@ -51,8 +52,9 @@ class CMEChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+    def make_changes(self, local_tree, subpath, update_changelog, reporter,
+                     committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         cwd = local_tree.abspath(subpath or '')
         subprocess.check_call(
             ['/usr/bin/cme', 'modify', 'dpkg', '-save'],
@@ -60,10 +62,12 @@ class CMEChanger(DebianChanger):
         local_tree.commit('Reformat for cme.')
         subprocess.check_call(
             ['/usr/bin/cme', 'fix', 'dpkg'], cwd=cwd)
-        local_tree.commit('Run cme.')
+        revid = local_tree.commit('Run cme.')
+        branches = [('main', None, base_revid, revid)]
+        tags = []
         return ChangerResult(
-            description=None, mutator=None,
-            proposed_commit_message='Run cme.',
+            description=None, mutator=None, branches=branches,
+            tags=tags, proposed_commit_message='Run cme.',
             sufficient_for_proposal=True)
 
     def get_proposal_description(
@@ -77,16 +81,9 @@ class CMEChanger(DebianChanger):
         else:
             note('No changes for package %s', result.package_name)
 
-
-def main(args):
-    changer = CMEChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    CMEChanger.setup_parser(parser)
+    @classmethod
+    def describe_command(cls, command):
+        return "Apply Configuration Model Editor (CME) fixes"
 
 
 if __name__ == '__main__':

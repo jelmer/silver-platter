@@ -96,6 +96,10 @@ def build(tree: Tree,
         [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
+class NoAptSources(Exception):
+    """No apt sources were configured."""
+
+
 def get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
@@ -107,7 +111,13 @@ def get_source_package(name: str) -> Deb822:
     import apt_pkg
     apt_pkg.init()
 
-    sources = apt_pkg.SourceRecords()
+    try:
+        sources = apt_pkg.SourceRecords()
+    except apt_pkg.Error as e:
+        if e.args[0] == (
+                'E:You must put some \'deb-src\' URIs in your sources.list'):
+            raise NoAptSources()
+        raise
 
     by_version: Dict[str, Deb822] = {}
     while sources.lookup(name):
@@ -137,7 +147,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
     location can either be a package name or a full URL
     """
-    if '/' not in location:
+    if '/' not in location and ':' not in location:
         pkg_source = get_source_package(location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
@@ -293,3 +303,32 @@ def changelog_add_line(
         env['DEBEMAIL'] = email
     subprocess.check_call(
         ['dch', '--', line], cwd=tree.abspath(subpath), env=env)
+
+
+def control_files_in_root(tree: Tree, subpath: str) -> bool:
+    debian_path = os.path.join(subpath, 'debian')
+    if tree.has_filename(debian_path):
+        return False
+    control_path = os.path.join(subpath, 'control')
+    if tree.has_filename(control_path):
+        return True
+    if tree.has_filename(control_path + '.in'):
+        return True
+    return False
+
+
+def control_file_present(tree: Tree, subpath: str) -> bool:
+    """Check whether there are any control files present in a tree.
+
+    Args:
+      tree: Tree to check
+      subpath: subpath to check
+    Returns:
+      whether control file is present
+    """
+    for name in ['debian/control', 'debian/control.in', 'control',
+                 'control.in']:
+        name = os.path.join(subpath, name)
+        if tree.has_filename(name):
+            return True
+    return False

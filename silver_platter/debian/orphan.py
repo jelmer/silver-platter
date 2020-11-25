@@ -22,9 +22,9 @@ from . import (
     add_changelog_entry,
     )
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
+    ChangerError,
     ChangerResult,
     )
 from ..proposal import push_changes
@@ -32,6 +32,7 @@ from breezy import osutils
 from breezy.trace import note
 
 from debmutate.control import ControlEditor
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 BRANCH_NAME = 'orphan'
@@ -70,6 +71,8 @@ class OrphanResult(object):
 
 class OrphanChanger(DebianChanger):
 
+    name = 'orphan'
+
     def __init__(self, update_vcs=True, salsa_push=True,
                  salsa_user='debian', dry_run=False):
         self.update_vcs = update_vcs
@@ -101,52 +104,71 @@ class OrphanChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
-        with ControlEditor(
-                path=local_tree.abspath(
-                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
-            editor.source[
-                'Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
-            try:
-                del editor.source['Uploaders']
-            except KeyError:
-                pass
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
+        control_path = local_tree.abspath(
+                osutils.pathjoin(subpath, 'debian/control'))
+        try:
+            with ControlEditor(path=control_path) as editor:
+                editor.source[
+                    'Maintainer'] = 'Debian QA Group <packages@qa.debian.org>'
+                try:
+                    del editor.source['Uploaders']
+                except KeyError:
+                    pass
 
-        result = OrphanResult()
+            result = OrphanResult()
 
-        if self.update_vcs:
-            with ControlEditor(path=local_tree.abspath(
-                    osutils.pathjoin(subpath, 'debian/control'))) as editor:
-                result.package_name = editor.source['Source']
-                result.old_vcs_url = editor.source.get('Vcs-Git')
-                editor.source['Vcs-Git'] = (
-                    'https://salsa.debian.org/%s/%s.git' % (
-                        self.salsa_user, result.package_name))
-                result.new_vcs_url = editor.source['Vcs-Git']
-                editor.source['Vcs-Browser'] = (
-                    'https://salsa.debian.org/%s/%s' % (
-                        self.salsa_user, result.package_name))
-                result.salsa_user = self.salsa_user
-            if result.old_vcs_url == result.new_vcs_url:
-                result.old_vcs_url = result.new_vcs_url = None
-        if update_changelog in (True, None):
-            add_changelog_entry(
-                local_tree,
-                osutils.pathjoin(subpath, 'debian/changelog'),
-                ['QA Upload.', 'Move package to QA team.'])
-        local_tree.commit(
-            'Move package to QA team.', committer=committer,
-            allow_pointless=False)
+            if self.update_vcs:
+                with ControlEditor(path=control_path) as editor:
+                    result.package_name = editor.source['Source']
+                    result.old_vcs_url = editor.source.get('Vcs-Git')
+                    editor.source['Vcs-Git'] = (
+                        'https://salsa.debian.org/%s/%s.git' % (
+                            self.salsa_user, result.package_name))
+                    result.new_vcs_url = editor.source['Vcs-Git']
+                    editor.source['Vcs-Browser'] = (
+                        'https://salsa.debian.org/%s/%s' % (
+                            self.salsa_user, result.package_name))
+                    result.salsa_user = self.salsa_user
+                if result.old_vcs_url == result.new_vcs_url:
+                    result.old_vcs_url = result.new_vcs_url = None
+            if update_changelog in (True, None):
+                add_changelog_entry(
+                    local_tree,
+                    osutils.pathjoin(subpath, 'debian/changelog'),
+                    ['QA Upload.', 'Move package to QA team.'])
+            local_tree.commit(
+                'Move package to QA team.', committer=committer,
+                allow_pointless=False)
+        except FormattingUnpreservable as e:
+            raise ChangerError(
+                'formatting-unpreservable',
+                'unable to preserve formatting while editing %s' % e.path)
+        except GeneratedFile as e:
+            raise ChangerError(
+                'generated-file',
+                'unable to edit generated file: %r' % e)
 
         if self.update_vcs and self.salsa_push and result.new_vcs_url:
             push_to_salsa(
                 local_tree, self.salsa_user, result.package_name,
                 dry_run=self.dry_run)
             result.pushed = True
+            reporter.report_metadata('old_vcs_url', result.old_vcs_url)
+            reporter.report_metadata('new_vcs_url', result.new_vcs_url)
+            reporter.report_metadata('pushed', result.pushed)
+
+        branches = [
+            ('main', None, base_revid,
+             local_tree.last_revision())]
+
+        tags = []
+
         return ChangerResult(
             description='Move package to QA team.',
-            mutator=result,
+            mutator=result, branches=branches, tags=tags,
             sufficient_for_proposal=True,
             proposed_commit_message=(
                 'Set the package maintainer to the QA team.'))
@@ -169,6 +191,10 @@ class OrphanChanger(DebianChanger):
                     result.new_vcs_url):
                 note('%s', line)
 
+    @classmethod
+    def describe_command(cls, command):
+        return "Mark as orphaned"
+
 
 def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
     yield 'Please move the repository from %s to %s.' % (
@@ -186,17 +212,6 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
         yield ''
         yield '    git clone %s %s' % (old_vcs_url, package_name)
         yield '    salsa --group=%s push_repo %s' % (salsa_user, package_name)
-
-
-def main(args):
-    changer = OrphanChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    OrphanChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':
