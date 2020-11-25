@@ -16,7 +16,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
@@ -39,6 +38,8 @@ class RulesRequiresRootResult(object):
 
 class RulesRequiresRootChanger(DebianChanger):
 
+    name = 'rules-requires-root'
+
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
 
@@ -53,8 +54,9 @@ class RulesRequiresRootChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         with ControlEditor.from_tree(local_tree, subpath) as updater:
             updater.source['Rules-Requires-Root'] = 'no'
             result = RulesRequiresRootResult(updater.source['Source'])
@@ -63,12 +65,18 @@ class RulesRequiresRootChanger(DebianChanger):
                 local_tree,
                 osutils.pathjoin(subpath, 'debian/changelog'),
                 ['Set Rules-Requires-Root: no.'])
-        local_tree.commit(
+        revid = local_tree.commit(
             'Set Rules-Requires-Root.', committer=committer,
             allow_pointless=False)
+
+        branches = [
+            ('main', None, base_revid, revid)]
+
+        tags = []
+
         return ChangerResult(
             description='Set Rules-Requires-Root',
-            mutator=result,
+            mutator=result, branches=branches, tags=tags,
             sufficient_for_proposal=True,
             proposed_commit_message='Set Rules-Requires-Root.')
 
@@ -83,16 +91,9 @@ class RulesRequiresRootChanger(DebianChanger):
         else:
             note('No changes for package %s', result.package_name)
 
-
-def main(args):
-    changer = RulesRequiresRootChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    from .changer import setup_multi_parser
-    setup_multi_parser(parser)
-    RulesRequiresRootChanger.setup_parser(parser)
+    @classmethod
+    def describe_command(cls, command):
+        return "Set rules-requires-root"
 
 
 if __name__ == '__main__':

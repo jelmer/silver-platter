@@ -24,6 +24,7 @@ def test_suite():
         'debian_lintian',
         'debian_upstream',
         'proposal',
+        'publish',
         'run',
         'utils',
         'version',

@@ -25,18 +25,25 @@ from urllib.request import urlopen
 
 from debian.changelog import Changelog
 
+from . import NoAptSources
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
-    setup_multi_parser as setup_changer_parser,
+    ChangerError,
     )
 from breezy.trace import note
 from breezy.plugins.debian.upstream import PackageVersionNotPresent
 
 
 BRANCH_NAME = 'missing-commits'
+
+
+class AptSourceError(Exception):
+    """An error occured while running 'apt source'."""
+
+    def __init__(self, reason):
+        self.reason = reason
 
 
 def select_vcswatch_packages():
@@ -111,6 +118,33 @@ class TreeUpstreamVersionMissing(Exception):
             'unable to find upstream version %r' % upstream_version)
 
 
+def retrieve_source(package_name, target):
+    try:
+        subprocess.run(
+            ['apt', 'source', package_name], cwd=target,
+            check=True,
+            stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.splitlines()
+        if stderr[-1] == (
+                b'E: You must put some \'source\' URIs in your '
+                b'sources.list'):
+            raise NoAptSources()
+        CS = b"\x1b[1;31mE: \x1b[0m"
+        CE = b"\x1b[0m"
+        if stderr[-1] == (
+                CS +
+                b"You must put some 'deb-src' URIs in your sources.list" +
+                CE):
+            raise NoAptSources()
+        if stderr[-1].startswith(b'E: '):
+            raise AptSourceError(stderr[-1][3:].decode())
+        if stderr[-1].startswith(CS):
+            raise AptSourceError(stderr[-1][len(CS):-len(CE)])
+        raise AptSourceError(
+            [line.decode('utf-8', 'surrogateescape') for line in stderr])
+
+
 def import_uncommitted(tree, subpath):
     from breezy.plugins.debian.import_dsc import (
         DistributionBranch,
@@ -122,8 +156,18 @@ def import_uncommitted(tree, subpath):
         package_name = tree_cl.package
     with contextlib.ExitStack() as es:
         archive_source = es.enter_context(tempfile.TemporaryDirectory())
-        subprocess.check_call(
-            ['apt-get', 'source', package_name], cwd=archive_source)
+        try:
+            retrieve_source(package_name, archive_source)
+        except AptSourceError as e:
+            if isinstance(e.reason, list):
+                reason = e.reason[-1]
+            else:
+                reason = e.reason
+            raise ChangerError('apt-source-error', reason)
+        except NoAptSources:
+            raise ChangerError(
+                'no-apt-sources',
+                'No sources configured in /etc/apt/sources.list')
         [subdir] = [
             e.path for e in os.scandir(archive_source) if e.is_dir()]
         with open(os.path.join(subdir, 'debian', 'changelog'), 'r') as f:
@@ -169,11 +213,14 @@ def import_uncommitted(tree, subpath):
                 version_path[version],
                 '%s_%s.dsc' % (package_name, version))
             tag_name = db.import_package(dsc_path)
-            ret.append((tag_name, version))
+            revision = db.version_as_revisions(version)
+            ret.append((tag_name, version, revision))
     return ret
 
 
 class UncommittedChanger(DebianChanger):
+
+    name = 'import-upload'
 
     @classmethod
     def setup_parser(cls, parser):
@@ -186,17 +233,35 @@ class UncommittedChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
-        ret = import_uncommitted(local_tree, subpath)
-        tags = set([tag_name for (tag_name, version) in ret])
+    def make_changes(self, local_tree, subpath, update_changelog, reporter,
+                     committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
+        try:
+            ret = import_uncommitted(local_tree, subpath)
+        except TreeUpstreamVersionMissing as e:
+            raise ChangerError('tree-upstream-version-missing', str(e))
+        except TreeVersionNotInArchiveChangelog as e:
+            raise ChangerError(
+                'tree-version-not-in-archive-changelog', str(e))
+        except NoMissingVersions as e:
+            raise ChangerError('nothing-to-do', str(e))
+        tags = [(None, tag_name, revid) for (tag_name, version, revid) in ret]
         # TODO(jelmer): Include upstream tags
-        # TODO(jelmer): Include auxiliary branches for upstream/pristine-tar
         proposed_commit_message = "Import missing uploads: %s." % (
             ', '.join([str(v) for t, v in ret]))
+        reporter.report_metadata('tags', [
+            (tag_name, str(version)) for (tag_name, version, revid) in ret])
+
+        branches = [
+            ('main', None, base_revid,
+             local_tree.last_revision())]
+
+        # TODO(jelmer): Include branches for upstream/pristine-tar
+
         return ChangerResult(
             description='Import archive changes missing from the VCS.',
-            mutator=ret, tags=tags, sufficient_for_proposal=True,
+            branches=branches, mutator=ret, tags=tags,
+            sufficient_for_proposal=True,
             proposed_commit_message=proposed_commit_message)
 
     def get_proposal_description(
@@ -217,17 +282,9 @@ class UncommittedChanger(DebianChanger):
             note('No new versions imported for proposal %s',
                  publish_result.proposal.url)
 
-
-def main(args):
-    if not args.packages:
-        args.packages = select_vcswatch_packages()
-    changer = UncommittedChanger.from_args(args)
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    UncommittedChanger.setup_parser(parser)
+    @classmethod
+    def describe_command(cls, command):
+        return "Import archive changes missing from VCS"
 
 
 if __name__ == '__main__':

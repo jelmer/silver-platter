@@ -18,11 +18,9 @@
 from breezy.trace import note
 
 from .changer import (
-    run_changer,
     run_mutator,
     DebianChanger,
     ChangerResult,
-    setup_multi_parser as setup_changer_parser,
     )
 
 from .lintian import LintianBrushChanger
@@ -33,6 +31,8 @@ BRANCH_NAME = 'tidy'
 
 
 class TidyChanger(DebianChanger):
+
+    name = 'tidy'
 
     SUBCHANGERS = [
         LintianBrushChanger,
@@ -53,12 +53,13 @@ class TidyChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+    def make_changes(self, local_tree, subpath, update_changelog,
+                     reporter, committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
         result = {}
-        tags = set()
+        tags = []
         sufficient_for_proposal = False
-        auxiliary_branches = set()
+        branches = []
         for subchanger in self.subchangers:
             subresult = (
                 subchanger.make_changes(
@@ -67,9 +68,11 @@ class TidyChanger(DebianChanger):
             if subresult.sufficient_for_proposal:
                 sufficient_for_proposal = True
             if subresult.tags:
-                tags.update(subresult.tags)
-            if tags.auxiliary_branches:
-                auxiliary_branches.update(subresult.auxiliary_branches)
+                tags.extend(subresult.tags)
+            if subresult.branches:
+                branches.extend(
+                    [entry for entry in subresult.branches
+                     if entry[0] != 'main'])
 
         commit_items = []
         for subchanger in result:
@@ -79,10 +82,14 @@ class TidyChanger(DebianChanger):
                 commit_items.append('apply multi-arch hints')
         proposed_commit_message = (', '.join(commit_items) + '.').capitalize()
 
+        branches.insert(
+            0, ('main', None, base_revid,
+                local_tree.last_revision()))
+
         return ChangerResult(
             mutator=result,
             description='Fix various small issues.',
-            tags=tags, auxiliary_branches=auxiliary_branches,
+            tags=tags, branches=branches,
             sufficient_for_proposal=sufficient_for_proposal,
             proposed_commit_message=proposed_commit_message)
 
@@ -102,17 +109,6 @@ class TidyChanger(DebianChanger):
             note('Updated proposal %s', publish_result.proposal.url)
         else:
             note('No new fixes for proposal %s', publish_result.proposal.url)
-
-
-def main(args):
-    changer = TidyChanger.from_args(args)
-
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    TidyChanger.setup_parser(parser)
 
 
 if __name__ == '__main__':

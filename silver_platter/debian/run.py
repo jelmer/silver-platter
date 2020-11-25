@@ -23,8 +23,6 @@ from .changer import (
     ChangerError,
     ChangerResult,
     DebianChanger,
-    run_single_changer,
-    setup_single_parser,
     )
 from ..run import (
     ScriptMadeNoChanges,
@@ -33,12 +31,9 @@ from ..run import (
     )
 
 
-def setup_parser(parser):
-    setup_single_parser(parser)
-    ScriptChanger.setup_parser(parser)
-
-
 class ScriptChanger(DebianChanger):
+
+    name = 'run'
 
     def _init__(self, script, commit_pending=None):
         self.script = script
@@ -60,17 +55,28 @@ class ScriptChanger(DebianChanger):
             args.commit_pending]
         return cls(script=args.script, commit_pending=commit_pending)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer,
-                     base_proposal=None):
+    def make_changes(self, local_tree, subpath, update_changelog, reporter,
+                     committer, base_proposal=None):
+        base_revid = local_tree.last_revision()
+
         try:
             description = script_runner(
                 local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
             raise ChangerError(
                 'nothing-to-do', 'Script did not make any changes.', e)
+
+        branches = [
+            ('main', None, base_revid,
+             local_tree.last_revision())]
+
+        tags = []
+
+        # TODO(jelmer): Compare old and new tags/branches?
+
         return ChangerResult(
             description=description, mutator=description,
-            sufficient_for_proposal=True,
+            sufficient_for_proposal=True, branches=branches, tags=tags,
             proposed_commit_message=None)
 
     def get_proposal_description(
@@ -86,8 +92,3 @@ class ScriptChanger(DebianChanger):
 
     def suggest_branch_name(self):
         return derived_branch_name(self.script)
-
-
-def main(args):
-    changer = ScriptChanger(args)
-    return run_single_changer(changer, args)

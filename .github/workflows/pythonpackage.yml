@@ -22,7 +22,7 @@ jobs:
       run: |
         sudo apt install devscripts cython3 bzr
         python -m pip install --upgrade pip
-        pip install -U pip setuptools flake8 mypy
+        pip install -U pip setuptools flake8 mypy debmutate pyyaml testtools
         python setup.py develop
         mkdir $HOME/.config/breezy/plugins -p
         bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
