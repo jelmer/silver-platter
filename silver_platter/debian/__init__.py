@@ -305,6 +305,16 @@ def changelog_add_line(
         ['dch', '--', line], cwd=tree.abspath(subpath), env=env)
 
 
+def is_debcargo_package(tree: Tree, subpath: str) -> bool:
+    debian_path = os.path.join(subpath, 'debian')
+    if tree.has_filename(debian_path):
+        return False
+    control_path = os.path.join(subpath, 'debcargo.toml')
+    if tree.has_filename(control_path):
+        return True
+    return False
+
+
 def control_files_in_root(tree: Tree, subpath: str) -> bool:
     debian_path = os.path.join(subpath, 'debian')
     if tree.has_filename(debian_path):
