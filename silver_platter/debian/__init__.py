@@ -93,7 +93,7 @@ def build(tree: Tree,
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
     cmd_builddeb().run(
-        [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
+        [tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 class NoAptSources(Exception):
