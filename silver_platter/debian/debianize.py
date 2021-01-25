@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # Copyright (C) 2021 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -16,13 +15,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
+import os
 import sys
-from typing import List, Set
 
 from debian.changelog import ChangelogCreateError
 
 import breezy
-from breezy.errors import BzrError
 from breezy.trace import note
 
 from lintian_brush import (
