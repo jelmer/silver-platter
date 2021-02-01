@@ -1,4 +1,4 @@
-silver-platter (0.4.0-1) UNRELEASED; urgency=medium
+silver-platter (0.4.0-1) unstable; urgency=medium
 
   * New upstream release.
    + Add subcommand to upload pending changes. Closes: #942602
@@ -6,7 +6,7 @@ silver-platter (0.4.0-1) UNRELEASED; urgency=medium
      VCS. Closes: #942598
   * Re-export upstream signing key without extra signatures.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Feb 2021 23:31:35 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Feb 2021 23:34:24 +0000
 
 silver-platter (0.3.0+git20201123.02992d4-1) unstable; urgency=medium
 
