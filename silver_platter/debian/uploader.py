@@ -212,8 +212,7 @@ def prepare_upload_package(
             message='Mention QA Upload.',
             allow_pointless=False,
             reporter=NullCommitReporter())
-    release(local_tree, subpath)
-    tag_name = debian_tag_name(local_tree, subpath)
+    tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
     target_changes = _build_helper(
@@ -271,29 +270,6 @@ def select_vcswatch_packages(packages: List[str], maintainer: List[str]):
         packages.append(package)
     return packages
 
-
-def debian_tag_name(tree, subpath):
-    from breezy.plugins.debian.config import BUILD_TYPE_MERGE
-    from breezy.plugins.debian.import_dsc import (
-        DistributionBranch, DistributionBranchSet)
-    from breezy.plugins.debian.util import (
-        debuild_config, find_changelog, MissingChangelogError)
-    config = debuild_config(tree, subpath=subpath)
-    try:
-        (changelog, top_level) = find_changelog(
-            tree, subpath=subpath,
-            merge=(config.build_type == BUILD_TYPE_MERGE))
-    except MissingChangelogError:
-        # Not a debian package
-        return None
-    if changelog.distributions == 'UNRELEASED':
-        # The changelog still targets 'UNRELEASED', so apparently hasn't been
-        # uploaded. XXX: Give a warning of some sort here?
-        return None
-    db = DistributionBranch(tree.branch, None)
-    dbs = DistributionBranchSet()
-    dbs.add_branch(db)
-    return db.tag_name(changelog.version)
 
 def main(argv):
     import argparse
@@ -469,8 +445,10 @@ def main(argv):
                      source_name)
                 continue
 
-            tags = [tag_name]
-            note('Pushing tag %s', tag_name)
+            tags = []
+            if tag_name is not None:
+                note('Pushing tag %s', tag_name)
+                tags.append(tag_name)
             ws.push(dry_run=args.dry_run, tags=tags)
             if not args.dry_run:
                 dput_changes(target_changes)
