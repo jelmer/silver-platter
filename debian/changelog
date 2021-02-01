@@ -4,6 +4,7 @@ silver-platter (0.4.0-1) UNRELEASED; urgency=medium
    + Add subcommand to upload pending changes. Closes: #942602
    + Add subcommand import-upload to upload changes missing from
      VCS. Closes: #942598
+  * Re-export upstream signing key without extra signatures.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Feb 2021 23:31:35 +0000
 
