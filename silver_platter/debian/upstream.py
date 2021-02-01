@@ -810,11 +810,21 @@ def merge_upstream(tree: Tree, snapshot: bool = False,
             except UpstreamAlreadyImported:
                 pristine_tar_source = get_pristine_tar_source(
                     tree, tree.branch)
+                upstream_revid = None
+                imported_revids = []
+                for component, revid in (
+                        pristine_tar_source.version_as_revisions(
+                            package, new_upstream_version).items()):
+                    if component is None:
+                        upstream_revid = revid
+                    upstream_tag = pristine_tar_source.tag_name(
+                        new_upstream_version, component)
+                    imported_revids.append(
+                        (component, upstream_tag, revid, None))
                 try:
                     conflicts = tree.merge_from_branch(
                         pristine_tar_source.branch,
-                        to_revision=pristine_tar_source.version_as_revisions(
-                            package, new_upstream_version)[None])
+                        to_revision=upstream_revid)
                 except PointlessMerge:
                     raise UpstreamAlreadyMerged(new_upstream_version)
     else:

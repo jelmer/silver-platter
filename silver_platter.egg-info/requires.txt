@@ -1,0 +1,8 @@
+breezy>=3.1.0
+dulwich
+
+[debian]
+debmutate>=0.3
+lintian-brush>=0.50
+python_debian
+pyyaml
