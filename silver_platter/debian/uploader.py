@@ -81,6 +81,16 @@ class NoUnuploadedChanges(Exception):
             archive_version)
 
 
+class NoUnreleasedChanges(Exception):
+    """Indicates there are no unreleased changes for a package."""
+
+    def __init__(self, version):
+        self.version = version
+        super(NoUnreleasedChanges, self).__init__(
+            "nothing to upload, latest version in vcs is not unreleased: %s" %
+            version)
+
+
 class RecentCommits(Exception):
     """Indicates there are too recent commits for a package."""
 
@@ -179,7 +189,7 @@ def prepare_upload_package(
             check_revision(rev, min_commit_age)
 
         if cl.distributions != "UNRELEASED":
-            raise Exception("Nothing left to release")
+            raise NoUnreleasedChanges(cl.version)
     qa_upload = False
     team_upload = False
     control_path = local_tree.abspath(os.path.join(subpath, 'debian/control'))
@@ -203,12 +213,13 @@ def prepare_upload_package(
             allow_pointless=False,
             reporter=NullCommitReporter())
     release(local_tree, subpath)
+    tag_name = debian_tag_name(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder)
     debsign(target_changes)
-    return target_changes
+    return target_changes, tag_name
 
 
 def select_apt_packages(package_names, maintainer):
@@ -260,6 +271,29 @@ def select_vcswatch_packages(packages: List[str], maintainer: List[str]):
         packages.append(package)
     return packages
 
+
+def debian_tag_name(tree, subpath):
+    from breezy.plugins.debian.config import BUILD_TYPE_MERGE
+    from breezy.plugins.debian.import_dsc import (
+        DistributionBranch, DistributionBranchSet)
+    from breezy.plugins.debian.util import (
+        debuild_config, find_changelog, MissingChangelogError)
+    config = debuild_config(tree, subpath=subpath)
+    try:
+        (changelog, top_level) = find_changelog(
+            tree, subpath=subpath,
+            merge=(config.build_type == BUILD_TYPE_MERGE))
+    except MissingChangelogError:
+        # Not a debian package
+        return None
+    if changelog.distributions == 'UNRELEASED':
+        # The changelog still targets 'UNRELEASED', so apparently hasn't been
+        # uploaded. XXX: Give a warning of some sort here?
+        return None
+    db = DistributionBranch(tree.branch, None)
+    dbs = DistributionBranchSet()
+    dbs.add_branch(db)
+    return db.tag_name(changelog.version)
 
 def main(argv):
     import argparse
@@ -405,7 +439,7 @@ def main(argv):
                 gpg_strategy = None
 
             try:
-                target_changes = prepare_upload_package(
+                target_changes, tag_name = prepare_upload_package(
                     ws.local_tree, subpath,
                     source_name, source_version,
                     builder=args.builder, gpg_strategy=gpg_strategy,
@@ -430,10 +464,13 @@ def main(argv):
                 note('%s: No unuploaded changes, skipping.',
                      source_name)
                 continue
+            except NoUnreleasedChanges:
+                note('%s: No unreleased changes, skipping.',
+                     source_name)
+                continue
 
-            # TODO(jelmer): Upload the right tags
-            tags = []
-
+            tags = [tag_name]
+            note('Pushing tag %s', tag_name)
             ws.push(dry_run=args.dry_run, tags=tags)
             if not args.dry_run:
                 dput_changes(target_changes)
