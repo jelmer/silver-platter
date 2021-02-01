@@ -21,6 +21,7 @@ from breezy.branch import Branch
 from breezy import (
     errors,
     merge as _mod_merge,
+    revision as _mod_revision,
     )
 from breezy.errors import PermissionDenied
 from breezy.propose import (
@@ -280,13 +281,16 @@ def check_proposal_diff(
     with other_branch.lock_read():
         main_tree = other_branch.repository.revision_tree(main_revid)
         revision_graph = other_branch.repository.get_graph()
-        merger = _mod_merge.Merger.from_revision_ids(
-                main_tree, other_branch=other_branch,
-                other=stop_revision,
-                tree_branch=MemoryBranch(
-                    other_branch.repository,
-                    (None, main_revid), None),
-                revision_graph=revision_graph)
+        tree_branch = MemoryBranch(
+            other_branch.repository, (None, main_revid), None)
+        merger = _mod_merge.Merger(
+            tree_branch, this_tree=main_tree,
+            revision_graph=revision_graph)
+        merger.set_other_revision(stop_revision, other_branch)
+        try:
+            merger.find_base()
+        except errors.UnrelatedBranches:
+            merger.set_base_revision(_mod_revision.NULL_REVISION, other_branch)
         merger.merge_type = _mod_merge.Merge3Merger
         tree_merger = merger.make_merger()
         with tree_merger.make_preview_transform() as tt:

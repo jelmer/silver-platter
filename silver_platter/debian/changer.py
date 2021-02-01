@@ -505,6 +505,9 @@ BUILTIN_ENTRYPOINTS = [
         'scrub-obsolete',
         'silver_platter.debian.scrub_obsolete',
         attrs=('ScrubObsoleteChanger', )),
+    pkg_resources.EntryPoint(
+        'debianize', 'silver_platter.debian.debianize',
+        attrs=('DebianizeChanger', )),
 ]
 
 

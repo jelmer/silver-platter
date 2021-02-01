@@ -25,7 +25,7 @@ from lintian_brush import run_lintian_fixer, SUPPORTED_CERTAINTIES
 from lintian_brush.config import Config
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
-from . import control_files_in_root
+from . import control_files_in_root, control_file_present, is_debcargo_package
 
 from .changer import (
     DebianChanger,
@@ -117,7 +117,10 @@ class MultiArchHintsChanger(DebianChanger):
                 'control files live in root rather than debian/ '
                 '(LarstIQ mode)')
 
-        if not control_files_in_root(local_tree, subpath):
+        if not control_file_present(local_tree, subpath):
+            if is_debcargo_package(local_tree, subpath):
+                raise ChangerError(
+                    'debcargo-package', 'Package uses debcargo')
             raise ChangerError(
                 'missing-control-file', 'Unable to find debian/control')
 
