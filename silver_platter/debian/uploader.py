@@ -32,6 +32,7 @@ from debmutate.changelog import (
     changeblock_ensure_first_line,
     )
 from debmutate.control import ControlEditor
+from debian.deb822 import Deb822
 
 from breezy import gpg
 from breezy.errors import NoSuchTag
@@ -55,7 +56,7 @@ from breezy.trace import note, show_error, warning
 from debian.changelog import get_maintainer
 
 from . import (
-    get_source_package,
+    apt_get_source_package,
     source_package_vcs,
     split_vcs_url,
     Workspace,
@@ -321,8 +322,11 @@ def main(argv):
     else:
         note('Use --vcswatch to only process packages for which '
              'vcswatch found pending commits.')
-        packages = select_apt_packages(
-            args.packages, args.maintainer)
+        if args.maintainer:
+            packages = select_apt_packages(
+                args.packages, args.maintainer)
+        else:
+            packages = args.packages
 
     if not packages:
         note('No packages found.')
@@ -339,14 +343,24 @@ def main(argv):
         note('Processing %s', package)
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
-        pkg_source = get_source_package(package)
-        try:
-            vcs_type, vcs_url = source_package_vcs(pkg_source)
-        except KeyError:
-            note('%s: no declared vcs location, skipping',
-                 pkg_source['Package'])
-            ret = 1
-            continue
+        if '/' not in package:
+            pkg_source = apt_get_source_package(package)
+            try:
+                vcs_type, vcs_url = source_package_vcs(pkg_source)
+            except KeyError:
+                note('%s: no declared vcs location, skipping',
+                     pkg_source['Package'])
+                ret = 1
+                continue
+            source_name = pkg_source['Package']
+            source_version = pkg_source['Version']
+            has_testsuite = 'Testsuite' in pkg_source
+        else:
+            vcs_url = package
+            vcs_type = None
+            source_name = None
+            source_version = None
+            has_testsuite = None
         (location, branch_name, subpath) = split_vcs_url(vcs_url)
         if subpath is None:
             subpath = ''
@@ -359,12 +373,24 @@ def main(argv):
             ret = 1
             continue
         with Workspace(main_branch) as ws:
+            if source_name is None:
+                with ControlEditor(
+                        ws.local_tree.abspath(
+                            os.path.join(subpath, 'debian/control'))
+                        ) as ce:
+                    source_name = ce.source['Source']
+                with ChangelogEditor(
+                        ws.local_tree.abspath(
+                            os.path.join(subpath, 'debian/changelog'))
+                        ) as cle:
+                    source_version = cle[0].version
+                has_testsuite = 'Testsuite' in ce.source
             if (args.autopkgtest_only and
-                    'Testsuite' not in pkg_source and
+                    not has_testsuite and
                     not ws.local_tree.has_filename(
                         os.path.join(subpath, 'debian/tests/control'))):
                 note('%s: Skipping, package has no autopkgtest.',
-                     pkg_source['Testsuite'])
+                     source_name)
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -381,28 +407,28 @@ def main(argv):
             try:
                 target_changes = prepare_upload_package(
                     ws.local_tree, subpath,
-                    pkg_source["Package"], pkg_source["Version"],
+                    source_name, source_version,
                     builder=args.builder, gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age)
             except BuildFailedError as e:
                 warning(
                     '%s: package failed to build: %s',
-                    pkg_source['Package'], e)
+                    source_name, e)
                 ret = 1
                 continue
             except LastReleaseRevisionNotFound as e:
                 warning(
                     '%s: Unable to find revision matching last release '
-                    '%s, skipping.', pkg_source['Package'], e.version)
+                    '%s, skipping.', source_name, e.version)
                 ret = 1
                 continue
             except RecentCommits as e:
                 note('%s: Recent commits (%d days), skipping.',
-                     pkg_source['Package'], e.commit_age)
+                     source_name, e.commit_age)
                 continue
             except NoUnuploadedChanges:
                 note('%s: No unuploaded changes, skipping.',
-                     pkg_source['Package'])
+                     source_name)
                 continue
 
             # TODO(jelmer): Upload the right tags

@@ -58,7 +58,7 @@ from ..utils import (
 __all__ = [
     'add_changelog_entry',
     'changelog_add_line',
-    'get_source_package',
+    'apt_get_source_package',
     'guess_update_changelog',
     'source_package_vcs',
     'build',
@@ -100,7 +100,7 @@ class NoAptSources(Exception):
     """No apt sources were configured."""
 
 
-def get_source_package(name: str) -> Deb822:
+def apt_get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
     Args:
@@ -148,7 +148,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     location can either be a package name or a full URL
     """
     if '/' not in location and ':' not in location:
-        pkg_source = get_source_package(location)
+        pkg_source = apt_get_source_package(location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
