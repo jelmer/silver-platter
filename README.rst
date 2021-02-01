@@ -72,6 +72,7 @@ Examples running ``debian-svp``::
     debian-svp lintian-brush --mode=push samba
 
     debian-svp upload-pending tdb
+    debian-svp upload-pending --vcswatch --maintainer jelmer@debian.org
 
     debian-svp new-upstream --no-build-verify tdb
 
