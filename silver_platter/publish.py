@@ -283,8 +283,9 @@ def check_proposal_diff(
         revision_graph = other_branch.repository.get_graph()
         tree_branch = MemoryBranch(
             other_branch.repository, (None, main_revid), None)
-        merger = _mod_merge.Merger(tree_branch, this_tree=main_tree,
-                        revision_graph=revision_graph)
+        merger = _mod_merge.Merger(
+            tree_branch, this_tree=main_tree,
+            revision_graph=revision_graph)
         merger.set_other_revision(stop_revision, other_branch)
         try:
             merger.find_base()

@@ -15,10 +15,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
-import os
 import sys
-
-from debian.changelog import ChangelogCreateError
 
 import breezy
 from breezy.trace import note

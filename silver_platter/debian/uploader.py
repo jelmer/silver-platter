@@ -32,7 +32,6 @@ from debmutate.changelog import (
     changeblock_ensure_first_line,
     )
 from debmutate.control import ControlEditor
-from debian.deb822 import Deb822
 
 from breezy import gpg
 from breezy.errors import NoSuchTag
