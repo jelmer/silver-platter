@@ -240,7 +240,8 @@ def select_apt_packages(package_names, maintainer):
     return packages
 
 
-def select_vcswatch_packages(packages: List[str], maintainer: List[str]):
+def select_vcswatch_packages(
+        packages: List[str], maintainer: List[str], autopkgtest_only: bool):
     import psycopg2
     conn = psycopg2.connect(
         database="udd",
@@ -256,6 +257,8 @@ def select_vcswatch_packages(packages: List[str], maintainer: List[str]):
      vcswatch.status IN ('COMMITS', 'NEW') AND
      sources.release = 'sid'
 """
+    if autopkgtest_only:
+        query += " AND sources.testsuite != '' "
     if maintainer:
         query += " AND sources.maintainer_email IN (%s)"
         args.append(tuple(maintainer))
@@ -328,7 +331,7 @@ def main(argv):
 
     if args.vcswatch:
         packages = select_vcswatch_packages(
-            args.packages, args.maintainer)
+            args.packages, args.maintainer, args.autopkgtest_only)
     else:
         note('Use --vcswatch to only process packages for which '
              'vcswatch found pending commits.')
