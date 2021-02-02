@@ -92,6 +92,9 @@ class OrphanChanger(DebianChanger):
             '--just-update-headers', action='store_true',
             help='Update the VCS-* headers, but don\'t actually '
             'clone the repository.')
+        parser.add_argument(
+            '--dry-run', action='store_true',
+            help='Dry run changes.')
 
     @classmethod
     def from_args(cls, args):
