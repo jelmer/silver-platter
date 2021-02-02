@@ -175,6 +175,17 @@ class BranchUnavailable(Exception):
         return self.description
 
 
+class BranchRateLimited(Exception):
+    """Opening branch was rate-limited."""
+
+    def __init__(self, url: str, description: str):
+        self.url = url
+        self.description = description
+
+    def __str__(self) -> str:
+        return self.description
+
+
 class BranchMissing(Exception):
     """Branch did not exist."""
 
@@ -209,6 +220,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, errors.PermissionDenied):
         return BranchUnavailable(url, str(e))
     if isinstance(e,  errors.InvalidHttpResponse):
+        if 'Unexpected HTTP status 429' in str(e):
+            raise BranchRateLimited(url, str(e))
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
