@@ -40,7 +40,7 @@ BRANCH_NAME = 'orphan'
 
 def push_to_salsa(local_tree, user, name, dry_run=False):
     from breezy.branch import Branch
-    from breezy.plugins.propose.gitlabs import GitLab
+    from breezy.plugins.gitlab.hoster import GitLab
     salsa = GitLab.probe_from_url('https://salsa.debian.org/')
     # TODO(jelmer): Fork if the old branch was hosted on salsa
     if dry_run:
