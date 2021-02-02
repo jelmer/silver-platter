@@ -34,7 +34,7 @@ from debmutate.changelog import (
 from debmutate.control import ControlEditor
 
 from breezy import gpg
-from breezy.errors import NoSuchTag
+from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
@@ -454,7 +454,13 @@ def main(argv):
             if tag_name is not None:
                 note('Pushing tag %s', tag_name)
                 tags.append(tag_name)
-            ws.push(dry_run=args.dry_run, tags=tags)
+            try:
+                ws.push(dry_run=args.dry_run, tags=tags)
+            except PermissionDenied:
+                note('%s: Permission denied pushing to branch, skipping.',
+                     source_name)
+                ret = 1
+                continue
             if not args.dry_run:
                 dput_changes(target_changes)
             if args.diff:
