@@ -61,6 +61,7 @@ from . import (
     Workspace,
     DEFAULT_BUILDER,
     select_probers,
+    NoSuchPackage,
     )
 from ..utils import (
     open_branch,
@@ -353,7 +354,12 @@ def main(argv):
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         if '/' not in package:
-            pkg_source = apt_get_source_package(package)
+            try:
+                pkg_source = apt_get_source_package(package)
+            except NoSuchPackage:
+                note('%s: package not found in apt', package)
+                ret = 1
+                continue
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
