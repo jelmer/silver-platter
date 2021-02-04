@@ -18,6 +18,7 @@ import argparse
 import sys
 
 import breezy
+from breezy.revision import NULL_REVISION
 from breezy.trace import note
 
 from lintian_brush import (
@@ -30,14 +31,10 @@ from lintian_brush.config import Config
 
 import silver_platter
 
-from . import (
-    control_files_in_root,
-    )
 from .changer import (
     DebianChanger,
-    ChangerResult,
     run_mutator,
-    ChangerError,
+    ChangerResult,
     )
 
 
@@ -66,6 +63,7 @@ class DebianizeChanger(DebianChanger):
     def make_changes(self, local_tree, subpath, update_changelog,
                      reporter, committer, base_proposal=None):
         base_revid = local_tree.last_revision()
+        upstream_base_revid = NULL_REVISION
 
         reporter.report_metadata('versions', {
             'lintian-brush': lintian_brush_version_string,
@@ -90,19 +88,18 @@ class DebianizeChanger(DebianChanger):
             compat_release = debian_info.stable()
 
         with local_tree.lock_write():
-            if control_files_in_root(local_tree, subpath):
-                raise ChangerError(
-                    'control-files-in-root',
-                    'control files live in root rather than debian/ '
-                    '(LarstIQ mode)')
-
             debianize(
                 local_tree, subpath=subpath,
                 compat_release=self.compat_release)
 
+        # TODO(jelmer): Pristine tar branch?
         branches = [
             ('main', None, base_revid,
-             local_tree.last_revision())]
+             local_tree.last_revision()),
+            ('upstream', 'upstream',
+             upstream_base_revid,
+             local_tree.controldir.open_branch('upstream').last_revision()),
+            ]
 
         return ChangerResult(
             description='Debianized package.',

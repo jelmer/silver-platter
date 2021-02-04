@@ -71,6 +71,17 @@ from ..utils import (
     )
 
 
+class LastUploadMoreRecent(Exception):
+    """Last version in archive is newer than vcs version."""
+
+    def __init__(self, archive_version, vcs_version):
+        self.archive_version = archive_version
+        self.vcs_version = vcs_version
+        super(LastUploadMoreRecent, self).__init__(
+            "last upload (%s) is more recent than vcs (%s)" %
+            (archive_version, vcs_version))
+
+
 class NoUnuploadedChanges(Exception):
     """Indicates there are no unuploaded changes for a package."""
 
@@ -156,10 +167,8 @@ def prepare_upload_package(
         raise NoUnuploadedChanges(cl.version)
     previous_version_in_branch = changelog_find_previous_upload(cl)
     if last_uploaded_version > previous_version_in_branch:
-        raise Exception(
-            "last uploaded version more recent than previous "
-            "version in branch: %r > %r" % (
-                last_uploaded_version, previous_version_in_branch))
+        raise LastUploadMoreRecent(
+                last_uploaded_version, previous_version_in_branch)
 
     note("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
@@ -186,7 +195,8 @@ def prepare_upload_package(
                         (revid, code))
         for revid, rev in local_tree.branch.repository.iter_revisions(
                 revids):
-            check_revision(rev, min_commit_age)
+            if rev is not None:
+                check_revision(rev, min_commit_age)
 
         if cl.distributions != "UNRELEASED":
             raise NoUnreleasedChanges(cl.version)
@@ -313,6 +323,12 @@ def main(argv):
         default=False,
         help='Use vcswatch to determine what packages need uploading.')
     parser.add_argument(
+        '--exclude',
+        type=str,
+        action='append',
+        default=[],
+        help='Ignore source package')
+    parser.add_argument(
         '--autopkgtest-only',
         action='store_true',
         help='Only process packages with autopkgtests.')
@@ -371,6 +387,8 @@ def main(argv):
                 ret = 1
                 continue
             source_name = pkg_source['Package']
+            if source_name in args.exclude:
+                continue
             source_version = pkg_source['Version']
             has_testsuite = 'Testsuite' in pkg_source
         else:
@@ -403,6 +421,8 @@ def main(argv):
                         ) as cle:
                     source_version = cle[0].version
                 has_testsuite = 'Testsuite' in ce.source
+            if source_name in args.exclude:
+                continue
             if (args.autopkgtest_only and
                     not has_testsuite and
                     not ws.local_tree.has_filename(
@@ -438,6 +458,12 @@ def main(argv):
                 warning(
                     '%s: Unable to find revision matching last release '
                     '%s, skipping.', source_name, e.version)
+                ret = 1
+                continue
+            except LastUploadMoreRecent as e:
+                warning(
+                    '%s: Last upload (%s) was more recent than VCS (%s)',
+                    source_name, e.archive_version, e.vcs_version)
                 ret = 1
                 continue
             except RecentCommits as e:
