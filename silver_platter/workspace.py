@@ -30,9 +30,11 @@ from breezy.propose import (
     get_hoster,
     Hoster,
     MergeProposal,
+    UnsupportedHoster,
     )
 
 from breezy.trace import note
+from breezy.transport.local import LocalTransport
 
 from .publish import (
     merge_conflicts,
@@ -150,7 +152,14 @@ class Workspace(object):
              tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
              stop_revision: Optional[bytes] = None) -> None:
         if hoster is None:
-            hoster = get_hoster(self.main_branch)
+            try:
+                hoster = get_hoster(self.main_branch)
+            except UnsupportedHoster:
+                if isinstance(
+                        self.main_branch.control_transport, LocalTransport):
+                    hoster = None
+                else:
+                    raise
         return push_changes(
             self.local_tree.branch, self.main_branch, hoster=hoster,
             additional_colocated_branches=self.additional_colocated_branches,

@@ -110,7 +110,7 @@ def push_result(
 
 
 def push_changes(local_branch: Branch, main_branch: Branch,
-                 hoster: Hoster,
+                 hoster: Optional[Hoster],
                  possible_transports: Optional[List[Transport]] = None,
                  additional_colocated_branches: Optional[List[str]] = None,
                  dry_run: bool = False,
@@ -118,7 +118,10 @@ def push_changes(local_branch: Branch, main_branch: Branch,
                  stop_revision: Optional[bytes] = None
                  ) -> None:
     """Push changes to a branch."""
-    push_url = hoster.get_push_url(main_branch)
+    if hoster is None:
+        push_url = main_branch.user_url
+    else:
+        push_url = hoster.get_push_url(main_branch)
     note('pushing to %s', push_url)
     target_branch = open_branch(
         push_url, possible_transports=possible_transports)
