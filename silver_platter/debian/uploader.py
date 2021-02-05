@@ -34,6 +34,7 @@ from debmutate.changelog import (
 from debmutate.control import ControlEditor
 
 from breezy import gpg
+from breezy.config import extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter
 from breezy.plugins.debian.builder import BuildFailedError
@@ -113,6 +114,17 @@ class RecentCommits(Exception):
                 self.commit_age, self.min_commit_age))
 
 
+class CommitterNotAllowed(Exception):
+    """Specified committer is not allowed."""
+
+    def __init__(self, committer, allowed_committers):
+        self.committer = committer
+        self.allowed_committers = allowed_committers
+        super(CommitterNotAllowed, self).__init__(
+            "Committer %s not in allowed committers: %r" % (
+                self.committer, self.allowed_committers))
+
+
 class LastReleaseRevisionNotFound(Exception):
     """The revision for the last uploaded release can't be found."""
 
@@ -124,12 +136,13 @@ class LastReleaseRevisionNotFound(Exception):
                 version, package))
 
 
-def check_revision(rev, min_commit_age):
+def check_revision(rev, min_commit_age, allowed_committers):
     """Check whether a revision can be included in an upload.
 
     Args:
       rev: revision to check
       min_commit_age: Minimum age for revisions
+      allowed_committers: List of allowed committers
     Raises:
       RecentCommits: When there are commits younger than min_commit_age
     """
@@ -140,6 +153,9 @@ def check_revision(rev, min_commit_age):
         if time_delta.days < min_commit_age:
             raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
+    committer_email = extract_email_address(rev.committer)
+    if allowed_committers and committer_email not in allowed_committers:
+        raise CommitterNotAllowed(committer_email, allowed_committers)
 
 
 def find_last_release_revid(branch, version):
@@ -157,7 +173,8 @@ def get_maintainer_keys(context):
 
 def prepare_upload_package(
         local_tree, subpath, pkg, last_uploaded_version, builder,
-        gpg_strategy=None, min_commit_age=None):
+        gpg_strategy=None, min_commit_age=None,
+        allowed_committers=None):
     if local_tree.has_filename(os.path.join(subpath, 'debian/gbp.conf')):
         subprocess.check_call(
             ['gbp', 'dch', '--ignore-branch'],
@@ -196,7 +213,7 @@ def prepare_upload_package(
         for revid, rev in local_tree.branch.repository.iter_revisions(
                 revids):
             if rev is not None:
-                check_revision(rev, min_commit_age)
+                check_revision(rev, min_commit_age, allowed_committers)
 
         if cl.distributions != "UNRELEASED":
             raise NoUnreleasedChanges(cl.version)
@@ -332,6 +349,11 @@ def main(argv):
         '--autopkgtest-only',
         action='store_true',
         help='Only process packages with autopkgtests.')
+    parser.add_argument(
+        '--allowed-committer',
+        type=str,
+        action='append',
+        help='Require that all new commits are from specified committers')
 
     args = parser.parse_args(argv)
     ret = 0
@@ -447,7 +469,13 @@ def main(argv):
                     ws.local_tree, subpath,
                     source_name, source_version,
                     builder=args.builder, gpg_strategy=gpg_strategy,
-                    min_commit_age=args.min_commit_age)
+                    min_commit_age=args.min_commit_age,
+                    allowed_committers=args.allowed_committer)
+            except CommitterNotAllowed as e:
+                warning(
+                    '%s: committer %s not in allowed list: %r',
+                    source_name, e.committer, e.allowed_committers)
+                continue
             except BuildFailedError as e:
                 warning(
                     '%s: package failed to build: %s',
