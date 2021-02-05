@@ -126,7 +126,7 @@ from breezy.plugins.debian.upstream.branch import (
 from breezy.tree import Tree
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
-from lintian_brush.upstream_metadata import (
+from upstream_ontologist.guess import (
     guess_upstream_metadata,
     )
 
