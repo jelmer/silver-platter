@@ -50,6 +50,7 @@ from breezy.plugins.debian.util import (
     dput_changes,
     find_changelog,
     debsign,
+    MissingChangelogError,
     )
 from breezy.trace import note, show_error, warning
 
@@ -492,6 +493,11 @@ def main(argv):
                 warning(
                     '%s: Last upload (%s) was more recent than VCS (%s)',
                     source_name, e.archive_version, e.vcs_version)
+                ret = 1
+                continue
+            except MissingChangelogError as e:
+                note('%s: No changelog found, skipping.',
+                     source_name)
                 ret = 1
                 continue
             except RecentCommits as e:
