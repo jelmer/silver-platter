@@ -35,10 +35,10 @@ Supported hosters
 
 At the moment, the following code hosters are supported:
 
- * `GitHub <https://github.com/>`_
- * `Launchpad <https://launchpad.net/>`_
- * `GitLab <https://gitlab.com/>`_ instances, such as Debian's
-   `Salsa <https://salsa.debian.org>`_
+* `GitHub <https://github.com/>`_
+* `Launchpad <https://launchpad.net/>`_
+* `GitLab <https://gitlab.com/>`_ instances, such as Debian's
+  `Salsa <https://salsa.debian.org>`_
 
 Working with Debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
