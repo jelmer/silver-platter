@@ -70,5 +70,5 @@ setup(
             'python_debian',
         ],
     },
-    tests_require=['testtools'],
+    tests_require=['testtools', 'lintian-brush'],
 )
