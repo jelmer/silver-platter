@@ -17,7 +17,7 @@
 
 """Support for uploading packages."""
 
-import silver_platter   # noqa: F401
+import silver_platter  # noqa: F401
 
 import datetime
 from email.utils import parseaddr
@@ -30,7 +30,7 @@ from typing import List
 from debmutate.changelog import (
     ChangelogEditor,
     changeblock_ensure_first_line,
-    )
+)
 from debmutate.control import ControlEditor
 
 from breezy import gpg
@@ -41,17 +41,17 @@ from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
     DistributionBranch,
-    )
+)
 from breezy.plugins.debian.release import (
     release,
-    )
+)
 from breezy.plugins.debian.util import (
     changelog_find_previous_upload,
     dput_changes,
     find_changelog,
     debsign,
     MissingChangelogError,
-    )
+)
 from breezy.trace import note, show_error, warning
 
 from debian.changelog import get_maintainer
@@ -64,13 +64,13 @@ from . import (
     DEFAULT_BUILDER,
     select_probers,
     NoSuchPackage,
-    )
+)
 from ..utils import (
     open_branch,
     BranchUnavailable,
     BranchMissing,
     BranchUnsupported,
-    )
+)
 
 
 class LastUploadMoreRecent(Exception):
@@ -80,8 +80,9 @@ class LastUploadMoreRecent(Exception):
         self.archive_version = archive_version
         self.vcs_version = vcs_version
         super(LastUploadMoreRecent, self).__init__(
-            "last upload (%s) is more recent than vcs (%s)" %
-            (archive_version, vcs_version))
+            "last upload (%s) is more recent than vcs (%s)"
+            % (archive_version, vcs_version)
+        )
 
 
 class NoUnuploadedChanges(Exception):
@@ -90,8 +91,8 @@ class NoUnuploadedChanges(Exception):
     def __init__(self, archive_version):
         self.archive_version = archive_version
         super(NoUnuploadedChanges, self).__init__(
-            "nothing to upload, latest version is in archive: %s" %
-            archive_version)
+            "nothing to upload, latest version is in archive: %s" % archive_version
+        )
 
 
 class NoUnreleasedChanges(Exception):
@@ -100,8 +101,8 @@ class NoUnreleasedChanges(Exception):
     def __init__(self, version):
         self.version = version
         super(NoUnreleasedChanges, self).__init__(
-            "nothing to upload, latest version in vcs is not unreleased: %s" %
-            version)
+            "nothing to upload, latest version in vcs is not unreleased: %s" % version
+        )
 
 
 class RecentCommits(Exception):
@@ -111,8 +112,9 @@ class RecentCommits(Exception):
         self.commit_age = commit_age
         self.min_commit_age = min_commit_age
         super(RecentCommits, self).__init__(
-            "Last commit is only %d days old (< %d)" % (
-                self.commit_age, self.min_commit_age))
+            "Last commit is only %d days old (< %d)"
+            % (self.commit_age, self.min_commit_age)
+        )
 
 
 class CommitterNotAllowed(Exception):
@@ -122,8 +124,9 @@ class CommitterNotAllowed(Exception):
         self.committer = committer
         self.allowed_committers = allowed_committers
         super(CommitterNotAllowed, self).__init__(
-            "Committer %s not in allowed committers: %r" % (
-                self.committer, self.allowed_committers))
+            "Committer %s not in allowed committers: %r"
+            % (self.committer, self.allowed_committers)
+        )
 
 
 class LastReleaseRevisionNotFound(Exception):
@@ -133,8 +136,8 @@ class LastReleaseRevisionNotFound(Exception):
         self.package = package
         self.version = version
         super(LastReleaseRevisionNotFound, self).__init__(
-            "Unable to find revision matching version %r for %s" % (
-                version, package))
+            "Unable to find revision matching version %r for %s" % (version, package)
+        )
 
 
 def check_revision(rev, min_commit_age, allowed_committers):
@@ -165,54 +168,59 @@ def find_last_release_revid(branch, version):
 
 
 def get_maintainer_keys(context):
-    for key in context.keylist(
-            source='/usr/share/keyrings/debian-keyring.gpg'):
+    for key in context.keylist(source="/usr/share/keyrings/debian-keyring.gpg"):
         yield key.fpr
         for subkey in key.subkeys:
             yield subkey.keyid
 
 
 def prepare_upload_package(
-        local_tree, subpath, pkg, last_uploaded_version, builder,
-        gpg_strategy=None, min_commit_age=None,
-        allowed_committers=None):
-    if local_tree.has_filename(os.path.join(subpath, 'debian/gbp.conf')):
+    local_tree,
+    subpath,
+    pkg,
+    last_uploaded_version,
+    builder,
+    gpg_strategy=None,
+    min_commit_age=None,
+    allowed_committers=None,
+):
+    if local_tree.has_filename(os.path.join(subpath, "debian/gbp.conf")):
         subprocess.check_call(
-            ['gbp', 'dch', '--ignore-branch'],
-            cwd=local_tree.abspath('.'))
+            ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
+        )
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
     previous_version_in_branch = changelog_find_previous_upload(cl)
     if last_uploaded_version > previous_version_in_branch:
-        raise LastUploadMoreRecent(
-                last_uploaded_version, previous_version_in_branch)
+        raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
 
     note("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
         try:
             last_release_revid = find_last_release_revid(
-                    local_tree.branch, last_uploaded_version)
+                local_tree.branch, last_uploaded_version
+            )
         except NoSuchTag:
             raise LastReleaseRevisionNotFound(pkg, last_uploaded_version)
         graph = local_tree.branch.repository.get_graph()
-        revids = list(graph.iter_lefthand_ancestry(
-            local_tree.branch.last_revision(), [last_release_revid]))
+        revids = list(
+            graph.iter_lefthand_ancestry(
+                local_tree.branch.last_revision(), [last_release_revid]
+            )
+        )
         if not revids:
             note("No pending changes")
             return
         if gpg_strategy:
-            note('Verifying GPG signatures...')
+            note("Verifying GPG signatures...")
             count, result, all_verifiables = gpg.bulk_verify_signatures(
-                    local_tree.branch.repository, revids,
-                    gpg_strategy)
+                local_tree.branch.repository, revids, gpg_strategy
+            )
             for revid, code, key in result:
                 if code != gpg.SIGNATURE_VALID:
-                    raise Exception(
-                        "No valid GPG signature on %r: %d" %
-                        (revid, code))
-        for revid, rev in local_tree.branch.repository.iter_revisions(
-                revids):
+                    raise Exception("No valid GPG signature on %r: %d" % (revid, code))
+        for revid, rev in local_tree.branch.repository.iter_revisions(revids):
             if rev is not None:
                 check_revision(rev, min_commit_age, allowed_committers)
 
@@ -220,31 +228,32 @@ def prepare_upload_package(
             raise NoUnreleasedChanges(cl.version)
     qa_upload = False
     team_upload = False
-    control_path = local_tree.abspath(os.path.join(subpath, 'debian/control'))
+    control_path = local_tree.abspath(os.path.join(subpath, "debian/control"))
     with ControlEditor(control_path) as e:
-        maintainer = parseaddr(e.source['Maintainer'])
-        if maintainer[1] == 'packages@qa.debian.org':
+        maintainer = parseaddr(e.source["Maintainer"])
+        if maintainer[1] == "packages@qa.debian.org":
             qa_upload = True
         # TODO(jelmer): Check whether this is a team upload
         # TODO(jelmer): determine whether this is a NMU upload
     if qa_upload or team_upload:
-        changelog_path = local_tree.abspath(
-            os.path.join(subpath, 'debian/changelog'))
+        changelog_path = local_tree.abspath(os.path.join(subpath, "debian/changelog"))
         with ChangelogEditor(changelog_path) as e:
             if qa_upload:
-                changeblock_ensure_first_line(e[0], 'QA upload.')
+                changeblock_ensure_first_line(e[0], "QA upload.")
             elif team_upload:
-                changeblock_ensure_first_line(e[0], 'Team upload.')
+                changeblock_ensure_first_line(e[0], "Team upload.")
         local_tree.commit(
-            specific_files=[os.path.join(subpath, 'debian/changelog')],
-            message='Mention QA Upload.',
+            specific_files=[os.path.join(subpath, "debian/changelog")],
+            message="Mention QA Upload.",
             allow_pointless=False,
-            reporter=NullCommitReporter())
+            reporter=NullCommitReporter(),
+        )
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
     target_changes = _build_helper(
-        local_tree, subpath, local_tree.branch, target_dir, builder=builder)
+        local_tree, subpath, local_tree.branch, target_dir, builder=builder
+    )
     debsign(target_changes)
     return target_changes, tag_name
 
@@ -252,6 +261,7 @@ def prepare_upload_package(
 def select_apt_packages(package_names, maintainer):
     packages = []
     import apt_pkg
+
     apt_pkg.init()
     sources = apt_pkg.SourceRecords()
     while sources.step():
@@ -269,13 +279,16 @@ def select_apt_packages(package_names, maintainer):
 
 
 def select_vcswatch_packages(
-        packages: List[str], maintainer: List[str], autopkgtest_only: bool):
+    packages: List[str], maintainer: List[str], autopkgtest_only: bool
+):
     import psycopg2
+
     conn = psycopg2.connect(
         database="udd",
         user="udd-mirror",
         password="udd-mirror",
-        host="udd-mirror.debian.net")
+        host="udd-mirror.debian.net",
+    )
     cursor = conn.cursor()
     args = []
     query = """\
@@ -302,59 +315,66 @@ def select_vcswatch_packages(
     return packages
 
 
-def main(argv):
+def main(argv):  # noqa: C901
     import argparse
-    parser = argparse.ArgumentParser(prog='upload-pending-commits')
-    parser.add_argument("packages", nargs='*')
+
+    parser = argparse.ArgumentParser(prog="upload-pending-commits")
+    parser.add_argument("packages", nargs="*")
+    parser.add_argument("--dry-run", action="store_true", help="Dry run changes.")
     parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Dry run changes.')
-    parser.add_argument(
-        '--acceptable-keys',
-        help='List of acceptable GPG keys',
-        action='append', default=[], type=str)
-    parser.add_argument(
-        '--gpg-verification',
-        help='Verify GPG signatures on commits', action='store_true')
-    parser.add_argument(
-        '--min-commit-age',
-        help='Minimum age of the last commit, in days',
-        type=int, default=0)
-    parser.add_argument(
-        '--diff',
-        action='store_true',
-        help='Show diff.')
-    parser.add_argument(
-        '--builder',
-        type=str,
-        help='Build command',
-        default=(DEFAULT_BUILDER + ' --source --source-only-changes '
-                 '--debbuildopt=-v${LAST_VERSION}'))
-    parser.add_argument(
-        '--maintainer',
-        type=str,
-        action='append',
-        help='Select all packages maintainer by specified maintainer.')
-    parser.add_argument(
-        '--vcswatch',
-        action='store_true',
-        default=False,
-        help='Use vcswatch to determine what packages need uploading.')
-    parser.add_argument(
-        '--exclude',
-        type=str,
-        action='append',
+        "--acceptable-keys",
+        help="List of acceptable GPG keys",
+        action="append",
         default=[],
-        help='Ignore source package')
-    parser.add_argument(
-        '--autopkgtest-only',
-        action='store_true',
-        help='Only process packages with autopkgtests.')
-    parser.add_argument(
-        '--allowed-committer',
         type=str,
-        action='append',
-        help='Require that all new commits are from specified committers')
+    )
+    parser.add_argument(
+        "--gpg-verification",
+        help="Verify GPG signatures on commits",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--min-commit-age",
+        help="Minimum age of the last commit, in days",
+        type=int,
+        default=0,
+    )
+    parser.add_argument("--diff", action="store_true", help="Show diff.")
+    parser.add_argument(
+        "--builder",
+        type=str,
+        help="Build command",
+        default=(
+            DEFAULT_BUILDER + " --source --source-only-changes "
+            "--debbuildopt=-v${LAST_VERSION}"
+        ),
+    )
+    parser.add_argument(
+        "--maintainer",
+        type=str,
+        action="append",
+        help="Select all packages maintainer by specified maintainer.",
+    )
+    parser.add_argument(
+        "--vcswatch",
+        action="store_true",
+        default=False,
+        help="Use vcswatch to determine what packages need uploading.",
+    )
+    parser.add_argument(
+        "--exclude", type=str, action="append", default=[], help="Ignore source package"
+    )
+    parser.add_argument(
+        "--autopkgtest-only",
+        action="store_true",
+        help="Only process packages with autopkgtests.",
+    )
+    parser.add_argument(
+        "--allowed-committer",
+        type=str,
+        action="append",
+        help="Require that all new commits are from specified committers",
+    )
 
     args = parser.parse_args(argv)
     ret = 0
@@ -362,7 +382,7 @@ def main(argv):
     if not args.packages and not args.maintainer:
         (name, email) = get_maintainer()
         if email:
-            note('Processing packages maintained by %s', email)
+            note("Processing packages maintained by %s", email)
             args.maintainer = [email]
         else:
             parser.print_usage()
@@ -370,18 +390,20 @@ def main(argv):
 
     if args.vcswatch:
         packages = select_vcswatch_packages(
-            args.packages, args.maintainer, args.autopkgtest_only)
+            args.packages, args.maintainer, args.autopkgtest_only
+        )
     else:
-        note('Use --vcswatch to only process packages for which '
-             'vcswatch found pending commits.')
+        note(
+            "Use --vcswatch to only process packages for which "
+            "vcswatch found pending commits."
+        )
         if args.maintainer:
-            packages = select_apt_packages(
-                args.packages, args.maintainer)
+            packages = select_apt_packages(args.packages, args.maintainer)
         else:
             packages = args.packages
 
     if not packages:
-        note('No packages found.')
+        note("No packages found.")
         parser.print_usage()
         sys.exit(1)
 
@@ -389,31 +411,30 @@ def main(argv):
     # commits are more likely to be successful.
 
     if len(packages) > 1:
-        note('Uploading packages: %s', ', '.join(packages))
+        note("Uploading packages: %s", ", ".join(packages))
 
     for package in packages:
-        note('Processing %s', package)
+        note("Processing %s", package)
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
-        if '/' not in package:
+        if "/" not in package:
             try:
                 pkg_source = apt_get_source_package(package)
             except NoSuchPackage:
-                note('%s: package not found in apt', package)
+                note("%s: package not found in apt", package)
                 ret = 1
                 continue
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
-                note('%s: no declared vcs location, skipping',
-                     pkg_source['Package'])
+                note("%s: no declared vcs location, skipping", pkg_source["Package"])
                 ret = 1
                 continue
-            source_name = pkg_source['Package']
+            source_name = pkg_source["Package"]
             if source_name in args.exclude:
                 continue
-            source_version = pkg_source['Version']
-            has_testsuite = 'Testsuite' in pkg_source
+            source_version = pkg_source["Version"]
+            has_testsuite = "Testsuite" in pkg_source
         else:
             vcs_url = package
             vcs_type = None
@@ -422,36 +443,35 @@ def main(argv):
             has_testsuite = None
         (location, branch_name, subpath) = split_vcs_url(vcs_url)
         if subpath is None:
-            subpath = ''
+            subpath = ""
         probers = select_probers(vcs_type)
         try:
-            main_branch = open_branch(
-                location, probers=probers, name=branch_name)
+            main_branch = open_branch(location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-            show_error('%s: %s', vcs_url, e)
+            show_error("%s: %s", vcs_url, e)
             ret = 1
             continue
         with Workspace(main_branch) as ws:
             if source_name is None:
                 with ControlEditor(
-                        ws.local_tree.abspath(
-                            os.path.join(subpath, 'debian/control'))
-                        ) as ce:
-                    source_name = ce.source['Source']
+                    ws.local_tree.abspath(os.path.join(subpath, "debian/control"))
+                ) as ce:
+                    source_name = ce.source["Source"]
                 with ChangelogEditor(
-                        ws.local_tree.abspath(
-                            os.path.join(subpath, 'debian/changelog'))
-                        ) as cle:
+                    ws.local_tree.abspath(os.path.join(subpath, "debian/changelog"))
+                ) as cle:
                     source_version = cle[0].version
-                has_testsuite = 'Testsuite' in ce.source
+                has_testsuite = "Testsuite" in ce.source
             if source_name in args.exclude:
                 continue
-            if (args.autopkgtest_only and
-                    not has_testsuite and
-                    not ws.local_tree.has_filename(
-                        os.path.join(subpath, 'debian/tests/control'))):
-                note('%s: Skipping, package has no autopkgtest.',
-                     source_name)
+            if (
+                args.autopkgtest_only
+                and not has_testsuite
+                and not ws.local_tree.has_filename(
+                    os.path.join(subpath, "debian/tests/control")
+                )
+            ):
+                note("%s: Skipping, package has no autopkgtest.", source_name)
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -459,69 +479,76 @@ def main(argv):
                 if args.acceptable_keys:
                     acceptable_keys = args.acceptable_keys
                 else:
-                    acceptable_keys = list(get_maintainer_keys(
-                        gpg_strategy.context))
-                gpg_strategy.set_acceptable_keys(','.join(acceptable_keys))
+                    acceptable_keys = list(get_maintainer_keys(gpg_strategy.context))
+                gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
             else:
                 gpg_strategy = None
 
             try:
                 target_changes, tag_name = prepare_upload_package(
-                    ws.local_tree, subpath,
-                    source_name, source_version,
-                    builder=args.builder, gpg_strategy=gpg_strategy,
+                    ws.local_tree,
+                    subpath,
+                    source_name,
+                    source_version,
+                    builder=args.builder,
+                    gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age,
-                    allowed_committers=args.allowed_committer)
+                    allowed_committers=args.allowed_committer,
+                )
             except CommitterNotAllowed as e:
                 warning(
-                    '%s: committer %s not in allowed list: %r',
-                    source_name, e.committer, e.allowed_committers)
+                    "%s: committer %s not in allowed list: %r",
+                    source_name,
+                    e.committer,
+                    e.allowed_committers,
+                )
                 continue
             except BuildFailedError as e:
-                warning(
-                    '%s: package failed to build: %s',
-                    source_name, e)
+                warning("%s: package failed to build: %s", source_name, e)
                 ret = 1
                 continue
             except LastReleaseRevisionNotFound as e:
                 warning(
-                    '%s: Unable to find revision matching last release '
-                    '%s, skipping.', source_name, e.version)
+                    "%s: Unable to find revision matching last release "
+                    "%s, skipping.",
+                    source_name,
+                    e.version,
+                )
                 ret = 1
                 continue
             except LastUploadMoreRecent as e:
                 warning(
-                    '%s: Last upload (%s) was more recent than VCS (%s)',
-                    source_name, e.archive_version, e.vcs_version)
+                    "%s: Last upload (%s) was more recent than VCS (%s)",
+                    source_name,
+                    e.archive_version,
+                    e.vcs_version,
+                )
                 ret = 1
                 continue
-            except MissingChangelogError as e:
-                note('%s: No changelog found, skipping.',
-                     source_name)
+            except MissingChangelogError:
+                note("%s: No changelog found, skipping.", source_name)
                 ret = 1
                 continue
             except RecentCommits as e:
-                note('%s: Recent commits (%d days), skipping.',
-                     source_name, e.commit_age)
+                note(
+                    "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
+                )
                 continue
             except NoUnuploadedChanges:
-                note('%s: No unuploaded changes, skipping.',
-                     source_name)
+                note("%s: No unuploaded changes, skipping.", source_name)
                 continue
             except NoUnreleasedChanges:
-                note('%s: No unreleased changes, skipping.',
-                     source_name)
+                note("%s: No unreleased changes, skipping.", source_name)
                 continue
 
             tags = []
             if tag_name is not None:
-                note('Pushing tag %s', tag_name)
+                note("Pushing tag %s", tag_name)
                 tags.append(tag_name)
             try:
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
-                note('%s: Permission denied pushing to branch, skipping.',
-                     source_name)
+                note("%s: Permission denied pushing to branch, skipping.", source_name)
                 ret = 1
                 continue
             if not args.dry_run:
@@ -534,5 +561,5 @@ def main(argv):
     return ret
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

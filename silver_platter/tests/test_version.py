@@ -23,19 +23,16 @@ from silver_platter import version_string
 
 
 class VersionMatchTest(TestCase):
-
     def test_matches_setup_version(self):
-        if not os.path.exists('setup.py'):
-            self.skipTest(
-                'no setup.py available. '
-                'Running outside of source tree?')
+        if not os.path.exists("setup.py"):
+            self.skipTest("no setup.py available. " "Running outside of source tree?")
         # TODO(jelmer): Surely there's a better way of doing this?
-        with open('setup.py', 'r') as f:
+        with open("setup.py", "r") as f:
             for line in f:
                 m = re.match(r'[ ]*version=["\'](.*)["\'],', line)
                 if m:
                     setup_version = m.group(1)
                     break
             else:
-                raise AssertionError('setup version not found')
+                raise AssertionError("setup version not found")
         self.assertEqual(version_string, setup_version)

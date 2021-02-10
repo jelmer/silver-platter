@@ -22,54 +22,55 @@ from ..debian.lintian import (
     create_mp_description,
     get_fixers,
     UnknownFixer,
-    )
+)
 
 
 class ParseMPDescriptionTests(unittest.TestCase):
-
     def test_single_line(self):
-        self.assertEqual(['some change'], parse_mp_description('some change'))
+        self.assertEqual(["some change"], parse_mp_description("some change"))
 
     def test_multiple_lines(self):
         self.assertEqual(
-                ['some change', 'some other change'],
-                parse_mp_description("""Lintian fixes:
+            ["some change", "some other change"],
+            parse_mp_description(
+                """Lintian fixes:
 * some change
 * some other change
-"""))
+"""
+            ),
+        )
 
 
 class CreateMPDescription(unittest.TestCase):
-
     def test_single_line(self):
-        self.assertEqual(
-            "some change", create_mp_description('plain', ['some change']))
+        self.assertEqual("some change", create_mp_description("plain", ["some change"]))
 
     def test_multiple_lines(self):
-        self.assertEqual("""\
+        self.assertEqual(
+            """\
 Fix some issues reported by lintian
 * some change
 * some other change
-""", create_mp_description('plain', ['some change', 'some other change']))
+""",
+            create_mp_description("plain", ["some change", "some other change"]),
+        )
 
 
 class GetFixersTests(unittest.TestCase):
-
     def setUp(self):
         super(GetFixersTests, self).setUp()
         from lintian_brush import Fixer
-        self.fixers = [Fixer('foo', ['atag'])]
+
+        self.fixers = [Fixer("foo", ["atag"])]
 
     def test_get_all(self):
         self.assertEqual([self.fixers[0]], list(get_fixers(self.fixers)))
 
     def test_get_specified(self):
-        self.assertEqual(
-            [self.fixers[0]], list(get_fixers(self.fixers, names=['foo'])))
+        self.assertEqual([self.fixers[0]], list(get_fixers(self.fixers, names=["foo"])))
 
     def test_get_specified_tag(self):
-        self.assertEqual(
-            [self.fixers[0]], list(get_fixers(self.fixers, tags=['atag'])))
+        self.assertEqual([self.fixers[0]], list(get_fixers(self.fixers, tags=["atag"])))
 
     def test_get_unknown(self):
-        self.assertRaises(UnknownFixer, get_fixers, self.fixers, names=['bar'])
+        self.assertRaises(UnknownFixer, get_fixers, self.fixers, names=["bar"])

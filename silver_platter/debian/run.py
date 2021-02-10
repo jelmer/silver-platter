@@ -23,17 +23,17 @@ from .changer import (
     ChangerError,
     ChangerResult,
     DebianChanger,
-    )
+)
 from ..run import (
     ScriptMadeNoChanges,
     derived_branch_name,
     script_runner,
-    )
+)
 
 
 class ScriptChanger(DebianChanger):
 
-    name = 'run'
+    name = "run"
 
     def _init__(self, script, commit_pending=None):
         self.script = script
@@ -41,46 +41,54 @@ class ScriptChanger(DebianChanger):
 
     @classmethod
     def setup_parser(cls, parser):
+        parser.add_argument("script", help="Path to script to run.", type=str)
         parser.add_argument(
-            'script', help='Path to script to run.', type=str)
-        parser.add_argument(
-            '--commit-pending',
-            help='Commit pending changes after script.',
-            choices=['yes', 'no', 'auto'],
-            default='auto', type=str)
+            "--commit-pending",
+            help="Commit pending changes after script.",
+            choices=["yes", "no", "auto"],
+            default="auto",
+            type=str,
+        )
 
     @classmethod
     def from_args(cls, args):
-        commit_pending = {'auto': None, 'yes': True, 'no': False}[
-            args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
         return cls(script=args.script, commit_pending=commit_pending)
 
-    def make_changes(self, local_tree, subpath, update_changelog, reporter,
-                     committer, base_proposal=None):
+    def make_changes(
+        self,
+        local_tree,
+        subpath,
+        update_changelog,
+        reporter,
+        committer,
+        base_proposal=None,
+    ):
         base_revid = local_tree.last_revision()
 
         try:
-            description = script_runner(
-                local_tree, self.script, self.commit_pending)
+            description = script_runner(local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
-            raise ChangerError(
-                'nothing-to-do', 'Script did not make any changes.', e)
+            raise ChangerError("nothing-to-do", "Script did not make any changes.", e)
 
-        branches = [
-            ('main', None, base_revid,
-             local_tree.last_revision())]
+        branches = [("main", None, base_revid, local_tree.last_revision())]
 
         tags = []
 
         # TODO(jelmer): Compare old and new tags/branches?
 
         return ChangerResult(
-            description=description, mutator=description,
-            sufficient_for_proposal=True, branches=branches, tags=tags,
-            proposed_commit_message=None)
+            description=description,
+            mutator=description,
+            sufficient_for_proposal=True,
+            branches=branches,
+            tags=tags,
+            proposed_commit_message=None,
+        )
 
     def get_proposal_description(
-            self, description, description_format, existing_proposal):
+        self, description, description_format, existing_proposal
+    ):
         if description is not None:
             return description
         if existing_proposal is not None:
@@ -88,7 +96,7 @@ class ScriptChanger(DebianChanger):
         raise ValueError("No description available")
 
     def describe(self, description, publish_result):
-        note('%s', description)
+        note("%s", description)
 
     def suggest_branch_name(self):
         return derived_branch_name(self.script)

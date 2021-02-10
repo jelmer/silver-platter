@@ -26,4 +26,4 @@ import breezy.plugins.github  # For github support  # noqa: F401
 import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 
 __version__ = (0, 4, 0)
-version_string = '.'.join(map(str, __version__))
+version_string = ".".join(map(str, __version__))
