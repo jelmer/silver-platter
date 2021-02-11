@@ -21,13 +21,15 @@ import silver_platter  # noqa: F401
 
 import argparse
 import errno
-from debian.changelog import Version, ChangelogParseError
+import logging
 import os
 import re
 import ssl
 import tempfile
 import traceback
 from typing import List, Optional, Callable, Union
+
+from debian.changelog import Version, ChangelogParseError
 
 from ..utils import (
     full_branch_url,
@@ -70,7 +72,6 @@ from breezy.plugins.debian.import_dsc import (
     UpstreamBranchAlreadyMerged,
 )
 
-from breezy.trace import note, warning
 from breezy.transform import MalformedTransform
 
 from breezy.plugins.debian.merge_upstream import (
@@ -253,7 +254,7 @@ DEFAULT_DISTRIBUTION = "unstable"
 
 def get_upstream_branch_location(tree, subpath, config, trust_package=False):
     if config.upstream_branch is not None:
-        note("Using upstream branch %s (from configuration)", config.upstream_branch)
+        logging.info("Using upstream branch %s (from configuration)", config.upstream_branch)
         # TODO(jelmer): Make brz-debian sanitize the URL?
         upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
         upstream_branch_browse = getattr(config, "upstream_branch_browse", None)
@@ -267,7 +268,7 @@ def get_upstream_branch_location(tree, subpath, config, trust_package=False):
         upstream_branch_location = guessed_upstream_metadata.get("Repository")
         upstream_branch_browse = guessed_upstream_metadata.get("Repository-Browse")
         if upstream_branch_location:
-            note("Using upstream branch %s (guessed)", upstream_branch_location)
+            logging.info("Using upstream branch %s (guessed)", upstream_branch_location)
     if upstream_branch_browse is None and upstream_branch_location is not None:
         try:
             from lintian_brush.vcs import determine_browser_url
@@ -373,7 +374,7 @@ def detect_include_upstream_history(
             package, old_upstream_version
         )
     except PackageVersionNotPresent:
-        warning(
+        logging.warn(
             "Old upstream version %r is not present in upstream "
             "branch %r. Unable to determine whether upstream history "
             "is normally included. Assuming no.",
@@ -385,13 +386,13 @@ def detect_include_upstream_history(
     graph = tree.branch.repository.get_graph()
     ret = graph.is_ancestor(revision, tree.last_revision())
     if ret:
-        note(
+        logging.info(
             "Including upstream history, since previous upstream version "
             "(%s) is present in packaging branch history.",
             old_upstream_version,
         )
     else:
-        note(
+        logging.info(
             "Not including upstream history, since previous upstream version "
             "(%s) is not present in packaging branch history.",
             old_upstream_version,
@@ -440,7 +441,7 @@ def find_new_upstream(  # noqa: C901
             upstream_branch = open_branch(upstream_branch_location)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             if not snapshot and allow_ignore_upstream_branch:
-                warning(
+                logging.warn(
                     "Upstream branch %s inaccessible; ignoring. %s",
                     upstream_branch_location,
                     e,
@@ -527,7 +528,7 @@ def find_new_upstream(  # noqa: C901
 
     # TODO(jelmer): Check if new_upstream_version is already imported
 
-    note("Using version string %s.", new_upstream_version)
+    logging.info("Using version string %s.", new_upstream_version)
 
     if include_upstream_history is None and upstream_branch_source is not None:
         include_upstream_history = detect_include_upstream_history(
@@ -555,7 +556,7 @@ def find_new_upstream(  # noqa: C901
                     upstream_branch_source.upstream_branch, new_upstream_version
                 )
             else:
-                warning(
+                logging.warn(
                     "Upstream version %s is not in upstream branch %s. "
                     "Not merging from upstream branch. ",
                     new_upstream_version,
@@ -945,7 +946,7 @@ def merge_upstream(  # noqa: C901
             tree, subpath, new_upstream_version, distribution_name, changelog, package
         )
     if not need_upstream_tarball:
-        note(
+        logging.info(
             "An entry for the new upstream version has been " "added to the changelog."
         )
     else:
@@ -1019,7 +1020,7 @@ def update_packaging(
         path = path[len(subpath) :]
         if path == "autogen.sh":
             if override_dh_autoreconf_add_arguments(tree.basedir, [b"./autogen.sh"]):
-                note("Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf.")
+                logging.info("Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf.")
                 changelog_add_line(
                     tree,
                     subpath,
@@ -1413,7 +1414,7 @@ class NewUpstreamChanger(DebianChanger):
                 branches.append(("upstream", "upstream", base_revision, new_revision))
 
         if self.import_only:
-            note(
+            logging.info(
                 "Imported new upstream version %s (previous: %s)",
                 result.new_upstream_version,
                 result.old_upstream_version,
@@ -1428,7 +1429,7 @@ class NewUpstreamChanger(DebianChanger):
                 sufficient_for_proposal=True,
             )
         else:
-            note(
+            logging.info(
                 "Merged new upstream version %s (previous: %s)",
                 result.new_upstream_version,
                 result.old_upstream_version,
@@ -1441,11 +1442,11 @@ class NewUpstreamChanger(DebianChanger):
                 notes = update_packaging(local_tree, old_tree)
                 reporter.report_metadata("notes", notes)
                 for n in notes:
-                    note("%s", n)
+                    logging.info("%s", n)
 
             patch_series_path = os.path.join(subpath, "debian/patches/series")
             if self.refresh_patches and local_tree.has_filename(patch_series_path):
-                note("Refresh quilt patches.")
+                logging.info("Refresh quilt patches.")
                 try:
                     refresh_quilt_patches(
                         local_tree,
@@ -1501,9 +1502,9 @@ class NewUpstreamChanger(DebianChanger):
     def describe(self, merge_upstream_result, publish_result):
         if publish_result.proposal:
             if publish_result.is_new:
-                note("Created new merge proposal %s.", publish_result.proposal.url)
+                logging.info("Created new merge proposal %s.", publish_result.proposal.url)
             else:
-                note("Updated merge proposal %s.", publish_result.proposal.url)
+                logging.info("Updated merge proposal %s.", publish_result.proposal.url)
 
 
 if __name__ == "__main__":

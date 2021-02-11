@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 from typing import Optional, Callable, List, Union, Dict, BinaryIO, Any, Tuple
 
 from breezy.branch import Branch
@@ -33,7 +34,6 @@ from breezy.propose import (
     UnsupportedHoster,
 )
 
-from breezy.trace import note
 from breezy.transport.local import LocalTransport
 
 from .publish import (
@@ -141,7 +141,7 @@ class Workspace(object):
                         name=branch_name, source=remote_colo_branch, overwrite=True
                     )
                 if merge_conflicts(self.main_branch, self.local_tree.branch):
-                    note("restarting branch")
+                    logging.info("restarting branch")
                     self.local_tree.update(revision=self.main_branch_revid)
                     self.local_tree.branch.generate_revision_history(
                         self.main_branch_revid

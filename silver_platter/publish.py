@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 from typing import List, Union, Dict, Optional, Tuple, Any, Callable
 
 from breezy.branch import Branch
@@ -32,7 +33,6 @@ from breezy.propose import (
     NoSuchProject,
     UnsupportedHoster,
 )
-from breezy.trace import note
 from breezy.transport import Transport
 
 try:
@@ -122,7 +122,7 @@ def push_changes(
         push_url = main_branch.user_url
     else:
         push_url = hoster.get_push_url(main_branch)
-    note("pushing to %s", push_url)
+    logging.info("pushing to %s", push_url)
     target_branch = open_branch(push_url, possible_transports=possible_transports)
     if not dry_run:
         push_result(
@@ -256,7 +256,8 @@ def propose_changes(  # noqa: C901
         try:
             resume_proposal.reopen()
         except ReopenFailed:
-            note("Reopening existing proposal failed. Creating new proposal.")
+            logging.info(
+                "Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
     if resume_proposal is None:
         if not dry_run:
@@ -277,7 +278,8 @@ def propose_changes(  # noqa: C901
                     raise
                 resume_proposal = e.existing_proposal
             except errors.PermissionDenied:
-                note("Permission denied while trying to create " "proposal.")
+                logging.info(
+                    "Permission denied while trying to create " "proposal.")
                 raise
             else:
                 return (mp, True)
@@ -452,7 +454,7 @@ def find_existing_proposed(
     except errors.NotBranchError:
         return (None, None, None)
     else:
-        note(
+        logging.info(
             "Branch %s already exists (branch at %s)",
             name,
             full_branch_url(existing_branch),
@@ -466,7 +468,7 @@ def find_existing_proposed(
                 merged_proposal = mp
         else:
             if merged_proposal is not None:
-                note(
+                logging.info(
                     "There is a proposal that has already been merged at %s.",
                     merged_proposal.url,
                 )
@@ -596,7 +598,7 @@ def publish_changes(
 
     if stop_revision == main_branch.last_revision():
         if existing_proposal is not None:
-            note("closing existing merge proposal - no new revisions")
+            logging.info("closing existing merge proposal - no new revisions")
             existing_proposal.close()
         return PublishResult(mode)
 
@@ -604,7 +606,7 @@ def publish_changes(
         # No new revisions added on this iteration, but changes since main
         # branch. We may not have gotten round to updating/creating the
         # merge proposal last time.
-        note("No changes added; making sure merge proposal is up to date.")
+        logging.info("No changes added; making sure merge proposal is up to date.")
 
     if hoster is None:
         hoster = get_hoster(main_branch)
@@ -639,10 +641,10 @@ def publish_changes(
             )
         except errors.PermissionDenied:
             if mode == MODE_ATTEMPT_PUSH:
-                note("push access denied, falling back to propose")
+                logging.info("push access denied, falling back to propose")
                 mode = MODE_PROPOSE
             else:
-                note("permission denied during push")
+                logging.info("permission denied during push")
                 raise
         else:
             return PublishResult(mode=mode)

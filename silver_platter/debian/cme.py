@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 import subprocess
 
 from .changer import (
@@ -22,7 +23,6 @@ from .changer import (
     DebianChanger,
     ChangerResult,
 )
-from breezy.trace import note
 
 
 BRANCH_NAME = "cme"
@@ -82,9 +82,13 @@ class CMEChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note("Proposed change from 'cme fix dpkg': %s", publish_result.proposal.url)
+            logging.info(
+                "Proposed change from 'cme fix dpkg': %s",
+                publish_result.proposal.url)
         else:
-            note("No changes for package %s", result.package_name)
+            logging.info(
+                "No changes for package %s",
+                result.package_name)
 
     @classmethod
     def describe_command(cls, command):

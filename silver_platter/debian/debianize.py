@@ -15,11 +15,11 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
+import logging
 import sys
 
 import breezy
 from breezy.revision import NULL_REVISION
-from breezy.trace import note
 
 from lintian_brush import (
     version_string as lintian_brush_version_string,
@@ -125,7 +125,7 @@ class DebianizeChanger(DebianChanger):
         return "Debianize package."
 
     def describe(self, applied, publish_result):
-        note("Created Debian package.")
+        logging.info("Created Debian package.")
 
 
 if __name__ == "__main__":

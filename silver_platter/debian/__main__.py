@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 from typing import Optional, Dict, List, Callable
 
 import silver_platter  # noqa: F401
@@ -92,6 +93,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
+        logging.basicConfig(level=logging.INFO)
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1

@@ -21,6 +21,7 @@ import silver_platter  # noqa: F401
 
 import datetime
 from email.utils import parseaddr
+import logging
 import os
 import subprocess
 import sys
@@ -52,7 +53,6 @@ from breezy.plugins.debian.util import (
     debsign,
     MissingChangelogError,
 )
-from breezy.trace import note, show_error, warning
 
 from debian.changelog import get_maintainer
 
@@ -195,7 +195,7 @@ def prepare_upload_package(
     if last_uploaded_version > previous_version_in_branch:
         raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
 
-    note("Checking revisions since %s" % last_uploaded_version)
+    logging.info("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
         try:
             last_release_revid = find_last_release_revid(
@@ -210,10 +210,10 @@ def prepare_upload_package(
             )
         )
         if not revids:
-            note("No pending changes")
+            logging.info("No pending changes")
             return
         if gpg_strategy:
-            note("Verifying GPG signatures...")
+            logging.info("Verifying GPG signatures...")
             count, result, all_verifiables = gpg.bulk_verify_signatures(
                 local_tree.branch.repository, revids, gpg_strategy
             )
@@ -382,7 +382,7 @@ def main(argv):  # noqa: C901
     if not args.packages and not args.maintainer:
         (name, email) = get_maintainer()
         if email:
-            note("Processing packages maintained by %s", email)
+            logging.info("Processing packages maintained by %s", email)
             args.maintainer = [email]
         else:
             parser.print_usage()
@@ -393,7 +393,7 @@ def main(argv):  # noqa: C901
             args.packages, args.maintainer, args.autopkgtest_only
         )
     else:
-        note(
+        logging.info(
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
@@ -403,7 +403,7 @@ def main(argv):  # noqa: C901
             packages = args.packages
 
     if not packages:
-        note("No packages found.")
+        logging.info("No packages found.")
         parser.print_usage()
         sys.exit(1)
 
@@ -411,23 +411,23 @@ def main(argv):  # noqa: C901
     # commits are more likely to be successful.
 
     if len(packages) > 1:
-        note("Uploading packages: %s", ", ".join(packages))
+        logging.info("Uploading packages: %s", ", ".join(packages))
 
     for package in packages:
-        note("Processing %s", package)
+        logging.info("Processing %s", package)
         # Can't use open_packaging_branch here, since we want to use pkg_source
         # later on.
         if "/" not in package:
             try:
                 pkg_source = apt_get_source_package(package)
             except NoSuchPackage:
-                note("%s: package not found in apt", package)
+                logging.info("%s: package not found in apt", package)
                 ret = 1
                 continue
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
-                note("%s: no declared vcs location, skipping", pkg_source["Package"])
+                logging.info("%s: no declared vcs location, skipping", pkg_source["Package"])
                 ret = 1
                 continue
             source_name = pkg_source["Package"]
@@ -448,7 +448,7 @@ def main(argv):  # noqa: C901
         try:
             main_branch = open_branch(location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-            show_error("%s: %s", vcs_url, e)
+            logging.exception("%s: %s", vcs_url, e)
             ret = 1
             continue
         with Workspace(main_branch) as ws:
@@ -471,7 +471,8 @@ def main(argv):  # noqa: C901
                     os.path.join(subpath, "debian/tests/control")
                 )
             ):
-                note("%s: Skipping, package has no autopkgtest.", source_name)
+                logging.info(
+                    "%s: Skipping, package has no autopkgtest.", source_name)
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -496,7 +497,7 @@ def main(argv):  # noqa: C901
                     allowed_committers=args.allowed_committer,
                 )
             except CommitterNotAllowed as e:
-                warning(
+                logging.warn(
                     "%s: committer %s not in allowed list: %r",
                     source_name,
                     e.committer,
@@ -504,11 +505,11 @@ def main(argv):  # noqa: C901
                 )
                 continue
             except BuildFailedError as e:
-                warning("%s: package failed to build: %s", source_name, e)
+                logging.warn("%s: package failed to build: %s", source_name, e)
                 ret = 1
                 continue
             except LastReleaseRevisionNotFound as e:
-                warning(
+                logging.warn(
                     "%s: Unable to find revision matching last release "
                     "%s, skipping.",
                     source_name,
@@ -517,7 +518,7 @@ def main(argv):  # noqa: C901
                 ret = 1
                 continue
             except LastUploadMoreRecent as e:
-                warning(
+                logging.warn(
                     "%s: Last upload (%s) was more recent than VCS (%s)",
                     source_name,
                     e.archive_version,
@@ -526,29 +527,34 @@ def main(argv):  # noqa: C901
                 ret = 1
                 continue
             except MissingChangelogError:
-                note("%s: No changelog found, skipping.", source_name)
+                logging.info("%s: No changelog found, skipping.", source_name)
                 ret = 1
                 continue
             except RecentCommits as e:
-                note(
-                    "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
+                logging.info(
+                    "%s: Recent commits (%d days), skipping.",
+                    source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges:
-                note("%s: No unuploaded changes, skipping.", source_name)
+                logging.info(
+                    "%s: No unuploaded changes, skipping.", source_name)
                 continue
             except NoUnreleasedChanges:
-                note("%s: No unreleased changes, skipping.", source_name)
+                logging.info(
+                    "%s: No unreleased changes, skipping.", source_name)
                 continue
 
             tags = []
             if tag_name is not None:
-                note("Pushing tag %s", tag_name)
+                logging.info("Pushing tag %s", tag_name)
                 tags.append(tag_name)
             try:
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
-                note("%s: Permission denied pushing to branch, skipping.", source_name)
+                logging.info(
+                    "%s: Permission denied pushing to branch, skipping.",
+                    source_name)
                 ret = 1
                 continue
             if not args.dry_run:

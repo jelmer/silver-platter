@@ -18,6 +18,7 @@
 """Support for scrubbing obsolete settings."""
 
 import argparse
+import logging
 
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
@@ -32,7 +33,6 @@ from .changer import (
     run_mutator,
 )
 
-from breezy.trace import note
 
 BRANCH_NAME = "scrub-obsolete"
 DEFAULT_VALUE_MULTIARCH_HINT = 30
@@ -149,9 +149,9 @@ class ScrubObsoleteChanger(DebianChanger):
         return "".join(ret)
 
     def describe(self, applied, publish_result):
-        note("Scrub obsolete settings.")
+        logging.info("Scrub obsolete settings.")
         for line in applied.itemized():
-            note("* %s", line)
+            logging.info("* %s", line)
 
     @classmethod
     def describe_command(cls, command):

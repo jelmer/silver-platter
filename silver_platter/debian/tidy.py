@@ -15,7 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.trace import note
+import logging
 
 from .changer import (
     run_mutator,
@@ -113,11 +113,14 @@ class TidyChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note("Create merge proposal: %s", publish_result.proposal.url)
+            logging.info(
+                "Create merge proposal: %s", publish_result.proposal.url)
         elif result:
-            note("Updated proposal %s", publish_result.proposal.url)
+            logging.info(
+                "Updated proposal %s", publish_result.proposal.url)
         else:
-            note("No new fixes for proposal %s", publish_result.proposal.url)
+            logging.info(
+                "No new fixes for proposal %s", publish_result.proposal.url)
 
 
 if __name__ == "__main__":

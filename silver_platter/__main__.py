@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
+import logging
 import silver_platter  # noqa: F401
 import sys
 from typing import Optional, List, Callable, Dict
@@ -23,8 +24,6 @@ from . import (
     run,
     version_string,
 )
-
-from breezy.trace import show_error
 
 
 def hosters_main(argv: List[str]) -> Optional[int]:
@@ -81,7 +80,7 @@ def login_main(argv: List[str]) -> Optional[int]:
         lp_api.connect_launchpad(lp_service_root, version="devel")
         return None
     else:
-        show_error("Unknown hoster %r.", hoster)
+        logging.exception("Unknown hoster %r.", hoster)
         return 1
 
 
@@ -122,6 +121,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "--help", action="store_true", help="show this help message and exit"
     )
     parser.add_argument("subcommand", type=str, choices=list(subcommands.keys()))
+    logging.basicConfig(level=logging.INFO)
     args, rest = parser.parse_known_args(argv)
     if args.help:
         if args.subcommand is None:

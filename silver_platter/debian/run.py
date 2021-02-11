@@ -17,7 +17,7 @@
 
 """Support for updating with a script."""
 
-from breezy.trace import note
+import logging
 
 from .changer import (
     ChangerError,
@@ -96,7 +96,7 @@ class ScriptChanger(DebianChanger):
         raise ValueError("No description available")
 
     def describe(self, description, publish_result):
-        note("%s", description)
+        logging.info("%s", description)
 
     def suggest_branch_name(self):
         return derived_branch_name(self.script)

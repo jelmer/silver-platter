@@ -16,14 +16,13 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
+import logging
 import sys
 from typing import List, Set
 
 from debian.changelog import ChangelogCreateError
 
 import breezy
-from breezy.errors import BzrError
-from breezy.trace import note
 
 from lintian_brush import (
     available_lintian_fixers,
@@ -74,13 +73,12 @@ LINTIAN_BRUSH_TAG_DEFAULT_VALUE = 5
 BRANCH_NAME = "lintian-fixes"
 
 
-class UnknownFixer(BzrError):
+class UnknownFixer(Exception):
     """The specified fixer is unknown."""
 
-    _fmt = "No such fixer: %s."
-
     def __init__(self, fixer):
-        super(UnknownFixer, self).__init__(fixer=fixer)
+        self.fixer = fixer
+        super(UnknownFixer, self).__init__("No such fixer: %s." % fixer)
 
 
 def calculate_value(tags: Set[str]) -> int:
@@ -405,7 +403,7 @@ class LintianBrushChanger(DebianChanger):
 
         if overall_result.failed_fixers:
             for fixer_name, failure in overall_result.failed_fixers.items():
-                note("Fixer %r failed to run:", fixer_name)
+                logging.info("Fixer %r failed to run:", fixer_name)
                 sys.stderr.write(str(failure))
         reporter.report_metadata(
             "failed",
@@ -428,7 +426,7 @@ class LintianBrushChanger(DebianChanger):
 
         if not add_on_only:
             if overall_result.success:
-                note("only add-on fixers found")
+                logging.info("only add-on fixers found")
             sufficient_for_proposal = False
             reporter.report_metadata("add_on_only", True)
         else:
@@ -459,11 +457,14 @@ class LintianBrushChanger(DebianChanger):
         for brush_result, unused_summary in applied:
             tags.update(brush_result.fixed_lintian_tags)
         if publish_result.is_new:
-            note("Proposed fixes %r: %s", tags, publish_result.proposal.url)
+            logging.info(
+                "Proposed fixes %r: %s", tags, publish_result.proposal.url)
         elif tags:
-            note("Updated proposal %s with fixes %r", publish_result.proposal.url, tags)
+            logging.info(
+                "Updated proposal %s with fixes %r", publish_result.proposal.url, tags)
         else:
-            note("No new fixes for proposal %s", publish_result.proposal.url)
+            logging.info(
+                "No new fixes for proposal %s", publish_result.proposal.url)
 
 
 if __name__ == "__main__":

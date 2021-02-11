@@ -15,7 +15,14 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 from urllib.parse import urlparse
+
+from breezy import osutils
+
+from debmutate.control import ControlEditor
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
+
 
 from . import (
     pick_additional_colocated_branches,
@@ -28,11 +35,6 @@ from .changer import (
     ChangerResult,
 )
 from ..proposal import push_changes
-from breezy import osutils
-from breezy.trace import note
-
-from debmutate.control import ControlEditor
-from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 BRANCH_NAME = "orphan"
@@ -45,7 +47,7 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
     salsa = GitLab.probe_from_url("https://salsa.debian.org/")
     # TODO(jelmer): Fork if the old branch was hosted on salsa
     if dry_run:
-        note("Creating and pushing to salsa project %s/%s", user, name)
+        logging.info("Creating and pushing to salsa project %s/%s", user, name)
         return
     salsa.create_project("%s/%s" % (user, name))
     target_branch = Branch.open(
@@ -202,14 +204,16 @@ class OrphanChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note(
+            logging.info(
                 "Proposed change of maintainer to QA team: %s",
                 publish_result.proposal.url,
             )
         else:
-            note("No changes for orphaned package %s", result.package_name)
+            logging.info(
+                "No changes for orphaned package %s",
+                result.package_name)
         if result.pushed:
-            note("Pushed new package to %s.", result.new_vcs_url)
+            logging.info("Pushed new package to %s.", result.new_vcs_url)
         elif result.new_vcs_url:
             for line in move_instructions(
                 result.package_name,
@@ -217,7 +221,7 @@ class OrphanChanger(DebianChanger):
                 result.old_vcs_url,
                 result.new_vcs_url,
             ):
-                note("%s", line)
+                logging.info("%s", line)
 
     @classmethod
     def describe_command(cls, command):

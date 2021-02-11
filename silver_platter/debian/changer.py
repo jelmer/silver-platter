@@ -19,6 +19,7 @@ __all__ = ["iter_conflicted"]
 
 import argparse
 from functools import partial
+import logging
 import pkg_resources
 import sys
 from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
@@ -26,7 +27,6 @@ from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
 from breezy.propose import Hoster, MergeProposal
-from breezy.trace import note, warning, show_error
 from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
@@ -140,7 +140,7 @@ def iter_packages(
     possible_hosters: List[Hoster] = []
 
     for pkg in packages:
-        note("Processing: %s", pkg)
+        logging.info("Processing: %s", pkg)
 
         (
             pkg,
@@ -394,7 +394,7 @@ def _run_single_changer(  # noqa: C901
     )
 
     if hoster is None and mode == "attempt-push":
-        warning(
+        logging.warn(
             "Unsupported hoster; will attempt to push to %s",
             full_branch_url(main_branch),
         )
@@ -408,7 +408,7 @@ def _run_single_changer(  # noqa: C901
         if update_changelog is None:
             dch_guess = guess_update_changelog(ws.local_tree)
             if dch_guess:
-                note(dch_guess[1])
+                logging.info(dch_guess[1])
                 update_changelog = dch_guess[0]
             else:
                 # Assume yes.
@@ -422,30 +422,30 @@ def _run_single_changer(  # noqa: C901
                 reporter=DummyChangerReporter(),
             )
         except ChangerError as e:
-            show_error(e.summary)
+            logging.exception(e.summary)
             return False
 
         if not ws.changes_since_main():
             if existing_proposal:
-                note("%s: nothing left to do. Closing proposal.", pkg)
+                logging.info("%s: nothing left to do. Closing proposal.", pkg)
                 existing_proposal.close()
             else:
-                note("%s: nothing to do", pkg)
+                logging.info("%s: nothing to do", pkg)
             return None
 
         try:
             run_post_check(ws.local_tree, post_check, ws.orig_revid)
         except PostCheckFailed as e:
-            note("%s: %s", pkg, e)
+            logging.info("%s: %s", pkg, e)
             return False
         if build_verify:
             try:
                 ws.build(builder=builder, result_dir=build_target_dir)
             except BuildFailedError:
-                note("%s: build failed", pkg)
+                logging.info("%s: build failed", pkg)
                 return False
             except MissingUpstreamTarball:
-                note("%s: unable to find upstream source", pkg)
+                logging.info("%s: unable to find upstream source", pkg)
                 return False
 
         enable_tag_pushing(ws.local_tree.branch)
@@ -474,23 +474,23 @@ def _run_single_changer(  # noqa: C901
                 **kwargs
             )
         except UnsupportedHoster as e:
-            show_error(
+            logging.exception(
                 "%s: No known supported hoster for %s. Run 'svp login'?",
                 pkg,
                 full_branch_url(e.branch),
             )
             return False
         except NoSuchProject as e:
-            note("%s: project %s was not found", pkg, e.project)
+            logging.info("%s: project %s was not found", pkg, e.project)
             return False
         except errors.PermissionDenied as e:
-            note("%s: %s", pkg, e)
+            logging.info("%s: %s", pkg, e)
             return False
         except errors.DivergedBranches:
-            note("%s: a branch exists. Use --overwrite to discard it.", pkg)
+            logging.info("%s: a branch exists. Use --overwrite to discard it.", pkg)
             return False
         except HosterLoginRequired as e:
-            show_error(
+            logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
                 e.hoster.base_url,
             )
@@ -539,16 +539,16 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
             owner=args.derived_owner,
         )
     except NoSuchPackage:
-        note("%s: no such package", args.package)
+        logging.info("%s: no such package", args.package)
         return 1
     except NoSuchProject as e:
-        note("%s: unable to find project: %s", args.package, e.project)
+        logging.info("%s: unable to find project: %s", args.package, e.project)
         return 1
     except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-        note("%s: ignoring: %s", args.package, e)
+        logging.info("%s: ignoring: %s", args.package, e)
         return 1
     except NoAptSources:
-        note(
+        logging.info(
             "%s: no apt sources configured, unable to get package metadata.",
             args.package,
         )

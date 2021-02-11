@@ -17,6 +17,7 @@
 
 import contextlib
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -32,7 +33,6 @@ from .changer import (
     ChangerResult,
     ChangerError,
 )
-from breezy.trace import note
 from breezy.plugins.debian.upstream import PackageVersionNotPresent
 
 
@@ -72,7 +72,7 @@ def select_vcswatch_packages():
 
 
 def download_snapshot(package, version, output_dir, no_preparation=False):
-    note("Downloading %s %s", package, version)
+    logging.info("Downloading %s %s", package, version)
     srcfiles_url = (
         "https://snapshot.debian.org/mr/package/%s/%s/"
         "srcfiles?fileinfo=1" % (package, version)
@@ -187,13 +187,13 @@ def import_uncommitted(tree, subpath):
             raise TreeVersionNotInArchiveChangelog(tree_cl.version)
         if len(missing_versions) == 0:
             raise NoMissingVersions(tree_cl.version, archive_cl.version)
-        note("Missing versions: %s", ", ".join(map(str, missing_versions)))
+        logging.info("Missing versions: %s", ", ".join(map(str, missing_versions)))
         ret = []
         dbs = DistributionBranchSet()
         db = DistributionBranch(tree.branch, tree.branch, tree=tree)
         dbs.add_branch(db)
         if tree_cl.version.debian_revision:
-            note("Extracting upstream version %s.", tree_cl.version.upstream_version)
+            logging.info("Extracting upstream version %s.", tree_cl.version.upstream_version)
             upstream_dir = es.enter_context(tempfile.TemporaryDirectory())
             try:
                 upstream_tips = db.pristine_upstream_source.version_as_revisions(
@@ -211,7 +211,7 @@ def import_uncommitted(tree, subpath):
             )
             version_path[version] = output_dir
         for version in reversed(missing_versions):
-            note("Importing %s", version)
+            logging.info("Importing %s", version)
             dsc_path = os.path.join(
                 version_path[version], "%s_%s.dsc" % (package_name, version)
             )
@@ -281,19 +281,19 @@ class UncommittedChanger(DebianChanger):
 
     def describe(self, applied, publish_result):
         if publish_result.is_new:
-            note(
+            logging.info(
                 "Proposed import of versions %s: %s",
                 ", ".join([str(v) for t, v in applied]),
                 publish_result.proposal.url,
             )
         elif applied:
-            note(
+            logging.info(
                 "Updated proposal %s with versions %s.",
                 publish_result.proposal.url,
                 ", ".join([str(v) for t, v in applied]),
             )
         else:
-            note(
+            logging.info(
                 "No new versions imported for proposal %s", publish_result.proposal.url
             )
 

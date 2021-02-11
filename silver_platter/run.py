@@ -18,6 +18,7 @@
 """Automatic proposal/push creation."""
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -28,7 +29,6 @@ import silver_platter  # noqa: F401
 from breezy import osutils
 from breezy import errors
 from breezy.commit import PointlessCommit
-from breezy.trace import note, warning, show_error
 from breezy.workingtree import WorkingTree
 from breezy import propose as _mod_propose
 from .proposal import (
@@ -144,7 +144,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     try:
         main_branch = open_branch(args.url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        show_error("%s: %s", args.url, e)
+        logging.exception("%s: %s", args.url, e)
         return 1
 
     if args.name is None:
@@ -164,7 +164,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         # that can tell us.
         resume_branch = None
         existing_proposal = None
-        warning(
+        logging.warn(
             "Unsupported hoster (%s), will attempt to push to %s",
             e,
             full_branch_url(main_branch),
@@ -181,7 +181,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         try:
             description = script_runner(ws.local_tree, args.script, commit_pending)
         except ScriptMadeNoChanges:
-            show_error("Script did not make any changes.")
+            logging.exception("Script did not make any changes.")
             return 1
 
         def get_description(description_format, existing_proposal):
@@ -206,13 +206,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 existing_proposal=existing_proposal,
             )
         except UnsupportedHoster as e:
-            show_error(
+            logging.exception(
                 "No known supported hoster for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
             return 1
         except _mod_propose.HosterLoginRequired as e:
-            show_error(
+            logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
                 e.hoster.base_url,
             )
@@ -220,12 +220,12 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
         if publish_result.proposal:
             if publish_result.is_new:
-                note("Merge proposal created.")
+                logging.info("Merge proposal created.")
             else:
-                note("Merge proposal updated.")
+                logging.info("Merge proposal updated.")
             if publish_result.proposal.url:
-                note("URL: %s", publish_result.proposal.url)
-            note("Description: %s", publish_result.proposal.get_description())
+                logging.info("URL: %s", publish_result.proposal.url)
+            logging.info("Description: %s", publish_result.proposal.get_description())
 
         if args.diff:
             ws.show_diff(sys.stdout.buffer)

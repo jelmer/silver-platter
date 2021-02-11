@@ -15,17 +15,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
+
+from breezy import osutils
+
+from debmutate.control import ControlEditor
+
+from . import add_changelog_entry
 from .changer import (
     run_mutator,
     DebianChanger,
     ChangerResult,
 )
-from breezy import osutils
-from breezy.trace import note
-
-from . import add_changelog_entry
-from debmutate.control import ControlEditor
-
 
 BRANCH_NAME = "rules-requires-root"
 
@@ -94,12 +95,12 @@ class RulesRequiresRootChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note(
+            logging.info(
                 "Proposed change to enable Rules-Requires-Root: %s",
                 publish_result.proposal.url,
             )
         else:
-            note("No changes for package %s", result.package_name)
+            logging.info("No changes for package %s", result.package_name)
 
     @classmethod
     def describe_command(cls, command):

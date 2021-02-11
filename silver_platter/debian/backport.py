@@ -17,6 +17,7 @@
 
 from distro_info import DebianDistroInfo
 
+import logging
 import os
 import re
 import tempfile
@@ -34,7 +35,6 @@ from breezy.plugins.debian.util import (
     dput_changes,
     debsign,
 )
-from breezy.trace import note
 
 from debian.changelog import format_date, get_maintainer
 from debmutate.changelog import ChangelogEditor, changeblock_add_line
@@ -84,7 +84,7 @@ def backport_package(local_tree, subpath, target_release, author=None):
     # TODO(jelmer): Update Vcs-Git/Vcs-Browser header?
     target_distribution = backport_distribution(target_release)
     version_suffix = backport_suffix(target_release)
-    note(
+    logging.info(
         "Using target distribution %s, version suffix %s",
         target_distribution,
         version_suffix,
@@ -199,13 +199,13 @@ class BackportChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note(
+            logging.info(
                 "Proposed backportg to %s: %s",
                 result.target_release,
                 publish_result.proposal.url,
             )
         else:
-            note("No changes for package %s", result.package_name)
+            logging.info("No changes for package %s", result.package_name)
 
 
 if __name__ == "__main__":

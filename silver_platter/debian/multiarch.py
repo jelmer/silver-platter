@@ -18,6 +18,7 @@
 """Support for integration multi-arch hints."""
 
 import argparse
+import logging
 
 import silver_platter  # noqa: F401
 
@@ -33,8 +34,6 @@ from .changer import (
     ChangerError,
     run_mutator,
 )
-
-from breezy.trace import note
 
 BRANCH_NAME = "multi-arch-fixes"
 
@@ -170,7 +169,7 @@ class MultiArchHintsChanger(DebianChanger):
             entry["action"] = description
             entry["certainty"] = certainty
             applied_hints.append(entry)
-            note("%s: %s" % (binary["Package"], description))
+            logging.info("%s: %s" % (binary["Package"], description))
 
         reporter.report_metadata("applied-hints", applied_hints)
 
@@ -195,9 +194,9 @@ class MultiArchHintsChanger(DebianChanger):
         return "".join(ret)
 
     def describe(self, applied, publish_result):
-        note("Applied multi-arch hints.")
+        logging.info("Applied multi-arch hints.")
         for binary, hint, description, certainty in applied.changes:
-            note("* %s: %s", binary["Package"], description)
+            logging.info("* %s: %s", binary["Package"], description)
 
     @classmethod
     def describe_command(cls, command):
