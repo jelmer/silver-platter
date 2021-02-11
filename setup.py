@@ -17,6 +17,16 @@
 
 from setuptools import setup
 
+debian_deps = [
+    'pyyaml',  # For reading debian/upstream/metadata
+    'debmutate>=0.3',
+    'lintian-brush>=0.50',
+    'python_debian',
+    'distro-info',
+    'upstream-ontologist',
+]
+
+
 setup(
     name='silver-platter',
     author="Jelmer Vernooij",
@@ -63,14 +73,7 @@ setup(
         'dulwich',
     ],
     extras_require={
-        'debian': [
-            'pyyaml',  # For reading debian/upstream/metadata
-            'debmutate>=0.3',
-            'lintian-brush>=0.50',
-            'python_debian',
-            'distro-info',
-            'upstream-ontologist',
-        ],
+        'debian': debian_deps,
     },
-    tests_require=['testtools', 'lintian-brush'],
+    tests_require=['testtools', 'lintian-brush'] + debian_deps,
 )
