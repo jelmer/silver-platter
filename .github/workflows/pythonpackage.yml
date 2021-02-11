@@ -37,6 +37,6 @@ jobs:
         python -m mypy silver_platter
     - name: Test suite run
       run: |
-        python -m unittest silver_platter.tests.test_suite
+        python setup.py test
       env:
         PYTHONHASHSEED: random

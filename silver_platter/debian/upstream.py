@@ -976,7 +976,7 @@ def merge_upstream(  # noqa: C901
 
 
 def override_dh_autoreconf_add_arguments(basedir: str, args):
-    from lintian_brush.rules import update_rules
+    from debmutate._rules import update_rules
 
     # TODO(jelmer): Make sure dh-autoreconf is installed,
     # or debhelper version is >= 10
