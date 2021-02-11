@@ -27,7 +27,7 @@ jobs:
         bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
         pip install -U git+https://salsa.debian.org/python-debian-team/python-debian \
                        git+https://salsa.debian.org/jelmer/lintian-brush \
-                       git+https://salsa.debian.org/debian/distro-info
+                       "git+https://salsa.debian.org/debian/distro-info#egg=pkg&subdirectory=python"
         python setup.py develop
     - name: Style checks
       run: |
