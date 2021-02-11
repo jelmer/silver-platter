@@ -68,6 +68,7 @@ setup(
             'debmutate>=0.3',
             'lintian-brush>=0.50',
             'python_debian',
+            'distro-info',
         ],
     },
     tests_require=['testtools', 'lintian-brush'],
