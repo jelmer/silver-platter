@@ -125,9 +125,6 @@ from breezy.plugins.debian.upstream.branch import (
 from breezy.tree import Tree
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
-from upstream_ontologist.guess import (
-    guess_upstream_metadata,
-)
 
 
 __all__ = [
@@ -259,6 +256,9 @@ def get_upstream_branch_location(tree, subpath, config, trust_package=False):
         upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
         upstream_branch_browse = getattr(config, "upstream_branch_browse", None)
     else:
+        from upstream_ontologist.guess import (
+            guess_upstream_metadata,
+        )
         guessed_upstream_metadata = guess_upstream_metadata(
             tree.abspath(subpath),
             trust_package=trust_package,

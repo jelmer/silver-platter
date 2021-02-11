@@ -58,7 +58,7 @@ setup(
         ],
     },
     test_suite='silver_platter.tests.test_suite',
-    install_requires=[
+    requires=[
         'breezy>=3.1.0',
         'dulwich',
     ],
@@ -69,6 +69,7 @@ setup(
             'lintian-brush>=0.50',
             'python_debian',
             'distro-info',
+            'upstream-ontologist',
         ],
     },
     tests_require=['testtools', 'lintian-brush'],
