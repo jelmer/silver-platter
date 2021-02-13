@@ -33,9 +33,9 @@ class CMEResult(object):
         pass
 
 
-class CMEChanger(DebianChanger):
+class CMEFixChanger(DebianChanger):
 
-    name = "cme"
+    name = "cme-fix"
 
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
@@ -98,4 +98,4 @@ class CMEChanger(DebianChanger):
 if __name__ == "__main__":
     import sys
 
-    sys.exit(run_mutator(CMEChanger))
+    sys.exit(run_mutator(CMEFixChanger))
