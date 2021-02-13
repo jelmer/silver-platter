@@ -39,7 +39,7 @@ from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
 
 from breezy.plugins.debian.changelog import (
-    changelog_commit_message,
+    debcommit,
 )
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.upstream import (
@@ -196,19 +196,6 @@ class Workspace(_mod_proposal.Workspace):
             builder=builder,
             result_dir=result_dir,
         )
-
-
-def debcommit(tree, committer=None, subpath="", paths=None):
-    message = changelog_commit_message(
-        tree, tree.basis_tree(), path=os.path.join(subpath, "debian/changelog")
-    )
-    if paths:
-        specific_files = [os.path.join(subpath, p) for p in paths]
-    elif subpath:
-        specific_files = [subpath]
-    else:
-        specific_files = None
-    tree.commit(committer=committer, message=message, specific_files=specific_files)
 
 
 class UnsupportedVCSProber(Prober):
