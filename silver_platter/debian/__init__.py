@@ -38,9 +38,6 @@ from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
 
-from breezy.plugins.debian.changelog import (
-    debcommit,
-)
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
