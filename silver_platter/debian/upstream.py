@@ -41,7 +41,6 @@ from ..utils import (
 
 from . import (
     changelog_add_line,
-    debcommit,
     control_files_in_root,
 )
 from .changer import (
@@ -71,6 +70,7 @@ from breezy.plugins.debian.import_dsc import (
     UpstreamAlreadyImported,
     UpstreamBranchAlreadyMerged,
 )
+from breezy.plugins.debian.changelog import debcommit
 
 from breezy.transform import MalformedTransform
 
