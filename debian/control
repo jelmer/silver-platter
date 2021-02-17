@@ -12,6 +12,7 @@ Build-Depends: dh-python,
                python3-launchpadlib,
                python3-yaml,
                python3-testtools,
+               python3-upstream-ontologist,
                lintian-brush (>= 0.70),
                debhelper-compat (= 13)
 Standards-Version: 4.5.0
@@ -29,6 +30,7 @@ Depends: devscripts,
          python3-distro-info,
          python3-launchpadlib,
          python3-yaml,
+         python3-upstream-ontologist,
          ${misc:Depends},
          ${python3:Depends}
 Conflicts: lintian-brush (<< 0.40)

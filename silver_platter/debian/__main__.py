@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 from typing import Optional, Dict, List, Callable
 
 import silver_platter  # noqa: F401
@@ -27,15 +28,15 @@ from .changer import (
     run_single_changer,
     changer_subcommands,
     changer_subcommand,
-    )
+)
 
 from . import uploader as debian_uploader
 
 
 def run_changer_subcommand(name, changer_cls, argv):
-    parser = argparse.ArgumentParser(prog='debian-svp %s URL|package' % name)
+    parser = argparse.ArgumentParser(prog="debian-svp %s URL|package" % name)
     setup_parser_common(parser)
-    parser.add_argument('package', type=str, nargs='?')
+    parser.add_argument("package", type=str, nargs="?")
     changer_cls.setup_parser(parser)
     args = parser.parse_args(argv)
     if args.package is None:
@@ -47,38 +48,40 @@ def run_changer_subcommand(name, changer_cls, argv):
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
+
     breezy.initialize()
 
     from ..__main__ import subcommands as main_subcommands
 
-    subcommands: Dict[
-            str, Callable[[List[str]], Optional[int]]] = {
-        'upload-pending': debian_uploader.main,
-        }
+    subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
+        "upload-pending": debian_uploader.main,
+    }
 
-    parser = argparse.ArgumentParser(prog='debian-svp', add_help=False)
+    parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
     parser.add_argument(
-        '--version', action='version',
-        version='%(prog)s ' + silver_platter.version_string)
+        "--version",
+        action="version",
+        version="%(prog)s " + silver_platter.version_string,
+    )
     parser.add_argument(
-        '--help', action='store_true',
-        help='show this help message and exit')
+        "--help", action="store_true", help="show this help message and exit"
+    )
 
     subcommands.update(main_subcommands.items())
 
     # We have a debian-specific run command
-    del subcommands['run']
+    del subcommands["run"]
 
     parser.add_argument(
-        'subcommand', type=str,
-        choices=list(subcommands.keys()) + changer_subcommands())
+        "subcommand", type=str, choices=list(subcommands.keys()) + changer_subcommands()
+    )
     args, rest = parser.parse_known_args()
     if args.help:
         if args.subcommand is None:
             parser.print_help()
             parser.exit()
         else:
-            rest.append('--help')
+            rest.append("--help")
 
     if args.subcommand is None:
         parser.print_usage()
@@ -90,10 +93,11 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
+        logging.basicConfig(level=logging.INFO)
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

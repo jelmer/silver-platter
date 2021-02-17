@@ -1,4 +1,5 @@
 .bzrignore
+.flake8
 .gitignore
 AUTHORS
 LICENSE
@@ -8,6 +9,7 @@ NEWS
 README.rst
 TODO
 debian-svp
+releaser.conf
 setup.cfg
 setup.py
 svp
