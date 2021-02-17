@@ -19,7 +19,7 @@ import breezy
 
 from breezy.tests import (
     TestCase,
-    )
+)
 
 
 from breezy.bzr import RemoteBzrProber
@@ -29,37 +29,35 @@ from ..debian import (
     select_probers,
     convert_debian_vcs_url,
     UnsupportedVCSProber,
-    )
+)
 
 
 class SelectProbersTests(TestCase):
-
     def test_none(self):
         self.assertIs(None, select_probers())
         self.assertIs(None, select_probers(None))
 
     def test_bzr(self):
-        self.assertEqual([RemoteBzrProber], select_probers('bzr'))
+        self.assertEqual([RemoteBzrProber], select_probers("bzr"))
 
     def test_git(self):
-        self.assertEqual([RemoteGitProber], select_probers('git'))
+        self.assertEqual([RemoteGitProber], select_probers("git"))
 
     def test_unsupported(self):
-        self.assertEqual([UnsupportedVCSProber('foo')], select_probers('foo'))
+        self.assertEqual([UnsupportedVCSProber("foo")], select_probers("foo"))
 
 
 class ConvertDebianVcsUrlTests(TestCase):
-
     def test_git(self):
         self.assertEqual(
-            'https://salsa.debian.org/jelmer/blah.git',
-            convert_debian_vcs_url(
-                'Git', 'https://salsa.debian.org/jelmer/blah.git'))
+            "https://salsa.debian.org/jelmer/blah.git",
+            convert_debian_vcs_url("Git", "https://salsa.debian.org/jelmer/blah.git"),
+        )
 
     def test_git_ssh(self):
         if breezy.version_info < (3, 1, 1):
-            self.knownFailure('breezy < 3.1.1 can not deal with ssh:// URLs')
+            self.knownFailure("breezy < 3.1.1 can not deal with ssh:// URLs")
         self.assertEqual(
-            'ssh://git@git.kali.org/jelmer/blah.git',
-            convert_debian_vcs_url(
-                'Git', 'ssh://git@git.kali.org/jelmer/blah.git'))
+            "ssh://git@git.kali.org/jelmer/blah.git",
+            convert_debian_vcs_url("Git", "ssh://git@git.kali.org/jelmer/blah.git"),
+        )

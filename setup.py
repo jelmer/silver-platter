@@ -17,13 +17,23 @@
 
 from setuptools import setup
 
+debian_deps = [
+    'pyyaml',  # For reading debian/upstream/metadata
+    'debmutate>=0.3',
+    'lintian-brush>=0.50',
+    'python_debian',
+    'distro-info',
+    'upstream-ontologist',
+]
+
+
 setup(
     name='silver-platter',
     author="Jelmer Vernooij",
     author_email="jelmer@jelmer.uk",
     url="https://jelmer.uk/code/silver-platter",
     description="Automatic merge proposal creeator",
-    version="0.4.0",
+    version='0.4.1',
     license='GNU GPL v2 or later',
     project_urls={
         "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
@@ -63,12 +73,7 @@ setup(
         'dulwich',
     ],
     extras_require={
-        'debian': [
-            'pyyaml',  # For reading debian/upstream/metadata
-            'debmutate>=0.3',
-            'lintian-brush>=0.50',
-            'python_debian',
-        ],
+        'debian': debian_deps,
     },
-    tests_require=['testtools'],
+    tests_require=['testtools', 'lintian-brush'] + debian_deps,
 )

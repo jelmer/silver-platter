@@ -26,7 +26,8 @@ from breezy import (
     errors,
     osutils,
     urlutils,
-    )
+)
+
 try:
     from breezy.bzr import LineEndingError
 except ImportError:  # brz < 3.1.1
@@ -35,7 +36,7 @@ except ImportError:  # brz < 3.1.1
 from breezy.branch import (
     Branch,
     BranchWriteLockResult,
-    )
+)
 from breezy.controldir import ControlDir, Prober
 from breezy.git.remote import RemoteGitError
 from breezy.revision import NULL_REVISION
@@ -46,10 +47,11 @@ from breezy.transport import UnusableRedirect
 
 
 def create_temp_sprout(
-        branch: Branch,
-        additional_colocated_branches: Optional[List[str]] = None,
-        dir: Optional[str] = None,
-        path: Optional[str] = None) -> Tuple[WorkingTree, Callable[[], None]]:
+    branch: Branch,
+    additional_colocated_branches: Optional[List[str]] = None,
+    dir: Optional[str] = None,
+    path: Optional[str] = None,
+) -> Tuple[WorkingTree, Callable[[], None]]:
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.
@@ -62,29 +64,31 @@ def create_temp_sprout(
 
     def destroy() -> None:
         shutil.rmtree(td)
+
     # Only use stacking if the remote repository supports chks because of
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
-        branch._format.supports_stacking() and
-        branch.repository._format.supports_chks)
+        branch._format.supports_stacking() and branch.repository._format.supports_chks
+    )
     try:
         # preserve whatever source format we have.
         to_dir = branch.controldir.sprout(
-            td, None, create_tree_if_local=True,
+            td,
+            None,
+            create_tree_if_local=True,
             source_branch=branch,
-            stacked=use_stacking)
+            stacked=use_stacking,
+        )
         # TODO(jelmer): Fetch these during the initial clone
         for branch_name in set(additional_colocated_branches or []):
             try:
                 add_branch = branch.controldir.open_branch(name=branch_name)
-            except (errors.NotBranchError,
-                    errors.NoColocatedBranchSupport):
+            except (errors.NotBranchError, errors.NoColocatedBranchSupport):
                 pass
             else:
                 local_add_branch = to_dir.create_branch(name=branch_name)
                 add_branch.push(local_add_branch)
-                assert (add_branch.last_revision() ==
-                        local_add_branch.last_revision())
+                assert add_branch.last_revision() == local_add_branch.last_revision()
         return to_dir.open_workingtree(), destroy
     except BaseException as e:
         destroy()
@@ -97,10 +101,12 @@ class TemporarySprout(object):
     This attempts to fetch the least amount of history as possible.
     """
 
-    def __init__(self,
-                 branch: Branch,
-                 additional_colocated_branches: Optional[List[str]] = None,
-                 dir: Optional[str] = None):
+    def __init__(
+        self,
+        branch: Branch,
+        additional_colocated_branches: Optional[List[str]] = None,
+        dir: Optional[str] = None,
+    ):
         self.branch = branch
         self.additional_colocated_branches = additional_colocated_branches
         self.dir = dir
@@ -109,7 +115,8 @@ class TemporarySprout(object):
         tree, self._destroy = create_temp_sprout(
             self.branch,
             additional_colocated_branches=self.additional_colocated_branches,
-            dir=self.dir)
+            dir=self.dir,
+        )
         return tree
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -142,9 +149,9 @@ class PostCheckFailed(Exception):
     """The post check failed."""
 
 
-def run_post_check(tree: WorkingTree,
-                   script: Optional[str],
-                   since_revid: bytes) -> None:
+def run_post_check(
+    tree: WorkingTree, script: Optional[str], since_revid: bytes
+) -> None:
     """Run a script after making any changes to a tree.
 
     Args:
@@ -158,14 +165,25 @@ def run_post_check(tree: WorkingTree,
         return
     try:
         subprocess.check_call(
-            script, shell=True, cwd=tree.basedir,
-            env={'SINCE_REVID': since_revid})
+            script, shell=True, cwd=tree.basedir, env={"SINCE_REVID": since_revid}
+        )
     except subprocess.CalledProcessError:
         raise PostCheckFailed()
 
 
 class BranchUnavailable(Exception):
     """Opening branch failed."""
+
+    def __init__(self, url: str, description: str):
+        self.url = url
+        self.description = description
+
+    def __str__(self) -> str:
+        return self.description
+
+
+class BranchRateLimited(Exception):
+    """Opening branch was rate-limited."""
 
     def __init__(self, url: str, description: str):
         self.url = url
@@ -199,16 +217,18 @@ class BranchUnsupported(Exception):
 
 def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, socket.error):
-        return BranchUnavailable(url, 'Socket error: %s' % e)
+        return BranchUnavailable(url, "Socket error: %s" % e)
     if isinstance(e, errors.NotBranchError):
-        return BranchMissing(url, 'Branch does not exist: %s' % e)
+        return BranchMissing(url, "Branch does not exist: %s" % e)
     if isinstance(e, errors.UnsupportedProtocol):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.ConnectionError):
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.PermissionDenied):
         return BranchUnavailable(url, str(e))
-    if isinstance(e,  errors.InvalidHttpResponse):
+    if isinstance(e, errors.InvalidHttpResponse):
+        if "Unexpected HTTP status 429" in str(e):
+            raise BranchRateLimited(url, str(e))
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
@@ -225,20 +245,21 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     return None
 
 
-def open_branch(url: str,
-                possible_transports: Optional[List[Transport]] = None,
-                probers: Optional[List[Prober]] = None,
-                name: str = None) -> Branch:
+def open_branch(
+    url: str,
+    possible_transports: Optional[List[Transport]] = None,
+    probers: Optional[List[Prober]] = None,
+    name: str = None,
+) -> Branch:
     """Open a branch by URL."""
     url, params = urlutils.split_segment_parameters(url)
     if name is None:
         try:
-            name = urlutils.unquote(params['branch'])
+            name = urlutils.unquote(params["branch"])
         except KeyError:
             name = None
     try:
-        transport = get_transport(
-            url, possible_transports=possible_transports)
+        transport = get_transport(url, possible_transports=possible_transports)
         dir = ControlDir.open_from_transport(transport, probers)
         return dir.open_branch(name=name)
     except Exception as e:
@@ -249,15 +270,14 @@ def open_branch(url: str,
 
 
 def open_branch_containing(
-        url: str,
-        possible_transports: Optional[List[Transport]] = None,
-        probers: Optional[List[Prober]] = None) -> Tuple[Branch, str]:
+    url: str,
+    possible_transports: Optional[List[Transport]] = None,
+    probers: Optional[List[Prober]] = None,
+) -> Tuple[Branch, str]:
     """Open a branch by URL."""
     try:
-        transport = get_transport(
-            url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(
-            transport, probers)
+        transport = get_transport(url, possible_transports=possible_transports)
+        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)
         return dir.open_branch(), subpath
     except Exception as e:
         converted = _convert_exception(url, e)
@@ -268,13 +288,13 @@ def open_branch_containing(
 
 try:
     from breezy.memorybranch import MemoryBranch
-except ImportError:   # breezy < 3.1.1
+except ImportError:  # breezy < 3.1.1
     from breezy.lock import _RelockDebugMixin, LogicalLockResult
 
     class MemoryBranch(Branch, _RelockDebugMixin):  # type: ignore
-
         def __init__(self, repository, last_revision_info, tags):
             from breezy.tag import DisabledTags, MemoryTags
+
             self.repository = repository
             self._last_revision_info = last_revision_info
             self._revision_history_cache = None
@@ -287,7 +307,7 @@ except ImportError:   # breezy < 3.1.1
             self._revision_id_to_revno_cache = None
             self._partial_revision_id_to_revno_cache = {}
             self._partial_revision_history_cache = []
-            self.base = 'memory://' + osutils.rand_chars(10)
+            self.base = "memory://" + osutils.rand_chars(10)
 
         def get_config(self):
             return _mod_config.Config()
@@ -307,8 +327,7 @@ except ImportError:   # breezy < 3.1.1
             return self._last_revision_info
 
         def _gen_revision_history(self):
-            """Generate the revision history from last revision
-            """
+            """Generate the revision history from last revision"""
             last_revno, last_revision = self.last_revision_info()
             self._extend_partial_history()
             return list(reversed(self._partial_revision_history_cache))
@@ -324,16 +343,15 @@ except ImportError:   # breezy < 3.1.1
                 if last_revno is None:
                     self._extend_partial_history()
                     return self._partial_revision_history_cache[
-                            len(self._partial_revision_history_cache) - revno]
+                        len(self._partial_revision_history_cache) - revno
+                    ]
                 else:
                     if revno <= 0 or revno > last_revno:
                         raise errors.NoSuchRevision(self, revno)
                     distance_from_last = last_revno - revno
-                    if len(self._partial_revision_history_cache) <= \
-                            distance_from_last:
+                    if len(self._partial_revision_history_cache) <= distance_from_last:
                         self._extend_partial_history(distance_from_last)
-                    return self._partial_revision_history_cache[
-                        distance_from_last]
+                    return self._partial_revision_history_cache[distance_from_last]
 
 
 def full_branch_url(branch):
@@ -346,6 +364,6 @@ def full_branch_url(branch):
     if branch.name is None:
         return branch.user_url
     url, params = urlutils.split_segment_parameters(branch.user_url)
-    if branch.name != '':
-        params['branch'] = urlutils.quote(branch.name, '')
+    if branch.name != "":
+        params["branch"] = urlutils.quote(branch.name, "")
     return urlutils.join_segment_parameters(url, params)

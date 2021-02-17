@@ -18,6 +18,7 @@
 """Support for scrubbing obsolete settings."""
 
 import argparse
+import logging
 
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
@@ -30,11 +31,10 @@ from .changer import (
     ChangerError,
     ChangerResult,
     run_mutator,
-    )
+)
 
-from breezy.trace import note
 
-BRANCH_NAME = 'scrub-obsolete'
+BRANCH_NAME = "scrub-obsolete"
 DEFAULT_VALUE_MULTIARCH_HINT = 30
 
 
@@ -50,25 +50,32 @@ def calculate_value(result):
 
 class ScrubObsoleteChanger(DebianChanger):
 
-    name: str = 'scrub-obsolete'
+    name: str = "scrub-obsolete"
 
     @classmethod
     def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            '--allow-reformatting', default=None, action='store_true',
-            help=argparse.SUPPRESS)
+            "--allow-reformatting",
+            default=None,
+            action="store_true",
+            help=argparse.SUPPRESS,
+        )
         parser.add_argument(
-            '--upgrade-release', metavar='UPGRADE-RELEASE',
-            help='Release to allow upgrading from.', default='oldstable')
+            "--upgrade-release",
+            metavar="UPGRADE-RELEASE",
+            help="Release to allow upgrading from.",
+            default="oldstable",
+        )
 
     @classmethod
     def from_args(cls, args):
         import distro_info
+
         debian_info = distro_info.DebianDistroInfo()
         upgrade_release = debian_info.codename(args.upgrade_release)
         return cls(
-            allow_reformatting=args.allow_reformatting,
-            upgrade_release=upgrade_release)
+            allow_reformatting=args.allow_reformatting, upgrade_release=upgrade_release
+        )
 
     def __init__(self, upgrade_release, allow_reformatting=None):
         self.allow_reformatting = allow_reformatting
@@ -77,9 +84,17 @@ class ScrubObsoleteChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog,
-                     reporter, committer, base_proposal=None):
+    def make_changes(
+        self,
+        local_tree,
+        subpath,
+        update_changelog,
+        reporter,
+        committer,
+        base_proposal=None,
+    ):
         from lintian_brush.scrub_obsolete import scrub_obsolete
+
         base_revid = local_tree.last_revision()
         allow_reformatting = self.allow_reformatting
         try:
@@ -94,50 +109,56 @@ class ScrubObsoleteChanger(DebianChanger):
 
         try:
             result = scrub_obsolete(
-                local_tree, subpath, self.upgrade_release,
-                update_changelog=update_changelog)
+                local_tree,
+                subpath,
+                self.upgrade_release,
+                update_changelog=update_changelog,
+            )
         except FormattingUnpreservable as e:
             raise ChangerError(
-                'formatting-unpreservable',
-                'unable to preserve formatting while editing %s' % e.path)
+                "formatting-unpreservable",
+                "unable to preserve formatting while editing %s" % e.path,
+            )
         except GeneratedFile as e:
             raise ChangerError(
-                'generated-file',
-                'unable to edit generated file: %r' % e)
+                "generated-file", "unable to edit generated file: %r" % e
+            )
 
         if not result:
-            raise ChangerError('nothing-to-do', 'no obsolete constraints')
+            raise ChangerError("nothing-to-do", "no obsolete constraints")
 
-        branches = [
-            ('main', None, base_revid,
-             local_tree.last_revision())]
+        branches = [("main", None, base_revid, local_tree.last_revision())]
 
         tags = []
 
         return ChangerResult(
-            description="Scrub obsolete settings.", mutator=result,
-            branches=branches, tags=tags,
+            description="Scrub obsolete settings.",
+            mutator=result,
+            branches=branches,
+            tags=tags,
             value=calculate_value(result),
             sufficient_for_proposal=True,
-            proposed_commit_message='Scrub obsolete settings.')
+            proposed_commit_message="Scrub obsolete settings.",
+        )
 
-    def get_proposal_description(
-            self, result, description_format, existing_proposal):
+    def get_proposal_description(self, result, description_format, existing_proposal):
         ret = [
-            'Remove constraints unnecessary since %s.' % self.upgrade_release,
-            ''] + ['* ' + line for line in result.itemized()]
-        return ''.join(ret)
+            "Remove constraints unnecessary since %s." % self.upgrade_release,
+            "",
+        ] + ["* " + line for line in result.itemized()]
+        return "".join(ret)
 
     def describe(self, applied, publish_result):
-        note('Scrub obsolete settings.')
+        logging.info("Scrub obsolete settings.")
         for line in applied.itemized():
-            note('* %s', line)
+            logging.info("* %s", line)
 
     @classmethod
     def describe_command(cls, command):
         return "Remove obsolete dependencies"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     sys.exit(run_mutator(ScrubObsoleteChanger))

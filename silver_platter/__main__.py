@@ -16,67 +16,71 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
-import silver_platter   # noqa: F401
+import logging
+import silver_platter  # noqa: F401
 import sys
 from typing import Optional, List, Callable, Dict
 from . import (
     run,
     version_string,
-    )
-
-from breezy.trace import show_error
+)
 
 
 def hosters_main(argv: List[str]) -> Optional[int]:
     from breezy.propose import hosters
-    parser = argparse.ArgumentParser(prog='svp hosters')
+
+    parser = argparse.ArgumentParser(prog="svp hosters")
     parser.parse_args(argv)
 
     for name, hoster_cls in hosters.items():
         for instance in hoster_cls.iter_instances():
-            print('%s (%s)' % (instance.base_url, name))
+            print("%s (%s)" % (instance.base_url, name))
 
     return None
 
 
 def login_main(argv: List[str]) -> Optional[int]:
-    parser = argparse.ArgumentParser(prog='svp login')
-    parser.add_argument('url', help='URL of branch to work on.', type=str)
+    parser = argparse.ArgumentParser(prog="svp login")
+    parser.add_argument("url", help="URL of branch to work on.", type=str)
     args = parser.parse_args(argv)
 
     from launchpadlib import uris as lp_uris
 
     hoster = None
     # TODO(jelmer): Don't special case various hosters here
-    if args.url.startswith('https://github.com'):
-        hoster = 'github'
+    if args.url.startswith("https://github.com"):
+        hoster = "github"
     for key, root in lp_uris.web_roots.items():
-        if args.url.startswith(root) or args.url == root.rstrip('/'):
-            hoster = 'launchpad'
+        if args.url.startswith(root) or args.url == root.rstrip("/"):
+            hoster = "launchpad"
             lp_service_root = lp_uris.service_roots[key]
     if hoster is None:
-        hoster = 'gitlab'
+        hoster = "gitlab"
 
-    if hoster == 'gitlab':
+    if hoster == "gitlab":
         from breezy.plugins.gitlab.cmds import cmd_gitlab_login
+
         cmd = cmd_gitlab_login()
         cmd._setup_outf()
         return cmd.run(args.url)
-    elif hoster == 'github':
+    elif hoster == "github":
         from breezy.plugins.github.cmds import cmd_github_login
+
         cmd = cmd_github_login()
         cmd._setup_outf()
         return cmd.run()
-    elif hoster == 'launchpad':
+    elif hoster == "launchpad":
         from breezy.plugins.launchpad.cmds import cmd_launchpad_login
+
         cmd = cmd_launchpad_login()
         cmd._setup_outf()
         cmd.run()
         from breezy.plugins.launchpad import lp_api
-        lp_api.connect_launchpad(lp_service_root, version='devel')
+
+        lp_api.connect_launchpad(lp_service_root, version="devel")
         return None
     else:
-        show_error('Unknown hoster %r.', hoster)
+        logging.exception("Unknown hoster %r.", hoster)
         return 1
 
 
@@ -85,8 +89,12 @@ def proposals_main(argv: List[str]) -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--status', default='open', choices=['open', 'merged', 'closed'],
-        type=str, help='Only display proposals with this status.')
+        "--status",
+        default="open",
+        choices=["open", "merged", "closed"],
+        type=str,
+        help="Only display proposals with this status.",
+    )
     args = parser.parse_args(argv)
 
     for hoster, proposal, status in iter_all_mps([args.status]):
@@ -94,36 +102,38 @@ def proposals_main(argv: List[str]) -> None:
 
 
 subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
-    'hosters': hosters_main,
-    'login': login_main,
-    'proposals': proposals_main,
-    'run': run.main,
-    }
+    "hosters": hosters_main,
+    "login": login_main,
+    "proposals": proposals_main,
+    "run": run.main,
+}
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
+
     breezy.initialize()
-    parser = argparse.ArgumentParser(prog='svp', add_help=False)
+    parser = argparse.ArgumentParser(prog="svp", add_help=False)
     parser.add_argument(
-        '--version', action='version', version='%(prog)s ' + version_string)
+        "--version", action="version", version="%(prog)s " + version_string
+    )
     parser.add_argument(
-        '--help', action='store_true',
-        help='show this help message and exit')
-    parser.add_argument(
-        'subcommand', type=str, choices=list(subcommands.keys()))
+        "--help", action="store_true", help="show this help message and exit"
+    )
+    parser.add_argument("subcommand", type=str, choices=list(subcommands.keys()))
+    logging.basicConfig(level=logging.INFO)
     args, rest = parser.parse_known_args(argv)
     if args.help:
         if args.subcommand is None:
             parser.print_help()
             parser.exit()
         else:
-            rest.append('--help')
+            rest.append("--help")
     if args.subcommand is None:
         parser.print_usage()
         return 1
     return subcommands[args.subcommand](rest)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
