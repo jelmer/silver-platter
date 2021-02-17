@@ -1,9 +1,9 @@
-silver-platter (0.4.1-1) UNRELEASED; urgency=medium
+silver-platter (0.4.1-1) unstable; urgency=medium
 
   * New upstream release.
    + Depend on upstream ontologist for upstream metadata. Closes: #982994
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 17 Feb 2021 22:46:54 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 17 Feb 2021 22:47:59 +0000
 
 silver-platter (0.4.0-1) unstable; urgency=medium
 
