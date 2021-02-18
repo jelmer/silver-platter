@@ -1,9 +1,9 @@
-silver-platter (0.4.1-2) UNRELEASED; urgency=medium
+silver-platter (0.4.1-2) unstable; urgency=medium
 
   * Bump minimum breezy-debian version to something that supports
     debcommit. Closes: #983008
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 18 Feb 2021 13:05:01 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 18 Feb 2021 13:05:11 +0000
 
 silver-platter (0.4.1-1) unstable; urgency=medium
 
