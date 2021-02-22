@@ -139,6 +139,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        '--verify-command',
+        type=str,
+        help='Command to run to verify changes.')
     args = parser.parse_args(argv)
 
     try:
@@ -183,6 +187,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         except ScriptMadeNoChanges:
             logging.exception("Script did not make any changes.")
             return 1
+
+        if args.verify_command:
+            try:
+                subprocess.check_call(
+                    args.verify_command, shell=True,
+                    cwd=ws.local_tree.abspath('.'))
+            except subprocess.CalledProcessError:
+                logging.exception("Verify command failed.")
+                return 1
 
         def get_description(description_format, existing_proposal):
             if description is not None:
