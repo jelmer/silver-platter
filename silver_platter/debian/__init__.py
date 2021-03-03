@@ -324,3 +324,14 @@ def control_file_present(tree: Tree, subpath: str) -> bool:
         if tree.has_filename(name):
             return True
     return False
+
+
+def connect_udd_mirror():
+    import psycopg2
+
+    return psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net",
+    )

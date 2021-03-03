@@ -26,6 +26,7 @@ from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 from . import (
     pick_additional_colocated_branches,
+    connect_udd_mirror,
     add_changelog_entry,
 )
 from .changer import (
@@ -67,13 +68,26 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
 
 class OrphanResult(object):
     def __init__(
-        self, package=None, old_vcs_url=None, new_vcs_url=None, salsa_user=None
+        self, package=None, old_vcs_url=None, new_vcs_url=None, salsa_user=None, wnpp_bug=None
     ):
         self.package = package
         self.old_vcs_url = old_vcs_url
         self.new_vcs_url = new_vcs_url
         self.pushed = False
         self.salsa_user = salsa_user
+        self.wnpp_bug = wnpp_bug
+
+
+def find_wnpp_bug(source):
+    conn = connect_udd_mirror()
+    cursor = conn.cursor()
+    cursor.execute(
+        "select id from wnpp where type = 'O' and source = %s",
+        (source, ))
+    entry = cursor.fetchone()
+    if entry is None:
+        raise KeyError
+    return entry[0]
 
 
 class OrphanChanger(DebianChanger):
@@ -81,12 +95,13 @@ class OrphanChanger(DebianChanger):
     name = "orphan"
 
     def __init__(
-        self, update_vcs=True, salsa_push=True, salsa_user="debian", dry_run=False
+        self, update_vcs=True, salsa_push=True, salsa_user="debian", dry_run=False, check_wnpp=True
     ):
         self.update_vcs = update_vcs
         self.salsa_push = salsa_push
         self.salsa_user = salsa_user
         self.dry_run = dry_run
+        self.check_wnpp = check_wnpp
 
     @classmethod
     def setup_parser(cls, parser):
@@ -107,6 +122,10 @@ class OrphanChanger(DebianChanger):
             help="Update the VCS-* headers, but don't actually "
             "clone the repository.",
         )
+        parser.add_argument(
+            '--no-check-wnpp',
+            action='store_true',
+            help='Do not check for WNPP bug.')
         parser.add_argument("--dry-run", action="store_true", help="Dry run changes.")
 
     @classmethod
@@ -116,6 +135,7 @@ class OrphanChanger(DebianChanger):
             dry_run=args.dry_run,
             salsa_user=args.salsa_user,
             salsa_push=not args.just_update_headers,
+            check_wnpp=not args.no_check_wnpp,
         )
 
     def suggest_branch_name(self):
@@ -135,6 +155,16 @@ class OrphanChanger(DebianChanger):
         changelog_entries = []
         try:
             with ControlEditor(path=control_path) as editor:
+                if self.check_wnpp:
+                    try:
+                        wnpp_bug = find_wnpp_bug(editor.source['Source'])
+                    except KeyError:
+                        raise ChangerError(
+                            'no-wnpp-bug',
+                            'Package is purported to be orphaned, '
+                            'but no open wnpp bug exists.')
+                else:
+                    wnpp_bug = None
                 editor.source["Maintainer"] = "Debian QA Group <packages@qa.debian.org>"
                 try:
                     del editor.source["Uploaders"]
@@ -142,7 +172,7 @@ class OrphanChanger(DebianChanger):
                     pass
             if editor.changed:
                 changelog_entries.append("Orphan package.")
-            result = OrphanResult()
+            result = OrphanResult(wnpp_bug=wnpp_bug)
 
             if self.update_vcs:
                 with ControlEditor(path=control_path) as editor:
@@ -192,6 +222,7 @@ class OrphanChanger(DebianChanger):
         reporter.report_metadata("old_vcs_url", result.old_vcs_url)
         reporter.report_metadata("new_vcs_url", result.new_vcs_url)
         reporter.report_metadata("pushed", result.pushed)
+        reporter.report_metadata("wnpp_bug", result.wnpp_bug)
 
         branches = [("main", None, base_revid, local_tree.last_revision())]
 

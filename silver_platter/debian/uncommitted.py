@@ -26,7 +26,7 @@ from urllib.request import urlopen
 
 from debian.changelog import Changelog
 
-from . import NoAptSources
+from . import NoAptSources, connect_udd_mirror
 from .changer import (
     run_mutator,
     DebianChanger,
@@ -47,14 +47,7 @@ class AptSourceError(Exception):
 
 
 def select_vcswatch_packages():
-    import psycopg2
-
-    conn = psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )
+    conn = connect_udd_mirror()
     cursor = conn.cursor()
     args = []
     query = """\

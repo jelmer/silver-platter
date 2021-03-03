@@ -58,6 +58,7 @@ from debian.changelog import get_maintainer
 
 from . import (
     apt_get_source_package,
+    connect_udd_mirror,
     source_package_vcs,
     split_vcs_url,
     Workspace,
@@ -281,14 +282,7 @@ def select_apt_packages(package_names, maintainer):
 def select_vcswatch_packages(
     packages: List[str], maintainer: List[str], autopkgtest_only: bool
 ):
-    import psycopg2
-
-    conn = psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )
+    conn = connect_udd_mirror()
     cursor = conn.cursor()
     args = []
     query = """\
