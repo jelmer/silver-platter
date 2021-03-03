@@ -171,7 +171,11 @@ class OrphanChanger(DebianChanger):
                 except KeyError:
                     pass
             if editor.changed:
-                changelog_entries.append("Orphan package.")
+                if wnpp_bug is not None:
+                    changelog_entries.append(
+                        "Orphan package - see bug %d." % wnpp_bug)
+                else:
+                    changelog_entries.append("Orphan package.")
             result = OrphanResult(wnpp_bug=wnpp_bug)
 
             if self.update_vcs:
