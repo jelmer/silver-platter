@@ -1342,7 +1342,7 @@ class NewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 "no-upstream-locations-known",
                 "No debian/watch file or Repository in "
-                "debian/upstream/metadata to retrieve new upstream version"
+                "debian/upstream/metadata to retrieve new upstream version "
                 "from.",
                 e,
             )
