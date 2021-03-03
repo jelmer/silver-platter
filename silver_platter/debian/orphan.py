@@ -182,9 +182,9 @@ class OrphanChanger(DebianChanger):
                 local_tree, self.salsa_user, result.package_name, dry_run=self.dry_run
             )
             result.pushed = True
-            reporter.report_metadata("old_vcs_url", result.old_vcs_url)
-            reporter.report_metadata("new_vcs_url", result.new_vcs_url)
-            reporter.report_metadata("pushed", result.pushed)
+        reporter.report_metadata("old_vcs_url", result.old_vcs_url)
+        reporter.report_metadata("new_vcs_url", result.new_vcs_url)
+        reporter.report_metadata("pushed", result.pushed)
 
         branches = [("main", None, base_revid, local_tree.last_revision())]
 
