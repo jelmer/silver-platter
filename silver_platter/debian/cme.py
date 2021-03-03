@@ -22,6 +22,7 @@ from .changer import (
     run_mutator,
     DebianChanger,
     ChangerResult,
+    ChangerError,
 )
 
 
@@ -64,7 +65,10 @@ class CMEFixChanger(DebianChanger):
         cwd = local_tree.abspath(subpath or "")
         subprocess.check_call(["/usr/bin/cme", "modify", "dpkg", "-save"], cwd=cwd)
         local_tree.commit("Reformat for cme.")
-        subprocess.check_call(["/usr/bin/cme", "fix", "dpkg"], cwd=cwd)
+        try:
+            subprocess.check_call(["/usr/bin/cme", "fix", "dpkg"], cwd=cwd)
+        except subprocess.CalledProcessError:
+            raise ChangerError('cme-failed', 'CME Failed to run')
         revid = local_tree.commit("Run cme.")
         branches = [("main", None, base_revid, revid)]
         tags = []
