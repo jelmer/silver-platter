@@ -132,6 +132,7 @@ class OrphanChanger(DebianChanger):
     ):
         base_revid = local_tree.last_revision()
         control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
+        changed = False
         try:
             with ControlEditor(path=control_path) as editor:
                 editor.source["Maintainer"] = "Debian QA Group <packages@qa.debian.org>"
@@ -139,7 +140,7 @@ class OrphanChanger(DebianChanger):
                     del editor.source["Uploaders"]
                 except KeyError:
                     pass
-
+            changed = changed or editor.changed
             result = OrphanResult()
 
             if self.update_vcs:
@@ -158,6 +159,9 @@ class OrphanChanger(DebianChanger):
                     result.salsa_user = self.salsa_user
                 if result.old_vcs_url == result.new_vcs_url:
                     result.old_vcs_url = result.new_vcs_url = None
+                changed = changed or editor.changed
+            if not changed:
+                raise ChangerError('nothing-to-do', 'Already orphaned')
             if update_changelog in (True, None):
                 add_changelog_entry(
                     local_tree,
