@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from breezy import osutils
 
 from debmutate.control import ControlEditor
+from debmutate.deb822 import ChangeConflict
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
@@ -220,7 +221,7 @@ class OrphanChanger(DebianChanger):
                 "formatting-unpreservable",
                 "unable to preserve formatting while editing %s" % e.path,
             )
-        except GeneratedFile as e:
+        except (ChangeConflict, GeneratedFile) as e:
             raise ChangerError(
                 "generated-file", "unable to edit generated file: %r" % e
             )
