@@ -43,13 +43,20 @@ BRANCH_NAME = "orphan"
 
 def push_to_salsa(local_tree, user, name, dry_run=False):
     from breezy.branch import Branch
+    from breezy.propose import UnsupportedHoster
     from breezy.plugins.gitlab.hoster import GitLab
 
-    salsa = GitLab.probe_from_url("https://salsa.debian.org/")
-    # TODO(jelmer): Fork if the old branch was hosted on salsa
     if dry_run:
         logging.info("Creating and pushing to salsa project %s/%s", user, name)
         return
+
+    try:
+        salsa = GitLab.probe_from_url("https://salsa.debian.org/")
+    except UnsupportedHoster:
+        logging.warning("No login for salsa known, not pushing branch.")
+        return
+
+    # TODO(jelmer): Fork if the old branch was hosted on salsa
     salsa.create_project("%s/%s" % (user, name))
     target_branch = Branch.open(
         "git+ssh://git@salsa.debian.org/%s/%s.git" % (user, name)
@@ -218,11 +225,13 @@ class OrphanChanger(DebianChanger):
                 "generated-file", "unable to edit generated file: %r" % e
             )
 
+        result.pushed = False
         if self.update_vcs and self.salsa_push and result.new_vcs_url:
-            push_to_salsa(
+            push_result = push_to_salsa(
                 local_tree, self.salsa_user, result.package_name, dry_run=self.dry_run
             )
-            result.pushed = True
+            if push_result:
+                result.pushed = True
         reporter.report_metadata("old_vcs_url", result.old_vcs_url)
         reporter.report_metadata("new_vcs_url", result.new_vcs_url)
         reporter.report_metadata("pushed", result.pushed)
