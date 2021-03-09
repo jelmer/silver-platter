@@ -63,8 +63,6 @@ class CMEFixChanger(DebianChanger):
     ):
         base_revid = local_tree.last_revision()
         cwd = local_tree.abspath(subpath or "")
-        subprocess.check_call(["/usr/bin/cme", "modify", "dpkg", "-save"], cwd=cwd)
-        local_tree.commit("Reformat for cme.")
         try:
             subprocess.check_call(["/usr/bin/cme", "fix", "dpkg"], cwd=cwd)
         except subprocess.CalledProcessError:
