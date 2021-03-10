@@ -128,20 +128,23 @@ class Workspace(object):
         self.refreshed = False
         with self.local_tree.branch.lock_write():
             if self.cached_branch:
-                logging.debug(
+                logger.debug(
                     'Pulling in missing revisions from resume/main branch %r',
                     self.resume_branch or self.main_branch)
                 self.local_tree.pull(
                     self.resume_branch or self.main_branch, overwrite=True
                 )
             if self.resume_branch:
-                logging.debug(
+                logger.debug(
                     'Pulling in missing revisions from main branch %r',
                     self.main_branch)
                 try:
                     self.local_tree.pull(self.main_branch, overwrite=False)
                 except DivergedBranches:
                     pass
+                logger.debug(
+                    'Fetching colocated branches: %r',
+                    self.additional_colocated_branches)
                 for branch_name in self.additional_colocated_branches:
                     try:
                         remote_colo_branch = self.main_branch.controldir.open_branch(
