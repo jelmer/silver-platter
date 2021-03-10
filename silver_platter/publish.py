@@ -435,6 +435,7 @@ def find_existing_proposed(
     name: str,
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
+    preferred_schemes: Optional[List[str]] = None
 ) -> Tuple[Optional[Branch], Optional[bool], Optional[MergeProposal]]:
     """Find an existing derived branch with the specified name, and proposal.
 
@@ -444,13 +445,17 @@ def find_existing_proposed(
       name: Name of the derived branch
       overwrite_unrelated: Whether to overwrite existing (but unrelated)
         branches
+      preferred_schemes: List of preferred schemes
     Returns:
       Tuple with (resume_branch, overwrite_existing, existing_proposal)
       The resume_branch is the branch to continue from; overwrite_existing
       means there is an existing branch in place that should be overwritten.
     """
     try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner)
+        if preferred_schemes is not None:
+            existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes)
+        else:  # TODO: Support older versions of breezy without preferred_schemes
+            existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner)
     except errors.NotBranchError:
         return (None, None, None)
     else:
