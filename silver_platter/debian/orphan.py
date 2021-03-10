@@ -19,6 +19,7 @@ import logging
 from urllib.parse import urlparse
 
 from breezy import osutils
+from breezy.branch import Branch
 
 from debmutate.control import ControlEditor
 from debmutate.deb822 import ChangeConflict
@@ -242,8 +243,13 @@ class OrphanChanger(DebianChanger):
 
         result.pushed = False
         if self.update_vcs and self.salsa_push and result.new_vcs_url:
+            parent_branch_url = local_tree.branch.get_parent()
+            if parent_branch_url is not None:
+                parent_branch = Branch.open(parent_branch_url)
+            else:
+                parent_branch = local_tree.branch
             push_result = push_to_salsa(
-                local_tree, self.main_branch,
+                local_tree, parent_branch,
                 self.salsa_user, result.package_name, dry_run=self.dry_run
             )
             if push_result:
