@@ -55,6 +55,9 @@ __all__ = [
 ]
 
 
+logger = logging.getLogger(__name__)
+
+
 class Workspace(object):
     """Workspace for creating changes to a branch.
 
@@ -112,8 +115,11 @@ class Workspace(object):
         )
 
     def __enter__(self) -> Any:
+        sprout_base = (
+            self.cached_branch or self.resume_branch or self.main_branch)
+        logger.debug('Creating sprout from %r', sprout_base)
         self.local_tree, self._destroy = create_temp_sprout(
-            self.cached_branch or self.resume_branch or self.main_branch,
+            sprout_base,
             self.additional_colocated_branches,
             dir=self._dir,
             path=self._path,
@@ -122,10 +128,16 @@ class Workspace(object):
         self.refreshed = False
         with self.local_tree.branch.lock_write():
             if self.cached_branch:
+                logging.debug(
+                    'Pulling in missing revisions from resume/main branch %r',
+                    self.resume_branch or self.main_branch)
                 self.local_tree.pull(
                     self.resume_branch or self.main_branch, overwrite=True
                 )
             if self.resume_branch:
+                logging.debug(
+                    'Pulling in missing revisions from main branch %r',
+                    self.main_branch)
                 try:
                     self.local_tree.pull(self.main_branch, overwrite=False)
                 except DivergedBranches:
@@ -141,7 +153,7 @@ class Workspace(object):
                         name=branch_name, source=remote_colo_branch, overwrite=True
                     )
                 if merge_conflicts(self.main_branch, self.local_tree.branch):
-                    logging.info("restarting branch")
+                    logger.info("restarting branch")
                     self.local_tree.update(revision=self.main_branch_revid)
                     self.local_tree.branch.generate_revision_history(
                         self.main_branch_revid
