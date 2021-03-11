@@ -41,9 +41,11 @@ MIA_TEAMMAINT_USERTAG = "mia-teammaint"
 
 
 class MIAResult(object):
-    def __init__(self, source=None, uploaders=None, bugs=None):
+    def __init__(
+        self, source=None, removed_uploaders=None, bugs=None
+    ):
         self.source = source
-        self.uploaders = uploaders
+        self.removed_uploaders = removed_uploaders
         self.bugs = bugs
 
 
@@ -104,7 +106,7 @@ class MIAChanger(DebianChanger):
                 bugs = all_mia_teammaint_bugs().intersection(get_package_bugs(source))
                 if not bugs:
                     raise ChangerError("nothing-to-do", "No MIA people")
-                uploaders = []
+                removed_uploaders = []
                 fixed_bugs = []
                 for bug in bugs:
                     mia_people = get_mia_maintainers(bug)
@@ -134,11 +136,11 @@ class MIAChanger(DebianChanger):
                     if removed_mia == mia_people:
                         description += " Closes: #%d" % bug
                     changelog_entries.append(description)
-                    uploaders.extend(removed_mia)
+                    removed_uploaders.extend(removed_mia)
 
-            result = MIAResult(source, uploaders, bugs=fixed_bugs)
+            result = MIAResult(source, removed_uploaders=removed_uploaders, bugs=fixed_bugs)
             reporter.report_metadata("bugs", fixed_bugs)
-            reporter.report_metadata("removed_uploaders", uploaders)
+            reporter.report_metadata("removed_uploaders", removed_uploaders)
 
             if not changelog_entries:
                 raise ChangerError(
