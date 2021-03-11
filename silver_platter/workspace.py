@@ -115,9 +115,8 @@ class Workspace(object):
         )
 
     def __enter__(self) -> Any:
-        sprout_base = (
-            self.cached_branch or self.resume_branch or self.main_branch)
-        logger.debug('Creating sprout from %r', sprout_base)
+        sprout_base = self.cached_branch or self.resume_branch or self.main_branch
+        logger.debug("Creating sprout from %r", sprout_base)
         self.local_tree, self._destroy = create_temp_sprout(
             sprout_base,
             self.additional_colocated_branches,
@@ -129,22 +128,24 @@ class Workspace(object):
         with self.local_tree.branch.lock_write():
             if self.cached_branch:
                 logger.debug(
-                    'Pulling in missing revisions from resume/main branch %r',
-                    self.resume_branch or self.main_branch)
+                    "Pulling in missing revisions from resume/main branch %r",
+                    self.resume_branch or self.main_branch,
+                )
                 self.local_tree.pull(
                     self.resume_branch or self.main_branch, overwrite=True
                 )
             if self.resume_branch:
                 logger.debug(
-                    'Pulling in missing revisions from main branch %r',
-                    self.main_branch)
+                    "Pulling in missing revisions from main branch %r", self.main_branch
+                )
                 try:
                     self.local_tree.pull(self.main_branch, overwrite=False)
                 except DivergedBranches:
                     pass
                 logger.debug(
-                    'Fetching colocated branches: %r',
-                    self.additional_colocated_branches)
+                    "Fetching colocated branches: %r",
+                    self.additional_colocated_branches,
+                )
                 for branch_name in self.additional_colocated_branches:
                     try:
                         remote_colo_branch = self.main_branch.controldir.open_branch(

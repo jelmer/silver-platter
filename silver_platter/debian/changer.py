@@ -598,7 +598,9 @@ BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
     ),
-    pkg_resources.EntryPoint("cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)),
+    pkg_resources.EntryPoint(
+        "cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)
+    ),
     pkg_resources.EntryPoint(
         "apply-multiarch-hints",
         "silver_platter.debian.multiarch",
@@ -612,9 +614,7 @@ BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
-    pkg_resources.EntryPoint(
-        "mia", "silver_platter.debian.mia", attrs=("MIAChanger",)
-    ),
+    pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
     pkg_resources.EntryPoint(
         "import-upload",
         "silver_platter.debian.uncommitted",

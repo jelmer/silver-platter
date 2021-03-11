@@ -16,10 +16,8 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-from urllib.parse import urlparse
 
 from breezy import osutils
-from breezy.branch import Branch
 
 from debmutate.control import ControlEditor, delete_from_list
 from debmutate.deb822 import ChangeConflict
@@ -27,8 +25,6 @@ from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 from . import (
-    pick_additional_colocated_branches,
-    connect_udd_mirror,
     add_changelog_entry,
 )
 from .changer import (
@@ -37,18 +33,15 @@ from .changer import (
     ChangerError,
     ChangerResult,
 )
-from ..proposal import push_changes
 
 
 BRANCH_NAME = "mia"
-MIA_EMAIL = 'mia@qa.debian.org'
-MIA_TEAMMAINT_USERTAG = 'mia-teammaint'
+MIA_EMAIL = "mia@qa.debian.org"
+MIA_TEAMMAINT_USERTAG = "mia-teammaint"
 
 
 class MIAResult(object):
-    def __init__(
-        self, source=None, uploaders=None, bugs=None
-    ):
+    def __init__(self, source=None, uploaders=None, bugs=None):
         self.source = source
         self.uploaders = uploaders
         self.bugs = bugs
@@ -56,28 +49,30 @@ class MIAResult(object):
 
 def all_mia_teammaint_bugs():
     import debianbts
-    return set(debianbts.get_usertag(
-        MIA_EMAIL, [MIA_TEAMMAINT_USERTAG])[MIA_TEAMMAINT_USERTAG])
+
+    return set(
+        debianbts.get_usertag(MIA_EMAIL, [MIA_TEAMMAINT_USERTAG])[MIA_TEAMMAINT_USERTAG]
+    )
 
 
 def get_package_bugs(source):
     import debianbts
-    return set(debianbts.get_bugs(src=source, status='open'))
+
+    return set(debianbts.get_bugs(src=source, status="open"))
 
 
 def get_mia_maintainers(bug):
     import debianbts
+
     log = debianbts.get_bug_log(bug)
-    return log[0]['message'].get_all('X-Debbugs-CC')
+    return log[0]["message"].get_all("X-Debbugs-CC")
 
 
 class MIAChanger(DebianChanger):
 
     name = "mia"
 
-    def __init__(
-        self, dry_run=False
-    ):
+    def __init__(self, dry_run=False):
         self.dry_run = dry_run
 
     @classmethod
@@ -105,10 +100,10 @@ class MIAChanger(DebianChanger):
         try:
             changelog_entries = []
             with ControlEditor(path=control_path) as editor:
-                source = editor.source['Source']
+                source = editor.source["Source"]
                 bugs = all_mia_teammaint_bugs().intersection(get_package_bugs(source))
                 if not bugs:
-                    raise ChangerError('nothing-to-do', 'No MIA people')
+                    raise ChangerError("nothing-to-do", "No MIA people")
                 uploaders = []
                 fixed_bugs = []
                 for bug in bugs:
@@ -116,14 +111,15 @@ class MIAChanger(DebianChanger):
 
                     removed_mia = []
                     try:
-                        uploaders = editor.source['Uploaders'].split(',')
+                        uploaders = editor.source["Uploaders"].split(",")
                     except KeyError:
-                        raise ChangerError('nothing-to-do', 'No uploaders field')
+                        raise ChangerError("nothing-to-do", "No uploaders field")
 
                     for person in mia_people:
                         if person in [uploader.strip() for uploader in uploaders]:
-                            editor.source['Uploaders'] = delete_from_list(
-                                editor.source['Uploaders'], person)
+                            editor.source["Uploaders"] = delete_from_list(
+                                editor.source["Uploaders"], person
+                            )
                             removed_mia.append(person)
 
                     if len(removed_mia) == 0:
@@ -133,7 +129,8 @@ class MIAChanger(DebianChanger):
                         description = "Remove MIA uploader %s." % removed_mia[0]
                     else:
                         description = "Remove MIA uploaders %s." % (
-                            ', '.join(removed_mia))
+                            ", ".join(removed_mia)
+                        )
                     if removed_mia == mia_people:
                         description += " Closes: #%d" % bug
                     changelog_entries.append(description)
@@ -145,7 +142,8 @@ class MIAChanger(DebianChanger):
 
             if not changelog_entries:
                 raise ChangerError(
-                    'nothing-to-do', 'Unable to remove any MIA uploaders')
+                    "nothing-to-do", "Unable to remove any MIA uploaders"
+                )
             if update_changelog in (True, None):
                 add_changelog_entry(
                     local_tree,

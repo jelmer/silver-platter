@@ -62,7 +62,7 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
     try:
         orig_hoster = get_hoster(orig_branch)
     except UnsupportedHoster:
-        logging.debug('Original branch %r not hosted on salsa.')
+        logging.debug("Original branch %r not hosted on salsa.")
         from_project = None
     else:
         if orig_hoster == salsa:
@@ -91,7 +91,12 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
 
 class OrphanResult(object):
     def __init__(
-        self, package=None, old_vcs_url=None, new_vcs_url=None, salsa_user=None, wnpp_bug=None
+        self,
+        package=None,
+        old_vcs_url=None,
+        new_vcs_url=None,
+        salsa_user=None,
+        wnpp_bug=None,
     ):
         self.package = package
         self.old_vcs_url = old_vcs_url
@@ -104,9 +109,7 @@ class OrphanResult(object):
 def find_wnpp_bug(source):
     conn = connect_udd_mirror()
     cursor = conn.cursor()
-    cursor.execute(
-        "select id from wnpp where type = 'O' and source = %s",
-        (source, ))
+    cursor.execute("select id from wnpp where type = 'O' and source = %s", (source,))
     entry = cursor.fetchone()
     if entry is None:
         raise KeyError
@@ -118,7 +121,12 @@ class OrphanChanger(DebianChanger):
     name = "orphan"
 
     def __init__(
-        self, update_vcs=True, salsa_push=True, salsa_user="debian", dry_run=False, check_wnpp=True
+        self,
+        update_vcs=True,
+        salsa_push=True,
+        salsa_user="debian",
+        dry_run=False,
+        check_wnpp=True,
     ):
         self.update_vcs = update_vcs
         self.salsa_push = salsa_push
@@ -146,9 +154,8 @@ class OrphanChanger(DebianChanger):
             "clone the repository.",
         )
         parser.add_argument(
-            '--no-check-wnpp',
-            action='store_true',
-            help='Do not check for WNPP bug.')
+            "--no-check-wnpp", action="store_true", help="Do not check for WNPP bug."
+        )
 
     @classmethod
     def from_args(cls, args):
@@ -163,7 +170,7 @@ class OrphanChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(
+    def make_changes(  # noqa: C901
         self,
         local_tree,
         subpath,
@@ -179,12 +186,13 @@ class OrphanChanger(DebianChanger):
             with ControlEditor(path=control_path) as editor:
                 if self.check_wnpp:
                     try:
-                        wnpp_bug = find_wnpp_bug(editor.source['Source'])
+                        wnpp_bug = find_wnpp_bug(editor.source["Source"])
                     except KeyError:
                         raise ChangerError(
-                            'no-wnpp-bug',
-                            'Package is purported to be orphaned, '
-                            'but no open wnpp bug exists.')
+                            "no-wnpp-bug",
+                            "Package is purported to be orphaned, "
+                            "but no open wnpp bug exists.",
+                        )
                 else:
                     wnpp_bug = None
                 editor.source["Maintainer"] = "Debian QA Group <packages@qa.debian.org>"
@@ -194,8 +202,7 @@ class OrphanChanger(DebianChanger):
                     pass
             if editor.changed:
                 if wnpp_bug is not None:
-                    changelog_entries.append(
-                        "Orphan package - see bug %d." % wnpp_bug)
+                    changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
                 else:
                     changelog_entries.append("Orphan package.")
             result = OrphanResult(wnpp_bug=wnpp_bug)
@@ -218,9 +225,10 @@ class OrphanChanger(DebianChanger):
                     result.old_vcs_url = result.new_vcs_url = None
                 if editor.changed:
                     changelog_entries.append(
-                        "Update VCS URLs to point to Debian group.")
+                        "Update VCS URLs to point to Debian group."
+                    )
             if not changelog_entries:
-                raise ChangerError('nothing-to-do', 'Already orphaned')
+                raise ChangerError("nothing-to-do", "Already orphaned")
             if update_changelog in (True, None):
                 add_changelog_entry(
                     local_tree,
@@ -248,8 +256,11 @@ class OrphanChanger(DebianChanger):
             else:
                 parent_branch = local_tree.branch
             push_result = push_to_salsa(
-                local_tree, parent_branch,
-                self.salsa_user, result.package_name, dry_run=self.dry_run
+                local_tree,
+                parent_branch,
+                self.salsa_user,
+                result.package_name,
+                dry_run=self.dry_run,
             )
             if push_result:
                 result.pushed = True
@@ -281,9 +292,7 @@ class OrphanChanger(DebianChanger):
                 publish_result.proposal.url,
             )
         else:
-            logging.info(
-                "No changes for orphaned package %s",
-                result.package_name)
+            logging.info("No changes for orphaned package %s", result.package_name)
         if result.pushed:
             logging.info("Pushed new package to %s.", result.new_vcs_url)
         elif result.new_vcs_url:

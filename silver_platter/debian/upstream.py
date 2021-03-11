@@ -251,7 +251,9 @@ DEFAULT_DISTRIBUTION = "unstable"
 
 def get_upstream_branch_location(tree, subpath, config, trust_package=False):
     if config.upstream_branch is not None:
-        logging.info("Using upstream branch %s (from configuration)", config.upstream_branch)
+        logging.info(
+            "Using upstream branch %s (from configuration)", config.upstream_branch
+        )
         # TODO(jelmer): Make brz-debian sanitize the URL?
         upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
         upstream_branch_browse = getattr(config, "upstream_branch_browse", None)
@@ -259,6 +261,7 @@ def get_upstream_branch_location(tree, subpath, config, trust_package=False):
         from upstream_ontologist.guess import (
             guess_upstream_metadata,
         )
+
         guessed_upstream_metadata = guess_upstream_metadata(
             tree.abspath(subpath),
             trust_package=trust_package,
@@ -1020,7 +1023,9 @@ def update_packaging(
         path = path[len(subpath) :]
         if path == "autogen.sh":
             if override_dh_autoreconf_add_arguments(tree.basedir, [b"./autogen.sh"]):
-                logging.info("Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf.")
+                logging.info(
+                    "Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf."
+                )
                 changelog_add_line(
                     tree,
                     subpath,
@@ -1502,7 +1507,9 @@ class NewUpstreamChanger(DebianChanger):
     def describe(self, merge_upstream_result, publish_result):
         if publish_result.proposal:
             if publish_result.is_new:
-                logging.info("Created new merge proposal %s.", publish_result.proposal.url)
+                logging.info(
+                    "Created new merge proposal %s.", publish_result.proposal.url
+                )
             else:
                 logging.info("Updated merge proposal %s.", publish_result.proposal.url)
 

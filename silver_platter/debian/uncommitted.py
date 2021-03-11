@@ -186,7 +186,9 @@ def import_uncommitted(tree, subpath):
         db = DistributionBranch(tree.branch, tree.branch, tree=tree)
         dbs.add_branch(db)
         if tree_cl.version.debian_revision:
-            logging.info("Extracting upstream version %s.", tree_cl.version.upstream_version)
+            logging.info(
+                "Extracting upstream version %s.", tree_cl.version.upstream_version
+            )
             upstream_dir = es.enter_context(tempfile.TemporaryDirectory())
             try:
                 upstream_tips = db.pristine_upstream_source.version_as_revisions(

@@ -113,14 +113,11 @@ class TidyChanger(DebianChanger):
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            logging.info(
-                "Create merge proposal: %s", publish_result.proposal.url)
+            logging.info("Create merge proposal: %s", publish_result.proposal.url)
         elif result:
-            logging.info(
-                "Updated proposal %s", publish_result.proposal.url)
+            logging.info("Updated proposal %s", publish_result.proposal.url)
         else:
-            logging.info(
-                "No new fixes for proposal %s", publish_result.proposal.url)
+            logging.info("No new fixes for proposal %s", publish_result.proposal.url)
 
 
 if __name__ == "__main__":

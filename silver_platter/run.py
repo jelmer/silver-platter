@@ -140,9 +140,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         default=False,
     )
     parser.add_argument(
-        '--verify-command',
-        type=str,
-        help='Command to run to verify changes.')
+        "--verify-command", type=str, help="Command to run to verify changes."
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -191,8 +190,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         if args.verify_command:
             try:
                 subprocess.check_call(
-                    args.verify_command, shell=True,
-                    cwd=ws.local_tree.abspath('.'))
+                    args.verify_command, shell=True, cwd=ws.local_tree.abspath(".")
+                )
             except subprocess.CalledProcessError:
                 logging.exception("Verify command failed.")
                 return 1

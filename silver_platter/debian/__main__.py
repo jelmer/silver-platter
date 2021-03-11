@@ -93,7 +93,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        logging.basicConfig(level=logging.INFO, format='%(message)s')
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1

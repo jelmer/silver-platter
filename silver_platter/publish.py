@@ -256,8 +256,7 @@ def propose_changes(  # noqa: C901
         try:
             resume_proposal.reopen()
         except ReopenFailed:
-            logging.info(
-                "Reopening existing proposal failed. Creating new proposal.")
+            logging.info("Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
     if resume_proposal is None:
         if not dry_run:
@@ -278,8 +277,7 @@ def propose_changes(  # noqa: C901
                     raise
                 resume_proposal = e.existing_proposal
             except errors.PermissionDenied:
-                logging.info(
-                    "Permission denied while trying to create " "proposal.")
+                logging.info("Permission denied while trying to create " "proposal.")
                 raise
             else:
                 return (mp, True)
@@ -435,7 +433,7 @@ def find_existing_proposed(
     name: str,
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
-    preferred_schemes: Optional[List[str]] = None
+    preferred_schemes: Optional[List[str]] = None,
 ) -> Tuple[Optional[Branch], Optional[bool], Optional[MergeProposal]]:
     """Find an existing derived branch with the specified name, and proposal.
 
@@ -453,9 +451,13 @@ def find_existing_proposed(
     """
     try:
         if preferred_schemes is not None:
-            existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes)
+            existing_branch = hoster.get_derived_branch(
+                main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes
+            )
         else:  # TODO: Support older versions of breezy without preferred_schemes
-            existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner)
+            existing_branch = hoster.get_derived_branch(
+                main_branch, name=name, owner=owner
+            )
     except errors.NotBranchError:
         return (None, None, None)
     else:

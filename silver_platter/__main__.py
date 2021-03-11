@@ -121,7 +121,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "--help", action="store_true", help="show this help message and exit"
     )
     parser.add_argument("subcommand", type=str, choices=list(subcommands.keys()))
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args, rest = parser.parse_known_args(argv)
     if args.help:
         if args.subcommand is None:

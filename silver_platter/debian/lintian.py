@@ -457,14 +457,13 @@ class LintianBrushChanger(DebianChanger):
         for brush_result, unused_summary in applied:
             tags.update(brush_result.fixed_lintian_tags)
         if publish_result.is_new:
-            logging.info(
-                "Proposed fixes %r: %s", tags, publish_result.proposal.url)
+            logging.info("Proposed fixes %r: %s", tags, publish_result.proposal.url)
         elif tags:
             logging.info(
-                "Updated proposal %s with fixes %r", publish_result.proposal.url, tags)
+                "Updated proposal %s with fixes %r", publish_result.proposal.url, tags
+            )
         else:
-            logging.info(
-                "No new fixes for proposal %s", publish_result.proposal.url)
+            logging.info("No new fixes for proposal %s", publish_result.proposal.url)
 
 
 if __name__ == "__main__":

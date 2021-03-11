@@ -66,7 +66,7 @@ class CMEFixChanger(DebianChanger):
         try:
             subprocess.check_call(["/usr/bin/cme", "fix", "dpkg"], cwd=cwd)
         except subprocess.CalledProcessError:
-            raise ChangerError('cme-failed', 'CME Failed to run')
+            raise ChangerError("cme-failed", "CME Failed to run")
         revid = local_tree.commit("Run cme.")
         branches = [("main", None, base_revid, revid)]
         tags = []
@@ -85,12 +85,10 @@ class CMEFixChanger(DebianChanger):
     def describe(self, result, publish_result):
         if publish_result.is_new:
             logging.info(
-                "Proposed change from 'cme fix dpkg': %s",
-                publish_result.proposal.url)
+                "Proposed change from 'cme fix dpkg': %s", publish_result.proposal.url
+            )
         else:
-            logging.info(
-                "No changes for package %s",
-                result.package_name)
+            logging.info("No changes for package %s", result.package_name)
 
     @classmethod
     def describe_command(cls, command):

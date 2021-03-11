@@ -421,7 +421,9 @@ def main(argv):  # noqa: C901
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
-                logging.info("%s: no declared vcs location, skipping", pkg_source["Package"])
+                logging.info(
+                    "%s: no declared vcs location, skipping", pkg_source["Package"]
+                )
                 ret = 1
                 continue
             source_name = pkg_source["Package"]
@@ -465,8 +467,7 @@ def main(argv):  # noqa: C901
                     os.path.join(subpath, "debian/tests/control")
                 )
             ):
-                logging.info(
-                    "%s: Skipping, package has no autopkgtest.", source_name)
+                logging.info("%s: Skipping, package has no autopkgtest.", source_name)
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -526,17 +527,14 @@ def main(argv):  # noqa: C901
                 continue
             except RecentCommits as e:
                 logging.info(
-                    "%s: Recent commits (%d days), skipping.",
-                    source_name, e.commit_age
+                    "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges:
-                logging.info(
-                    "%s: No unuploaded changes, skipping.", source_name)
+                logging.info("%s: No unuploaded changes, skipping.", source_name)
                 continue
             except NoUnreleasedChanges:
-                logging.info(
-                    "%s: No unreleased changes, skipping.", source_name)
+                logging.info("%s: No unreleased changes, skipping.", source_name)
                 continue
 
             tags = []
@@ -547,8 +545,8 @@ def main(argv):  # noqa: C901
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
                 logging.info(
-                    "%s: Permission denied pushing to branch, skipping.",
-                    source_name)
+                    "%s: Permission denied pushing to branch, skipping.", source_name
+                )
                 ret = 1
                 continue
             if not args.dry_run:
