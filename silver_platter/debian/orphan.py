@@ -149,7 +149,6 @@ class OrphanChanger(DebianChanger):
             '--no-check-wnpp',
             action='store_true',
             help='Do not check for WNPP bug.')
-        parser.add_argument("--dry-run", action="store_true", help="Dry run changes.")
 
     @classmethod
     def from_args(cls, args):

@@ -613,6 +613,9 @@ BUILTIN_ENTRYPOINTS = [
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
     pkg_resources.EntryPoint(
+        "mia", "silver_platter.debian.mia", attrs=("MIAChanger",)
+    ),
+    pkg_resources.EntryPoint(
         "import-upload",
         "silver_platter.debian.uncommitted",
         attrs=("UncommittedChanger",),
