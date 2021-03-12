@@ -124,6 +124,9 @@ class MIAChanger(DebianChanger):
                             )
                             removed_mia.append(person)
 
+                    if not editor.source['Uploaders']:
+                        del editor.source['Uploaders']
+
                     if len(removed_mia) == 0:
                         continue
 
