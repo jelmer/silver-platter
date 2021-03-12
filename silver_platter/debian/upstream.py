@@ -122,6 +122,13 @@ from breezy.plugins.debian.upstream.branch import (
     DistCommandFailed,
     run_dist_command,
 )
+
+try:
+    from debmutate.watch import WatchSyntaxError
+except ImportError:
+    class WatchSyntaxError(Exception):
+        """Watch syntax error."""
+
 from breezy.tree import Tree
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
@@ -810,6 +817,7 @@ def merge_upstream(  # noqa: C901
       NoUpstreamLocationsKnown
       UpstreamMetadataSyntaxError
       NewerUpstreamAlreadyImported
+      WatchSyntaxError
     Returns:
       MergeUpstreamResult object
     """
@@ -1358,6 +1366,8 @@ class NewUpstreamChanger(DebianChanger):
                 "A newer upstream release (%s) has already been imported. "
                 "Found: %s" % (e.old_upstream_version, e.new_upstream_version),
             )
+        except WatchSyntaxError as e:
+            raise ChangerError('watch-syntax-error', str(e))
         except OSError as e:
             if e.errno == errno.ENOSPC:
                 raise ChangerError("no-space-on-device", str(e))
