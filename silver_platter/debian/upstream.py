@@ -1288,7 +1288,6 @@ class NewUpstreamChanger(DebianChanger):
                 "upstream-merged-conflicts",
                 "Merging upstream version %s resulted in conflicts." % e.version,
                 e, details=details)
-            )
         except PackageIsNative as e:
             raise ChangerError(
                 "native-package",
