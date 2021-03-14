@@ -185,11 +185,12 @@ class ChangerReporter(object):
 
 class ChangerError(Exception):
     def __init__(
-        self, category: str, summary: str, original: Optional[Exception] = None
+            self, category: str, summary: str, original: Optional[Exception] = None, details: Any = None
     ):
         self.category = category
         self.summary = summary
         self.original = original
+        self.details = details
 
 
 class ChangerResult(object):
@@ -711,6 +712,7 @@ def run_mutator(changer_cls, argv=None):
         result_json = {
             "result-code": e.category,
             "description": e.summary,
+            "details": e.details,
         }
     else:
         result_json = {

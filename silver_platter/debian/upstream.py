@@ -1277,11 +1277,17 @@ class NewUpstreamChanger(DebianChanger):
         except UpstreamMergeConflicted as e:
             reporter.report_context(str(e.version))
             reporter.report_metadata("upstream_version", str(e.version))
-            reporter.report_metadata("conflicts", e.conflicts)
+            details = {}
+            if isinstance(e.conflicts, int):
+                conflicts = e.conflicts
+            else:
+                conflicts = [[c.path, c.typestring] for c in e.conflicts]
+                details['conflicts'] = conflicts
+            reporter.report_metadata("conflicts", conflicts)
             raise ChangerError(
                 "upstream-merged-conflicts",
                 "Merging upstream version %s resulted in conflicts." % e.version,
-                e,
+                e, details=details)
             )
         except PackageIsNative as e:
             raise ChangerError(
