@@ -42,6 +42,7 @@ from .workspace import (
 )
 from .publish import (
     SUPPORTED_MODES,
+    InsufficientChangesForNewProposal,
 )
 from .utils import (
     open_branch,
@@ -223,6 +224,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 full_branch_url(e.branch),
             )
             return 1
+        except InsufficientChangesForNewProposal:
+            logging.info('Insufficient changes for a new merge proposal')
+            return 0
         except _mod_propose.HosterLoginRequired as e:
             logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",

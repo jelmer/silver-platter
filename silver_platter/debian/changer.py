@@ -50,6 +50,7 @@ from ..proposal import (
 from ..publish import (
     PublishResult,
     SUPPORTED_MODES,
+    InsufficientChangesForNewProposal,
 )
 from ..utils import (
     BranchMissing,
@@ -489,6 +490,9 @@ def _run_single_changer(  # noqa: C901
         except errors.DivergedBranches:
             logging.info("%s: a branch exists. Use --overwrite to discard it.", pkg)
             return False
+        except InsufficientChangesForNewProposal:
+            logging.info('%s: insufficient changes for a new merge proposal',
+                         pkg)
         except HosterLoginRequired as e:
             logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",

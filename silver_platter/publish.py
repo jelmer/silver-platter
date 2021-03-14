@@ -555,6 +555,10 @@ class PublishResult(object):
         return (self.proposal, self.is_new)
 
 
+class InsufficientChangesForNewProposal(Exception):
+    """There were not enough changes for a new merge proposal."""
+
+
 def publish_changes(
     local_branch: Branch,
     main_branch: Branch,
@@ -658,8 +662,7 @@ def publish_changes(
 
     assert mode == "propose"
     if not resume_branch and not allow_create_proposal:
-        # TODO(jelmer): Raise an exception of some sort here?
-        return PublishResult(mode)
+        raise InsufficientChangesForNewProposal()
 
     mp_description = get_proposal_description(
         getattr(hoster, "merge_proposal_description_format", "plain"),

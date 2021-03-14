@@ -126,7 +126,7 @@ from breezy.plugins.debian.upstream.branch import (
 try:
     from debmutate.watch import WatchSyntaxError
 except ImportError:
-    class WatchSyntaxError(Exception):
+    class WatchSyntaxError(Exception):  # type: ignore
         """Watch syntax error."""
 
 from breezy.tree import Tree
