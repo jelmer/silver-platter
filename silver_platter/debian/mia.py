@@ -70,6 +70,25 @@ def get_mia_maintainers(bug):
     return log[0]["message"].get_all("X-Debbugs-CC")
 
 
+def drop_uploaders(editor, mia_people):
+    removed_mia = []
+    try:
+        uploaders = editor.source["Uploaders"].split(",")
+    except KeyError:
+        raise ChangerError("nothing-to-do", "No uploaders field")
+
+    for person in mia_people:
+        if person in [uploader.strip() for uploader in uploaders]:
+            editor.source["Uploaders"] = delete_from_list(
+                editor.source["Uploaders"], person
+            )
+            removed_mia.append(person)
+
+    if not editor.source['Uploaders']:
+        del editor.source['Uploaders']
+    return removed_mia
+
+
 class MIAChanger(DebianChanger):
 
     name = "mia"
@@ -111,21 +130,7 @@ class MIAChanger(DebianChanger):
                 for bug in bugs:
                     mia_people = get_mia_maintainers(bug)
 
-                    removed_mia = []
-                    try:
-                        uploaders = editor.source["Uploaders"].split(",")
-                    except KeyError:
-                        raise ChangerError("nothing-to-do", "No uploaders field")
-
-                    for person in mia_people:
-                        if person in [uploader.strip() for uploader in uploaders]:
-                            editor.source["Uploaders"] = delete_from_list(
-                                editor.source["Uploaders"], person
-                            )
-                            removed_mia.append(person)
-
-                    if not editor.source['Uploaders']:
-                        del editor.source['Uploaders']
+                    removed_mia = drop_uploaders(editor, mia_people)
 
                     if len(removed_mia) == 0:
                         continue

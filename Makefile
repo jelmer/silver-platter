@@ -1,4 +1,4 @@
-all: silver_platter/release/config_pb2.py
+all:
 
 check:
 	flake8
