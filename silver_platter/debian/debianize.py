@@ -99,7 +99,8 @@ class DebianizeChanger(DebianChanger):
             compat_release = debian_info.stable()
 
         with local_tree.lock_write():
-            debianize(local_tree, subpath=subpath, compat_release=self.compat_release)
+            result = debianize(
+                local_tree, subpath=subpath, compat_release=self.compat_release)
 
         # TODO(jelmer): Pristine tar branch?
         # TODO(jelmer): Tags
@@ -107,17 +108,23 @@ class DebianizeChanger(DebianChanger):
             ("main", None, base_revid, local_tree.last_revision()),
             (
                 "upstream",
-                "upstream",
+                result.upstream_branch_name,
                 upstream_base_revid,
-                local_tree.controldir.open_branch("upstream").last_revision(),
+                local_tree.controldir.open_branch(result.upstream_branch_name).last_revision(),
             ),
+        ]
+
+        tags = [
+            (("upstream", str(result.upstream_version), component), tag,
+             local_tree.branch.tags.lookup_tag(tag))
+            for (component, tag) in result.tag_names
         ]
 
         return ChangerResult(
             description="Debianized package.",
             mutator=None,
             branches=branches,
-            tags=[],
+            tags=tags,
             value=None,
             sufficient_for_proposal=True,
         )
