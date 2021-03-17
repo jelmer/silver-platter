@@ -102,6 +102,7 @@ class DebianizeChanger(DebianChanger):
             debianize(local_tree, subpath=subpath, compat_release=self.compat_release)
 
         # TODO(jelmer): Pristine tar branch?
+        # TODO(jelmer): Tags
         branches = [
             ("main", None, base_revid, local_tree.last_revision()),
             (
