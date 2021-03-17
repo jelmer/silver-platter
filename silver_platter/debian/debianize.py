@@ -117,7 +117,7 @@ class DebianizeChanger(DebianChanger):
         tags = [
             (("upstream", str(result.upstream_version), component), tag,
              local_tree.branch.tags.lookup_tag(tag))
-            for (component, tag) in result.tag_names
+            for (component, tag) in result.tag_names.items()
         ]
 
         return ChangerResult(
