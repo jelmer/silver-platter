@@ -29,6 +29,7 @@ from lintian_brush.debianize import (
     DebianDirectoryExists,
     UpstreamNameUnknown,
     SourcePackageNameInvalid,
+    NoBuildToolsFound,
 )
 from lintian_brush.config import Config
 
@@ -115,6 +116,8 @@ class DebianizeChanger(DebianChanger):
                 raise ChangerError('invalid-source-package-name', str(e))
             except UpstreamNameUnknown as e:
                 raise ChangerError('source-package-name-invalid', str(e))
+            except NoBuildToolsFound as e:
+                raise ChangerError('no-build-tools', str(e))
 
         # TODO(jelmer): Pristine tar branch?
         # TODO(jelmer): Tags
