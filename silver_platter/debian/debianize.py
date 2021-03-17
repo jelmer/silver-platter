@@ -115,7 +115,7 @@ class DebianizeChanger(DebianChanger):
             except SourcePackageNameInvalid as e:
                 raise ChangerError('invalid-source-package-name', str(e))
             except UpstreamNameUnknown as e:
-                raise ChangerError('source-package-name-invalid', str(e))
+                raise ChangerError('upstream-name-unknown', str(e))
             except NoBuildToolsFound as e:
                 raise ChangerError('no-build-tools', str(e))
 
