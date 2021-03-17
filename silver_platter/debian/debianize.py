@@ -30,6 +30,7 @@ from lintian_brush.debianize import (
     UpstreamNameUnknown,
     SourcePackageNameInvalid,
     NoBuildToolsFound,
+    DistCreationFailed,
 )
 from lintian_brush.config import Config
 
@@ -118,6 +119,12 @@ class DebianizeChanger(DebianChanger):
                 raise ChangerError('upstream-name-unknown', str(e))
             except NoBuildToolsFound as e:
                 raise ChangerError('no-build-tools', str(e))
+            except DistCreationFailed as e:
+                if e.inner:
+                    raise ChangerError('dist-%s' % e.inner.kind, e.msg)
+                else:
+                    raise ChangerError('dist-failed', e.msg)
+
 
         # TODO(jelmer): Pristine tar branch?
         # TODO(jelmer): Tags
