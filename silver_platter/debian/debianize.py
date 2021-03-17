@@ -26,6 +26,9 @@ from lintian_brush import (
 )
 from lintian_brush.debianize import (
     debianize,
+    DebianDirectoryExists,
+    UpstreamNameUnknown,
+    SourcePackageNameInvalid,
 )
 from lintian_brush.config import Config
 
@@ -35,6 +38,7 @@ from .changer import (
     DebianChanger,
     run_mutator,
     ChangerResult,
+    ChangerError,
 )
 
 
@@ -101,9 +105,16 @@ class DebianizeChanger(DebianChanger):
             compat_release = debian_info.stable()
 
         with local_tree.lock_write():
-            result = debianize(
-                local_tree, subpath=subpath, compat_release=self.compat_release,
-                schroot=self.schroot)
+            try:
+                result = debianize(
+                    local_tree, subpath=subpath, compat_release=self.compat_release,
+                    schroot=self.schroot)
+            except DebianDirectoryExists as e:
+                raise ChangerError('debian-directory-exists', str(e))
+            except SourcePackageNameInvalid as e:
+                raise ChangerError('invalid-source-package-name', str(e))
+            except UpstreamNameUnknown as e:
+                raise ChangerError('source-package-name-invalid', str(e))
 
         # TODO(jelmer): Pristine tar branch?
         # TODO(jelmer): Tags
