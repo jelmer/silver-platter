@@ -45,16 +45,18 @@ class DebianizeChanger(DebianChanger):
 
     name = "debianize"
 
-    def __init__(self, compat_release=None):
+    def __init__(self, compat_release=None, schroot=None):
         self.compat_release = compat_release
+        self.schroot = schroot
 
     @classmethod
     def setup_parser(cls, parser):
         parser.add_argument("--compat-release", type=str, help=argparse.SUPPRESS)
+        parser.add_argument("--schroot", type=str, help=argparse.SUPPRESS)
 
     @classmethod
     def from_args(cls, args):
-        return cls(compat_release=args.compat_release)
+        return cls(compat_release=args.compat_release, schroot=args.schroot)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
@@ -100,7 +102,8 @@ class DebianizeChanger(DebianChanger):
 
         with local_tree.lock_write():
             result = debianize(
-                local_tree, subpath=subpath, compat_release=self.compat_release)
+                local_tree, subpath=subpath, compat_release=self.compat_release,
+                schroot=self.schroot)
 
         # TODO(jelmer): Pristine tar branch?
         # TODO(jelmer): Tags
