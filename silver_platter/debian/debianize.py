@@ -16,6 +16,7 @@
 
 import argparse
 import logging
+import os
 import sys
 
 import breezy
@@ -62,7 +63,11 @@ class DebianizeChanger(DebianChanger):
 
     @classmethod
     def from_args(cls, args):
-        return cls(compat_release=args.compat_release, schroot=args.schroot)
+        if args.schroot:
+            schroot = args.schroot
+        else:
+            schroot = os.environ.get('CHROOT')
+        return cls(compat_release=args.compat_release, schroot=schroot)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
