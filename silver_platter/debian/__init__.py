@@ -46,7 +46,7 @@ from breezy.plugins.debian.upstream import (
 from lintian_brush.detect_gbp_dch import guess_update_changelog
 from lintian_brush.changelog import add_changelog_entry
 
-from .. import proposal as _mod_proposal
+from .. import workspace as _mod_workspace
 from ..utils import (
     open_branch,
 )
@@ -173,7 +173,7 @@ def pick_additional_colocated_branches(main_branch):
     return ret
 
 
-class Workspace(_mod_proposal.Workspace):
+class Workspace(_mod_workspace.Workspace):
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
         if isinstance(main_branch.repository, GitRepository):
             kwargs["additional_colocated_branches"] = kwargs.get(

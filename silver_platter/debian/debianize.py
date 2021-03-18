@@ -130,9 +130,7 @@ class DebianizeChanger(DebianChanger):
                 else:
                     raise ChangerError('dist-failed', e.msg)
 
-
         # TODO(jelmer): Pristine tar branch?
-        # TODO(jelmer): Tags
         branches = [
             ("main", None, base_revid, local_tree.last_revision()),
             (
