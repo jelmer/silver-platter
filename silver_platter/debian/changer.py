@@ -576,7 +576,7 @@ BUILTIN_ENTRYPOINTS = [
 
 
 def changer_subcommands() -> List[str]:
-    endpoints = pkg_resources.iter_entry_points("silver_platter.debian.changer")
+    endpoints = pkg_resources.iter_entry_points(__name__)
     ret = []
     for ep in BUILTIN_ENTRYPOINTS + list(endpoints):
         ret.append(ep.name)
@@ -587,7 +587,7 @@ def changer_subcommand(name: str) -> Type[DebianChanger]:
     for ep in BUILTIN_ENTRYPOINTS:
         if ep.name == name:
             return ep.resolve()
-    endpoints = pkg_resources.iter_entry_points("silver_platter.debian.changer", name)
+    endpoints = pkg_resources.iter_entry_points(__name__, name)
     for ep in endpoints:
         return ep.load()
     raise KeyError(name)
