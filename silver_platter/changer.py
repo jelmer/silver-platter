@@ -16,7 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
-from typing import List, Optional, Any, Dict, Tuple
+from typing import List, Optional, Any, Dict, Tuple, Type
 
 from breezy.propose import MergeProposal
 from breezy.workingtree import WorkingTree
@@ -139,3 +139,10 @@ def changer_subcommands() -> List[str]:
     for ep in list(endpoints):
         ret.append(ep.name)
     return ret
+
+
+def changer_subcommand(name: str) -> Type[GenericChanger]:
+    endpoints = pkg_resources.iter_entry_points(__name__, name)
+    for ep in endpoints:
+        return ep.load()
+    raise KeyError(name)
