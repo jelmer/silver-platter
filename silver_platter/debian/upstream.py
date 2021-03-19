@@ -1149,9 +1149,6 @@ class NewUpstreamChanger(DebianChanger):
             chroot=args.chroot
         )
 
-    def create_dist_from_command(self, tree, package, version, target_dir):
-        return run_dist_command(tree, package, version, target_dir, self.dist_command)
-
     def make_changes(  # noqa: C901
         self,
         local_tree,
@@ -1173,7 +1170,8 @@ class NewUpstreamChanger(DebianChanger):
             )
 
         if self.dist_command:
-            create_dist = self.create_dist_from_command
+            def create_dist(self, tree, package, version, target_dir):
+                return run_dist_command(tree, package, version, target_dir, self.dist_command)
         else:
             create_dist = getattr(self, 'create_dist', None)
 
