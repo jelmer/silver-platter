@@ -114,16 +114,24 @@ class DebianizeChanger(DebianChanger):
         with local_tree.lock_write():
             try:
                 result = debianize(
-                    local_tree, subpath=subpath, compat_release=self.compat_release,
-                    schroot=self.schroot)
+                    local_tree, subpath=subpath,
+                    compat_release=self.compat_release, schroot=self.schroot)
             except DebianDirectoryExists as e:
-                raise ChangerError('debian-directory-exists', str(e))
+                raise ChangerError(
+                    'debian-directory-exists',
+                    "A debian/ directory already exists in the upstream project.")
             except SourcePackageNameInvalid as e:
-                raise ChangerError('invalid-source-package-name', str(e))
+                raise ChangerError(
+                    'invalid-source-package-name',
+                    "Generated source package name %r is not valid" % e.source)
             except UpstreamNameUnknown as e:
-                raise ChangerError('upstream-name-unknown', str(e))
+                raise ChangerError(
+                    'upstream-name-unknown',
+                    "Unable to determine the upstream project name")
             except NoBuildToolsFound as e:
-                raise ChangerError('no-build-tools', str(e))
+                raise ChangerError(
+                    'no-build-tools',
+                    "Unable to find any build systems in upstream sources")
             except DistCreationFailed as e:
                 if e.inner:
                     raise ChangerError('dist-%s' % e.inner.kind, e.msg)
