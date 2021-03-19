@@ -52,14 +52,20 @@ class DebianizeChanger(DebianChanger):
 
     name = "debianize"
 
-    def __init__(self, compat_release=None, schroot=None):
+    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False):
         self.compat_release = compat_release
         self.schroot = schroot
+        self.diligence = diligence
+        self.trust = trust_package
 
     @classmethod
     def setup_parser(cls, parser):
         parser.add_argument("--compat-release", type=str, help=argparse.SUPPRESS)
         parser.add_argument("--schroot", type=str, help=argparse.SUPPRESS)
+        parser.add_argument("--diligence", type=int, default=10, help=argparse.SUPPRESS)
+        parser.add_argument(
+            "--trust-package", action="store_true", help="Trust package."
+        )
 
     @classmethod
     def from_args(cls, args):
@@ -67,7 +73,10 @@ class DebianizeChanger(DebianChanger):
             schroot = args.schroot
         else:
             schroot = os.environ.get('CHROOT')
-        return cls(compat_release=args.compat_release, schroot=schroot)
+        return cls(
+            compat_release=args.compat_release, schroot=schroot,
+            diligence=args.diligence,
+            trust=args.trust_package)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
@@ -114,8 +123,10 @@ class DebianizeChanger(DebianChanger):
         with local_tree.lock_write():
             try:
                 result = debianize(
-                    local_tree, subpath=subpath,
-                    compat_release=self.compat_release, schroot=self.schroot)
+                    local_tree, subpath=subpath, compat_release=self.compat_release,
+                    schroot=self.schroot,
+                    diligence=self.diligence,
+                    trust=self.trust)
             except DebianDirectoryExists as e:
                 raise ChangerError(
                     'debian-directory-exists',
