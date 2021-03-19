@@ -1064,6 +1064,7 @@ class NewUpstreamChanger(DebianChanger):
         dist_command,
         import_only=False,
         include_upstream_history=None,
+        chroot=None
     ):
         self.snapshot = snapshot
         self.trust_package = trust_package
@@ -1072,6 +1073,7 @@ class NewUpstreamChanger(DebianChanger):
         self.dist_command = dist_command
         self.import_only = import_only
         self.include_upstream_history = include_upstream_history
+        self.schroot = chroot
 
     @classmethod
     def setup_parser(cls, parser):
@@ -1144,6 +1146,7 @@ class NewUpstreamChanger(DebianChanger):
             dist_command=args.dist_command,
             import_only=args.import_only,
             include_upstream_history=args.include_upstream_history,
+            chroot=args.chroot
         )
 
     def create_dist_from_command(self, tree, package, version, target_dir):
@@ -1172,7 +1175,7 @@ class NewUpstreamChanger(DebianChanger):
         if self.dist_command:
             create_dist = self.create_dist_from_command
         else:
-            create_dist = None
+            create_dist = getattr(self, 'create_dist', None)
 
         try:
             if not self.import_only:

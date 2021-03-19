@@ -126,7 +126,8 @@ class DebianizeChanger(DebianChanger):
                     local_tree, subpath=subpath, compat_release=self.compat_release,
                     schroot=self.schroot,
                     diligence=self.diligence,
-                    trust=self.trust)
+                    trust=self.trust,
+                    create_dist=getattr(self, 'create_dist', None))
             except DebianDirectoryExists as e:
                 raise ChangerError(
                     'debian-directory-exists',
