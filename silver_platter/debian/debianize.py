@@ -76,7 +76,7 @@ class DebianizeChanger(DebianChanger):
         return cls(
             compat_release=args.compat_release, schroot=schroot,
             diligence=args.diligence,
-            trust=args.trust_package)
+            trust_package=args.trust_package)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
