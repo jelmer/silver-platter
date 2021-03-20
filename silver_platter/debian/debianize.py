@@ -21,6 +21,9 @@ import sys
 
 import breezy
 from breezy.revision import NULL_REVISION
+from breezy.plugins.debian.upstream.branch import (
+    DistCommandFailed,
+    )
 
 from lintian_brush import (
     version_string as lintian_brush_version_string,
@@ -144,11 +147,13 @@ class DebianizeChanger(DebianChanger):
                 raise ChangerError(
                     'no-build-tools',
                     "Unable to find any build systems in upstream sources")
+            except DistCommandFailed as e:
+                raise ChangerError("dist-command-failed", "Dist command failed: %s" % e, e)
             except DistCreationFailed as e:
                 if e.inner:
                     raise ChangerError('dist-%s' % e.inner.kind, e.msg)
                 else:
-                    raise ChangerError('dist-failed', e.msg)
+                    raise ChangerError('dist-command-failed', e.msg)
 
         # TODO(jelmer): Pristine tar branch?
         branches = [
