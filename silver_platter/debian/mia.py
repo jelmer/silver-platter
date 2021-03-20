@@ -130,6 +130,10 @@ class MIAChanger(DebianChanger):
                 for bug in bugs:
                     mia_people = get_mia_maintainers(bug)
 
+                    if mia_people is None:
+                        logging.warning('No MIA people (X-Debbugs-CC) found in bug %d', bug)
+                        continue
+
                     removed_mia = drop_uploaders(editor, mia_people)
 
                     if len(removed_mia) == 0:
