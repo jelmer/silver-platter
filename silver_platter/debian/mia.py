@@ -17,6 +17,8 @@
 
 import logging
 
+from typing import Optional, List
+
 from breezy import osutils
 
 from debmutate.control import ControlEditor, delete_from_list
@@ -63,7 +65,7 @@ def get_package_bugs(source):
     return set(debianbts.get_bugs(src=source, status="open"))
 
 
-def get_mia_maintainers(bug):
+def get_mia_maintainers(bug) -> Optional[List[str]]:
     import debianbts
 
     log = debianbts.get_bug_log(bug)
