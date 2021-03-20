@@ -20,9 +20,11 @@ __all__ = ["iter_conflicted"]
 import argparse
 from functools import partial
 import logging
-import pkg_resources
+import os
 import sys
 from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
+
+import pkg_resources
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
@@ -31,6 +33,7 @@ from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
 from . import (
+    control_files_in_root,
     open_packaging_branch,
     guess_update_changelog,
     NoSuchPackage,
@@ -346,8 +349,12 @@ def _run_single_changer(  # noqa: C901
         if ws.refreshed:
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
+        if control_files_in_root(ws.local_tree, subpath):
+            debian_path = subpath
+        else:
+            debian_path = os.path.join(subpath, "debian")
         if update_changelog is None:
-            dch_guess = guess_update_changelog(ws.local_tree)
+            dch_guess = guess_update_changelog(ws.local_tree, debian_path)
             if dch_guess:
                 logging.info(dch_guess[1])
                 update_changelog = dch_guess[0]
