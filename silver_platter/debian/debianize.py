@@ -35,6 +35,8 @@ from lintian_brush.debianize import (
     SourcePackageNameInvalid,
     NoBuildToolsFound,
     DistCreationFailed,
+    UnidentifiedError,
+    DetailedFailure,
 )
 from lintian_brush.config import Config
 
@@ -154,6 +156,10 @@ class DebianizeChanger(DebianChanger):
                     "Unable to find any build systems in upstream sources")
             except DistCommandFailed as e:
                 raise ChangerError("dist-command-failed", "Dist command failed: %s" % e, e)
+            except DetailedFailure as e:
+                raise ChangerError('dist-%s' % e.error.kind, str(e.error))
+            except UnidentifiedError as e:
+                raise ChangerError('dist-command-failed', str(e.secondary.line))
             except DistCreationFailed as e:
                 if e.inner:
                     raise ChangerError('dist-%s' % e.inner.kind, e.msg)
