@@ -32,7 +32,6 @@ from lintian_brush import (
 from lintian_brush.debianize import (
     debianize,
     DebianDirectoryExists,
-    UpstreamNameUnknown,
     SourcePackageNameInvalid,
     NoBuildToolsFound,
     DistCreationFailed,
@@ -147,10 +146,6 @@ class DebianizeChanger(DebianChanger):
                 raise ChangerError(
                     'invalid-source-package-name',
                     "Generated source package name %r is not valid" % e.source)
-            except UpstreamNameUnknown as e:
-                raise ChangerError(
-                    'upstream-name-unknown',
-                    "Unable to determine the upstream project name")
             except NoBuildToolsFound as e:
                 raise ChangerError(
                     'no-build-tools',
