@@ -57,11 +57,12 @@ class DebianizeChanger(DebianChanger):
 
     name = "debianize"
 
-    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False):
+    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False, verbose=False):
         self.compat_release = compat_release
         self.schroot = schroot
         self.diligence = diligence
         self.trust = trust_package
+        self.verbose = verbose
 
     @classmethod
     def setup_parser(cls, parser):
@@ -83,7 +84,8 @@ class DebianizeChanger(DebianChanger):
         return cls(
             compat_release=args.compat_release, schroot=schroot,
             diligence=args.diligence,
-            trust_package=args.trust_package)
+            trust_package=args.trust_package,
+            verbose=args.verbose)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
