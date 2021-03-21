@@ -131,6 +131,7 @@ class DebianizeChanger(DebianChanger):
                     schroot=self.schroot,
                     diligence=self.diligence,
                     trust=self.trust,
+                    verbose=True,
                     create_dist=getattr(self, 'create_dist', None))
             except OSError as e:
                 if e.errno == errno.ENOSPC:
@@ -138,7 +139,7 @@ class DebianizeChanger(DebianChanger):
                         'no-space-on-device', str(e))
                 else:
                     raise
-            except DebianDirectoryExists as e:
+            except DebianDirectoryExists:
                 raise ChangerError(
                     'debian-directory-exists',
                     "A debian/ directory already exists in the upstream project.")
