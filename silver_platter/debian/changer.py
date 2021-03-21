@@ -356,7 +356,7 @@ def _run_single_changer(  # noqa: C901
         if update_changelog is None:
             dch_guess = guess_update_changelog(ws.local_tree, debian_path)
             if dch_guess:
-                logging.info(dch_guess[1])
+                logging.info('%s', dch_guess[1])
                 update_changelog = dch_guess[0]
             else:
                 # Assume yes.
