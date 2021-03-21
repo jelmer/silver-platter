@@ -69,6 +69,8 @@ class DebianizeChanger(DebianChanger):
         parser.add_argument(
             "--trust-package", action="store_true", help="Trust package."
         )
+        parser.add_argument(
+            "--verbose", action="store_true", help="Be verbose.")
 
     @classmethod
     def from_args(cls, args):
@@ -130,7 +132,7 @@ class DebianizeChanger(DebianChanger):
                     schroot=self.schroot,
                     diligence=self.diligence,
                     trust=self.trust,
-                    verbose=True,
+                    verbose=self.verbose,
                     create_dist=getattr(self, 'create_dist', None))
             except OSError as e:
                 if e.errno == errno.ENOSPC:
