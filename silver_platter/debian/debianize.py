@@ -15,6 +15,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import argparse
+import errno
 import logging
 import os
 import sys
@@ -131,6 +132,12 @@ class DebianizeChanger(DebianChanger):
                     diligence=self.diligence,
                     trust=self.trust,
                     create_dist=getattr(self, 'create_dist', None))
+            except OSError as e:
+                if e.errno == errno.ENOSPC:
+                    raise ChangerError(
+                        'no-space-on-device', str(e))
+                else:
+                    raise
             except DebianDirectoryExists as e:
                 raise ChangerError(
                     'debian-directory-exists',
