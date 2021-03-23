@@ -57,12 +57,13 @@ class DebianizeChanger(DebianChanger):
 
     name = "debianize"
 
-    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False, verbose=False):
+    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False, verbose=False, force_new_directory=False):
         self.compat_release = compat_release
         self.schroot = schroot
         self.diligence = diligence
         self.trust = trust_package
         self.verbose = verbose
+        self.force_new_directory = force_new_directory
 
     @classmethod
     def setup_parser(cls, parser):
@@ -74,6 +75,9 @@ class DebianizeChanger(DebianChanger):
         )
         parser.add_argument(
             "--verbose", action="store_true", help="Be verbose.")
+        parser.add_argument(
+            '--force-new-directory', action='store_true',
+            help='Force creation of a new directory.')
 
     @classmethod
     def from_args(cls, args):
@@ -85,7 +89,8 @@ class DebianizeChanger(DebianChanger):
             compat_release=args.compat_release, schroot=schroot,
             diligence=args.diligence,
             trust_package=args.trust_package,
-            verbose=args.verbose)
+            verbose=args.verbose,
+            force_new_directory=args.force_new_directory)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
@@ -137,6 +142,7 @@ class DebianizeChanger(DebianChanger):
                     diligence=self.diligence,
                     trust=self.trust,
                     verbose=self.verbose,
+                    force_new_directory=self.force_new_directory,
                     create_dist=getattr(self, 'create_dist', None))
             except OSError as e:
                 if e.errno == errno.ENOSPC:
