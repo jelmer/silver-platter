@@ -161,7 +161,10 @@ class DebianizeChanger(DebianChanger):
             except DetailedFailure as e:
                 raise ChangerError('dist-%s' % e.error.kind, str(e.error))
             except UnidentifiedError as e:
-                raise ChangerError('dist-command-failed', str(e.secondary.line))
+                if e.secondary:
+                    raise ChangerError('dist-command-failed', str(e.secondary.line))
+                else:
+                    raise ChangerError('dist-command-failed', "Dist command failed: %s" % e.lines[-1])
             except DistCreationFailed as e:
                 if e.inner:
                     raise ChangerError('dist-%s' % e.inner.kind, e.msg)
