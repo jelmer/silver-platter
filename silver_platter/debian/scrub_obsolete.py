@@ -66,19 +66,24 @@ class ScrubObsoleteChanger(DebianChanger):
             help="Release to allow upgrading from.",
             default="oldstable",
         )
+        parser.add_argument(
+            "--compat-release",
+            metavar="UPGRADE-RELEASE",
+            help="Release to allow upgrading from.",
+            default="stable",
+        )
+
 
     @classmethod
     def from_args(cls, args):
-        import distro_info
-
-        debian_info = distro_info.DebianDistroInfo()
-        upgrade_release = debian_info.codename(args.upgrade_release)
         return cls(
-            allow_reformatting=args.allow_reformatting, upgrade_release=upgrade_release
+            allow_reformatting=args.allow_reformatting, upgrade_release=args.upgrade_release,
+            compat_release=args.compat_release
         )
 
-    def __init__(self, upgrade_release, allow_reformatting=None):
+    def __init__(self, upgrade_release, compat_release, allow_reformatting=None):
         self.allow_reformatting = allow_reformatting
+        self.compat_release = compat_release
         self.upgrade_release = upgrade_release
 
     def suggest_branch_name(self):
@@ -95,6 +100,16 @@ class ScrubObsoleteChanger(DebianChanger):
     ):
         from lintian_brush.scrub_obsolete import scrub_obsolete
 
+        import distro_info
+
+        debian_info = distro_info.DebianDistroInfo()
+        if self.compat_release:
+            compat_release = debian_info.codename(self.compat_release)
+        else:
+            compat_release = None
+
+        upgrade_release = debian_info.codename(self.upgrade_release)
+
         base_revid = local_tree.last_revision()
         allow_reformatting = self.allow_reformatting
         try:
@@ -106,12 +121,18 @@ class ScrubObsoleteChanger(DebianChanger):
                 allow_reformatting = cfg.allow_reformatting()
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
+            if compat_release is None:
+                compat_release = cfg.compat_release()
+
+        if compat_release is None:
+            compat_release = debian_info.stable()
 
         try:
             result = scrub_obsolete(
                 local_tree,
                 subpath,
-                self.upgrade_release,
+                compat_release,
+                upgrade_release,
                 update_changelog=update_changelog,
             )
         except FormattingUnpreservable as e:
