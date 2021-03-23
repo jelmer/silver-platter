@@ -180,13 +180,14 @@ class DebianizeChanger(DebianChanger):
         # TODO(jelmer): Pristine tar branch?
         branches = [
             ("main", None, base_revid, local_tree.last_revision()),
-            (
+            ]
+        if result.upstream_branch_name:
+            branches.append((
                 "upstream",
                 result.upstream_branch_name,
                 upstream_base_revid,
                 local_tree.controldir.open_branch(result.upstream_branch_name).last_revision(),
-            ),
-        ]
+            ))
 
         tags = [
             (("upstream", str(result.upstream_version), component), tag,
