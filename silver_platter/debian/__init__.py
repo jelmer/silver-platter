@@ -319,7 +319,8 @@ def control_file_present(tree: Tree, subpath: str) -> bool:
     Returns:
       whether control file is present
     """
-    for name in ["debian/control", "debian/control.in", "control", "control.in"]:
+    for name in ["debian/control", "debian/control.in", "control",
+                 "control.in", "debian/debcargo.toml"]:
         name = os.path.join(subpath, name)
         if tree.has_filename(name):
             return True
