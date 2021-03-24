@@ -24,6 +24,7 @@ from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 import silver_platter  # noqa: F401
 
+from lintian_brush import NotDebianPackage
 from lintian_brush.config import Config
 
 from .changer import (
@@ -144,6 +145,8 @@ class ScrubObsoleteChanger(DebianChanger):
             raise ChangerError(
                 "generated-file", "unable to edit generated file: %r" % e
             )
+        except NotDebianPackage:
+            raise ChangerError("not-debian-package", "Not a Debian package")
 
         if not result:
             raise ChangerError("nothing-to-do", "no obsolete constraints")
