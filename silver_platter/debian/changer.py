@@ -370,7 +370,7 @@ def _run_single_changer(  # noqa: C901
                 reporter=DummyChangerReporter(),
             )
         except ChangerError as e:
-            logging.exception(e.summary)
+            logging.error('%s: %s', e.category, e.summary)
             return False
 
         if not ws.changes_since_main():
@@ -422,7 +422,7 @@ def _run_single_changer(  # noqa: C901
                 **kwargs
             )
         except UnsupportedHoster as e:
-            logging.exception(
+            logging.error(
                 "%s: No known supported hoster for %s. Run 'svp login'?",
                 pkg,
                 full_branch_url(e.branch),
@@ -441,7 +441,7 @@ def _run_single_changer(  # noqa: C901
             logging.info('%s: insufficient changes for a new merge proposal',
                          pkg)
         except HosterLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
                 e.hoster.base_url,
             )
