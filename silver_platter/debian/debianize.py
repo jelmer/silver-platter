@@ -163,14 +163,14 @@ class DebianizeChanger(DebianChanger):
                     'no-build-tools',
                     "Unable to find any build systems in upstream sources")
             except DistCommandFailed as e:
-                raise ChangerError("dist-command-failed", "Dist command failed: %s" % e, e)
+                raise ChangerError("dist-command-failed", str(e), e)
             except DetailedFailure as e:
                 raise ChangerError('dist-%s' % e.error.kind, str(e.error))
             except UnidentifiedError as e:
                 if e.secondary:
                     raise ChangerError('dist-command-failed', str(e.secondary.line))
                 else:
-                    raise ChangerError('dist-command-failed', "Dist command failed: %s" % e.lines[-1])
+                    raise ChangerError('dist-command-failed', e.lines[-1])
             except DistCreationFailed as e:
                 if e.inner:
                     raise ChangerError('dist-%s' % e.inner.kind, e.msg)

@@ -1343,7 +1343,7 @@ class NewUpstreamChanger(DebianChanger):
         except MissingChangelogError as e:
             raise ChangerError("missing-changelog", "Missing changelog %s" % e, e)
         except DistCommandFailed as e:
-            raise ChangerError("dist-command-failed", "Dist command failed: %s" % e, e)
+            raise ChangerError("dist-command-failed", str(e), e)
         except MissingUpstreamTarball as e:
             raise ChangerError(
                 "missing-upstream-tarball", "Missing upstream tarball: %s" % e, e
