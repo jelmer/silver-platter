@@ -20,6 +20,7 @@
 import silver_platter  # noqa: F401
 
 import argparse
+from email.utils import parseaddr
 import errno
 import logging
 import os
@@ -29,7 +30,7 @@ import tempfile
 import traceback
 from typing import List, Optional, Callable, Union
 
-from debian.changelog import Version, ChangelogParseError
+from debian.changelog import Version, ChangelogParseError, get_maintainer
 
 from ..utils import (
     full_branch_url,
@@ -1026,6 +1027,10 @@ def update_packaging(
       old_tree: Old tree
       committer: Optional committer to use for changes
     """
+    if committer is None:
+        maintainer = get_maintainer()
+    else:
+        maintainer = parseaddr(committer)
     notes = []
     tree_delta = tree.changes_from(old_tree, specific_files=[subpath])
     for delta in tree_delta.added:
@@ -1042,7 +1047,7 @@ def update_packaging(
                 )
                 with ChangelogEditor(
                         tree.abspath(os.path.join(subpath, 'debian/changelog'))) as cl:
-                    cl.add_entry(["Invoke autogen.sh from dh_autoreconf."])
+                    cl.add_entry(["Invoke autogen.sh from dh_autoreconf."], maintainer=maintainer)
                 debcommit(
                     tree,
                     committer=committer,
@@ -1463,7 +1468,7 @@ class NewUpstreamChanger(DebianChanger):
                 old_tree = local_tree.branch.repository.revision_tree(
                     result.old_revision
                 )
-                notes = update_packaging(local_tree, old_tree)
+                notes = update_packaging(local_tree, old_tree, committer=committer)
                 reporter.report_metadata("notes", notes)
                 for n in notes:
                     logging.info("%s", n)
