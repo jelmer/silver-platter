@@ -962,7 +962,7 @@ def merge_upstream(  # noqa: C901
     with ChangelogEditor(
             tree.abspath(os.path.join(debian_path, "changelog"))) as cl:
         new_version = str(new_package_version(
-            new_upstream_version, distribution_name, cl[0].version.epoch)),
+            new_upstream_version, distribution_name, cl[0].version.epoch))
         cl.auto_version(new_version)
 
         if update_changelog:
