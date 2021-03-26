@@ -74,7 +74,6 @@ class ScrubObsoleteChanger(DebianChanger):
             default="stable",
         )
 
-
     @classmethod
     def from_args(cls, args):
         return cls(

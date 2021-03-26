@@ -158,7 +158,7 @@ class DebianizeChanger(DebianChanger):
                 raise ChangerError(
                     'invalid-source-package-name',
                     "Generated source package name %r is not valid" % e.source)
-            except NoBuildToolsFound as e:
+            except NoBuildToolsFound:
                 raise ChangerError(
                     'no-build-tools',
                     "Unable to find any build systems in upstream sources")

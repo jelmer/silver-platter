@@ -74,7 +74,6 @@ from breezy.plugins.debian.changelog import debcommit
 from breezy.transform import MalformedTransform
 
 from breezy.plugins.debian.merge_upstream import (
-    changelog_add_new_version,
     do_import,
     do_merge,
     get_tarballs,
