@@ -123,6 +123,9 @@ from breezy.plugins.debian.upstream.branch import (
     run_dist_command,
 )
 
+from debmutate.changelog import ChangelogEditor, upstream_merge_changelog_line
+from debmutate.versions import new_package_version
+
 try:
     from debmutate.watch import WatchSyntaxError
 except ImportError:
@@ -946,20 +949,27 @@ def merge_upstream(  # noqa: C901
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
     (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
-    package = changelog.package
+    if top_level:
+        debian_path = subpath
+    else:
+        debian_path = os.path.join(subpath, "debian")
 
     if Version(old_upstream_version) >= Version(new_upstream_version):
         if conflicts:
             raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
-    if update_changelog:
-        changelog_add_new_version(
-            tree, subpath, new_upstream_version, distribution_name, changelog, package
-        )
+
+    with ChangelogEditor(
+            tree.abspath(os.path.join(debian_path, "changelog"))) as cl:
+        new_version = str(new_package_version(
+            new_upstream_version, distribution_name, cl[0].version.epoch)),
+        cl.auto_version(new_version)
+
+        if update_changelog:
+            cl.add_entry([upstream_merge_changelog_line(new_upstream_version)])
+
     if not need_upstream_tarball:
-        logging.info(
-            "An entry for the new upstream version has been " "added to the changelog."
-        )
+        logging.info("The changelog has been updated for the new version.")
     else:
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
