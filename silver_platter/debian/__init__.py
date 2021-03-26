@@ -54,7 +54,6 @@ from ..utils import (
 
 __all__ = [
     "add_changelog_entry",
-    "changelog_add_line",
     "apt_get_source_package",
     "guess_update_changelog",
     "source_package_vcs",
@@ -277,15 +276,6 @@ def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
         except KeyError:
             pass
     return probers
-
-
-def changelog_add_line(
-    tree: WorkingTree, subpath: str, line: str, email: Optional[str] = None
-) -> None:
-    env = {}
-    if email:
-        env["DEBEMAIL"] = email
-    subprocess.check_call(["dch", "--", line], cwd=tree.abspath(subpath), env=env)
 
 
 def is_debcargo_package(tree: Tree, subpath: str) -> bool:

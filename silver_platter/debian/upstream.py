@@ -40,7 +40,6 @@ from ..utils import (
 )
 
 from . import (
-    changelog_add_line,
     control_files_in_root,
 )
 from .changer import (
@@ -318,12 +317,10 @@ def refresh_quilt_patches(
             if m and getattr(patches, "delete", None):
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
-                changelog_add_line(
-                    local_tree,
-                    subpath,
-                    "Drop patch %s, present upstream." % name,
-                    email=committer,
-                )
+                with ChangelogEditor(
+                        local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
+                        ) as cl:
+                    cl.add_entry(["Drop patch %s, present upstream." % name])
                 debcommit(
                     local_tree,
                     committer=committer,
@@ -1044,12 +1041,9 @@ def update_packaging(
                 logging.info(
                     "Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf."
                 )
-                changelog_add_line(
-                    tree,
-                    subpath,
-                    "Invoke autogen.sh from dh_autoreconf.",
-                    email=committer,
-                )
+                with ChangelogEditor(
+                        tree.abspath(os.path.join(subpath, 'debian/changelog'))) as cl:
+                    cl.add_entry(["Invoke autogen.sh from dh_autoreconf."])
                 debcommit(
                     tree,
                     committer=committer,
