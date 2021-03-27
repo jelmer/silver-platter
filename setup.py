@@ -20,7 +20,7 @@ from setuptools import setup
 debian_deps = [
     'pyyaml',  # For reading debian/upstream/metadata
     'debmutate>=0.3',
-    'lintian-brush>=0.50',
+    'lintian-brush>=0.102',
     'python_debian',
     'distro-info',
     'upstream-ontologist',

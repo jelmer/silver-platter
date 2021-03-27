@@ -134,10 +134,17 @@ class DebianizeChanger(DebianChanger):
         if compat_release is None:
             compat_release = debian_info.stable()
 
+        # For now...
+        upstream_branch = local_tree.branch
+        upstream_subpath = subpath
+
         with local_tree.lock_write():
             try:
                 result = debianize(
-                    local_tree, subpath=subpath, compat_release=self.compat_release,
+                    local_tree, subpath=subpath,
+                    upstream_branch=upstream_branch,
+                    upstream_subpath=upstream_subpath,
+                    compat_release=self.compat_release,
                     schroot=self.schroot,
                     diligence=self.diligence,
                     trust=self.trust,
