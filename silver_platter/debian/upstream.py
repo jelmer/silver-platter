@@ -160,7 +160,16 @@ __all__ = [
     "UpstreamMetadataSyntaxError",
     "QuiltPatchPushFailure",
     "WatchLineWithoutMatches",
+    "BigVersionJump",
 ]
+
+
+class BigVersionJump(Exception):
+    """There was a big version jump."""
+
+    def __init__(self, old_upstream_version, new_upstream_version):
+        self.old_upstream_version = old_upstream_version
+        self.new_upstream_version = new_upstream_version
 
 
 class UpstreamMergeConflicted(Exception):
@@ -256,6 +265,20 @@ class NewerUpstreamAlreadyImported(Exception):
 RELEASE_BRANCH_NAME = "new-upstream-release"
 SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 DEFAULT_DISTRIBUTION = "unstable"
+
+
+def is_big_version_jump(old_upstream_version, new_upstream_version):
+    try:
+        old_major_version = int(old_upstream_version.split('.')[0])
+    except ValueError:
+        return False
+    try:
+        new_major_version = int(new_upstream_version.split('.')[0])
+    except ValueError:
+        return False
+    if new_major_version > 5*old_major_version:
+        return True
+    return False
 
 
 def get_upstream_branch_location(tree, subpath, config, trust_package=False):
@@ -437,6 +460,7 @@ def find_new_upstream(  # noqa: C901
     top_level=False,
     create_dist=None,
     include_upstream_history: Optional[bool] = None,
+    force_big_version_jump: bool = False
 ):
 
     # TODO(jelmer): Find the lastest upstream present in the upstream branch
@@ -535,6 +559,8 @@ def find_new_upstream(  # noqa: C901
             raise NewerUpstreamAlreadyImported(
                 old_upstream_version, new_upstream_version
             )
+        if is_big_version_jump(old_upstream_version, new_upstream_version) and not force_big_version_jump:
+            raise BigVersionJump(old_upstream_version, new_upstream_version)
 
     # TODO(jelmer): Check if new_upstream_version is already imported
 
@@ -607,6 +633,7 @@ def import_upstream(
     subpath: str = "",
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
+    force_big_version_jump: bool = False,
 ) -> ImportUpstreamResult:
     """Import a new upstream version into a tree.
 
@@ -678,6 +705,7 @@ def import_upstream(
         top_level=top_level,
         include_upstream_history=include_upstream_history,
         create_dist=create_dist,
+        force_big_version_jump=force_big_version_jump,
     )
 
     with tempfile.TemporaryDirectory() as target_dir:
@@ -792,6 +820,7 @@ def merge_upstream(  # noqa: C901
     subpath: str = "",
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
+    force_big_version_jump: bool = False
 ) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
@@ -864,6 +893,7 @@ def merge_upstream(  # noqa: C901
         top_level=top_level,
         include_upstream_history=include_upstream_history,
         create_dist=create_dist,
+        force_big_version_jump=force_big_version_jump,
     )
 
     if need_upstream_tarball:
@@ -1079,7 +1109,8 @@ class NewUpstreamChanger(DebianChanger):
         dist_command,
         import_only=False,
         include_upstream_history=None,
-        chroot=None
+        chroot=None,
+        force_big_version_jump=False
     ):
         self.snapshot = snapshot
         self.trust_package = trust_package
@@ -1089,6 +1120,7 @@ class NewUpstreamChanger(DebianChanger):
         self.import_only = import_only
         self.include_upstream_history = include_upstream_history
         self.schroot = chroot
+        self.force_big_version_jump = force_big_version_jump
 
     @classmethod
     def setup_parser(cls, parser):
@@ -1144,6 +1176,10 @@ class NewUpstreamChanger(DebianChanger):
             help="force inclusion of upstream history",
             default=None,
         )
+        parser.add_argument(
+            "--force-big-version-jump",
+            action="store_true",
+            help="force through big version jumps")
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -1161,7 +1197,8 @@ class NewUpstreamChanger(DebianChanger):
             dist_command=args.dist_command,
             import_only=args.import_only,
             include_upstream_history=args.include_upstream_history,
-            chroot=args.chroot
+            chroot=args.chroot,
+            force_big_version_jump=args.force_big_version_jump,
         )
 
     def make_changes(  # noqa: C901
@@ -1202,6 +1239,7 @@ class NewUpstreamChanger(DebianChanger):
                         committer=committer,
                         include_upstream_history=self.include_upstream_history,
                         create_dist=create_dist,
+                        force_big_version_jump=self.force_big_version_jump,
                     )
                 except MalformedTransform:
                     traceback.print_exc()
@@ -1219,6 +1257,7 @@ class NewUpstreamChanger(DebianChanger):
                     committer=committer,
                     include_upstream_history=self.include_upstream_history,
                     create_dist=create_dist,
+                    force_big_version_jump=self.force_big_version_jump,
                 )
         except UpstreamAlreadyImported as e:
             reporter.report_context(str(e.version))
