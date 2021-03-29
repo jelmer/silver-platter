@@ -272,11 +272,11 @@ DEFAULT_DISTRIBUTION = "unstable"
 
 def is_big_version_jump(old_upstream_version, new_upstream_version):
     try:
-        old_major_version = int(old_upstream_version.split('.')[0])
+        old_major_version = int(str(old_upstream_version).split('.')[0])
     except ValueError:
         return False
     try:
-        new_major_version = int(new_upstream_version.split('.')[0])
+        new_major_version = int(str(new_upstream_version).split('.')[0])
     except ValueError:
         return False
     if new_major_version > 5*old_major_version:
@@ -594,11 +594,11 @@ def find_new_upstream(  # noqa: C901
                 # The branch is our primary upstream source, so if it can't
                 # find the version then there's nothing we can do.
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch_source.upstream_branch, new_upstream_version
+                    upstream_branch_source.upstream_branch, str(new_upstream_version)
                 )
             elif not allow_ignore_upstream_branch:
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch_source.upstream_branch, new_upstream_version
+                    upstream_branch_source.upstream_branch, str(new_upstream_version)
                 )
             else:
                 logging.warn(
