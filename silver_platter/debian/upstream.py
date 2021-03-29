@@ -123,7 +123,10 @@ from breezy.plugins.debian.upstream.branch import (
 )
 
 from debmutate.changelog import ChangelogEditor, upstream_merge_changelog_line
-from debmutate.versions import new_package_version
+from debmutate.versions import (
+    new_upstream_package_version,
+    initial_debian_revision,
+    )
 
 try:
     from debmutate.watch import WatchSyntaxError
@@ -820,7 +823,8 @@ def merge_upstream(  # noqa: C901
     subpath: str = "",
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
-    force_big_version_jump: bool = False
+    force_big_version_jump: bool = False,
+    debian_revision: Optional[str] = None
 ) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
@@ -995,8 +999,10 @@ def merge_upstream(  # noqa: C901
 
     with ChangelogEditor(
             tree.abspath(os.path.join(debian_path, "changelog"))) as cl:
-        new_version = str(new_package_version(
-            new_upstream_version, distribution_name, cl[0].version.epoch))
+        if debian_revision is None:
+            debian_revision = initial_debian_revision(distribution_name)
+        new_version = str(new_upstream_package_version(
+            new_upstream_version, debian_revision, cl[0].version.epoch))
         cl.auto_version(new_version)
 
         if update_changelog:
@@ -1110,7 +1116,8 @@ class NewUpstreamChanger(DebianChanger):
         import_only=False,
         include_upstream_history=None,
         chroot=None,
-        force_big_version_jump=False
+        force_big_version_jump=False,
+        debian_revision=None,
     ):
         self.snapshot = snapshot
         self.trust_package = trust_package
@@ -1121,6 +1128,7 @@ class NewUpstreamChanger(DebianChanger):
         self.include_upstream_history = include_upstream_history
         self.schroot = chroot
         self.force_big_version_jump = force_big_version_jump
+        self.debian_revision = debian_revision
 
     @classmethod
     def setup_parser(cls, parser):
@@ -1180,6 +1188,11 @@ class NewUpstreamChanger(DebianChanger):
             "--force-big-version-jump",
             action="store_true",
             help="force through big version jumps")
+        parser.add_argument(
+            "--debian-revision",
+            type=str,
+            help="Debian revision to use (e.g. '1' or '0ubuntu1')",
+            default=None)
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -1199,6 +1212,7 @@ class NewUpstreamChanger(DebianChanger):
             include_upstream_history=args.include_upstream_history,
             chroot=args.chroot,
             force_big_version_jump=args.force_big_version_jump,
+            debian_revision=args.debian_revision,
         )
 
     def make_changes(  # noqa: C901
@@ -1240,6 +1254,7 @@ class NewUpstreamChanger(DebianChanger):
                         include_upstream_history=self.include_upstream_history,
                         create_dist=create_dist,
                         force_big_version_jump=self.force_big_version_jump,
+                        debian_revision=self.debian_revision,
                     )
                 except MalformedTransform:
                     traceback.print_exc()
