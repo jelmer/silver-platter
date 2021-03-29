@@ -544,6 +544,12 @@ def find_new_upstream(  # noqa: C901
     if new_upstream_version is None:
         raise NewUpstreamMissing()
 
+    if not new_upstream_version[0].isdigit():
+        # dpkg forbids this, let's just refuse it early
+        raise InvalidFormatUpstreamVersion(
+            new_upstream_version, primary_upstream_source
+        )
+
     try:
         new_upstream_version = Version(new_upstream_version)
     except ValueError:
