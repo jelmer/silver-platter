@@ -279,7 +279,7 @@ def is_big_version_jump(old_upstream_version, new_upstream_version):
         new_major_version = int(str(new_upstream_version).split('.')[0])
     except ValueError:
         return False
-    if new_major_version > 5*old_major_version:
+    if old_major_version > 0 and new_major_version > 5*old_major_version:
         return True
     return False
 
