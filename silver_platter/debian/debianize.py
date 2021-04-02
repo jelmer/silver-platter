@@ -202,6 +202,8 @@ class DebianizeChanger(DebianChanger):
             for (component, tag) in result.tag_names.items()
         ]
 
+        reporter.report_metadata("wnpp_bugs", result.wnpp_bugs)
+
         return ChangerResult(
             description="Debianized package.",
             mutator=None,
