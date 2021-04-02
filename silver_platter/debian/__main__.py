@@ -64,6 +64,10 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         version="%(prog)s " + silver_platter.version_string,
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Be more verbose")
+    parser.add_argument(
         "--help", action="store_true", help="show this help message and exit"
     )
 
@@ -93,7 +97,11 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        if args.debug:
+            level = logging.DEBUG
+        else:
+            level = logging.INFO
+        logging.basicConfig(level=level, format="%(message)s")
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1
