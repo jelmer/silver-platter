@@ -203,7 +203,10 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
         url, params = urlutils.split_segment_parameters(location)
-        branch_name = params.get("branch")
+        try:
+            branch_name = urlutils.unquote(params["branch"])
+        except KeyError:
+            branch_name = None
         subpath = ""
     probers = select_probers(vcs_type)
     branch = open_branch(
