@@ -47,7 +47,7 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
     from breezy import urlutils
     from breezy.branch import Branch
     from breezy.errors import PermissionDenied
-    from breezy.propose import UnsupportedHoster, get_hoster
+    from breezy.propose import UnsupportedHoster, get_hoster, HosterLoginRequired
     from breezy.plugins.gitlab.hoster import GitLab
 
     if dry_run:
@@ -56,7 +56,7 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
 
     try:
         salsa = GitLab.probe_from_url("https://salsa.debian.org/")
-    except UnsupportedHoster:
+    except HosterLoginRequired:
         logging.warning("No login for salsa known, not pushing branch.")
         return
 
