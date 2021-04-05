@@ -27,6 +27,7 @@ import silver_platter  # noqa: F401
 from lintian_brush import NotDebianPackage
 from lintian_brush.config import Config
 
+from . import control_file_present, is_debcargo_package
 from .changer import (
     DebianChanger,
     ChangerError,
@@ -126,6 +127,11 @@ class ScrubObsoleteChanger(DebianChanger):
 
         if compat_release is None:
             compat_release = debian_info.stable()
+
+        if not control_file_present(local_tree, subpath):
+            if is_debcargo_package(local_tree, subpath):
+                raise ChangerError("debcargo-package", "Package uses debcargo")
+            raise ChangerError("missing-control-file", "Unable to find debian/control")
 
         try:
             result = scrub_obsolete(
