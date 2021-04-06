@@ -130,9 +130,9 @@ class MultiArchHintsChanger(DebianChanger):
                 "control files live in root rather than debian/ " "(LarstIQ mode)",
             )
 
-        if not control_file_present(local_tree, subpath):
-            if is_debcargo_package(local_tree, subpath):
-                raise ChangerError("debcargo-package", "Package uses debcargo")
+        if is_debcargo_package(local_tree, subpath):
+            raise ChangerError("debcargo-package", "Package uses debcargo")
+        elif not control_file_present(local_tree, subpath):
             raise ChangerError("missing-control-file", "Unable to find debian/control")
 
         try:
