@@ -987,7 +987,7 @@ def merge_upstream(  # noqa: C901
     # from upstream.
     try:
         (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
-    except ChangelogParseError:
+    except (ChangelogParseError, MissingChangelogError):
         # If there was a conflict that affected debian/changelog, then that might be
         # to blame.
         if conflicts:
