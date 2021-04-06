@@ -129,7 +129,7 @@ class ScrubObsoleteChanger(DebianChanger):
             compat_release = debian_info.stable()
 
         if is_debcargo_package(local_tree, subpath):
-            raise ChangerError("debcargo-package", "Package uses debcargo")
+            raise ChangerError("nothing-to-do", "Package uses debcargo")
         elif not control_file_present(local_tree, subpath):
             raise ChangerError("missing-control-file", "Unable to find debian/control")
 
