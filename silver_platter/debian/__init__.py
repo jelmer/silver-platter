@@ -332,13 +332,8 @@ def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
 
 
 def is_debcargo_package(tree: Tree, subpath: str) -> bool:
-    debian_path = os.path.join(subpath, "debian")
-    if tree.has_filename(debian_path):
-        return False
-    control_path = os.path.join(subpath, "debcargo.toml")
-    if tree.has_filename(control_path):
-        return True
-    return False
+    control_path = os.path.join(subpath, "debian", "debcargo.toml")
+    return tree.has_filename(control_path)
 
 
 def control_files_in_root(tree: Tree, subpath: str) -> bool:
