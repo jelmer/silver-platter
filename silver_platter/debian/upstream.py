@@ -1009,10 +1009,15 @@ def merge_upstream(  # noqa: C901
             debian_revision = initial_debian_revision(distribution_name)
         new_version = str(new_upstream_package_version(
             new_upstream_version, debian_revision, cl[0].version.epoch))
+        if not update_changelog:
+            # We need to run "gbp dch" here, since the next "gbp dch" runs
+            # won't pick up the pending changes, as we're about to change
+            # debian/changelog.
+            from debmutate.changelog import gbp_dch
+            gbp_dch(tree.basedir)
         cl.auto_version(new_version)
 
-        if update_changelog:
-            cl.add_entry([upstream_merge_changelog_line(new_upstream_version)])
+        cl.add_entry([upstream_merge_changelog_line(new_upstream_version)])
 
     if not need_upstream_tarball:
         logging.info("The changelog has been updated for the new version.")
@@ -1020,14 +1025,7 @@ def merge_upstream(  # noqa: C901
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
-    if update_changelog:
-        debcommit(tree, subpath=subpath, committer=committer)
-    else:
-        tree.commit(
-            committer=committer,
-            message="Merge new upstream release %s." % new_upstream_version,
-            specific_files=([subpath] if len(tree.get_parent_ids()) <= 1 else None),
-        )
+    debcommit(tree, subpath=subpath, committer=committer)
 
     return MergeUpstreamResult(
         include_upstream_history=include_upstream_history,
