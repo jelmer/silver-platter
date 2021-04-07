@@ -78,6 +78,7 @@ class Workspace(object):
         resume_branch: Optional[Branch] = None,
         cached_branch: Optional[Branch] = None,
         additional_colocated_branches: Optional[List[str]] = None,
+        resume_branch_additional_colocated_branches: Optional[List[str]] = None,
         dir: Optional[str] = None,
         path: Optional[str] = None,
     ) -> None:
@@ -86,6 +87,7 @@ class Workspace(object):
         self.cached_branch = cached_branch
         self.resume_branch = resume_branch
         self.additional_colocated_branches = additional_colocated_branches or []
+        self.resume_branch_additional_colocated_branches = resume_branch_additional_colocated_branches
         self._destroy = None
         self._dir = dir
         self._path = path
@@ -102,24 +104,33 @@ class Workspace(object):
     def __repr__(self):
         return (
             "%s(%r, resume_branch=%r, cached_branch=%r, "
-            "additional_colocated_branches=%r, dir=%r, path=%r)"
+            "additional_colocated_branches=%r, "
+            "resume_branch_additional_colocated_branches=%r, dir=%r, path=%r)"
             % (
                 type(self).__name__,
                 self.main_branch,
                 self.resume_branch,
                 self.cached_branch,
                 self.additional_colocated_branches,
+                self.resume_branch_additional_colocated_branches,
                 self._dir,
                 self._path,
             )
         )
 
     def __enter__(self) -> Any:
-        sprout_base = self.cached_branch or self.resume_branch or self.main_branch
+        for (sprout_base, sprout_coloc) in [
+                (self.cached_branch, self.additional_colocated_branches),
+                (self.resume_branch, self.resume_branch_additional_colocated_branches),
+                (self.main_branch, self.additional_colocated_branches)]:
+            if sprout_base:
+                break
+        else:
+            raise ValueError('main branch needs to be specified')
         logger.debug("Creating sprout from %r", sprout_base)
         self.local_tree, self._destroy = create_temp_sprout(
             sprout_base,
-            self.additional_colocated_branches,
+            sprout_coloc,
             dir=self._dir,
             path=self._path,
         )
@@ -146,7 +157,7 @@ class Workspace(object):
                     "Fetching colocated branches: %r",
                     self.additional_colocated_branches,
                 )
-                for branch_name in self.additional_colocated_branches:
+                for branch_name in self.resume_branch_additional_colocated_branches or []:
                     try:
                         remote_colo_branch = self.main_branch.controldir.open_branch(
                             name=branch_name
@@ -163,6 +174,7 @@ class Workspace(object):
                         self.main_branch_revid
                     )
                     self.resume_branch = None
+                    self.resume_branch_additional_colocated_branches = None
                     self.refreshed = True
             self.orig_revid = self.local_tree.last_revision()
         return self
