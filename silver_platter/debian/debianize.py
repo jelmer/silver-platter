@@ -37,6 +37,7 @@ from lintian_brush.debianize import (
     DistCreationFailed,
     UnidentifiedError,
     DetailedFailure,
+    NoUpstreamReleases,
 )
 from lintian_brush.config import Config
 
@@ -164,11 +165,15 @@ class DebianizeChanger(DebianChanger):
             except SourcePackageNameInvalid as e:
                 raise ChangerError(
                     'invalid-source-package-name',
-                    "Generated source package name %r is not valid" % e.source)
+                    "Generated source package name %r is not valid." % e.source)
             except NoBuildToolsFound:
                 raise ChangerError(
                     'no-build-tools',
-                    "Unable to find any build systems in upstream sources")
+                    "Unable to find any build systems in upstream sources.")
+            except NoUpstreamReleases:
+                raise ChangerError(
+                    'no-upstream-releases',
+                    'The upstream project does not appear to have made any releases.')
             except DistCommandFailed as e:
                 raise ChangerError("dist-command-failed", str(e), e)
             except DetailedFailure as e:
