@@ -1450,7 +1450,7 @@ class NewUpstreamChanger(DebianChanger):
         except BigVersionJump as e:
             raise ChangerError(
                 "big-version-jump",
-                "There was a big jump in upstream versions: %s => %s" % (
+                "There was a big jump in upstream versions: %s ⇒ %s" % (
                 e.old_upstream_version, e.new_upstream_version),
                 details={
                     'old_upstream_version': str(e.old_upstream_version),
