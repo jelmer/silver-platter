@@ -1318,6 +1318,10 @@ class NewUpstreamChanger(DebianChanger):
                 "Last upstream version %s already merged." % e.version,
                 e,
             )
+        except NoWatchFile:
+            raise ChangerError(
+                "no-watch-file",
+                "No watch file is present, but --require-uscan was specified")
         except PreviousVersionTagMissing as e:
             raise ChangerError(
                 "previous-upstream-missing",
