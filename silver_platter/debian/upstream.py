@@ -463,7 +463,8 @@ def find_new_upstream(  # noqa: C901
     top_level=False,
     create_dist=None,
     include_upstream_history: Optional[bool] = None,
-    force_big_version_jump: bool = False
+    force_big_version_jump: bool = False,
+    require_uscan: bool = False,
 ):
 
     # TODO(jelmer): Find the lastest upstream present in the upstream branch
@@ -534,6 +535,8 @@ def find_new_upstream(  # noqa: C901
                 # watch file.
                 if upstream_branch_source is None:
                     raise NoUpstreamLocationsKnown(package)
+                if require_uscan:
+                    raise
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
@@ -830,7 +833,8 @@ def merge_upstream(  # noqa: C901
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
     force_big_version_jump: bool = False,
-    debian_revision: Optional[str] = None
+    debian_revision: Optional[str] = None,
+    require_uscan: bool = False
 ) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
@@ -904,6 +908,7 @@ def merge_upstream(  # noqa: C901
         include_upstream_history=include_upstream_history,
         create_dist=create_dist,
         force_big_version_jump=force_big_version_jump,
+        require_uscan=require_uscan,
     )
 
     if need_upstream_tarball:
@@ -1122,6 +1127,7 @@ class NewUpstreamChanger(DebianChanger):
         chroot=None,
         force_big_version_jump=False,
         debian_revision=None,
+        require_uscan=False,
     ):
         self.snapshot = snapshot
         self.trust_package = trust_package
@@ -1133,6 +1139,7 @@ class NewUpstreamChanger(DebianChanger):
         self.schroot = chroot
         self.force_big_version_jump = force_big_version_jump
         self.debian_revision = debian_revision
+        self.require_uscan = require_uscan
 
     @classmethod
     def setup_parser(cls, parser):
@@ -1197,6 +1204,11 @@ class NewUpstreamChanger(DebianChanger):
             type=str,
             help="Debian revision to use (e.g. '1' or '0ubuntu1')",
             default=None)
+        parser.add_argument(
+            "--require-uscan",
+            action="store_true",
+            help=("Require that uscan provides a tarball"
+                  "(if --snapshot is not specified)"))
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -1217,6 +1229,7 @@ class NewUpstreamChanger(DebianChanger):
             chroot=args.chroot,
             force_big_version_jump=args.force_big_version_jump,
             debian_revision=args.debian_revision,
+            require_uscan=args.require_uscan,
         )
 
     def make_changes(  # noqa: C901
@@ -1259,6 +1272,7 @@ class NewUpstreamChanger(DebianChanger):
                         create_dist=create_dist,
                         force_big_version_jump=self.force_big_version_jump,
                         debian_revision=self.debian_revision,
+                        require_uscan=self.require_uscan,
                     )
                 except MalformedTransform:
                     traceback.print_exc()
