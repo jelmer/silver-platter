@@ -245,6 +245,10 @@ def setup_parser_common(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--install", "-i",
+        action="store_true",
+        help="Install built package (implies --build-verify)")
+    parser.add_argument(
         "--overwrite", action="store_true", help="Overwrite existing branches."
     )
     parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
@@ -321,6 +325,7 @@ def _run_single_changer(  # noqa: C901
     diff: bool = False,
     committer: Optional[str] = None,
     build_verify: bool = False,
+    install: bool = False,
     pre_check: Optional[str] = None,
     post_check: Optional[str] = None,
     builder: str = DEFAULT_BUILDER,
@@ -386,7 +391,7 @@ def _run_single_changer(  # noqa: C901
         except PostCheckFailed as e:
             logging.info("%s: %s", pkg, e)
             return False
-        if build_verify:
+        if build_verify or install:
             try:
                 ws.build(builder=builder, result_dir=build_target_dir)
             except BuildFailedError:
@@ -395,6 +400,25 @@ def _run_single_changer(  # noqa: C901
             except MissingUpstreamTarball:
                 logging.info("%s: unable to find upstream source", pkg)
                 return False
+
+        if install:
+            import re
+            import subprocess
+            from debian.changelog import Changelog
+            from debian.deb822 import Deb822
+            with open(ws.local_tree.abspath(os.path.join(ws.subpath, 'debian/changelog')), 'r') as f:
+                cl = Changelog(f)
+            non_epoch_version = cl[0].version.upstream_version
+            if cl[0].version.debian_version is not None:
+                non_epoch_version += "-%s" % cl[0].version.debian_version
+            c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))
+            for entry in os.scandir(build_target_dir):
+                if not c.match(entry.name):
+                    continue
+                with open(entry.path, 'rb') as f:
+                    changes = Deb822(f)
+                    if changes.get('Binary'):
+                        subprocess.check_call(['debi', entry.path])
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -520,6 +544,7 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
             diff=args.diff,
             committer=args.committer,
             build_verify=args.build_verify,
+            install=args.install,
             pre_check=args.pre_check,
             builder=args.builder,
             post_check=args.post_check,
