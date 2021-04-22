@@ -195,7 +195,7 @@ class OrphanChanger(DebianChanger):
                         wnpp_bug = find_wnpp_bug(editor.source["Source"])
                     except KeyError:
                         raise ChangerError(
-                            "no-wnpp-bug",
+                            "nothing-to-do",
                             "Package is purported to be orphaned, "
                             "but no open wnpp bug exists.",
                         )
