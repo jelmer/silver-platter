@@ -58,7 +58,7 @@ class DebianizeChanger(DebianChanger):
 
     name = "debianize"
 
-    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False, verbose=False, force_new_directory=False, upstream_version=None):
+    def __init__(self, compat_release=None, schroot=None, diligence=0, trust_package=False, verbose=False, force_new_directory=False, upstream_version=None, upstream_version_kind=None):
         self.compat_release = compat_release
         self.schroot = schroot
         self.diligence = diligence
@@ -66,6 +66,7 @@ class DebianizeChanger(DebianChanger):
         self.verbose = verbose
         self.force_new_directory = force_new_directory
         self.upstream_version = upstream_version
+        self.upstream_version_kind = upstream_version_kind
 
     @classmethod
     def setup_parser(cls, parser):
@@ -79,6 +80,9 @@ class DebianizeChanger(DebianChanger):
             "--verbose", action="store_true", help="Be verbose.")
         parser.add_argument(
             "--upstream-version", type=str, help="Upstream version to package.")
+        parser.add_argument(
+            "--upstream-version-kind", type=str, choices=['snapshot', 'release', 'auto'],
+            help="Upstream version kind.")
         parser.add_argument(
             '--force-new-directory', action='store_true',
             help='Force creation of a new directory.')
@@ -95,7 +99,8 @@ class DebianizeChanger(DebianChanger):
             trust_package=args.trust_package,
             verbose=args.verbose,
             force_new_directory=args.force_new_directory,
-            upstream_version=args.upstream_version)
+            upstream_version=args.upstream_version,
+            upstream_version_kind=args.upstream_version_kind)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
