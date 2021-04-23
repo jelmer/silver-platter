@@ -498,7 +498,7 @@ def find_new_upstream(  # noqa: C901
                 config=config,
                 local_dir=tree.controldir,
                 create_dist=create_dist,
-                snapshot=snapshot,
+                version_kind=("snapshot" if snapshot else "release")
             )
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
@@ -518,7 +518,7 @@ def find_new_upstream(  # noqa: C901
                 config=config,
                 local_dir=tree.controldir,
                 create_dist=create_dist,
-                snapshot=snapshot,
+                version_kind=("snapshot" if snapshot else "release")
             )
     else:
         if snapshot:
