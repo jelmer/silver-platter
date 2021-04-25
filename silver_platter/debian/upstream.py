@@ -126,6 +126,7 @@ from debmutate.changelog import ChangelogEditor, upstream_merge_changelog_line
 from debmutate.versions import (
     new_upstream_package_version,
     initial_debian_revision,
+    debianize_upstream_version,
     )
 
 try:
@@ -540,9 +541,12 @@ def find_new_upstream(  # noqa: C901
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
-        new_upstream_version = primary_upstream_source.get_latest_version(
+        unmangled_new_upstream_version, new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version
         )
+    else:
+        new_upstream_version = debianize_upstream_version(
+            new_upstream_version)
 
     if new_upstream_version is None:
         raise NewUpstreamMissing()
