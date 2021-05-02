@@ -1473,10 +1473,10 @@ class NewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 "big-version-jump",
                 "There was a big jump in upstream versions: %s ⇒ %s" % (
-                e.old_upstream_version, e.new_upstream_version),
-                details={
-                    'old_upstream_version': str(e.old_upstream_version),
-                    'new_upstream_version': str(e.new_upstream_version)})
+                    e.old_upstream_version, e.new_upstream_version),
+                    details={
+                        'old_upstream_version': str(e.old_upstream_version),
+                        'new_upstream_version': str(e.new_upstream_version)})
         except OSError as e:
             if e.errno == errno.ENOSPC:
                 raise ChangerError("no-space-on-device", str(e))
