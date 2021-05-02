@@ -258,6 +258,9 @@ def setup_parser_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--label", type=str, help="Label to attach", action="append", default=[]
     )
+    parser.add_argument(
+        "--preserve-repositories", action="store_true",
+        help="Preserve temporary repositories.")
 
 
 class DebianChanger(object):
@@ -325,6 +328,7 @@ def _run_single_changer(  # noqa: C901
     diff: bool = False,
     committer: Optional[str] = None,
     build_verify: bool = False,
+    preserve_repositories: bool = False,
     install: bool = False,
     pre_check: Optional[str] = None,
     post_check: Optional[str] = None,
@@ -464,6 +468,7 @@ def _run_single_changer(  # noqa: C901
         except InsufficientChangesForNewProposal:
             logging.info('%s: insufficient changes for a new merge proposal',
                          pkg)
+            return False
         except HosterLoginRequired as e:
             logging.error(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
@@ -485,6 +490,9 @@ def _run_single_changer(  # noqa: C901
                 )
                 if len(changer_result.branches) > 1:
                     sys.stdout.write("\n")
+        if preserve_repositories:
+            ws.defer_destroy()
+            logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
 
         return True
 
@@ -544,6 +552,7 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
             diff=args.diff,
             committer=args.committer,
             build_verify=args.build_verify,
+            preserve_repositories=args.preserve_repositories,
             install=args.install,
             pre_check=args.pre_check,
             builder=args.builder,

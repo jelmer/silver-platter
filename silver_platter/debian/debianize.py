@@ -106,14 +106,13 @@ class DebianizeChanger(DebianChanger):
         return BRANCH_NAME
 
     def make_changes(
-        self,
-        local_tree,
-        subpath,
-        update_changelog,
-        reporter,
-        committer,
-        base_proposal=None,
-    ):
+            self,
+            local_tree,
+            subpath,
+            update_changelog,
+            reporter,
+            committer,
+            base_proposal=None):  # noqa: C901
         base_revid = local_tree.last_revision()
         upstream_base_revid = NULL_REVISION
 
