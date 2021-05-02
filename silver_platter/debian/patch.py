@@ -24,7 +24,6 @@ from .changer import (
     run_mutator,
     DebianChanger,
     ChangerResult,
-    ChangerError,
 )
 
 from breezy.patch import patch_tree
