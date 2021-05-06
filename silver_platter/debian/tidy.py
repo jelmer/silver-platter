@@ -15,27 +15,29 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.trace import note
+import logging
 
 from .changer import (
-    run_changer,
+    run_mutator,
     DebianChanger,
-    setup_multi_parser as setup_changer_parser,
-    )
+    ChangerResult,
+)
 
 from .lintian import LintianBrushChanger
 from .multiarch import MultiArchHintsChanger
 
 
-BRANCH_NAME = 'tidy'
+BRANCH_NAME = "tidy"
 
 
 class TidyChanger(DebianChanger):
 
+    name = "tidy"
+
     SUBCHANGERS = [
         LintianBrushChanger,
         MultiArchHintsChanger,
-        ]
+    ]
 
     def __init__(self) -> None:
         self.subchangers = [kls() for kls in self.SUBCHANGERS]
@@ -51,71 +53,74 @@ class TidyChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(
+        self,
+        local_tree,
+        subpath,
+        update_changelog,
+        reporter,
+        committer,
+        base_proposal=None,
+    ):
+        base_revid = local_tree.last_revision()
         result = {}
+        tags = []
+        sufficient_for_proposal = False
+        branches = []
         for subchanger in self.subchangers:
-            result[subchanger] = (
-                subchanger.make_changes(
-                    local_tree, subpath, update_changelog, committer))
-        return result
+            subresult = subchanger.make_changes(
+                local_tree, subpath, update_changelog, committer
+            )
+            result[subchanger] = subresult.mutator
+            if subresult.sufficient_for_proposal:
+                sufficient_for_proposal = True
+            if subresult.tags:
+                tags.extend(subresult.tags)
+            if subresult.branches:
+                branches.extend(
+                    [entry for entry in subresult.branches if entry[0] != "main"]
+                )
 
-    def get_proposal_description(
-            self, result, description_format, existing_proposal):
+        commit_items = []
+        for subchanger in result:
+            if isinstance(subchanger, LintianBrushChanger):
+                commit_items.append("fix some lintian tags")
+            if isinstance(subchanger, MultiArchHintsChanger):
+                commit_items.append("apply multi-arch hints")
+        proposed_commit_message = (", ".join(commit_items) + ".").capitalize()
+
+        branches.insert(0, ("main", None, base_revid, local_tree.last_revision()))
+
+        return ChangerResult(
+            mutator=result,
+            description="Fix various small issues.",
+            tags=tags,
+            branches=branches,
+            sufficient_for_proposal=sufficient_for_proposal,
+            proposed_commit_message=proposed_commit_message,
+        )
+
+    def get_proposal_description(self, result, description_format, existing_proposal):
         entries = []
         for subchanger, memo in result.items():
             # TODO(jelmer): Does passing existing proposal in here work?
-            entries.append(subchanger.get_proposal_description(
-                memo, description_format, existing_proposal))
-        return '\n'.join(entries)
-
-    def get_commit_message(self, result, existing_proposal):
-        ret = []
-        for subchanger in result:
-            if isinstance(subchanger, LintianBrushChanger):
-                ret.append('fix some lintian tags')
-            if isinstance(subchanger, MultiArchHintsChanger):
-                ret.append('apply multi-arch hints')
-        return (', '.join(ret) + '.').capitalize()
-
-    def allow_create_proposal(self, result):
-        for subchanger, memo in result.items():
-            if subchanger.allow_create_proposal(memo):
-                return True
-        else:
-            return False
+            entries.append(
+                subchanger.get_proposal_description(
+                    memo, description_format, existing_proposal
+                )
+            )
+        return "\n".join(entries)
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
-            note('Create merge proposal: %s', publish_result.proposal.url)
+            logging.info("Create merge proposal: %s", publish_result.proposal.url)
         elif result:
-            note('Updated proposal %s', publish_result.proposal.url)
+            logging.info("Updated proposal %s", publish_result.proposal.url)
         else:
-            note('No new fixes for proposal %s', publish_result.proposal.url)
-
-    def tags(self, result):
-        ret = []
-        for subchanger, memo in result.items():
-            subret = subchanger.tags(memo)
-            if subret is None:
-                return None
-            ret.extend(subret)
-        return ret
+            logging.info("No new fixes for proposal %s", publish_result.proposal.url)
 
 
-def main(args):
-    changer = TidyChanger.from_args(args)
+if __name__ == "__main__":
+    import sys
 
-    return run_changer(changer, args)
-
-
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    TidyChanger.setup_parser(parser)
-
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(prog='tidy')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    sys.exit(run_mutator(TidyChanger))

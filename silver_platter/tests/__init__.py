@@ -20,14 +20,15 @@ import unittest
 
 def test_suite():
     names = [
-        'debian',
-        'debian_lintian',
-        'debian_upstream',
-        'proposal',
-        'run',
-        'utils',
-        'version',
-        ]
-    module_names = [__name__ + '.test_' + name for name in names]
+        "debian",
+        "debian_lintian",
+        "debian_upstream",
+        "proposal",
+        "publish",
+        "run",
+        "utils",
+        "version",
+    ]
+    module_names = [__name__ + ".test_" + name for name in names]
     loader = unittest.TestLoader()
     return loader.loadTestsFromNames(module_names)

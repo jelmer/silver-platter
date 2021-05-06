@@ -17,48 +17,63 @@
 
 from setuptools import setup
 
+debian_deps = [
+    'pyyaml',  # For reading debian/upstream/metadata
+    'debmutate>=0.3',
+    'lintian-brush>=0.102',
+    'python_debian',
+    'distro-info',
+    'upstream-ontologist',
+]
+
+
 setup(
-      name='silver-platter',
-      author="Jelmer Vernooij",
-      author_email="jelmer@jelmer.uk",
-      url="https://jelmer.uk/code/silver-platter",
-      description="Automatic merge proposal creeator",
-      version="0.3.0",
-      license='GNU GPL v2 or later',
-      project_urls={
-          "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
-          "Repository": "https://jelmer.uk/code/silver-platter",
-          "GitHub": "https://github.com/jelmer/silver-platter",
-      },
-      keywords="git bzr vcs github gitlab launchpad",
-      packages=[
-          'silver_platter',
-          'silver_platter.debian',
-          'silver_platter.tests',
-      ],
-      classifiers=[
-          'Development Status :: 3 - Alpha',
-          'License :: OSI Approved :: GNU General Public License (GPL)',
-          'Programming Language :: Python :: 3.6',
-          'Programming Language :: Python :: 3.7',
-          'Programming Language :: Python :: 3.8',
-          'Programming Language :: Python :: Implementation :: CPython',
-          'Programming Language :: Python :: Implementation :: PyPy',
-          'Operating System :: POSIX',
-          'Topic :: Software Development :: Version Control',
-      ],
-      entry_points={
-          'console_scripts': [
-              'svp=silver_platter.__main__:main',
-              'debian-svp=silver_platter.debian.__main__:main',
-            ],
-      },
-      test_suite='silver_platter.tests.test_suite',
-      install_requires=[
-          'breezy',
-          'dulwich',
-          'testtools',
-          'lintian-brush>=0.50',
-          'pyyaml',  # For reading debian/upstream/metadata
-      ],
+    name='silver-platter',
+    author="Jelmer Vernooij",
+    author_email="jelmer@jelmer.uk",
+    url="https://jelmer.uk/code/silver-platter",
+    description="Automatic merge proposal creeator",
+    version='0.4.2',
+    license='GNU GPL v2 or later',
+    project_urls={
+        "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
+        "Repository": "https://jelmer.uk/code/silver-platter",
+        "GitHub": "https://github.com/jelmer/silver-platter",
+    },
+    keywords="git bzr vcs github gitlab launchpad",
+    packages=[
+        'silver_platter',
+        'silver_platter.debian',
+        'silver_platter.tests',
+    ],
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'License :: OSI Approved :: GNU General Public License (GPL)',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Programming Language :: Python :: Implementation :: PyPy',
+        'Operating System :: POSIX',
+        'Topic :: Software Development :: Version Control',
+    ],
+    entry_points={
+        'console_scripts': [
+            'svp=silver_platter.__main__:main',
+            'debian-svp=silver_platter.debian.__main__:main',
+        ],
+        'silver_platter.debian.changer': [
+            'lintian-brush = '
+            'silver_platter.debian.lintian:LintianBrushChanger',
+        ],
+    },
+    test_suite='silver_platter.tests.test_suite',
+    install_requires=[
+        'breezy>=3.1.0',
+        'dulwich',
+    ],
+    extras_require={
+        'debian': debian_deps,
+    },
+    tests_require=['testtools', 'lintian-brush'] + debian_deps,
 )

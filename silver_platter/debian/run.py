@@ -17,27 +17,23 @@
 
 """Support for updating with a script."""
 
-from breezy.trace import note
+import logging
 
 from .changer import (
     ChangerError,
+    ChangerResult,
     DebianChanger,
-    run_single_changer,
-    setup_single_parser,
-    )
+)
 from ..run import (
     ScriptMadeNoChanges,
     derived_branch_name,
     script_runner,
-    )
-
-
-def setup_parser(parser):
-    setup_single_parser(parser)
-    ScriptChanger.setup_parser(parser)
+)
 
 
 class ScriptChanger(DebianChanger):
+
+    name = "run"
 
     def _init__(self, script, commit_pending=None):
         self.script = script
@@ -45,52 +41,62 @@ class ScriptChanger(DebianChanger):
 
     @classmethod
     def setup_parser(cls, parser):
+        parser.add_argument("script", help="Path to script to run.", type=str)
         parser.add_argument(
-            'script', help='Path to script to run.', type=str)
-        parser.add_argument(
-            '--commit-pending',
-            help='Commit pending changes after script.',
-            choices=['yes', 'no', 'auto'],
-            default='auto', type=str)
+            "--commit-pending",
+            help="Commit pending changes after script.",
+            choices=["yes", "no", "auto"],
+            default="auto",
+            type=str,
+        )
 
     @classmethod
     def from_args(cls, args):
-        commit_pending = {'auto': None, 'yes': True, 'no': False}[
-            args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
         return cls(script=args.script, commit_pending=commit_pending)
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(
+        self,
+        local_tree,
+        subpath,
+        update_changelog,
+        reporter,
+        committer,
+        base_proposal=None,
+    ):
+        base_revid = local_tree.last_revision()
+
         try:
-            description = script_runner(
-                local_tree, self.script, self.commit_pending)
+            description = script_runner(local_tree, self.script, self.commit_pending)
         except ScriptMadeNoChanges as e:
-            raise ChangerError('Script did not make any changes.', e)
-        return description
+            raise ChangerError("nothing-to-do", "Script did not make any changes.", e)
+
+        branches = [("main", None, base_revid, local_tree.last_revision())]
+
+        tags = []
+
+        # TODO(jelmer): Compare old and new tags/branches?
+
+        return ChangerResult(
+            description=description,
+            mutator=description,
+            sufficient_for_proposal=True,
+            branches=branches,
+            tags=tags,
+            proposed_commit_message=None,
+        )
 
     def get_proposal_description(
-            self, description, description_format, existing_proposal):
+        self, description, description_format, existing_proposal
+    ):
         if description is not None:
             return description
         if existing_proposal is not None:
             return existing_proposal.get_description()
         raise ValueError("No description available")
 
-    def get_commit_message(self, applied, existing_proposal):
-        return None
-
-    def allow_create_proposal(self, applied):
-        return True
-
     def describe(self, description, publish_result):
-        note('%s', description)
+        logging.info("%s", description)
 
     def suggest_branch_name(self):
         return derived_branch_name(self.script)
-
-    def tags(self, result):
-        return None
-
-
-def main(args):
-    changer = ScriptChanger(args)
-    return run_single_changer(changer, args)

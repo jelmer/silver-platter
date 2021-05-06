@@ -13,12 +13,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from datetime import datetime
 from debian.deb822 import Deb822
 from debian.changelog import Version
 import os
-import re
-import subprocess
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Dict, List, Tuple
+
+from debmutate.vcs import split_vcs_url
+from debmutate.changelog import (
+    Changelog,
+    changelog_add_entry as _changelog_add_entry,
+)
+
 
 from breezy import urlutils
 from breezy.branch import Branch
@@ -26,74 +32,101 @@ from breezy.errors import UnsupportedFormatError
 from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
+from breezy.git.repository import GitRepository
+from breezy.mutabletree import MutableTree
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
     vcs_field_to_bzr_url_converters,
-    )
+)
 
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
-from breezy.workingtree import WorkingTree
 
-from breezy.plugins.debian.changelog import (
-    changelog_commit_message,
-    )
-try:
-    from breezy.plugins.debian.builder import BuildFailedError
-except ImportError:  # breezy < 3.1
-    from breezy.plugins.debian.errors import BuildFailedError
-from breezy.plugins.debian.errors import (
+from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
-    )
+)
 
-try:
-    from lintian_brush.detect_gbp_dch import guess_update_changelog
-except ImportError:  # lintian-brush < 0.65
-    from lintian_brush import (
-        guess_update_changelog as old_guess_update_changelog,
-        )
+from lintian_brush.detect_gbp_dch import guess_update_changelog
 
-    def guess_update_changelog(tree, path, cl=None):
-        return (old_guess_update_changelog(tree, path, cl), None)
-
-try:
-    from lintian_brush.changelog import add_changelog_entry
-except ImportError:  # lintian-brush < 0.66
-    from lintian_brush import add_changelog_entry as add_changelog_entry_old
-
-    def add_changelog_entry(tree, path, summary):
-        return add_changelog_entry_old(tree, path, summary[0])
-
-from .. import proposal as _mod_proposal
+from .. import workspace as _mod_workspace
 from ..utils import (
     open_branch,
-    )
+)
 
 
 __all__ = [
-    'changelog_add_line',
-    'get_source_package',
-    'guess_update_changelog',
-    'source_package_vcs',
-    'build',
-    'BuildFailedError',
-    'MissingUpstreamTarball',
-    'vcs_field_to_bzr_url_converters',
-    ]
+    "add_changelog_entry",
+    "apt_get_source_package",
+    "guess_update_changelog",
+    "source_package_vcs",
+    "build",
+    "BuildFailedError",
+    "MissingUpstreamTarball",
+    "vcs_field_to_bzr_url_converters",
+]
 
 
-DEFAULT_BUILDER = 'sbuild --no-clean-source'
+DEFAULT_URGENCY = "medium"
+DEFAULT_BUILDER = "sbuild --no-clean-source"
 
 
 class NoSuchPackage(Exception):
     """No such package."""
 
 
-def build(tree: Tree,
-          subpath: str = '',
-          builder: Optional[str] = None,
-          result_dir: Optional[str] = None) -> None:
+def add_changelog_entry(
+    tree: MutableTree,
+    path: str,
+    summary: List[str],
+    maintainer: Optional[Tuple[str, str]] = None,
+    timestamp: Optional[datetime] = None,
+    urgency: str = DEFAULT_URGENCY,
+) -> None:
+    """Add a changelog entry.
+
+    Args:
+      tree: Tree to edit
+      path: Path to the changelog file
+      summary: Entry to add
+      maintainer: Maintainer details; tuple of fullname and email
+      suppress_warnings: Whether to suppress any warnings from 'dch'
+    """
+    # TODO(jelmer): This logic should ideally be in python-debian.
+    with tree.get_file(path) as f:
+        cl = Changelog()
+        cl.parse_changelog(f, max_blocks=None, allow_empty_author=True, strict=False)
+        _changelog_add_entry(
+            cl,
+            summary=summary,
+            maintainer=maintainer,
+            timestamp=timestamp,
+            urgency=urgency,
+        )
+    # Workaround until
+    # https://salsa.debian.org/python-debian-team/python-debian/-/merge_requests/22
+    # lands.
+    pieces = []
+    for line in cl.initial_blank_lines:
+        pieces.append(line.encode(cl._encoding) + b"\n")
+    for block in cl._blocks:
+        try:
+            serialized = block._format(allow_missing_author=True).encode(
+                block._encoding
+            )
+        except TypeError:  # older python-debian
+            serialized = bytes(block)
+        pieces.append(serialized)
+    tree.put_file_bytes_non_atomic(path, b"".join(pieces))
+
+
+def build(
+    tree: Tree,
+    subpath: str = "",
+    builder: Optional[str] = None,
+    result_dir: Optional[str] = None,
+) -> None:
     """Build a debian package in a directory.
 
     Args:
@@ -107,11 +140,14 @@ def build(tree: Tree,
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run(
-        [tree.local_abspath(subpath)], builder=builder, result_dir=result_dir)
+    cmd_builddeb().run([tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
-def get_source_package(name: str) -> Deb822:
+class NoAptSources(Exception):
+    """No apt sources were configured."""
+
+
+def apt_get_source_package(name: str) -> Deb822:
     """Get source package metadata.
 
     Args:
@@ -120,9 +156,15 @@ def get_source_package(name: str) -> Deb822:
       A `Deb822` object
     """
     import apt_pkg
+
     apt_pkg.init()
 
-    sources = apt_pkg.SourceRecords()
+    try:
+        sources = apt_pkg.SourceRecords()
+    except apt_pkg.Error as e:
+        if e.args[0] == ("E:You must put some 'deb-src' URIs in your sources.list"):
+            raise NoAptSources()
+        raise
 
     by_version: Dict[str, Deb822] = {}
     while sources.lookup(name):
@@ -142,26 +184,9 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
     try:
         return converters[vcs_type](vcs_url)
     except KeyError:
-        raise ValueError('unknown vcs %s' % vcs_type)
+        raise ValueError("unknown vcs %s" % vcs_type)
     except InvalidURL as e:
-        raise ValueError('invalid URL: %s' % e)
-
-
-def split_vcs_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
-    subpath: Optional[str]
-    m = re.search(r' \[([^] ]+)\]', url)
-    if m:
-        url = url[:m.start()] + url[m.end():]
-        subpath = m.group(1)
-    else:
-        subpath = None
-    branch: Optional[str]
-    try:
-        (repo_url, branch) = url.split(' -b ', 1)
-    except ValueError:
-        branch = None
-        repo_url = url
-    return (repo_url, branch, subpath)
+        raise ValueError("invalid URL: %s" % e)
 
 
 def open_packaging_branch(location, possible_transports=None, vcs_type=None):
@@ -169,74 +194,65 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
     location can either be a package name or a full URL
     """
-    if '/' not in location:
-        pkg_source = get_source_package(location)
+    if "/" not in location and ":" not in location:
+        pkg_source = apt_get_source_package(location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
-            raise Exception(
-                'Package %s does not have any VCS information' % location)
+            raise Exception("Package %s does not have any VCS information" % location)
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
         url, params = urlutils.split_segment_parameters(location)
-        branch_name = params.get('branch')
-        subpath = ''
+        try:
+            branch_name = urlutils.unquote(params["branch"])
+        except KeyError:
+            branch_name = None
+        subpath = ""
     probers = select_probers(vcs_type)
     branch = open_branch(
-        url, possible_transports=possible_transports, probers=probers,
-        name=branch_name)
-    return branch, subpath
+        url, possible_transports=possible_transports, probers=probers, name=branch_name
+    )
+    return branch, subpath or ""
 
 
 def pick_additional_colocated_branches(main_branch):
     ret = ["pristine-tar", "pristine-lfs", "upstream"]
-    ret.append('patch-queue/' + main_branch.name)
-    if main_branch.name.startswith('debian/'):
-        parts = main_branch.name.split('/')
-        parts[0] = 'upstream'
-        ret.append('/'.join(parts))
+    ret.append("patch-queue/" + main_branch.name)
+    if main_branch.name.startswith("debian/"):
+        parts = main_branch.name.split("/")
+        parts[0] = "upstream"
+        ret.append("/".join(parts))
     return ret
 
 
-class Workspace(_mod_proposal.Workspace):
-
+class Workspace(_mod_workspace.Workspace):
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
-        if getattr(main_branch.repository, '_git', None):
-            kwargs['additional_colocated_branches'] = (
-                kwargs.get('additional_colocated_branches', []) +
-                pick_additional_colocated_branches(main_branch))
+        if isinstance(main_branch.repository, GitRepository):
+            kwargs["additional_colocated_branches"] = kwargs.get(
+                "additional_colocated_branches", []
+            ) + pick_additional_colocated_branches(main_branch)
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
-    def build(self, builder: Optional[str] = None,
-              result_dir: Optional[str] = None, subpath: str = '') -> None:
-        return build(tree=self.local_tree, subpath=subpath, builder=builder,
-                     result_dir=result_dir)
-
-
-def debcommit(tree, committer=None, subpath='', paths=None):
-    message = changelog_commit_message(
-        tree, tree.basis_tree(),
-        path=os.path.join(subpath, 'debian/changelog'))
-    if paths:
-        specific_files = [os.path.join(subpath, p) for p in paths]
-    elif subpath:
-        specific_files = [subpath]
-    else:
-        specific_files = None
-    tree.commit(
-        committer=committer,
-        message=message,
-        specific_files=specific_files)
+    def build(
+        self,
+        builder: Optional[str] = None,
+        result_dir: Optional[str] = None,
+        subpath: str = "",
+    ) -> None:
+        return build(
+            tree=self.local_tree,
+            subpath=subpath,
+            builder=builder,
+            result_dir=result_dir,
+        )
 
 
 class UnsupportedVCSProber(Prober):
-
     def __init__(self, vcs_type):
         self.vcs_type = vcs_type
 
     def __eq__(self, other):
-        return (isinstance(other, type(self)) and
-                other.vcs_type == self.vcs_type)
+        return isinstance(other, type(self)) and other.vcs_type == self.vcs_type
 
     def __call__(self):
         # The prober expects to be registered as a class.
@@ -247,8 +263,8 @@ class UnsupportedVCSProber(Prober):
 
     def probe_transport(self, transport):
         raise UnsupportedFormatError(
-            'This VCS %s is not currently supported.' %
-            self.vcs_type)
+            "This VCS %s is not currently supported." % self.vcs_type
+        )
 
     @classmethod
     def known_formats(klass):
@@ -256,8 +272,8 @@ class UnsupportedVCSProber(Prober):
 
 
 prober_registry = {
-    'bzr': RemoteBzrProber,
-    'git': RemoteGitProber,
+    "bzr": RemoteBzrProber,
+    "git": RemoteGitProber,
 }
 
 try:
@@ -265,35 +281,35 @@ try:
 except ImportError:
     pass
 else:
-    prober_registry['fossil'] = RemoteFossilProber
+    prober_registry["fossil"] = RemoteFossilProber
 
 try:
     from breezy.plugins.svn import SvnRepositoryProber
 except ImportError:
     pass
 else:
-    prober_registry['svn'] = SvnRepositoryProber
+    prober_registry["svn"] = SvnRepositoryProber
 
 try:
     from breezy.plugins.hg import SmartHgProber
 except ImportError:
     pass
 else:
-    prober_registry['hg'] = SmartHgProber
+    prober_registry["hg"] = SmartHgProber
 
 try:
     from breezy.plugins.darcs import DarcsProber
 except ImportError:
     pass
 else:
-    prober_registry['darcs'] = DarcsProber
+    prober_registry["darcs"] = DarcsProber
 
 try:
     from breezy.plugins.cvs import CVSProber
 except ImportError:
     pass
 else:
-    prober_registry['cvs'] = CVSProber
+    prober_registry["cvs"] = CVSProber
 
 
 def select_probers(vcs_type=None):
@@ -315,13 +331,46 @@ def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
     return probers
 
 
-def changelog_add_line(
-        tree: WorkingTree,
-        subpath: str,
-        line: str,
-        email: Optional[str] = None) -> None:
-    env = {}
-    if email:
-        env['DEBEMAIL'] = email
-    subprocess.check_call(
-        ['dch', '--', line], cwd=tree.abspath(subpath), env=env)
+def is_debcargo_package(tree: Tree, subpath: str) -> bool:
+    control_path = os.path.join(subpath, "debian", "debcargo.toml")
+    return tree.has_filename(control_path)
+
+
+def control_files_in_root(tree: Tree, subpath: str) -> bool:
+    debian_path = os.path.join(subpath, "debian")
+    if tree.has_filename(debian_path):
+        return False
+    control_path = os.path.join(subpath, "control")
+    if tree.has_filename(control_path):
+        return True
+    if tree.has_filename(control_path + ".in"):
+        return True
+    return False
+
+
+def control_file_present(tree: Tree, subpath: str) -> bool:
+    """Check whether there are any control files present in a tree.
+
+    Args:
+      tree: Tree to check
+      subpath: subpath to check
+    Returns:
+      whether control file is present
+    """
+    for name in ["debian/control", "debian/control.in", "control",
+                 "control.in", "debian/debcargo.toml"]:
+        name = os.path.join(subpath, name)
+        if tree.has_filename(name):
+            return True
+    return False
+
+
+def connect_udd_mirror():
+    import psycopg2
+
+    return psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net",
+    )
