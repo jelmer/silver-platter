@@ -1,9 +1,9 @@
-silver-platter (0.4.2-1) UNRELEASED; urgency=low
+silver-platter (0.4.2-1) unstable; urgency=low
 
   * New upstream release.
    + Fixes compatibility with Breezy 3.2. Closes: #988167
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 06 May 2021 21:21:04 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 06 May 2021 21:21:40 +0100
 
 silver-platter (0.3.0+git20200530.3e19145-1) unstable; urgency=medium
 
