@@ -415,12 +415,12 @@ def _run_single_changer(  # noqa: C901
             non_epoch_version = cl[0].version.upstream_version
             if cl[0].version.debian_version is not None:
                 non_epoch_version += "-%s" % cl[0].version.debian_version
-            c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))
+            c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))  # type: ignore
             for entry in os.scandir(build_target_dir):
                 if not c.match(entry.name):
                     continue
-                with open(entry.path, 'rb') as f:
-                    changes = Deb822(f)
+                with open(entry.path, 'rb') as g:
+                    changes = Deb822(g)
                     if changes.get('Binary'):
                         subprocess.check_call(['debi', entry.path])
 
@@ -479,8 +479,8 @@ def _run_single_changer(  # noqa: C901
         if publish_result.proposal:
             changer.describe(changer_result.mutator, publish_result)
         if diff:
-            for entry in changer_result.branches:
-                role = entry[0]
+            for branch_entry in changer_result.branches:
+                role = branch_entry[0]
                 if len(changer_result.branches) > 1:
                     sys.stdout.write("%s\n" % role)
                     sys.stdout.write(("-" * len(role)) + "\n")
