@@ -15,68 +15,97 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from typing import Optional, List, Tuple, Callable
+import logging
+from typing import Optional, Dict, List, Callable
 
 import silver_platter  # noqa: F401
 
 import argparse
 import sys
 
+from .changer import (
+    setup_parser_common,
+    run_single_changer,
+    changer_subcommands,
+    changer_subcommand,
+)
+
+from . import uploader as debian_uploader
+
+
+def run_changer_subcommand(name, changer_cls, argv):
+    parser = argparse.ArgumentParser(prog="debian-svp %s URL|package" % name)
+    setup_parser_common(parser)
+    parser.add_argument("package", type=str, nargs="?")
+    changer_cls.setup_parser(parser)
+    args = parser.parse_args(argv)
+    if args.package is None:
+        parser.print_usage()
+        return 1
+    changer = changer_cls.from_args(args)
+    return run_single_changer(changer, args)
+
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
+
     breezy.initialize()
 
-    from . import (
-        lintian as debian_lintian,
-        cme,
-        run as debian_run,
-        multiarch,
-        orphan,
-        rrr,
-        tidy,
-        uncommitted,
-        upstream as debian_upstream,
-        uploader as debian_uploader,
-        )
     from ..__main__ import subcommands as main_subcommands
 
-    subcommands: List[
-            Tuple[str, Optional[Callable[[argparse.ArgumentParser], None]],
-                  Callable[[argparse.Namespace], Optional[int]]]] = [
-        ('run', debian_run.setup_parser, debian_run.main),
-        ('new-upstream', debian_upstream.setup_parser, debian_upstream.main),
-        ('upload-pending', debian_uploader.setup_parser, debian_uploader.main),
-        ('lintian-brush', debian_lintian.setup_parser, debian_lintian.main),
-        ('apply-multi-arch-hints', multiarch.setup_parser, multiarch.main),
-        ('orphan', orphan.setup_parser, orphan.main),
-        ('tidy', tidy.setup_parser, tidy.main),
-        ('import-upload', uncommitted.setup_parser, uncommitted.main),
-        ('rules-requires-root', rrr.setup_parser, rrr.main),
-        ('cme-fix', cme.setup_parser, cme.main),
-        ]
+    subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
+        "upload-pending": debian_uploader.main,
+    }
 
-    for cmd in main_subcommands:
-        if cmd[0] not in [subcmd[0] for subcmd in subcommands]:
-            subcommands.append(cmd)
-
-    parser = argparse.ArgumentParser(prog='debian-svp')
+    parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
     parser.add_argument(
-        '--version', action='version',
-        version='%(prog)s ' + silver_platter.version_string)
-    subparsers = parser.add_subparsers(dest='subcommand')
-    callbacks = {}
-    for name, setup_parser, run in subcommands:
-        subparser = subparsers.add_parser(name)
-        if setup_parser is not None:
-            setup_parser(subparser)
-        callbacks[name] = run
-    args = parser.parse_args(argv)
+        "--version",
+        action="version",
+        version="%(prog)s " + silver_platter.version_string,
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Be more verbose")
+    parser.add_argument(
+        "--help", action="store_true", help="show this help message and exit"
+    )
+
+    subcommands.update(main_subcommands.items())
+
+    # We have a debian-specific run command
+    del subcommands["run"]
+
+    parser.add_argument(
+        "subcommand", type=str, choices=list(subcommands.keys()) + changer_subcommands()
+    )
+    args, rest = parser.parse_known_args()
+    if args.help:
+        if args.subcommand is None:
+            parser.print_help()
+            parser.exit()
+        else:
+            rest.append("--help")
+
     if args.subcommand is None:
         parser.print_usage()
-        sys.exit(1)
-    return callbacks[args.subcommand](args)
+        return 1
+    if args.subcommand in subcommands:
+        return subcommands[args.subcommand](rest)
+    try:
+        subcmd = changer_subcommand(args.subcommand)
+    except KeyError:
+        pass
+    else:
+        if args.debug:
+            level = logging.DEBUG
+        else:
+            level = logging.INFO
+        logging.basicConfig(level=level, format="%(message)s")
+        return run_changer_subcommand(args.subcommand, subcmd, rest)
+    parser.print_usage()
+    return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

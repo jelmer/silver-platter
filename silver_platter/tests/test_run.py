@@ -24,66 +24,79 @@ from breezy.tests import (
 from ..run import (
     ScriptMadeNoChanges,
     script_runner,
-    )
+)
 
 
 class ScriptRunnerTests(TestCaseWithTransport):
-
     def setUp(self):
         super(ScriptRunnerTests, self).setUp()
-        self.tree = self.make_branch_and_tree('tree')
+        self.tree = self.make_branch_and_tree("tree")
 
-        with open('foo.sh', 'w') as f:
-            f.write("""\
+        with open("foo.sh", "w") as f:
+            f.write(
+                """\
 #!/bin/sh
 echo Foo > bar
 echo "Some message"
 brz add --quiet bar
-""")
-        os.chmod('foo.sh', 0o755)
+"""
+            )
+        os.chmod("foo.sh", 0o755)
 
     def test_simple_with_commit(self):
         description = script_runner(
-            self.tree, os.path.abspath('foo.sh'), commit_pending=True)
-        self.assertEqual(description, 'Some message\n')
+            self.tree, os.path.abspath("foo.sh"), commit_pending=True
+        )
+        self.assertEqual(description, "Some message\n")
 
     def test_simple_with_autocommit(self):
-        description = script_runner(self.tree, os.path.abspath('foo.sh'))
+        description = script_runner(self.tree, os.path.abspath("foo.sh"))
         self.assertEqual(
-            self.tree.branch.repository.get_revision(
-                self.tree.last_revision()).message,
-            "Some message\n")
-        self.assertEqual(description, 'Some message\n')
+            self.tree.branch.repository.get_revision(self.tree.last_revision()).message,
+            "Some message\n",
+        )
+        self.assertEqual(description, "Some message\n")
 
     def test_simple_with_autocommit_and_script_commits(self):
-        with open('foo.sh', 'w') as f:
-            f.write("""\
+        with open("foo.sh", "w") as f:
+            f.write(
+                """\
 #!/bin/sh
 echo Foo > bar
 echo "Some message"
 brz add --quiet bar
 brz commit --quiet -m blah
-""")
-        os.chmod('foo.sh', 0o755)
-        description = script_runner(
-            self.tree, os.path.abspath('foo.sh'))
+"""
+            )
+        os.chmod("foo.sh", 0o755)
+        description = script_runner(self.tree, os.path.abspath("foo.sh"))
         self.assertEqual(
-            self.tree.branch.repository.get_revision(
-                self.tree.last_revision()).message,
-            "blah")
-        self.assertEqual(description, 'Some message\n')
+            self.tree.branch.repository.get_revision(self.tree.last_revision()).message,
+            "blah",
+        )
+        self.assertEqual(description, "Some message\n")
 
     def test_simple_without_commit(self):
         self.assertRaises(
-            ScriptMadeNoChanges, script_runner, self.tree,
-            os.path.abspath('foo.sh'), commit_pending=False)
+            ScriptMadeNoChanges,
+            script_runner,
+            self.tree,
+            os.path.abspath("foo.sh"),
+            commit_pending=False,
+        )
 
     def test_no_changes(self):
-        with open('foo.sh', 'w') as f:
-            f.write("""\
+        with open("foo.sh", "w") as f:
+            f.write(
+                """\
 #!/bin/sh
 echo "Some message"
-""")
+"""
+            )
         self.assertRaises(
-            ScriptMadeNoChanges, script_runner, self.tree,
-            os.path.abspath('foo.sh'), commit_pending=True)
+            ScriptMadeNoChanges,
+            script_runner,
+            self.tree,
+            os.path.abspath("foo.sh"),
+            commit_pending=True,
+        )

@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2020 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2021 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,39 +15,48 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from io import BytesIO
 import logging
-import subprocess
+import os
+import posixpath
 
 from .changer import (
     run_mutator,
     DebianChanger,
     ChangerResult,
-    ChangerError,
 )
 
-
-BRANCH_NAME = "cme"
-
-
-class CMEResult(object):
-    def __init__(self):
-        pass
+from breezy.patch import patch_tree
+from breezy.plugins.debian.changelog import changelog_commit_message
 
 
-class CMEFixChanger(DebianChanger):
+BRANCH_NAME = "patch"
 
-    name = "cme-fix"
 
-    def __init__(self, dry_run=False):
-        self.dry_run = dry_run
+class PatchResult(object):
+    def __init__(self, patchname, message):
+        self.patchname = patchname
+        self.message = message
+
+
+class PatchChanger(DebianChanger):
+
+    name = "patch"
+
+    def __init__(self, patchname, strip=1, quiet=False):
+        self.patchname = patchname
+        self.strip = strip
+        self.quiet = quiet
 
     @classmethod
     def setup_parser(cls, parser):
-        pass
+        parser.add_argument('patchname', type=str, help='Path to patch.')
+        parser.add_argument('--strip', '-p', type=int, default=1, help="Number of path elements to strip")
+        parser.add_argument('--quiet', action='store_true', help='Be quiet')
 
     @classmethod
     def from_args(cls, args):
-        return cls()
+        return cls(patchname=args.patchname, strip=args.strip, quiet=args.quiet)
 
     def suggest_branch_name(self):
         return BRANCH_NAME
@@ -62,40 +71,48 @@ class CMEFixChanger(DebianChanger):
         base_proposal=None,
     ):
         base_revid = local_tree.last_revision()
-        cwd = local_tree.abspath(subpath or "")
-        try:
-            subprocess.check_call(["/usr/bin/cme", "fix", "dpkg"], cwd=cwd)
-        except subprocess.CalledProcessError:
-            raise ChangerError("cme-failed", "CME Failed to run")
-        revid = local_tree.commit("Run cme.")
+        with open(self.patchname, 'rb') as f:
+            patches = [f.read()]
+        outf = BytesIO()
+        patch_tree(
+            local_tree, patches, strip=self.strip, quiet=self.quiet,
+            out=outf)
+        message = changelog_commit_message(
+            local_tree, local_tree.basis_tree(),
+            path=posixpath.join(subpath, "debian/changelog")
+        )
+        if not message:
+            message = "Apply patch %s." % os.path.basename(self.patchname)
+        revid = local_tree.commit(message)
         branches = [("main", None, base_revid, revid)]
         tags = []
         return ChangerResult(
             description=None,
-            mutator=None,
+            mutator=PatchResult(message=message, patchname=os.path.basename(self.patchname)),
             branches=branches,
             tags=tags,
-            proposed_commit_message="Run cme.",
+            proposed_commit_message=message,
             sufficient_for_proposal=True,
         )
 
     def get_proposal_description(self, applied, description_format, existing_proposal):
-        return "Run cme."
+        return applied.message
 
     def describe(self, result, publish_result):
         if publish_result.is_new:
             logging.info(
-                "Proposed change from 'cme fix dpkg': %s", publish_result.proposal.url
+                "Proposed change from appling %s: %s", os.path.basename(self.patchname),
+                publish_result.proposal.url
             )
         else:
             logging.info("No changes for package %s", result.package_name)
 
     @classmethod
     def describe_command(cls, command):
-        return "Apply Configuration Model Editor (CME) fixes"
+        return "Apply patch"
 
 
 if __name__ == "__main__":
     import sys
 
-    sys.exit(run_mutator(CMEFixChanger))
+    sys.exit(run_mutator(PatchChanger))

@@ -18,38 +18,38 @@
 """Automatic proposal/push creation."""
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
-from typing import Optional
+from typing import Optional, List
 
 import silver_platter  # noqa: F401
 
 from breezy import osutils
 from breezy import errors
 from breezy.commit import PointlessCommit
-from breezy.trace import note, warning, show_error
 from breezy.workingtree import WorkingTree
-try:
-    from breezy import propose as _mod_propose
-except ImportError:
-    from breezy.plugins.propose import (
-        propose as _mod_propose,
-        )
+from breezy import propose as _mod_propose
 from .proposal import (
     UnsupportedHoster,
     enable_tag_pushing,
     find_existing_proposed,
     get_hoster,
-    publish_changes,
+)
+from .workspace import (
     Workspace,
+)
+from .publish import (
     SUPPORTED_MODES,
-    )
+    InsufficientChangesForNewProposal,
+)
 from .utils import (
     open_branch,
     BranchMissing,
     BranchUnsupported,
     BranchUnavailable,
+    full_branch_url,
 )
 
 
@@ -58,9 +58,9 @@ class ScriptMadeNoChanges(errors.BzrError):
     _fmt = "Script made no changes."
 
 
-def script_runner(local_tree: WorkingTree,
-                  script: str,
-                  commit_pending: Optional[bool] = None) -> str:
+def script_runner(
+    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None
+) -> str:
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
@@ -73,13 +73,14 @@ def script_runner(local_tree: WorkingTree,
     :return: Description as reported by script
     """
     last_revision = local_tree.last_revision()
-    p = subprocess.Popen(script, cwd=local_tree.basedir,
-                         stdout=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(
+        script, cwd=local_tree.basedir, stdout=subprocess.PIPE, shell=True
+    )
     (description_encoded, err) = p.communicate(b"")
     if p.returncode != 0:
         raise errors.BzrCommandError(
-            "Script %s failed with error code %d" % (
-                script, p.returncode))
+            "Script %s failed with error code %d" % (script, p.returncode)
+        )
     new_revision = local_tree.last_revision()
     description = description_encoded.decode()
     if last_revision == new_revision and commit_pending is None:
@@ -88,8 +89,7 @@ def script_runner(local_tree: WorkingTree,
         commit_pending = True
     if commit_pending:
         try:
-            new_revision = local_tree.commit(
-                description, allow_pointless=False)
+            new_revision = local_tree.commit(description, allow_pointless=False)
         except PointlessCommit:
             pass
     if new_revision == last_revision:
@@ -98,76 +98,104 @@ def script_runner(local_tree: WorkingTree,
 
 
 def derived_branch_name(script: str) -> str:
-    return os.path.splitext(osutils.basename(script.split(' ')[0]))[0]
+    return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
 
 
-def setup_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('script', help='Path to script to run.', type=str)
-    parser.add_argument('url', help='URL of branch to work on.', type=str)
-    parser.add_argument('--refresh', action="store_true",
-                        help='Refresh changes if branch already exists')
-    parser.add_argument('--label', type=str,
-                        help='Label to attach', action="append", default=[])
-    parser.add_argument('--name', type=str,
-                        help='Proposed branch name', default=None)
-    parser.add_argument('--diff', action="store_true",
-                        help="Show diff of generated changes.")
+def main(argv: List[str]) -> Optional[int]:  # noqa: C901
+    parser = argparse.ArgumentParser()
+    parser.add_argument("script", help="Path to script to run.", type=str)
+    parser.add_argument("url", help="URL of branch to work on.", type=str)
     parser.add_argument(
-        '--mode',
-        help='Mode for pushing', choices=SUPPORTED_MODES,
-        default="propose", type=str)
+        "--derived-owner", type=str, default=None, help="Owner for derived branches."
+    )
     parser.add_argument(
-        '--commit-pending',
-        help='Commit pending changes after script.',
-        choices=['yes', 'no', 'auto'],
-        default='auto', type=str)
+        "--refresh",
+        action="store_true",
+        help="Refresh changes if branch already exists",
+    )
+    parser.add_argument(
+        "--label", type=str, help="Label to attach", action="append", default=[]
+    )
+    parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
+    parser.add_argument(
+        "--diff", action="store_true", help="Show diff of generated changes."
+    )
+    parser.add_argument(
+        "--mode",
+        help="Mode for pushing",
+        choices=SUPPORTED_MODES,
+        default="propose",
+        type=str,
+    )
+    parser.add_argument(
+        "--commit-pending",
+        help="Commit pending changes after script.",
+        choices=["yes", "no", "auto"],
+        default="auto",
+        type=str,
+    )
     parser.add_argument(
         "--dry-run",
         help="Create branches but don't push or propose anything.",
-        action="store_true", default=False)
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--verify-command", type=str, help="Command to run to verify changes."
+    )
+    args = parser.parse_args(argv)
 
-
-def main(args: argparse.Namespace) -> Optional[int]:
     try:
         main_branch = open_branch(args.url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        show_error('%s: %s', args.url, e)
+        logging.exception("%s: %s", args.url, e)
         return 1
 
     if args.name is None:
         name = derived_branch_name(args.script)
     else:
         name = args.name
-    commit_pending = {'auto': None, 'yes': True, 'no': False}[
-        args.commit_pending]
+    commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
 
     overwrite = False
 
     try:
         hoster = get_hoster(main_branch)
     except UnsupportedHoster as e:
-        if args.mode != 'push':
+        if args.mode != "push":
             raise
         # We can't figure out what branch to resume from when there's no hoster
         # that can tell us.
         resume_branch = None
         existing_proposal = None
-        warning('Unsupported hoster (%s), will attempt to push to %s',
-                e, main_branch.user_url)
+        logging.warn(
+            "Unsupported hoster (%s), will attempt to push to %s",
+            e,
+            full_branch_url(main_branch),
+        )
     else:
-        (resume_branch, resume_overwrite, existing_proposal) = (
-            find_existing_proposed(main_branch, hoster, name))
+        (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
+            main_branch, hoster, name, owner=args.derived_owner
+        )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if args.refresh:
         resume_branch = None
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
-            description = script_runner(
-                ws.local_tree, args.script, commit_pending)
+            description = script_runner(ws.local_tree, args.script, commit_pending)
         except ScriptMadeNoChanges:
-            show_error('Script did not make any changes.')
+            logging.exception("Script did not make any changes.")
             return 1
+
+        if args.verify_command:
+            try:
+                subprocess.check_call(
+                    args.verify_command, shell=True, cwd=ws.local_tree.abspath(".")
+                )
+            except subprocess.CalledProcessError:
+                logging.exception("Verify command failed.")
+                return 1
 
         def get_description(description_format, existing_proposal):
             if description is not None:
@@ -179,30 +207,41 @@ def main(args: argparse.Namespace) -> Optional[int]:
         enable_tag_pushing(ws.local_tree.branch)
 
         try:
-            publish_result = publish_changes(
-                ws, args.mode, name,
+            publish_result = ws.publish_changes(
+                args.mode,
+                name,
                 get_proposal_description=get_description,
-                dry_run=args.dry_run, hoster=hoster,
-                labels=args.label, overwrite_existing=overwrite,
-                existing_proposal=existing_proposal)
+                dry_run=args.dry_run,
+                hoster=hoster,
+                labels=args.label,
+                overwrite_existing=overwrite,
+                derived_owner=args.derived_owner,
+                existing_proposal=existing_proposal,
+            )
         except UnsupportedHoster as e:
-            show_error('No known supported hoster for %s. Run \'svp login\'?',
-                       e.branch.user_url)
+            logging.exception(
+                "No known supported hoster for %s. Run 'svp login'?",
+                full_branch_url(e.branch),
+            )
             return 1
+        except InsufficientChangesForNewProposal:
+            logging.info('Insufficient changes for a new merge proposal')
+            return 0
         except _mod_propose.HosterLoginRequired as e:
-            show_error(
-                'Credentials for hosting site at %r missing. '
-                'Run \'svp login\'?', e.hoster.base_url)
+            logging.exception(
+                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
+                e.hoster.base_url,
+            )
             return 1
 
         if publish_result.proposal:
             if publish_result.is_new:
-                note('Merge proposal created.')
+                logging.info("Merge proposal created.")
             else:
-                note('Merge proposal updated.')
+                logging.info("Merge proposal updated.")
             if publish_result.proposal.url:
-                note('URL: %s', publish_result.proposal.url)
-            note('Description: %s', publish_result.proposal.get_description())
+                logging.info("URL: %s", publish_result.proposal.url)
+            logging.info("Description: %s", publish_result.proposal.get_description())
 
         if args.diff:
             ws.show_diff(sys.stdout.buffer)
@@ -210,8 +249,5 @@ def main(args: argparse.Namespace) -> Optional[int]:
     return None
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

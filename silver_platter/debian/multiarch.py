@@ -18,55 +18,63 @@
 """Support for integration multi-arch hints."""
 
 import argparse
+import logging
 
 import silver_platter  # noqa: F401
 
 from lintian_brush import run_lintian_fixer, SUPPORTED_CERTAINTIES
 from lintian_brush.config import Config
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
+
+from . import control_files_in_root, control_file_present, is_debcargo_package
 
 from .changer import (
     DebianChanger,
-    run_changer,
-    setup_multi_parser as setup_changer_parser,
-    )
+    ChangerResult,
+    ChangerError,
+    run_mutator,
+)
 
-from breezy.trace import note
-
-BRANCH_NAME = 'multi-arch-fixes'
+BRANCH_NAME = "multi-arch-fixes"
 
 
 DEFAULT_VALUE_MULTIARCH_HINT = 50
 MULTIARCH_HINTS_VALUE = {
-    'ma-foreign': 20,
-    'file-conflict': 50,
-    'ma-foreign-library': 20,
-    'dep-any': 20,
-    'ma-same': 20,
-    'arch-all': 20,
+    "ma-foreign": 20,
+    "file-conflict": 50,
+    "ma-foreign-library": 20,
+    "dep-any": 20,
+    "ma-same": 20,
+    "arch-all": 20,
 }
 
 
 def calculate_value(hints):
     return sum(map(MULTIARCH_HINTS_VALUE.__getitem__, hints)) + (
-        DEFAULT_VALUE_MULTIARCH_HINT)
+        DEFAULT_VALUE_MULTIARCH_HINT
+    )
 
 
 class MultiArchHintsChanger(DebianChanger):
 
-    name: str = 'apply-multi-arch-hints'
+    name: str = "apply-multiarch-hints"
 
     @classmethod
     def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
         # Hide the minimum-certainty option for the moment.
         parser.add_argument(
-            '--minimum-certainty',
+            "--minimum-certainty",
             type=str,
             choices=SUPPORTED_CERTAINTIES,
             default=None,
-            help=argparse.SUPPRESS)
+            help=argparse.SUPPRESS,
+        )
         parser.add_argument(
-            '--allow-reformatting', default=None, action='store_true',
-            help=argparse.SUPPRESS)
+            "--allow-reformatting",
+            default=None,
+            action="store_true",
+            help=argparse.SUPPRESS,
+        )
 
     @classmethod
     def from_args(cls, args):
@@ -77,7 +85,8 @@ class MultiArchHintsChanger(DebianChanger):
             cache_download_multiarch_hints,
             multiarch_hints_by_binary,
             parse_multiarch_hints,
-            )
+        )
+
         with cache_download_multiarch_hints() as f:
             self.hints = multiarch_hints_by_binary(parse_multiarch_hints(f))
         self.minimum_certainty = minimum_certainty
@@ -86,10 +95,21 @@ class MultiArchHintsChanger(DebianChanger):
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(self, local_tree, subpath, update_changelog, committer):
+    def make_changes(
+        self,
+        local_tree,
+        subpath,
+        update_changelog,
+        reporter,
+        committer,
+        base_proposal=None,
+    ):
+        from lintian_brush import NoChanges
         from lintian_brush.multiarch_hints import (
             MultiArchHintFixer,
-            )
+        )
+
+        base_revid = local_tree.last_revision()
         minimum_certainty = self.minimum_certainty
         allow_reformatting = self.allow_reformatting
         try:
@@ -104,55 +124,86 @@ class MultiArchHintsChanger(DebianChanger):
             if update_changelog is None:
                 update_changelog = cfg.update_changelog()
 
-        result, summary = run_lintian_fixer(
-            local_tree, MultiArchHintFixer(self.hints),
-            update_changelog=update_changelog,
-            minimum_certainty=minimum_certainty,
-            subpath=subpath, allow_reformatting=allow_reformatting,
-            net_access=True)
+        if control_files_in_root(local_tree, subpath):
+            raise ChangerError(
+                "control-files-in-root",
+                "control files live in root rather than debian/ " "(LarstIQ mode)",
+            )
 
-        return result
+        if is_debcargo_package(local_tree, subpath):
+            raise ChangerError("nothing-to-do", "Package uses debcargo")
+        elif not control_file_present(local_tree, subpath):
+            raise ChangerError("missing-control-file", "Unable to find debian/control")
 
-    def get_proposal_description(
-            self, applied, description_format, existing_proposal):
-        ret = ['Apply multi-arch hints.\n']
+        try:
+            with local_tree.lock_write():
+                result, summary = run_lintian_fixer(
+                    local_tree,
+                    MultiArchHintFixer(self.hints),
+                    update_changelog=update_changelog,
+                    minimum_certainty=minimum_certainty,
+                    subpath=subpath,
+                    allow_reformatting=allow_reformatting,
+                    net_access=True,
+                    committer=committer,
+                    changes_by="apply-multiarch-hints",
+                )
+        except NoChanges:
+            raise ChangerError("nothing-to-do", "no hints to apply")
+        except FormattingUnpreservable as e:
+            raise ChangerError(
+                "formatting-unpreservable",
+                "unable to preserve formatting while editing %s" % e.path,
+            )
+        except GeneratedFile as e:
+            raise ChangerError(
+                "generated-file", "unable to edit generated file: %r" % e
+            )
+
+        applied_hints = []
+        hint_names = []
+        for (binary, hint, description, certainty) in result.changes:
+            hint_names.append(hint["link"].split("#")[-1])
+            entry = dict(hint.items())
+            hint_names.append(entry["link"].split("#")[-1])
+            entry["action"] = description
+            entry["certainty"] = certainty
+            applied_hints.append(entry)
+            logging.info("%s: %s" % (binary["Package"], description))
+
+        reporter.report_metadata("applied-hints", applied_hints)
+
+        branches = [("main", None, base_revid, local_tree.last_revision())]
+
+        tags = []
+
+        return ChangerResult(
+            description="Applied multi-arch hints.",
+            mutator=result,
+            branches=branches,
+            tags=tags,
+            value=calculate_value(hint_names),
+            sufficient_for_proposal=True,
+            proposed_commit_message="Apply multi-arch hints.",
+        )
+
+    def get_proposal_description(self, applied, description_format, existing_proposal):
+        ret = ["Apply multi-arch hints.\n"]
         for binary, hint, description, certainty in applied.changes:
-            ret.append('* %s: %s\n' % (binary['Package'], description))
-        return ''.join(ret)
-
-    def get_commit_message(self, applied, existing_proposal):
-        return 'Apply multi-arch hints.'
-
-    def allow_create_proposal(self, applied):
-        return True
+            ret.append("* %s: %s\n" % (binary["Package"], description))
+        return "".join(ret)
 
     def describe(self, applied, publish_result):
-        note('Applied multi-arch hints.')
+        logging.info("Applied multi-arch hints.")
         for binary, hint, description, certainty in applied.changes:
-            note('* %s: %s', binary['Package'], description)
+            logging.info("* %s: %s", binary["Package"], description)
 
-    def tags(self, applied):
-        return []
-
-    def value(self, applied):
-        hint_names = []
-        for (binary, hint, description, certainty) in applied.changes:
-            hint_names.append(hint['link'].split('#')[-1])
-        return calculate_value(hint_names)
+    @classmethod
+    def describe_command(cls, command):
+        return "Apply multi-arch hints"
 
 
-def setup_parser(parser):
-    setup_changer_parser(parser)
-    MultiArchHintsChanger.setup_parser(parser)
+if __name__ == "__main__":
+    import sys
 
-
-def main(args):
-    changer = MultiArchHintsChanger()
-    return run_changer(changer, args)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='multi-arch-hints')
-    setup_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    sys.exit(run_mutator(MultiArchHintsChanger))
