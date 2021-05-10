@@ -69,7 +69,7 @@ setup(
     },
     test_suite='silver_platter.tests.test_suite',
     install_requires=[
-        'breezy>=3.1.0',
+        'breezy>=3.2.0',
         'dulwich',
     ],
     extras_require={
