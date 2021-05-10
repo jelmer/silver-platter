@@ -12,6 +12,10 @@ In addition to that, it can also perform basic maintenance on branches
 that have been proposed for merging - such as restarting them if they
 have conflicts due to upstream changes.
 
+Silver-Platter powers the Debian Janitor (https://janitor.debian.org/) and
+Kali Janitor (https://kali.janitor.org/). The UI is still a bit rough around
+the edges, I'd be grateful for any feedback from people using it.
+
 Getting started
 ~~~~~~~~~~~~~~~
 
