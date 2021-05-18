@@ -153,7 +153,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("url", help="URL of branch to work on.", type=str)
     parser.add_argument(
-        "script", help="Path to script to run.", type=str,
+        "command", help="Path to script to run.", type=str,
         nargs='?')
     parser.add_argument(
         "--derived-owner", type=str, default=None, help="Owner for derived branches."
@@ -214,7 +214,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.name:
         name = recipe.name
     else:
-        name = derived_branch_name(args.script)
+        name = derived_branch_name(args.command)
 
     if args.commit_pending:
         commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
@@ -247,9 +247,18 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             overwrite = resume_overwrite
     if args.refresh or (recipe and not recipe.resume):
         resume_branch = None
+
+    if args.command:
+        command = args.command
+    elif recipe.command:
+        command = recipe.command
+    else:
+        logging.exception('No command specified.')
+        return 1
+
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
-            result = script_runner(ws.local_tree, args.script, commit_pending)
+            result = script_runner(ws.local_tree, command, commit_pending)
         except ScriptMadeNoChanges:
             logging.exception("Script did not make any changes.")
             return 1

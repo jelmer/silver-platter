@@ -17,7 +17,7 @@
 
 from dataclasses import dataclass
 from jinja2 import Template
-from typing import Optional, Dict
+from typing import Optional, Dict, Union, List
 import yaml
 
 
@@ -26,6 +26,7 @@ class Recipe(object):
     """Recipe to use."""
 
     name: str
+    command: Union[str, List[str]]
     merge_request_description_template: Dict[Optional[str], Template]
     merge_request_commit_message_template: Template
     resume: bool = False
@@ -49,6 +50,7 @@ class Recipe(object):
             propose_threshold = None
         return cls(
             name=d.get('name'),
+            command=d.get('command'),
             resume=d.get('resume', False),
             commit_pending=d.get('commit-pending'),
             merge_request_description_template=merge_request_description_template,
