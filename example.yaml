@@ -1,0 +1,20 @@
+---
+# Name of the recipe; used e.g. as part of the branch name when
+# creating merge requests.
+name: example
+# Command to run, in a pristine clone of the specified branch.
+command: example --flag
+# Supported modes:
+# - propose: create merge request
+# - push: Push changes to main branch
+# - attempt-push: Try to push changes to main branch, but create a merge
+#     request if there are not enough permissions
+# (optional, defaults to attempt-push)
+mode: propose
+merge-request:
+  commit-message: Make a change
+  labels:
+    - some-label
+  description:
+    This field contains the body of the merge request, and supports
+    jinja2 templating.

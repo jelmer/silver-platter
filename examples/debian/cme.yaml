@@ -1,0 +1,10 @@
+---
+name: cme-fix
+command: cme fix dpkg
+merge-proposal:
+  commit-message: Run CME fix.
+  description: |-
+    {% extends "base.md" %}
+    {% block runner -%}
+    Run CME.
+    {% endblock %}

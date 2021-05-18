@@ -18,11 +18,14 @@
 """Automatic proposal/push creation."""
 
 import argparse
+from dataclasses import dataclass, field
+import json
 import logging
 import os
 import subprocess
 import sys
-from typing import Optional, List
+import tempfile
+from typing import Optional, List, Dict, Tuple
 
 import silver_platter  # noqa: F401
 
@@ -31,6 +34,7 @@ from breezy import errors
 from breezy.commit import PointlessCommit
 from breezy.workingtree import WorkingTree
 from breezy import propose as _mod_propose
+
 from .proposal import (
     UnsupportedHoster,
     enable_tag_pushing,
@@ -58,43 +62,87 @@ class ScriptMadeNoChanges(errors.BzrError):
     _fmt = "Script made no changes."
 
 
+@dataclass
+class CommandResult(object):
+
+    description: Optional[str] = None
+    value: Optional[int] = None
+    context: Dict[str, str] = field(default_factory=dict)
+    tags: List[Tuple[str, bytes]] = field(default_factory=list)
+
+    @classmethod
+    def from_json(cls, data):
+        if 'tags' in data:
+            tags = []
+            for name, revid in data['tags']:
+                tags.append((name, revid.encode('utf-8')))
+        else:
+            tags = None
+        return cls(
+            value=data.get('value', None),
+            context=data.get('context', {}),
+            description=data.get('description'),
+            tags=tags)
+
+
 def script_runner(
-    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None
-) -> str:
+    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
+    resume_metadata=None
+) -> CommandResult:
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
 
-    :param local_tree: Local tree to run script in
-    :param script: Script to run
-    :param commit_pending: Whether to commit pending changes
+    Args:
+      local_tree: Local tree to run script in
+      script: Script to run
+      commit_pending: Whether to commit pending changes
         (True, False or None: only commit if there were no commits by the
          script)
-    :return: Description as reported by script
     """
+    env = dict(os.environ)
+    env['SVP_API'] = '1'
     last_revision = local_tree.last_revision()
-    p = subprocess.Popen(
-        script, cwd=local_tree.basedir, stdout=subprocess.PIPE, shell=True
-    )
-    (description_encoded, err) = p.communicate(b"")
-    if p.returncode != 0:
-        raise errors.BzrCommandError(
-            "Script %s failed with error code %d" % (script, p.returncode)
+    orig_tags = local_tree.branch.tags.get_tag_dict()
+    with tempfile.TemporaryDirectory() as td:
+        env['SVP_RESULT'] = os.path.join(td, 'result.json')
+        if resume_metadata:
+            env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
+            with open(env['SVP_RESUME'], 'w') as f:
+                json.dump(f, resume_metadata)
+        p = subprocess.Popen(
+            script, cwd=local_tree.basedir, stdout=subprocess.PIPE, shell=True,
+            env=env
         )
+        (description_encoded, err) = p.communicate(b"")
+        if p.returncode != 0:
+            raise errors.BzrCommandError(
+                "Script %s failed with error code %d" % (script, p.returncode))
+        try:
+            with open(env['SVP_RESULT'], 'r') as f:
+                result = CommandResult.from_json(json.load(f))
+        except FileNotFoundError:
+            result = CommandResult()
+    if not result.description:
+        result.description = description_encoded.decode()
     new_revision = local_tree.last_revision()
-    description = description_encoded.decode()
+    if result.tags is None:
+        result.tags = []
+        for name, revid in local_tree.branch.tags.get_tag_dict().items():
+            if orig_tags.get(name) != revid:
+                result.tags.append((name, revid))
     if last_revision == new_revision and commit_pending is None:
         # Automatically commit pending changes if the script did not
         # touch the branch.
         commit_pending = True
     if commit_pending:
         try:
-            new_revision = local_tree.commit(description, allow_pointless=False)
+            new_revision = local_tree.commit(result.description, allow_pointless=False)
         except PointlessCommit:
             pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
-    return description
+    return result
 
 
 def derived_branch_name(script: str) -> str:
@@ -103,8 +151,10 @@ def derived_branch_name(script: str) -> str:
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
-    parser.add_argument("script", help="Path to script to run.", type=str)
     parser.add_argument("url", help="URL of branch to work on.", type=str)
+    parser.add_argument(
+        "script", help="Path to script to run.", type=str,
+        nargs='?')
     parser.add_argument(
         "--derived-owner", type=str, default=None, help="Owner for derived branches."
     )
@@ -131,7 +181,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--commit-pending",
         help="Commit pending changes after script.",
         choices=["yes", "no", "auto"],
-        default="auto",
+        default=None,
         type=str,
     )
     parser.add_argument(
@@ -143,7 +193,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser.add_argument(
         "--verify-command", type=str, help="Command to run to verify changes."
     )
+    parser.add_argument(
+        "--recipe", type=str, help="Recipe to use.")
     args = parser.parse_args(argv)
+
+    if args.recipe:
+        from .recipe import Recipe
+        recipe = Recipe.from_path(args.recipe)
+    else:
+        recipe = None
 
     try:
         main_branch = open_branch(args.url)
@@ -151,11 +209,19 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         logging.exception("%s: %s", args.url, e)
         return 1
 
-    if args.name is None:
-        name = derived_branch_name(args.script)
-    else:
+    if args.name is not None:
         name = args.name
-    commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+    elif recipe and recipe.name:
+        name = recipe.name
+    else:
+        name = derived_branch_name(args.script)
+
+    if args.commit_pending:
+        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+    elif recipe:
+        commit_pending = recipe.commit_pending
+    else:
+        commit_pending = None
 
     overwrite = False
 
@@ -179,11 +245,11 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
-    if args.refresh:
+    if args.refresh or (recipe and not recipe.resume):
         resume_branch = None
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
-            description = script_runner(ws.local_tree, args.script, commit_pending)
+            result = script_runner(ws.local_tree, args.script, commit_pending)
         except ScriptMadeNoChanges:
             logging.exception("Script did not make any changes.")
             return 1
@@ -198,11 +264,28 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 return 1
 
         def get_description(description_format, existing_proposal):
-            if description is not None:
-                return description
+            if recipe:
+                return recipe.render_merge_request_description(
+                    description_format, result.context)
+            if result.description is not None:
+                return result.description
             if existing_proposal is not None:
                 return existing_proposal.get_description()
             raise ValueError("No description available")
+
+        def get_commit_message(existing_proposal):
+            if recipe:
+                return recipe.render_merge_request_commit_message(result.context)
+            if existing_proposal is not None:
+                return existing_proposal.get_commit_message()
+            return None
+
+        def allow_create_proposal():
+            if result.value is None:
+                return True
+            if recipe.propose_threshold is not None:
+                return result.value >= recipe.propose_threshold
+            return True
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -211,6 +294,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 args.mode,
                 name,
                 get_proposal_description=get_description,
+                get_proposal_commit_message=get_commit_message,
+                allow_create_proposal=allow_create_proposal,
                 dry_run=args.dry_run,
                 hoster=hoster,
                 labels=args.label,

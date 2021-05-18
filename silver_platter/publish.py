@@ -25,6 +25,7 @@ from breezy import (
     revision as _mod_revision,
 )
 from breezy.errors import PermissionDenied
+from breezy.memorybranch import MemoryBranch
 from breezy.propose import (
     get_hoster,
     Hoster,
@@ -35,17 +36,13 @@ from breezy.propose import (
 )
 from breezy.transport import Transport
 
-try:
-    from breezy.propose import (
-        SourceNotDerivedFromTarget,
-    )
-except ImportError:  # breezy < 3.1.1
-    SourceNotDerivedFromTarget = None
+from breezy.propose import (
+    SourceNotDerivedFromTarget,
+)
 
 
 from .utils import (
     open_branch,
-    MemoryBranch,
     full_branch_url,
 )
 
@@ -61,6 +58,7 @@ __all__ = [
     "NoSuchProject",
     "PermissionDenied",
     "UnsupportedHoster",
+    "SourceNotDerivedFromTarget",
 ]
 
 

@@ -101,7 +101,7 @@ class PatchChanger(DebianChanger):
     def describe(self, result, publish_result):
         if publish_result.is_new:
             logging.info(
-                "Proposed change from appling %s: %s", os.path.basename(self.patchname),
+                "Proposed change from applying %s: %s", os.path.basename(self.patchname),
                 publish_result.proposal.url
             )
         else:

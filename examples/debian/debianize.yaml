@@ -1,0 +1,7 @@
+---
+name: debianize
+command: debianize
+merge-proposal:
+  commit-message: Debianize package
+  description: |-
+    Debianize package.

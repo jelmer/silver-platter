@@ -1,0 +1,14 @@
+---
+name: mia
+command: mia
+merge-proposal:
+  commit-message: Remove MIA uploaders
+  description: |-
+    {% extends "base.md" %}
+    {% block runner %}
+    Remove MIA uploaders:
+
+    {% for uploader in removed_uploaders %}
+    * {{ uploader }}
+    {% endfor %}
+    {% endblock %}

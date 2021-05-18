@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2021 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,21 +15,20 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import unittest
+from breezy.tests import (
+    TestCaseWithTransport,
+)
+
+from silver_platter.recipe import Recipe
 
 
-def test_suite():
-    names = [
-        "debian",
-        "debian_lintian",
-        "debian_upstream",
-        "proposal",
-        "publish",
-        "recipe",
-        "run",
-        "utils",
-        "version",
-    ]
-    module_names = [__name__ + ".test_" + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+class TestReadRecipe(TestCaseWithTransport):
+
+    def test_read(self):
+        self.build_tree_contents([('recipe.yaml', """\
+---
+name: foo
+resume: true
+""")])
+        recipe = Recipe.from_path('recipe.yaml')
+        self.assertEqual(recipe.name, 'foo')

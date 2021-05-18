@@ -129,11 +129,7 @@ from debmutate.versions import (
     debianize_upstream_version,
     )
 
-try:
-    from debmutate.watch import WatchSyntaxError
-except ImportError:
-    class WatchSyntaxError(Exception):  # type: ignore
-        """Watch syntax error."""
+from debmutate.watch import WatchSyntaxError
 
 from breezy.tree import Tree
 

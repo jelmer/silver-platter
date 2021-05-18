@@ -25,14 +25,36 @@ To log in to a code-hosting site, use ``svp login``::
 
 The simplest way to create a change as a merge proposal is to run something like::
 
-    svp run --mode=propose https://github.com/jelmer/dulwich ./some-script.sh
+    svp run ----mode=propose https://github.com/jelmer/dulwich ./framwork.sh
 
-where ``some-script.sh`` makes some modifications to a working copy and prints the
-body for the pull request to standard out. For example::
+where ``framwork.sh`` makes some modifications to a working copy and prints the
+commit message and body for the pull request to standard out. For example::
 
     #!/bin/sh
     sed -i 's/framwork/framework/' README.rst
     echo "Fix common typo: framwork => framework"
+
+Recipes
+~~~~~~~
+
+To make this process a little bit easier to repeat, recipe files can be used.
+For this example, create one called ``framwork.yaml`` with the following contents::
+
+    ---
+    name: framwork
+    command: ./framwork.sh
+    mode: propose
+    merge-request:
+      commit-message: Fix a typo
+      description:
+        markdown: |-
+          I spotted that we commonly mistype *framework* as *framwork*.
+
+To execute this recipe, run::
+
+    svp run --recipe=framwork.yaml https://github.com/jelmer/dulwich
+
+See `example.yaml` for an example recipe with plenty of comments
 
 Supported hosters
 ~~~~~~~~~~~~~~~~~
@@ -52,17 +74,23 @@ under the ``debian-svp`` command. These will also automatically look up
 packaging repository location for any Debian package names that are
 specified.
 
-Subcommands that are available include:
-
-* *lintian-brush*: Run the `lintian-brush
-  <https://packages.debian.org/lintian-brush>`_ command on the branch.
 * *upload-pending*: Build and upload a package and push/propose the
   changelog updates.
-* *new-upstream*: Merge in a new upstream release or snapshot.
-* *apply-multi-arch-hints*: Apply multi-arch hints.
-* *orphan*: Mark a package as orphaned, update its Maintainer
+* *run*: Similar to *svp run* but ensures that the *upstream* and *pristine-tar*
+  branches are available as well, and can test that the branch still
+  builds.
+
+Some Debian-specific example recipes are provided in examples/debian/:
+
+* *lintian-fixes.yaml*: Run the `lintian-brush
+  <https://packages.debian.org/lintian-brush>`_ command to
+  fix common issues reported by `lintian
+  <https://salsa.debian.org/qa/lintian>`_.
+* *new-upstream-release.yaml*: Merge in a new upstream release.
+* *multi-arch-hints.yaml*: Apply multi-arch hints.
+* *orphan.yaml*: Mark a package as orphaned, update its Maintainer
   field and move it to the common Debian salsa group.
-* *rules-requires-root*: Mark a package as "Rules-Requires-Root: no"
+* *rules-requires-root.yaml*: Mark a package as "Rules-Requires-Root: no"
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
@@ -71,16 +99,15 @@ See ``debian-svp COMMAND --help`` for more details.
 
 Examples running ``debian-svp``::
 
-    debian-svp lintian-brush samba
-    debian-svp lintian-brush --mode=propose samba
-    debian-svp lintian-brush --mode=push samba
+    debian-svp run --recipe=examples/lintian-brush.yaml samba
 
     debian-svp upload-pending tdb
     debian-svp upload-pending --vcswatch --maintainer jelmer@debian.org
 
-    debian-svp new-upstream --no-build-verify tdb
+    debian-svp run --recipe=examples/new-upstream-release.yaml \
+        --no-build-verify tdb
 
-    debian-svp apply-multi-arch-hints tdb
+    debian-svp run --recipe=examples/multiarch-hints.yaml tdb
 
 Credentials
 ~~~~~~~~~~~
