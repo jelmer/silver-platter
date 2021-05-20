@@ -1,0 +1,11 @@
+---
+name: framwork
+command: |-
+    sed -i 's/framwork/framework/' README.rst
+    echo "Fix common typo: framwork => framework"
+mode: propose
+merge-request:
+  commit-message: Fix a typo
+  description:
+    markdown: |-
+      I spotted that we commonly mistype *framework* as *framwork*.
