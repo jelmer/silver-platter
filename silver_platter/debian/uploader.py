@@ -50,7 +50,6 @@ from breezy.plugins.debian.util import (
     changelog_find_previous_upload,
     dput_changes,
     find_changelog,
-    debsign,
     MissingChangelogError,
 )
 
@@ -72,6 +71,15 @@ from ..utils import (
     BranchMissing,
     BranchUnsupported,
 )
+
+
+def debsign(path, keyid=None):
+    (bd, changes_file) = os.path.split(path)
+    args = ["debsign"]
+    if keyid:
+        args.append("-k%s" % keyid)
+    args.append(changes_file)
+    subprocess.check_call(args, cwd=bd)
 
 
 class LastUploadMoreRecent(Exception):
