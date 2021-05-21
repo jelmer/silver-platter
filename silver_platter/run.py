@@ -35,6 +35,7 @@ from breezy.commit import PointlessCommit
 from breezy.workingtree import WorkingTree
 from breezy import propose as _mod_propose
 
+from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
 from .proposal import (
     UnsupportedHoster,
     enable_tag_pushing,
@@ -55,94 +56,6 @@ from .utils import (
     BranchUnavailable,
     full_branch_url,
 )
-
-
-class ScriptMadeNoChanges(errors.BzrError):
-
-    _fmt = "Script made no changes."
-
-
-@dataclass
-class CommandResult(object):
-
-    description: Optional[str] = None
-    value: Optional[int] = None
-    context: Dict[str, str] = field(default_factory=dict)
-    tags: List[Tuple[str, bytes]] = field(default_factory=list)
-
-    @classmethod
-    def from_json(cls, data):
-        if 'tags' in data:
-            tags = []
-            for name, revid in data['tags']:
-                tags.append((name, revid.encode('utf-8')))
-        else:
-            tags = None
-        return cls(
-            value=data.get('value', None),
-            context=data.get('context', {}),
-            description=data.get('description'),
-            tags=tags)
-
-
-def script_runner(
-    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None
-) -> CommandResult:
-    """Run a script in a tree and commit the result.
-
-    This ignores newly added files.
-
-    Args:
-      local_tree: Local tree to run script in
-      script: Script to run
-      commit_pending: Whether to commit pending changes
-        (True, False or None: only commit if there were no commits by the
-         script)
-    """
-    env = dict(os.environ)
-    env['SVP_API'] = '1'
-    last_revision = local_tree.last_revision()
-    orig_tags = local_tree.branch.tags.get_tag_dict()
-    with tempfile.TemporaryDirectory() as td:
-        env['SVP_RESULT'] = os.path.join(td, 'result.json')
-        if resume_metadata:
-            env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
-            with open(env['SVP_RESUME'], 'w') as f:
-                json.dump(f, resume_metadata)
-        p = subprocess.Popen(
-            script, cwd=local_tree.basedir, stdout=subprocess.PIPE, shell=True,
-            env=env
-        )
-        (description_encoded, err) = p.communicate(b"")
-        if p.returncode != 0:
-            raise errors.BzrCommandError(
-                "Script %s failed with error code %d" % (script, p.returncode))
-        try:
-            with open(env['SVP_RESULT'], 'r') as f:
-                result = CommandResult.from_json(json.load(f))
-        except FileNotFoundError:
-            result = CommandResult()
-    if not result.description:
-        result.description = description_encoded.decode()
-    new_revision = local_tree.last_revision()
-    if result.tags is None:
-        result.tags = []
-        for name, revid in local_tree.branch.tags.get_tag_dict().items():
-            if orig_tags.get(name) != revid:
-                result.tags.append((name, revid))
-    if last_revision == new_revision and commit_pending is None:
-        # Automatically commit pending changes if the script did not
-        # touch the branch.
-        commit_pending = True
-    if commit_pending:
-        try:
-            new_revision = local_tree.commit(result.description, allow_pointless=False)
-        except PointlessCommit:
-            pass
-    if new_revision == last_revision:
-        raise ScriptMadeNoChanges()
-    return result
 
 
 def derived_branch_name(script: str) -> str:
@@ -195,6 +108,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     )
     parser.add_argument(
         "--recipe", type=str, help="Recipe to use.")
+    parser.add_argument(
+        "--candidates", type=str, help="File with candidate list.")
     args = parser.parse_args(argv)
 
     if args.recipe:
@@ -202,6 +117,12 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
+
+    if args.candidates:
+        from .candidates import CandidateList
+        candidatelist = CandidateList.from_path(args.candidates)
+    else:
+        candidatelist = None
 
     try:
         main_branch = open_branch(args.url)
@@ -261,6 +182,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             result = script_runner(ws.local_tree, command, commit_pending)
         except ScriptMadeNoChanges:
             logging.exception("Script did not make any changes.")
+            return 1
+        except ScriptFailed:
+            logging.exception("Script failed to run.")
             return 1
 
         if args.verify_command:

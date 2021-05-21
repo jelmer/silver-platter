@@ -21,6 +21,7 @@ import silver_platter  # noqa: F401
 import sys
 from typing import Optional, List, Callable, Dict
 from . import (
+    apply,
     run,
     version_string,
 )
@@ -106,6 +107,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
     "login": login_main,
     "proposals": proposals_main,
     "run": run.main,
+    "apply": apply.main,
 }
 
 
