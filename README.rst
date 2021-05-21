@@ -56,6 +56,17 @@ To execute this recipe, run::
 
 See `example.yaml` for an example recipe with plenty of comments
 
+In addition, you can run a particular recipe over a set of repositories by specifying a candidate list.
+For example, if *candidates.yaml* looked like this::
+
+   ---
+   - url: https://github.com/dulwich/dulwich
+   - url: https://github.com/jelmer/xandikos
+
+then the following command would process each repository in turn:
+
+    svp run --recipe=framwork.yaml --candidates=candidates.yaml
+
 Supported hosters
 ~~~~~~~~~~~~~~~~~
 
