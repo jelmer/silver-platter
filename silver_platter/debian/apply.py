@@ -60,7 +60,7 @@ class CommandResult(object):
     new_revision: Optional[bytes] = None
 
     @classmethod
-    def from_json(cls, data):
+    def from_json(cls, source, data):
         if 'tags' in data:
             tags = []
             for name, revid in data['tags']:
@@ -68,6 +68,7 @@ class CommandResult(object):
         else:
             tags = None
         return cls(
+            source=source,
             value=data.get('value', None),
             context=data.get('context', {}),
             description=data.get('description'),
@@ -76,7 +77,7 @@ class CommandResult(object):
 
 def script_runner(
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', update_changelog: bool = False
+    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None 
 ) -> CommandResult:
     """Run a script in a tree and commit the result.
 
@@ -131,10 +132,9 @@ def script_runner(
             raise ScriptFailed(script, p.returncode)
         try:
             with open(env['SVP_RESULT'], 'r') as f:
-                result = CommandResult.from_json(json.load(f))
+                result = CommandResult.from_json(source_name, json.load(f))
         except FileNotFoundError:
-            result = CommandResult()
-    result.source = source_name
+            result = CommandResult(source=source_name)
     if not result.description:
         result.description = description_encoded.decode()
     new_revision = local_tree.last_revision()
@@ -148,7 +148,7 @@ def script_runner(
         # touch the branch.
         commit_pending = True
     if commit_pending:
-        if update_changelog:
+        if update_changelog and result.description:
             add_changelog_entry(
                 local_tree,
                 os.path.join(debian_path, 'changelog'),

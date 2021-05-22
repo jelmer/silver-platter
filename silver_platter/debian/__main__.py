@@ -75,10 +75,9 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "--help", action="store_true", help="show this help message and exit"
     )
 
-    subcommands.update(main_subcommands.items())
-
-    # We have a debian-specific run command
-    del subcommands["run"]
+    for name, cmd in main_subcommands.items():
+        if name not in subcommands:
+            subcommands[name] = cmd
 
     parser.add_argument(
         "subcommand", type=str, choices=list(subcommands.keys()) + changer_subcommands()
