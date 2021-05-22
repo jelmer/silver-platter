@@ -42,6 +42,9 @@ class CandidateList(object):
 
     candidates: List[Candidate]
 
+    def __iter__(self):
+        return iter(self.candidates)
+
     @classmethod
     def from_yaml(cls, d):
         candidates = []

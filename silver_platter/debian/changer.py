@@ -575,46 +575,7 @@ BUILTIN_ENTRYPOINTS = [
         "run", "silver_platter.debian.run", attrs=("ScriptChanger",)
     ),
     pkg_resources.EntryPoint(
-        "lintian-brush", "silver_platter.debian.lintian", attrs=("LintianBrushChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "tidy", "silver_platter.debian.tidy", attrs=("TidyChanger",)
-    ),
-    pkg_resources.EntryPoint(
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "apply-multiarch-hints",
-        "silver_platter.debian.multiarch",
-        attrs=("MultiArchHintsChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "rules-requires-root",
-        "silver_platter.debian.rrr",
-        attrs=("RulesRequiresRootChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
-    ),
-    pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
-    pkg_resources.EntryPoint(
-        "import-upload",
-        "silver_platter.debian.uncommitted",
-        attrs=("UncommittedChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "scrub-obsolete",
-        "silver_platter.debian.scrub_obsolete",
-        attrs=("ScrubObsoleteChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "debianize", "silver_platter.debian.debianize", attrs=("DebianizeChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "patch", "silver_platter.debian.patch", attrs=("PatchChanger",)
     ),
 ]
 

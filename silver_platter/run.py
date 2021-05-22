@@ -62,6 +62,109 @@ def derived_branch_name(script: str) -> str:
     return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
 
 
+def apply_and_publish(
+        url: str, name: str, command: str, mode: str,
+        commit_pending: Optional[bool] = None, dry_run: bool = False,
+        labels: Optional[List[str]] = None, diff: bool = False,
+        verify_command: Optional[str] = None,
+        derived_owner: Optional[str] = None,
+        refresh: bool = False, allow_create_proposal=None,
+        get_commit_message=None, get_description=None):
+    try:
+        main_branch = open_branch(url)
+    except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
+        logging.exception("%s: %s", url, e)
+        return 1
+
+    overwrite = False
+
+    try:
+        hoster = get_hoster(main_branch)
+    except UnsupportedHoster as e:
+        if mode != "push":
+            raise
+        # We can't figure out what branch to resume from when there's no hoster
+        # that can tell us.
+        resume_branch = None
+        existing_proposal = None
+        logging.warn(
+            "Unsupported hoster (%s), will attempt to push to %s",
+            e,
+            full_branch_url(main_branch),
+        )
+    else:
+        (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
+            main_branch, hoster, name, owner=derived_owner
+        )
+        if resume_overwrite is not None:
+            overwrite = resume_overwrite
+    if refresh:
+        resume_branch = None
+
+    with Workspace(main_branch, resume_branch=resume_branch) as ws:
+        try:
+            result = script_runner(ws.local_tree, command, commit_pending)
+        except ScriptMadeNoChanges:
+            logging.error("Script did not make any changes.")
+            return 1
+        except ScriptFailed:
+            logging.error("Script failed to run.")
+            return 1
+
+        if verify_command:
+            try:
+                subprocess.check_call(
+                    verify_command, shell=True, cwd=ws.local_tree.abspath(".")
+                )
+            except subprocess.CalledProcessError:
+                logging.error("Verify command failed.")
+                return 1
+
+        enable_tag_pushing(ws.local_tree.branch)
+
+        try:
+            publish_result = ws.publish_changes(
+                mode,
+                name,
+                get_proposal_description=lambda df, ep: get_description(result, df, ep),
+                get_proposal_commit_message=lambda ep: get_commit_message(result, ep),
+                allow_create_proposal=lambda: allow_create_proposal(result),
+                dry_run=dry_run,
+                hoster=hoster,
+                labels=labels,
+                overwrite_existing=overwrite,
+                derived_owner=derived_owner,
+                existing_proposal=existing_proposal,
+            )
+        except UnsupportedHoster as e:
+            logging.exception(
+                "No known supported hoster for %s. Run 'svp login'?",
+                full_branch_url(e.branch),
+            )
+            return 1
+        except InsufficientChangesForNewProposal:
+            logging.info('Insufficient changes for a new merge proposal')
+            return 0
+        except _mod_propose.HosterLoginRequired as e:
+            logging.exception(
+                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
+                e.hoster.base_url,
+            )
+            return 1
+
+        if publish_result.proposal:
+            if publish_result.is_new:
+                logging.info("Merge proposal created.")
+            else:
+                logging.info("Merge proposal updated.")
+            if publish_result.proposal.url:
+                logging.info("URL: %s", publish_result.proposal.url)
+            logging.info("Description: %s", publish_result.proposal.get_description())
+
+        if diff:
+            ws.show_diff(sys.stdout.buffer)
+
+
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("url", help="URL of branch to work on.", type=str)
@@ -118,17 +221,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     else:
         recipe = None
 
+    urls = []
+
+    if args.url:
+        urls = [args.url]
+
     if args.candidates:
         from .candidates import CandidateList
         candidatelist = CandidateList.from_path(args.candidates)
-    else:
-        candidatelist = None
-
-    try:
-        main_branch = open_branch(args.url)
-    except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        logging.exception("%s: %s", args.url, e)
-        return 1
+        urls.extend([candidate.url for candidate in candidatelist])
 
     if args.name is not None:
         name = args.name
@@ -144,31 +245,6 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     else:
         commit_pending = None
 
-    overwrite = False
-
-    try:
-        hoster = get_hoster(main_branch)
-    except UnsupportedHoster as e:
-        if args.mode != "push":
-            raise
-        # We can't figure out what branch to resume from when there's no hoster
-        # that can tell us.
-        resume_branch = None
-        existing_proposal = None
-        logging.warn(
-            "Unsupported hoster (%s), will attempt to push to %s",
-            e,
-            full_branch_url(main_branch),
-        )
-    else:
-        (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
-            main_branch, hoster, name, owner=args.derived_owner
-        )
-        if resume_overwrite is not None:
-            overwrite = resume_overwrite
-    if args.refresh or (recipe and not recipe.resume):
-        resume_branch = None
-
     if args.command:
         command = args.command
     elif recipe.command:
@@ -177,94 +253,52 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         logging.exception('No command specified.')
         return 1
 
-    with Workspace(main_branch, resume_branch=resume_branch) as ws:
-        try:
-            result = script_runner(ws.local_tree, command, commit_pending)
-        except ScriptMadeNoChanges:
-            logging.exception("Script did not make any changes.")
-            return 1
-        except ScriptFailed:
-            logging.exception("Script failed to run.")
-            return 1
+    import pdb; pdb.set_trace()
+    refresh = args.refresh
 
-        if args.verify_command:
-            try:
-                subprocess.check_call(
-                    args.verify_command, shell=True, cwd=ws.local_tree.abspath(".")
-                )
-            except subprocess.CalledProcessError:
-                logging.exception("Verify command failed.")
-                return 1
+    if recipe and not recipe.resume:
+        refresh = True
 
-        def get_description(description_format, existing_proposal):
-            if recipe:
-                return recipe.render_merge_request_description(
-                    description_format, result.context)
-            if result.description is not None:
-                return result.description
-            if existing_proposal is not None:
-                return existing_proposal.get_description()
-            raise ValueError("No description available")
-
-        def get_commit_message(existing_proposal):
-            if recipe:
-                return recipe.render_merge_request_commit_message(result.context)
-            if existing_proposal is not None:
-                return existing_proposal.get_commit_message()
-            return None
-
-        def allow_create_proposal():
-            if result.value is None:
-                return True
-            if recipe.propose_threshold is not None:
-                return result.value >= recipe.propose_threshold
+    def allow_create_proposal(result):
+        if result.value is None:
             return True
+        if recipe.propose_threshold is not None:
+            return result.value >= recipe.propose_threshold
+        return True
 
-        enable_tag_pushing(ws.local_tree.branch)
+    def get_commit_message(result, existing_proposal):
+        if recipe:
+            return recipe.render_merge_request_commit_message(result.context)
+        if existing_proposal is not None:
+            return existing_proposal.get_commit_message()
+        return None
 
-        try:
-            publish_result = ws.publish_changes(
-                args.mode,
-                name,
-                get_proposal_description=get_description,
-                get_proposal_commit_message=get_commit_message,
+    def get_description(result, description_format, existing_proposal):
+        if recipe:
+            description = recipe.render_merge_request_description(
+                description_format, result.context)
+            if description:
+                return description
+        if result.description is not None:
+            return result.description
+        if existing_proposal is not None:
+            return existing_proposal.get_description()
+        raise ValueError("No description available")
+
+    retcode = 0
+
+    for url in urls:
+        if apply_and_publish(
+                url, name=name, command=command, mode=args.mode,
+                commit_pending=commit_pending, dry_run=args.dry_run,
+                labels=args.label, diff=args.diff,
+                derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,
-                dry_run=args.dry_run,
-                hoster=hoster,
-                labels=args.label,
-                overwrite_existing=overwrite,
-                derived_owner=args.derived_owner,
-                existing_proposal=existing_proposal,
-            )
-        except UnsupportedHoster as e:
-            logging.exception(
-                "No known supported hoster for %s. Run 'svp login'?",
-                full_branch_url(e.branch),
-            )
-            return 1
-        except InsufficientChangesForNewProposal:
-            logging.info('Insufficient changes for a new merge proposal')
-            return 0
-        except _mod_propose.HosterLoginRequired as e:
-            logging.exception(
-                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
-                e.hoster.base_url,
-            )
-            return 1
+                get_commit_message=get_commit_message,
+                get_description=get_description):
+            retcode = 1
 
-        if publish_result.proposal:
-            if publish_result.is_new:
-                logging.info("Merge proposal created.")
-            else:
-                logging.info("Merge proposal updated.")
-            if publish_result.proposal.url:
-                logging.info("URL: %s", publish_result.proposal.url)
-            logging.info("Description: %s", publish_result.proposal.get_description())
-
-        if args.diff:
-            ws.show_diff(sys.stdout.buffer)
-
-    return None
+    return retcode
 
 
 if __name__ == "__main__":

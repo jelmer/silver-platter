@@ -137,7 +137,7 @@ def build(
     """
     if builder is None:
         builder = DEFAULT_BUILDER
-     TODO(jelmer): Refactor brz-debian so it's not necessary
+    # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
     cmd_builddeb().run([tree.abspath(subpath)], builder=builder, result_dir=result_dir)

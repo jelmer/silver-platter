@@ -45,7 +45,7 @@ class Recipe(object):
             merge_request_commit_message_template = merge_request.get('commit-message')
             propose_threshold = merge_request.get('propose-threshold')
         else:
-            merge_request_description_template = None
+            merge_request_description_template = {}
             merge_request_commit_message_template = None
             propose_threshold = None
         return cls(
@@ -58,12 +58,18 @@ class Recipe(object):
             propose_threshold=propose_threshold)
 
     def render_merge_request_commit_message(self, context):
-        return self.merge_request_commit_message_template.render(context)
+        template = self.merge_request_commit_message_template
+        if template:
+            return template.render(context)
+        return None
 
     def render_merge_request_description(self, description_format, context):
         template = self.merge_request_description_template.get(description_format)
         if template is None:
-            template = self.merge_request_description_template[None]
+            try:
+                template = self.merge_request_description_template[None]
+            except KeyError:
+                return None
         return template.render(context)
 
     @classmethod

@@ -30,7 +30,10 @@ from .changer import (
     changer_subcommand,
 )
 
-from . import uploader as debian_uploader
+from . import (
+    apply as debian_apply,
+    uploader as debian_uploader,
+    )
 
 
 def run_changer_subcommand(name, changer_cls, argv):
@@ -55,6 +58,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
     subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
         "upload-pending": debian_uploader.main,
+        "apply": debian_apply.main,
     }
 
     parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
