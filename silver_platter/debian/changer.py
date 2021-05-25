@@ -406,23 +406,8 @@ def _run_single_changer(  # noqa: C901
                 return False
 
         if install:
-            import re
-            import subprocess
-            from debian.changelog import Changelog
-            from debian.deb822 import Deb822
-            with open(ws.local_tree.abspath(os.path.join(ws.subpath, 'debian/changelog')), 'r') as f:
-                cl = Changelog(f)
-            non_epoch_version = cl[0].version.upstream_version
-            if cl[0].version.debian_version is not None:
-                non_epoch_version += "-%s" % cl[0].version.debian_version
-            c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))  # type: ignore
-            for entry in os.scandir(build_target_dir):
-                if not c.match(entry.name):
-                    continue
-                with open(entry.path, 'rb') as g:
-                    changes = Deb822(g)
-                    if changes.get('Binary'):
-                        subprocess.check_call(['debi', entry.path])
+            from .apply import install_built_package
+            install_built_package(ws.local_tree, ws.subpath, build_target_dir)
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -572,10 +557,46 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
 
 BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
-        "run", "silver_platter.debian.run", attrs=("ScriptChanger",)
+        "lintian-brush", "silver_platter.debian.lintian", attrs=("LintianBrushChanger",)
+    ),
+    pkg_resources.EntryPoint(
+        "tidy", "silver_platter.debian.tidy", attrs=("TidyChanger",)
     ),
     pkg_resources.EntryPoint(
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
+    ),
+    pkg_resources.EntryPoint(
+        "cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)
+    ),
+    pkg_resources.EntryPoint(
+        "apply-multiarch-hints",
+        "silver_platter.debian.multiarch",
+        attrs=("MultiArchHintsChanger",),
+    ),
+    pkg_resources.EntryPoint(
+        "rules-requires-root",
+        "silver_platter.debian.rrr",
+        attrs=("RulesRequiresRootChanger",),
+    ),
+    pkg_resources.EntryPoint(
+        "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
+    ),
+    pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
+    pkg_resources.EntryPoint(
+        "import-upload",
+        "silver_platter.debian.uncommitted",
+        attrs=("UncommittedChanger",),
+    ),
+    pkg_resources.EntryPoint(
+        "scrub-obsolete",
+        "silver_platter.debian.scrub_obsolete",
+        attrs=("ScrubObsoleteChanger",),
+    ),
+    pkg_resources.EntryPoint(
+        "debianize", "silver_platter.debian.debianize", attrs=("DebianizeChanger",)
+    ),
+    pkg_resources.EntryPoint(
+        "patch", "silver_platter.debian.patch", attrs=("PatchChanger",)
     ),
 ]
 

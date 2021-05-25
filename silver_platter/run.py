@@ -169,8 +169,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("url", help="URL of branch to work on.", type=str)
     parser.add_argument(
-        "command", help="Path to script to run.", type=str,
-        nargs='?')
+        "--command", help="Path to script to run.", type=str)
     parser.add_argument(
         "--derived-owner", type=str, default=None, help="Owner for derived branches."
     )
@@ -231,13 +230,6 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         candidatelist = CandidateList.from_path(args.candidates)
         urls.extend([candidate.url for candidate in candidatelist])
 
-    if args.name is not None:
-        name = args.name
-    elif recipe and recipe.name:
-        name = recipe.name
-    else:
-        name = derived_branch_name(args.command)
-
     if args.commit_pending:
         commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
@@ -253,7 +245,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         logging.exception('No command specified.')
         return 1
 
-    import pdb; pdb.set_trace()
+    if args.name is not None:
+        name = args.name
+    elif recipe and recipe.name:
+        name = recipe.name
+    else:
+        name = derived_branch_name(command)
+
     refresh = args.refresh
 
     if recipe and not recipe.resume:

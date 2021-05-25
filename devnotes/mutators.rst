@@ -51,7 +51,7 @@ For Debian branches, branches will be provided named according to DEP-13.
 The following environment variables will be set as well:
 
  * DEB_SOURCE: Source package name
- * UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
+ * DEB_UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
  * ALLOW_REFORMATTING: boolean indicating whether reformatting is allowed
 
 Required Changes

@@ -75,6 +75,25 @@ class CommandResult(object):
             tags=tags)
 
 
+def install_built_package(local_tree, subpath, build_target_dir):
+    import re
+    import subprocess
+    with open(local_tree.abspath(os.path.join(subpath, 'debian/changelog')), 'r') as f:
+        cl = Changelog(f)
+    non_epoch_version = cl[0].version.upstream_version
+    if cl[0].version.debian_version is not None:
+        non_epoch_version += "-%s" % cl[0].version.debian_version
+    c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))  # type: ignore
+    for entry in os.scandir(build_target_dir):
+        if not c.match(entry.name):
+            continue
+        with open(entry.path, 'rb') as g:
+            changes = Deb822(g)
+            if changes.get('Binary'):
+                subprocess.check_call(['debi', entry.path])
+
+
+
 def script_runner(
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None 
@@ -107,7 +126,8 @@ def script_runner(
         cl = Changelog(f)
         source_name = cl[0].package
 
-    os.environ['DEB_SOURCE'] = source_name
+    if source_name:
+        os.environ['DEB_SOURCE'] = source_name
 
     if update_changelog:
         os.environ['DEB_UPDATE_CHANGELOG'] = 'update'
@@ -267,21 +287,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 return False
 
         if args.install:
-            import re
-            import subprocess
-            with open(local_tree.abspath(os.path.join(subpath, 'debian/changelog')), 'r') as f:
-                cl = Changelog(f)
-            non_epoch_version = cl[0].version.upstream_version
-            if cl[0].version.debian_version is not None:
-                non_epoch_version += "-%s" % cl[0].version.debian_version
-            c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))  # type: ignore
-            for entry in os.scandir(args.build_target_dir):
-                if not c.match(entry.name):
-                    continue
-                with open(entry.path, 'rb') as g:
-                    changes = Deb822(g)
-                    if changes.get('Binary'):
-                        subprocess.check_call(['debi', entry.path])
+            install_built_package(local_tree, subpath, args.build_target_dir)
     except Exception:
         reset_tree(local_tree, subpath)
         raise

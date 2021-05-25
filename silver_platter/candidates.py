@@ -24,15 +24,20 @@ import yaml
 class Candidate(object):
     """Candidate."""
 
-    repository_url: str
-    branch: Optional[str]
+    url: str
+    branch: Optional[str] = None
+    subpath: str = ''
 
     @classmethod
     def from_yaml(cls, d):
         if isinstance(d, dict):
-            return cls(repository_url=d.get('url'), branch=d.get('branch'))
+            return cls(
+                url=d.get('url'),
+                branch=d.get('branch'),
+                subpath=d.get('path'),
+                )
         elif isinstance(d, str):
-            return cls(repository_url=d)
+            return cls(url=d)
         else:
             raise TypeError(d)
 
