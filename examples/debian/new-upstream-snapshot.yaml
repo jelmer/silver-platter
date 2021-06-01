@@ -1,6 +1,6 @@
 ---
 name: new-upstream-snapshot
-command: deb-merge-upstream --snapshot
+command: deb-new-upstream --snapshot
 merge-proposal:
   commit-message: "Merge new upstream snapshot {{ new_upstream_version }}"
   description: |-

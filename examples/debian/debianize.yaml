@@ -1,4 +1,7 @@
 ---
+# Generate a Debian package for an upstream source repository
+#
+# Requires the "lintian-brush" package.
 name: debianize
 command: debianize
 merge-proposal:

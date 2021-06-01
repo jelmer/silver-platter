@@ -1,6 +1,6 @@
 ---
 name: new-upstream-release
-command: deb-merge-upstream
+command: deb-new-upstream
 merge-proposal:
   commit-message: "Merge new upstream release {{ new_upstream_version }}"
   description: |-

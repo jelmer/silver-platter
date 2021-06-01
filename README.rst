@@ -48,7 +48,7 @@ For this example, create one called ``framwork.yaml`` with the following content
       commit-message: Fix a typo
       description:
         markdown: |-
-          I spotted that we commonly mistype *framework* as *framwork*.
+          I spotted that we often mistype *framework* as *framwork*.
 
 To execute this recipe, run::
 
@@ -102,6 +102,8 @@ Some Debian-specific example recipes are provided in examples/debian/:
 * *orphan.yaml*: Mark a package as orphaned, update its Maintainer
   field and move it to the common Debian salsa group.
 * *rules-requires-root.yaml*: Mark a package as "Rules-Requires-Root: no"
+* *cme.yaml*: Run "cme fix", from the [cme](https://packages.debian.org/cme)
+  package.
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
@@ -115,10 +117,16 @@ Examples running ``debian-svp``::
     debian-svp upload-pending tdb
     debian-svp upload-pending --vcswatch --maintainer jelmer@debian.org
 
-    debian-svp run --recipe=examples/new-upstream-release.yaml \
+    debian-svp run --recipe=examples/debian/new-upstream-release.yaml \
         --no-build-verify tdb
 
-    debian-svp run --recipe=examples/multiarch-hints.yaml tdb
+    debian-svp run --recipe=examples/debian/multiarch-hints.yaml tdb
+
+The following environment variables are provided for Debian packages:
+
+ * ``DEB_SOURCE``: the source package name
+ * ``DEB_UPDATE_CHANGELOG``: indicates whether a changelog entry should
+       be added. Either "leave" (leave alone) or "update" (update changelog).
 
 Credentials
 ~~~~~~~~~~~
