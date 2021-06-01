@@ -96,7 +96,7 @@ def install_built_package(local_tree, subpath, build_target_dir):
 
 def script_runner(
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None 
+    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None
 ) -> CommandResult:
     """Run a script in a tree and commit the result.
 
