@@ -188,8 +188,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", help="Path to script to run.", type=str,
-        nargs='?')
+        "--command", help="Path to script to run.", type=str)
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -258,10 +257,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     if args.command:
         command = args.command
-    elif recipe.command:
+    elif recipe and recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
+        logging.exception('No command or recipe specified.')
         return 1
 
     local_tree, subpath = WorkingTree.open_containing('.')
