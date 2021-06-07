@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -24,9 +25,11 @@ import tempfile
 
 from urllib.request import urlopen
 
+from breezy.workingtree import WorkingTree
+
 from debian.changelog import Changelog
 
-from . import NoAptSources, connect_udd_mirror
+from silver_platter.debian import NoAptSources, connect_udd_mirror
 from .changer import (
     run_mutator,
     DebianChanger,
@@ -216,88 +219,40 @@ def import_uncommitted(tree, subpath):
     return ret
 
 
-class UncommittedChanger(DebianChanger):
+async def main():
+    local_tree, subpath = WorkingTree.open_containing('.')
+    try:
+        ret = import_uncommitted(local_tree, subpath)
+    except TreeUpstreamVersionMissing as e:
+        raise ChangerError("tree-upstream-version-missing", str(e))
+    except TreeVersionNotInArchiveChangelog as e:
+        raise ChangerError("tree-version-not-in-archive-changelog", str(e))
+    except NoMissingVersions as e:
+        raise ChangerError("nothing-to-do", str(e))
+    tags = [(None, tag_name, revid) for (tag_name, version, revid) in ret]
+    # TODO(jelmer): Include upstream tags
+    proposed_commit_message = "Import missing uploads: %s." % (
+        ", ".join([str(v) for t, v in ret])
+    )
+    reporter.report_metadata(
+        "tags", [(tag_name, str(version)) for (tag_name, version, revid) in ret]
+    )
 
-    name = "import-upload"
+    branches = [("main", None, base_revid, local_tree.last_revision())]
 
-    @classmethod
-    def setup_parser(cls, parser):
-        pass
+    # TODO(jelmer): Include branches for upstream/pristine-tar
 
-    @classmethod
-    def from_args(cls, args):
-        return cls()
-
-    def suggest_branch_name(self):
-        return BRANCH_NAME
-
-    def make_changes(
-        self,
-        local_tree,
-        subpath,
-        update_changelog,
-        reporter,
-        committer,
-        base_proposal=None,
-    ):
-        base_revid = local_tree.last_revision()
-        try:
-            ret = import_uncommitted(local_tree, subpath)
-        except TreeUpstreamVersionMissing as e:
-            raise ChangerError("tree-upstream-version-missing", str(e))
-        except TreeVersionNotInArchiveChangelog as e:
-            raise ChangerError("tree-version-not-in-archive-changelog", str(e))
-        except NoMissingVersions as e:
-            raise ChangerError("nothing-to-do", str(e))
-        tags = [(None, tag_name, revid) for (tag_name, version, revid) in ret]
-        # TODO(jelmer): Include upstream tags
-        proposed_commit_message = "Import missing uploads: %s." % (
-            ", ".join([str(v) for t, v in ret])
-        )
-        reporter.report_metadata(
-            "tags", [(tag_name, str(version)) for (tag_name, version, revid) in ret]
-        )
-
-        branches = [("main", None, base_revid, local_tree.last_revision())]
-
-        # TODO(jelmer): Include branches for upstream/pristine-tar
-
-        return ChangerResult(
-            description="Import archive changes missing from the VCS.",
-            branches=branches,
-            mutator=ret,
-            tags=tags,
-            sufficient_for_proposal=True,
-            proposed_commit_message=proposed_commit_message,
-        )
-
-    def get_proposal_description(self, applied, description_format, existing_proposal):
-        return "Import missing uploads: %s." % (", ".join([str(v) for t, v in applied]))
-
-    def describe(self, applied, publish_result):
-        if publish_result.is_new:
-            logging.info(
-                "Proposed import of versions %s: %s",
-                ", ".join([str(v) for t, v in applied]),
-                publish_result.proposal.url,
-            )
-        elif applied:
-            logging.info(
-                "Updated proposal %s with versions %s.",
-                publish_result.proposal.url,
-                ", ".join([str(v) for t, v in applied]),
-            )
-        else:
-            logging.info(
-                "No new versions imported for proposal %s", publish_result.proposal.url
-            )
-
-    @classmethod
-    def describe_command(cls, command):
-        return "Import archive changes missing from VCS"
+    return ChangerResult(
+        description="Import archive changes missing from the VCS.",
+        branches=branches,
+        mutator=ret,
+        tags=tags,
+        sufficient_for_proposal=True,
+        proposed_commit_message=proposed_commit_message,
+    )
 
 
 if __name__ == "__main__":
     import sys
 
-    sys.exit(run_mutator(UncommittedChanger))
+    sys.exit(asyncio.run(main()))

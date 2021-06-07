@@ -1,0 +1,146 @@
+#!/usr/bin/python3
+# Copyright (C) 2020 Jelmer Vernooij <jelmer@jelmer.uk>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+"""Support for scrubbing obsolete settings."""
+
+import argparse
+import asyncio
+import os
+import json
+import logging
+
+from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
+
+import silver_platter  # noqa: F401
+
+from lintian_brush import NotDebianPackage
+from lintian_brush.config import Config
+
+from . import control_file_present, is_debcargo_package
+from .changer import (
+    ChangerError,
+    ChangerResult,
+)
+
+
+BRANCH_NAME = "scrub-obsolete"
+DEFAULT_VALUE_MULTIARCH_HINT = 30
+
+
+def calculate_value(result):
+    value = DEFAULT_VALUE_MULTIARCH_HINT
+    for para, changes in result.control_removed:
+        for field, packages in changes:
+            value += len(packages) * 2
+    for path, removed in result.maintscript_removed:
+        value += len(removed)
+    return value
+
+
+async def main():
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--allow-reformatting",
+        default=None,
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--upgrade-release",
+        metavar="UPGRADE-RELEASE",
+        help="Release to allow upgrading from.",
+        default="oldstable",
+    )
+    parser.add_argument(
+        "--compat-release",
+        metavar="UPGRADE-RELEASE",
+        help="Release to allow upgrading from.",
+        default="stable",
+    )
+
+    args = parser.parse_args()
+
+    from lintian_brush.scrub_obsolete import scrub_obsolete
+
+    import distro_info
+
+    debian_info = distro_info.DebianDistroInfo()
+    if args.compat_release:
+        compat_release = debian_info.codename(args.compat_release)
+    else:
+        compat_release = None
+
+    upgrade_release = debian_info.codename(args.upgrade_release)
+
+    allow_reformatting = args.allow_reformatting
+    try:
+        cfg = Config.from_workingtree(local_tree, subpath)
+    except FileNotFoundError:
+        pass
+    else:
+        if allow_reformatting is None:
+            allow_reformatting = cfg.allow_reformatting()
+        if update_changelog is None:
+            update_changelog = cfg.update_changelog()
+        if compat_release is None:
+            compat_release = cfg.compat_release()
+
+    if compat_release is None:
+        compat_release = debian_info.stable()
+
+    if is_debcargo_package(local_tree, subpath):
+        raise ChangerError("nothing-to-do", "Package uses debcargo")
+    elif not control_file_present(local_tree, subpath):
+        raise ChangerError("missing-control-file", "Unable to find debian/control")
+
+    try:
+        result = scrub_obsolete(
+            local_tree,
+            subpath,
+            compat_release,
+            upgrade_release,
+            update_changelog=update_changelog,
+        )
+    except FormattingUnpreservable as e:
+        raise ChangerError(
+            "formatting-unpreservable",
+            "unable to preserve formatting while editing %s" % e.path,
+        )
+    except GeneratedFile as e:
+        raise ChangerError(
+            "generated-file", "unable to edit generated file: %r" % e
+        )
+    except NotDebianPackage:
+        raise ChangerError("not-debian-package", "Not a Debian package")
+
+    if not result:
+        raise ChangerError("nothing-to-do", "no obsolete constraints")
+
+    if os.environ.get('SVP_API') == '1':
+        with open(os.environ['SVP_RESULT'], 'w') as f:
+            json.dump(f, {
+                'description': "Scrub obsolete settings.",
+                'value': calculate_value(result),
+                'context': {}})
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(asyncio.run(main()))

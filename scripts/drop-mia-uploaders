@@ -17,23 +17,21 @@
 
 import logging
 
+import json
+import os
+
 from typing import Optional, List
 
 from breezy import osutils
+from breezy.workingtree import WorkingTree
 
 from debmutate.control import ControlEditor, delete_from_list
 from debmutate.deb822 import ChangeConflict
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
-from . import (
+from silver_platter.debian import (
     add_changelog_entry,
-)
-from .changer import (
-    run_mutator,
-    DebianChanger,
-    ChangerError,
-    ChangerResult,
 )
 
 
@@ -98,7 +96,7 @@ def tree_drop_mia_uploaders(local_tree, subpath, update_changelog=None, committe
         source = editor.source["Source"]
         bugs = all_mia_teammaint_bugs().intersection(get_package_bugs(source))
         if not bugs:
-            raise ChangerError("nothing-to-do", "No MIA people")
+            return MIAResult()
         removed_uploaders = []
         fixed_bugs = []
         for bug in bugs:
@@ -138,87 +136,44 @@ def tree_drop_mia_uploaders(local_tree, subpath, update_changelog=None, committe
     return MIAResult(source, removed_uploaders=removed_uploaders, bugs=fixed_bugs)
 
 
-class MIAChanger(DebianChanger):
+async def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.parse_args()
 
-    name = "mia"
-
-    def __init__(self, dry_run=False):
-        self.dry_run = dry_run
-
-    @classmethod
-    def setup_parser(cls, parser):
-        pass
-
-    @classmethod
-    def from_args(cls, args):
-        return cls(dry_run=args.dry_run)
-
-    def suggest_branch_name(self):
-        return BRANCH_NAME
-
-    def make_changes(
-        self,
-        local_tree,
-        subpath,
-        update_changelog,
-        reporter,
-        committer,
-        base_proposal=None,
-    ):
-        base_revid = local_tree.last_revision()
-        try:
-            result = tree_drop_mia_uploaders(
-                local_tree, subpath, update_changelog=update_changelog,
-                committer=committer)
-        except FormattingUnpreservable as e:
-            raise ChangerError(
-                "formatting-unpreservable",
-                "unable to preserve formatting while editing %s" % e.path,
-            )
-        except (ChangeConflict, GeneratedFile) as e:
-            raise ChangerError(
-                "generated-file", "unable to edit generated file: %r" % e
-            )
-
-        reporter.report_metadata("bugs", result.bugs)
-        reporter.report_metadata("removed_uploaders", result.removed_uploaders)
-
-        if not result.removed_uploaders:
-            raise ChangerError(
-                "nothing-to-do", "Unable to remove any MIA uploaders"
-            )
-
-        branches = [("main", None, base_revid, local_tree.last_revision())]
-
-        tags = []
-
-        return ChangerResult(
-            description="Remove MIA uploaders.",
-            mutator=result,
-            branches=branches,
-            tags=tags,
-            sufficient_for_proposal=True,
-            proposed_commit_message=("Remove MIA uploaders."),
+    local_tree, subpath = WorkingTree.open_containing('.')
+    try:
+        result = tree_drop_mia_uploaders(
+            local_tree, subpath, update_changelog=update_changelog)
+    except FormattingUnpreservable as e:
+        raise ChangerError(
+            "formatting-unpreservable",
+            "unable to preserve formatting while editing %s" % e.path,
+        )
+    except (ChangeConflict, GeneratedFile) as e:
+        raise ChangerError(
+            "generated-file", "unable to edit generated file: %r" % e
         )
 
-    def get_proposal_description(self, applied, description_format, existing_proposal):
-        text = "Remove MIA uploaders:\n\n"
-        for uploader in applied.removed_uploaders:
-            text += " * %s\n" % uploader
-        return text
+    if not result.bugs:
+        raise ChangerError("nothing-to-do", "No MIA people")
 
-    def describe(self, result, publish_result):
-        logging.info(
-            "Removed MIA uploaders: %s",
-            publish_result.proposal.url,
+    if 'SVP_RESULT' in os.environ:
+        with open(os.environ['SVP_RESULT'], 'w') as f:
+            json.dump({
+                'context': {
+                    'bugs': result.bugs,
+                    'removed_uploaders': result.removed_uploaders,
+                    }}, f)
+
+    if not result.removed_uploaders:
+        raise ChangerError(
+            "nothing-to-do", "Unable to remove any MIA uploaders"
         )
-
-    @classmethod
-    def describe_command(cls, command):
-        return "Remove MIA maintainers."
 
 
 if __name__ == "__main__":
+    import asyncio
     import sys
 
-    sys.exit(run_mutator(MIAChanger))
+    sys.exit(asyncio.run(main()))

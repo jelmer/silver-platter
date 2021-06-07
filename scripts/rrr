@@ -1,0 +1,54 @@
+#!/usr/bin/python
+# Copyright (C) 2020 Jelmer Vernooij <jelmer@jelmer.uk>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+import logging
+import os
+import json
+
+from breezy import osutils
+
+from debmutate.control import ControlEditor
+
+from breezy.workingtree import WorkingTree
+
+
+class RulesRequiresRootResult(object):
+    def __init__(self, package=None):
+        self.package = package
+
+
+async def main():
+    import argparse
+
+    parser = argparse.ArgumenParser()
+    args = parser.parse_args()
+
+    with ControlEditor() as updater:
+        updater.source["Rules-Requires-Root"] = "no"
+        result = RulesRequiresRootResult(updater.source["Source"])
+    print("Set Rules-Requires-Root.")
+
+    if os.environ.get('SVP_API') == "1":
+        with open(os.environ['SVP_RESULT'], 'w') as f:
+            json.dump(f, {'description': 'Set rules requires root'})
+
+
+if __name__ == "__main__":
+    import asyncio
+    import sys
+
+    sys.exit(asyncio.run(main))
