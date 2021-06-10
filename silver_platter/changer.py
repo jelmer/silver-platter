@@ -21,8 +21,6 @@ from typing import List, Optional, Any, Dict, Tuple, Type
 from breezy.propose import MergeProposal
 from breezy.workingtree import WorkingTree
 
-import pkg_resources
-
 from .publish import (
     PublishResult,
     )
@@ -131,18 +129,3 @@ class GenericChanger(object):
     @classmethod
     def describe_command(cls, command):
         return cls.name
-
-
-def changer_subcommands() -> List[str]:
-    endpoints = pkg_resources.iter_entry_points(__name__)
-    ret = []
-    for ep in list(endpoints):
-        ret.append(ep.name)
-    return ret
-
-
-def changer_subcommand(name: str) -> Type[GenericChanger]:
-    endpoints = pkg_resources.iter_entry_points(__name__, name)
-    for ep in endpoints:
-        return ep.load()
-    raise KeyError(name)
