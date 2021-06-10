@@ -379,6 +379,7 @@ def main(argv):  # noqa: C901
     )
 
     args = parser.parse_args(argv)
+
     ret = 0
 
     if not args.packages and not args.maintainer:

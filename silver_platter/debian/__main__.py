@@ -91,7 +91,11 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
             parser.exit()
         else:
             rest.append("--help")
-
+    if args.debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format="%(message)s")
     if args.subcommand is None:
         parser.print_usage()
         return 1
@@ -102,11 +106,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        if args.debug:
-            level = logging.DEBUG
-        else:
-            level = logging.INFO
-        logging.basicConfig(level=level, format="%(message)s")
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1
