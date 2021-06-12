@@ -29,6 +29,11 @@ from breezy.commit import PointlessCommit
 from breezy.workingtree import WorkingTree
 from breezy.workspace import reset_tree, check_clean_tree
 
+from ..apply import (
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    )
+
 from . import (
     add_changelog_entry,
     build,
@@ -38,14 +43,6 @@ from . import (
     MissingUpstreamTarball,
     DEFAULT_BUILDER,
     )
-
-
-class ScriptMadeNoChanges(Exception):
-    "Script made no changes."
-
-
-class ScriptFailed(Exception):
-    """Script failed to run."""
 
 
 @dataclass
