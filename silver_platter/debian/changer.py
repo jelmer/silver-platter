@@ -568,11 +568,6 @@ BUILTIN_ENTRYPOINTS = [
         attrs=("MultiArchHintsChanger",),
     ),
     pkg_resources.EntryPoint(
-        "rules-requires-root",
-        "silver_platter.debian.rrr",
-        attrs=("RulesRequiresRootChanger",),
-    ),
-    pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
     pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
