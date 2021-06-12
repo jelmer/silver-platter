@@ -563,11 +563,6 @@ BUILTIN_ENTRYPOINTS = [
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
     ),
     pkg_resources.EntryPoint(
-        "apply-multiarch-hints",
-        "silver_platter.debian.multiarch",
-        attrs=("MultiArchHintsChanger",),
-    ),
-    pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
     pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
