@@ -573,9 +573,6 @@ BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
         "debianize", "silver_platter.debian.debianize", attrs=("DebianizeChanger",)
     ),
-    pkg_resources.EntryPoint(
-        "patch", "silver_platter.debian.patch", attrs=("PatchChanger",)
-    ),
 ]
 
 
