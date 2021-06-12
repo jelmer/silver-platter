@@ -565,7 +565,6 @@ BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
-    pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
     pkg_resources.EntryPoint(
         "scrub-obsolete",
         "silver_platter.debian.scrub_obsolete",
