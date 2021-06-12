@@ -45,6 +45,24 @@ from . import (
     )
 
 
+class DetailedFailure(Exception):
+    """Detailed failure"""
+
+    def __init__(self, source_name, result_code, description, details=None):
+        self.source = source_name
+        self.result_code = result_code
+        self.description = description
+        self.details = details
+
+    @classmethod
+    def from_json(cls, source_name, json):
+        return cls(
+            source_name,
+            result_code=json.get('result_code'),
+            description=json.get('description'),
+            details=json.get('details'))
+
+
 @dataclass
 class CommandResult(object):
 
@@ -145,12 +163,18 @@ def script_runner(
             script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE, shell=True,
             env=env)
         (description_encoded, err) = p.communicate(b"")
-        if p.returncode != 0:
-            raise ScriptFailed(script, p.returncode)
         try:
             with open(env['SVP_RESULT'], 'r') as f:
-                result = CommandResult.from_json(source_name, json.load(f))
+                result_json = json.load(f)
         except FileNotFoundError:
+            result_json = None
+        if p.returncode != 0:
+            if result_json is not None:
+                raise DetailedFailure.from_json(source_name, result_json)
+            raise ScriptFailed(script, p.returncode)
+        if result_json is not None:
+            result = CommandResult.from_json(source_name, result_json)
+        else:
             result = CommandResult(source=source_name)
     if not result.description:
         result.description = description_encoded.decode()
