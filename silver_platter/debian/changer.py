@@ -583,11 +583,6 @@ BUILTIN_ENTRYPOINTS = [
     ),
     pkg_resources.EntryPoint("mia", "silver_platter.debian.mia", attrs=("MIAChanger",)),
     pkg_resources.EntryPoint(
-        "import-upload",
-        "silver_platter.debian.uncommitted",
-        attrs=("UncommittedChanger",),
-    ),
-    pkg_resources.EntryPoint(
         "scrub-obsolete",
         "silver_platter.debian.scrub_obsolete",
         attrs=("ScrubObsoleteChanger",),
