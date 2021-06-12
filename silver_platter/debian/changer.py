@@ -560,9 +560,6 @@ BUILTIN_ENTRYPOINTS = [
         "lintian-brush", "silver_platter.debian.lintian", attrs=("LintianBrushChanger",)
     ),
     pkg_resources.EntryPoint(
-        "tidy", "silver_platter.debian.tidy", attrs=("TidyChanger",)
-    ),
-    pkg_resources.EntryPoint(
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
     ),
     pkg_resources.EntryPoint(
