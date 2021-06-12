@@ -563,9 +563,6 @@ BUILTIN_ENTRYPOINTS = [
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
     ),
     pkg_resources.EntryPoint(
-        "cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)
-    ),
-    pkg_resources.EntryPoint(
         "apply-multiarch-hints",
         "silver_platter.debian.multiarch",
         attrs=("MultiArchHintsChanger",),
