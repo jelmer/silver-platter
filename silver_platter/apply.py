@@ -52,6 +52,13 @@ class DetailedFailure(Exception):
             details=json.get('details'))
 
 
+class ResultFileFormatError(Exception):
+    """The result file was invalid."""
+
+    def __init__(self, inner_error):
+        self.inner_error = inner_error
+
+
 @dataclass
 class CommandResult(object):
 
@@ -108,7 +115,10 @@ def script_runner(
         (description_encoded, err) = p.communicate(b"")
         try:
             with open(env['SVP_RESULT'], 'r') as f:
-                result_json = json.load(f)
+                try:
+                    result_json = json.load(f)
+                except json.decoder.JSONDecodeError as e:
+                    raise ResultFileFormatError(e)
         except FileNotFoundError:
             result_json = None
         if p.returncode != 0:
