@@ -305,12 +305,12 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             except MissingUpstreamTarball:
                 logging.info("%s: unable to find upstream source", result.source)
                 return False
-
-        if args.install:
-            install_built_package(local_tree, subpath, args.build_target_dir)
     except Exception:
         reset_tree(local_tree, subpath)
         raise
+
+    if args.install:
+        install_built_package(local_tree, subpath, args.build_target_dir)
 
     if args.diff:
         from breezy.diff import show_diff_trees
