@@ -34,6 +34,11 @@ commit message and body for the pull request to standard out. For example::
     sed -i 's/framwork/framework/' README.rst
     echo "Fix common typo: framwork => framework"
 
+If you leave pending changes, silver-platter will automatically create a commit
+and use the output from the script as the commit message. Scripts also
+create their own commits if they prefer - this is especially useful if they
+would like to create multiple commits.
+
 Recipes
 ~~~~~~~
 
@@ -102,8 +107,8 @@ Some Debian-specific example recipes are provided in examples/debian/:
 * *orphan.yaml*: Mark a package as orphaned, update its Maintainer
   field and move it to the common Debian salsa group.
 * *rules-requires-root.yaml*: Mark a package as "Rules-Requires-Root: no"
-* *cme.yaml*: Run "cme fix", from the [cme](https://packages.debian.org/cme)
-  package.
+* *cme.yaml*: Run "cme fix dpkg", from the
+  [cme](https://packages.debian.org/cme) package.
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
