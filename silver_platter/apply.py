@@ -124,7 +124,7 @@ def script_runner(
         if p.returncode != 0:
             if result_json is not None:
                 raise DetailedFailure.from_json(result_json)
-            raise ScriptFailed(script, p.returncode, result_json)
+            raise ScriptFailed(script, p.returncode)
         if result_json is not None:
             result = CommandResult.from_json(result_json)
         else:
