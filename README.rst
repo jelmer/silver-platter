@@ -14,7 +14,8 @@ have conflicts due to upstream changes.
 
 Silver-Platter powers the Debian Janitor (https://janitor.debian.org/) and
 Kali Janitor (https://kali.janitor.org/). The UI is still a bit rough around
-the edges, I'd be grateful for any feedback from people using it.
+the edges, I'd be grateful for any feedback from people using it - please file bugs in
+the issue tracker at https://github.com/jelmer/silver-platter/issues/new.
 
 Getting started
 ~~~~~~~~~~~~~~~
@@ -80,7 +81,7 @@ At the moment, the following code hosters are supported:
 * `GitHub <https://github.com/>`_
 * `Launchpad <https://launchpad.net/>`_
 * `GitLab <https://gitlab.com/>`_ instances, such as Debian's
-  `Salsa <https://salsa.debian.org>`_
+  `Salsa <https://salsa.debian.org>`_ or `GNOME's GitLab <https://gitlab.gnome.org/>`_
 
 Working with Debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -108,7 +109,7 @@ Some Debian-specific example recipes are provided in examples/debian/:
   field and move it to the common Debian salsa group.
 * *rules-requires-root.yaml*: Mark a package as "Rules-Requires-Root: no"
 * *cme.yaml*: Run "cme fix dpkg", from the
-  [cme](https://packages.debian.org/cme) package.
+  `cme package <https://packages.debian.org/cme>`_.
 
 *debian-svp run* takes package name arguments that will be resolved
 to repository locations from the *Vcs-Git* field in the package.
