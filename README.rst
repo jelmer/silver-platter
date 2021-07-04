@@ -140,7 +140,7 @@ Examples running ``debian-svp``::
 The following environment variables are provided for Debian packages:
 
 * ``DEB_SOURCE``: the source package name
-* ``DEB\_UPDATE\_CHANGELOG``: indicates whether a changelog entry should
+* ``DEB_UPDATE_CHANGELOG``: indicates whether a changelog entry should
   be added. Either "leave" (leave alone) or "update" (update changelog).
 
 Credentials
