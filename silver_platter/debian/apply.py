@@ -67,7 +67,7 @@ class DetailedFailure(Exception):
 @dataclass
 class CommandResult(object):
 
-    source: str
+    source: Optional[str]
     description: Optional[str] = None
     value: Optional[int] = None
     context: Dict[str, str] = field(default_factory=dict)
