@@ -69,7 +69,7 @@ For example, if *candidates.yaml* looked like this::
    - url: https://github.com/dulwich/dulwich
    - url: https://github.com/jelmer/xandikos
 
-then the following command would process each repository in turn:
+then the following command would process each repository in turn::
 
     svp run --recipe=framwork.yaml --candidates=candidates.yaml
 
@@ -93,11 +93,12 @@ specified.
 
 * *upload-pending*: Build and upload a package and push/propose the
   changelog updates.
-* *run*: Similar to *svp run* but ensures that the *upstream* and *pristine-tar*
-  branches are available as well, and can test that the branch still
+* *run*: Similar to *svp run* but specific to Debian packages:
+  it ensures that the *upstream* and *pristine-tar* branches are available as
+  well, can optionally update the changelog, and can test that the branch still
   builds.
 
-Some Debian-specific example recipes are provided in examples/debian/:
+Some Debian-specific example recipes are provided in `examples/debian/`:
 
 * *lintian-fixes.yaml*: Run the `lintian-brush
   <https://packages.debian.org/lintian-brush>`_ command to
@@ -118,14 +119,22 @@ See ``debian-svp COMMAND --help`` for more details.
 
 Examples running ``debian-svp``::
 
+    # Create merge proposal running lintian-brush against Samba
     debian-svp run --recipe=examples/lintian-brush.yaml samba
 
+    # Upload pending changes for tdb
     debian-svp upload-pending tdb
+
+    # Upload pending changes for any packages maintained by Jelmer,
+    # querying vcswatch.
     debian-svp upload-pending --vcswatch --maintainer jelmer@debian.org
 
+    # Import the latest upstream release for tdb, without testing
+    # the build afterwards.
     debian-svp run --recipe=examples/debian/new-upstream-release.yaml \
         --no-build-verify tdb
 
+    # Apply multi-arch hints to tdb
     debian-svp run --recipe=examples/debian/multiarch-hints.yaml tdb
 
 The following environment variables are provided for Debian packages:
