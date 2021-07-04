@@ -18,22 +18,15 @@
 """Support for updating with a script."""
 
 import argparse
-from dataclasses import dataclass, field
-import json
 import logging
 import os
-import subprocess
 import sys
-import tempfile
-from typing import Optional, List, Dict, Tuple
-
-import silver_platter  # noqa: F401
+from typing import Optional, List
 
 from breezy import osutils
-from breezy import errors
-from breezy.commit import PointlessCommit
-from breezy.workingtree import WorkingTree
 from breezy import propose as _mod_propose
+
+import silver_platter  # noqa: F401
 
 from . import (
     DEFAULT_BUILDER,
@@ -74,7 +67,7 @@ def derived_branch_name(script: str) -> str:
     return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
 
 
-def apply_and_publish(
+def apply_and_publish(  # noqa: C901
         url: str, name: str, command: str, mode: str,
         subpath: str = '',
         commit_pending: Optional[bool] = None, dry_run: bool = False,
@@ -189,7 +182,6 @@ def apply_and_publish(
         if preserve_repositories:
             ws.defer_destroy()
             logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
-
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901

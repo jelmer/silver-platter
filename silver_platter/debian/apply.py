@@ -109,11 +109,10 @@ def install_built_package(local_tree, subpath, build_target_dir):
                 subprocess.check_call(['debi', entry.path])
 
 
-
-def script_runner(
+def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None
-) -> CommandResult:
+) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
