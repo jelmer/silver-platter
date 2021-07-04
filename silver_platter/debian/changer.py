@@ -132,8 +132,6 @@ class ChangerResult(object):
         )
 
 
-
-
 def get_package(
     package: str,
     branch_name: str,
