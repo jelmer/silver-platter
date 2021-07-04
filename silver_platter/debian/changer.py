@@ -40,11 +40,6 @@ from . import (
     NoAptSources,
     DEFAULT_BUILDER,
 )
-from ..changer import (
-    ChangerError,
-    ChangerReporter,
-    ChangerResult,
-    )
 from ..proposal import (
     HosterLoginRequired,
     UnsupportedHoster,
@@ -69,6 +64,74 @@ from ..utils import (
     PostCheckFailed,
     full_branch_url,
 )
+
+
+class ChangerReporter(object):
+    def report_context(self, context):
+        raise NotImplementedError(self.report_context)
+
+    def report_metadata(self, key, value):
+        raise NotImplementedError(self.report_metadata)
+
+    def get_base_metadata(self, key, default_value=None):
+        raise NotImplementedError(self.get_base_metadata)
+
+
+class ChangerError(Exception):
+    def __init__(
+            self, category: str, summary: str, original: Optional[Exception] = None, details: Any = None
+    ):
+        self.category = category
+        self.summary = summary
+        self.original = original
+        self.details = details
+
+
+class ChangerResult(object):
+    def __init__(
+        self,
+        description: Optional[str],
+        mutator: Any,
+        branches: Optional[List[Tuple[str, str, bytes, bytes]]] = [],
+        tags: Optional[Dict[str, bytes]] = None,
+        value: Optional[int] = None,
+        proposed_commit_message: Optional[str] = None,
+        title: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        sufficient_for_proposal: bool = True,
+    ):
+        self.description = description
+        self.mutator = mutator
+        self.branches = branches or []
+        self.tags = tags or {}
+        self.value = value
+        self.proposed_commit_message = proposed_commit_message
+        self.title = title
+        self.labels = labels
+        self.sufficient_for_proposal = sufficient_for_proposal
+
+    def show_diff(
+        self,
+        repository,
+        outf,
+        role="main",
+        old_label: str = "old/",
+        new_label: str = "new/",
+    ) -> None:
+        from breezy.diff import show_diff_trees
+
+        for (brole, name, base_revision, revision) in self.branches:
+            if role == brole:
+                break
+        else:
+            raise KeyError
+        old_tree = repository.revision_tree(base_revision)
+        new_tree = repository.revision_tree(revision)
+        show_diff_trees(
+            old_tree, new_tree, outf, old_label=old_label, new_label=new_label
+        )
+
+
 
 
 def get_package(
