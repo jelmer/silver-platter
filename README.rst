@@ -26,7 +26,7 @@ To log in to a code-hosting site, use ``svp login``::
 
 The simplest way to create a change as a merge proposal is to run something like::
 
-    svp run ----mode=propose https://github.com/jelmer/dulwich ./framwork.sh
+    svp run --mode=propose ./framwork.sh https://github.com/jelmer/dulwich
 
 where ``framwork.sh`` makes some modifications to a working copy and prints the
 commit message and body for the pull request to standard out. For example::
