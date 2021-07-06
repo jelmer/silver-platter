@@ -60,7 +60,7 @@ class Recipe(object):
     def render_merge_request_commit_message(self, context):
         template = self.merge_request_commit_message_template
         if template:
-            return template.render(context)
+            return Template(template).render(context)
         return None
 
     def render_merge_request_description(self, description_format, context):
@@ -70,7 +70,7 @@ class Recipe(object):
                 template = self.merge_request_description_template[None]
             except KeyError:
                 return None
-        return template.render(context)
+        return Template(template).render(context)
 
     @classmethod
     def from_path(cls, path):
