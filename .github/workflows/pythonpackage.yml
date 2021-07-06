@@ -34,7 +34,8 @@ jobs:
         python -m flake8
     - name: Typing checks
       run: |
-        yes | python -m mypy --install-types silver_platter
+        python -m pip install types-setuptools types-PyYAML types-dataclasses types-chardet
+        python -m mypy silver_platter
     - name: Test suite run
       run: |
         python setup.py test
