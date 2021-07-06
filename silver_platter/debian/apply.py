@@ -180,7 +180,7 @@ def script_runner(   # noqa: C901
         else:
             result = CommandResult(source=source_name)
     if not result.description:
-        result.description = description_encoded.decode()
+        result.description = description_encoded.decode().replace("\r", "")
     new_revision = local_tree.last_revision()
     if result.tags is None:
         result.tags = []
