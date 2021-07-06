@@ -70,7 +70,8 @@ setup(
     test_suite='silver_platter.tests.test_suite',
     install_requires=[
         'breezy>=3.2.0',
-        'dulwich',
+        'dulwich>=0.20.23',
+        'jinja2',
     ],
     extras_require={
         'debian': debian_deps,

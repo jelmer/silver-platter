@@ -44,18 +44,18 @@ brz add --quiet bar
         os.chmod("foo.sh", 0o755)
 
     def test_simple_with_commit(self):
-        description = script_runner(
+        result = script_runner(
             self.tree, os.path.abspath("foo.sh"), commit_pending=True
         )
-        self.assertEqual(description, "Some message\n")
+        self.assertEqual(result.description, "Some message\n")
 
     def test_simple_with_autocommit(self):
-        description = script_runner(self.tree, os.path.abspath("foo.sh"))
+        result = script_runner(self.tree, os.path.abspath("foo.sh"))
         self.assertEqual(
             self.tree.branch.repository.get_revision(self.tree.last_revision()).message,
             "Some message\n",
         )
-        self.assertEqual(description, "Some message\n")
+        self.assertEqual(result.description, "Some message\n")
 
     def test_simple_with_autocommit_and_script_commits(self):
         with open("foo.sh", "w") as f:
@@ -69,12 +69,12 @@ brz commit --quiet -m blah
 """
             )
         os.chmod("foo.sh", 0o755)
-        description = script_runner(self.tree, os.path.abspath("foo.sh"))
+        result = script_runner(self.tree, os.path.abspath("foo.sh"))
         self.assertEqual(
             self.tree.branch.repository.get_revision(self.tree.last_revision()).message,
             "blah",
         )
-        self.assertEqual(description, "Some message\n")
+        self.assertEqual(result.description, "Some message\n")
 
     def test_simple_without_commit(self):
         self.assertRaises(
