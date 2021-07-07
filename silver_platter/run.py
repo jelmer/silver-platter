@@ -161,7 +161,7 @@ def apply_and_publish(  # noqa: C901
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
-    parser.add_argument("url", help="URL of branch to work on.", type=str)
+    parser.add_argument("url", help="URL of branch to work on.", type=str, nargs="?")
     parser.add_argument(
         "--command", help="Path to script to run.", type=str)
     parser.add_argument(
@@ -213,6 +213,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
+
+    if not args.url and not args.candidates:
+        parser.error("url or candidates are required")
 
     urls = []
 
