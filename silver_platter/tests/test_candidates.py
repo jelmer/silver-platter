@@ -1,5 +1,6 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2021 Jelmer Vernooij
+#                    Filippo Giunchedi
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,21 +16,19 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import unittest
+from breezy.tests import (
+    TestCaseWithTransport,
+)
+
+from silver_platter.candidates import CandidateList
 
 
-def test_suite():
-    names = [
-        "candidates",
-        "debian",
-        "debian_upstream",
-        "proposal",
-        "publish",
-        "recipe",
-        "run",
-        "utils",
-        "version",
-    ]
-    module_names = [__name__ + ".test_" + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+class TestReadCandidates(TestCaseWithTransport):
+
+    def test_read(self):
+        self.build_tree_contents([('candidates.yaml', """\
+---
+- url: https://foo
+""")])
+        candidates = CandidateList.from_path('candidates.yaml')
+        self.assertEqual(len(candidates.candidates), 1)

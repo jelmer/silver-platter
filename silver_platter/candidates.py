@@ -42,6 +42,7 @@ class Candidate(object):
             raise TypeError(d)
 
 
+@dataclass
 class CandidateList(object):
     """Candidate list."""
 
