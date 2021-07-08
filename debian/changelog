@@ -1,8 +1,9 @@
 silver-platter (0.4.3-1) UNRELEASED; urgency=low
 
   * New upstream release.
+   + Add dependency on python3-jinja2.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 08 Jul 2021 09:20:21 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 08 Jul 2021 09:22:51 +0100
 
 silver-platter (0.4.1-2) unstable; urgency=medium
 
