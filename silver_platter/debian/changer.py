@@ -20,9 +20,11 @@ __all__ = ["iter_conflicted"]
 import argparse
 from functools import partial
 import logging
-import pkg_resources
+import os
 import sys
 from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
+
+import pkg_resources
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
@@ -31,6 +33,7 @@ from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
 from . import (
+    control_files_in_root,
     open_packaging_branch,
     guess_update_changelog,
     NoSuchPackage,
@@ -50,6 +53,7 @@ from ..proposal import (
 from ..publish import (
     PublishResult,
     SUPPORTED_MODES,
+    InsufficientChangesForNewProposal,
 )
 from ..utils import (
     BranchMissing,
@@ -60,6 +64,72 @@ from ..utils import (
     PostCheckFailed,
     full_branch_url,
 )
+
+
+class ChangerReporter(object):
+    def report_context(self, context):
+        raise NotImplementedError(self.report_context)
+
+    def report_metadata(self, key, value):
+        raise NotImplementedError(self.report_metadata)
+
+    def get_base_metadata(self, key, default_value=None):
+        raise NotImplementedError(self.get_base_metadata)
+
+
+class ChangerError(Exception):
+    def __init__(
+            self, category: str, summary: str, original: Optional[Exception] = None, details: Any = None
+    ):
+        self.category = category
+        self.summary = summary
+        self.original = original
+        self.details = details
+
+
+class ChangerResult(object):
+    def __init__(
+        self,
+        description: Optional[str],
+        mutator: Any,
+        branches: Optional[List[Tuple[str, str, bytes, bytes]]] = [],
+        tags: Optional[Dict[str, bytes]] = None,
+        value: Optional[int] = None,
+        proposed_commit_message: Optional[str] = None,
+        title: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        sufficient_for_proposal: bool = True,
+    ):
+        self.description = description
+        self.mutator = mutator
+        self.branches = branches or []
+        self.tags = tags or {}
+        self.value = value
+        self.proposed_commit_message = proposed_commit_message
+        self.title = title
+        self.labels = labels
+        self.sufficient_for_proposal = sufficient_for_proposal
+
+    def show_diff(
+        self,
+        repository,
+        outf,
+        role="main",
+        old_label: str = "old/",
+        new_label: str = "new/",
+    ) -> None:
+        from breezy.diff import show_diff_trees
+
+        for (brole, name, base_revision, revision) in self.branches:
+            if role == brole:
+                break
+        else:
+            raise KeyError
+        old_tree = repository.revision_tree(base_revision)
+        new_tree = repository.revision_tree(revision)
+        show_diff_trees(
+            old_tree, new_tree, outf, old_label=old_label, new_label=new_label
+        )
 
 
 def get_package(
@@ -171,71 +241,6 @@ def iter_packages(
         )
 
 
-class ChangerReporter(object):
-    def report_context(self, context):
-        raise NotImplementedError(self.report_context)
-
-    def report_metadata(self, key, value):
-        raise NotImplementedError(self.report_metadata)
-
-    def get_base_metadata(self, key, default_value=None):
-        raise NotImplementedError(self.get_base_metadata)
-
-
-class ChangerError(Exception):
-    def __init__(
-        self, category: str, summary: str, original: Optional[Exception] = None
-    ):
-        self.category = category
-        self.summary = summary
-        self.original = original
-
-
-class ChangerResult(object):
-    def __init__(
-        self,
-        description: Optional[str],
-        mutator: Any,
-        branches: Optional[List[Tuple[str, str, bytes, bytes]]] = [],
-        tags: Optional[Dict[str, bytes]] = None,
-        value: Optional[int] = None,
-        proposed_commit_message: Optional[str] = None,
-        title: Optional[str] = None,
-        labels: Optional[List[str]] = None,
-        sufficient_for_proposal: bool = True,
-    ):
-        self.description = description
-        self.mutator = mutator
-        self.branches = branches or []
-        self.tags = tags or {}
-        self.value = value
-        self.proposed_commit_message = proposed_commit_message
-        self.title = title
-        self.labels = labels
-        self.sufficient_for_proposal = sufficient_for_proposal
-
-    def show_diff(
-        self,
-        repository,
-        outf,
-        role="main",
-        old_label: str = "old/",
-        new_label: str = "new/",
-    ) -> None:
-        from breezy.diff import show_diff_trees
-
-        for (brole, name, base_revision, revision) in self.branches:
-            if role == brole:
-                break
-        else:
-            raise KeyError
-        old_tree = repository.revision_tree(base_revision)
-        new_tree = repository.revision_tree(revision)
-        show_diff_trees(
-            old_tree, new_tree, outf, old_label=old_label, new_label=new_label
-        )
-
-
 def setup_parser_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--dry-run",
@@ -301,6 +306,10 @@ def setup_parser_common(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--install", "-i",
+        action="store_true",
+        help="Install built package (implies --build-verify)")
+    parser.add_argument(
         "--overwrite", action="store_true", help="Overwrite existing branches."
     )
     parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
@@ -310,6 +319,9 @@ def setup_parser_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--label", type=str, help="Label to attach", action="append", default=[]
     )
+    parser.add_argument(
+        "--preserve-repositories", action="store_true",
+        help="Preserve temporary repositories.")
 
 
 class DebianChanger(object):
@@ -377,6 +389,8 @@ def _run_single_changer(  # noqa: C901
     diff: bool = False,
     committer: Optional[str] = None,
     build_verify: bool = False,
+    preserve_repositories: bool = False,
+    install: bool = False,
     pre_check: Optional[str] = None,
     post_check: Optional[str] = None,
     builder: str = DEFAULT_BUILDER,
@@ -405,10 +419,14 @@ def _run_single_changer(  # noqa: C901
         if ws.refreshed:
             overwrite = True
         run_pre_check(ws.local_tree, pre_check)
+        if control_files_in_root(ws.local_tree, subpath):
+            debian_path = subpath
+        else:
+            debian_path = os.path.join(subpath, "debian")
         if update_changelog is None:
-            dch_guess = guess_update_changelog(ws.local_tree)
+            dch_guess = guess_update_changelog(ws.local_tree, debian_path)
             if dch_guess:
-                logging.info(dch_guess[1])
+                logging.info('%s', dch_guess[1])
                 update_changelog = dch_guess[0]
             else:
                 # Assume yes.
@@ -422,7 +440,7 @@ def _run_single_changer(  # noqa: C901
                 reporter=DummyChangerReporter(),
             )
         except ChangerError as e:
-            logging.exception(e.summary)
+            logging.error('%s: %s', e.category, e.summary)
             return False
 
         if not ws.changes_since_main():
@@ -438,7 +456,7 @@ def _run_single_changer(  # noqa: C901
         except PostCheckFailed as e:
             logging.info("%s: %s", pkg, e)
             return False
-        if build_verify:
+        if build_verify or install:
             try:
                 ws.build(builder=builder, result_dir=build_target_dir)
             except BuildFailedError:
@@ -447,6 +465,10 @@ def _run_single_changer(  # noqa: C901
             except MissingUpstreamTarball:
                 logging.info("%s: unable to find upstream source", pkg)
                 return False
+
+        if install:
+            from .apply import install_built_package
+            install_built_package(ws.local_tree, ws.subpath, build_target_dir)
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -474,7 +496,7 @@ def _run_single_changer(  # noqa: C901
                 **kwargs
             )
         except UnsupportedHoster as e:
-            logging.exception(
+            logging.error(
                 "%s: No known supported hoster for %s. Run 'svp login'?",
                 pkg,
                 full_branch_url(e.branch),
@@ -489,8 +511,12 @@ def _run_single_changer(  # noqa: C901
         except errors.DivergedBranches:
             logging.info("%s: a branch exists. Use --overwrite to discard it.", pkg)
             return False
+        except InsufficientChangesForNewProposal:
+            logging.info('%s: insufficient changes for a new merge proposal',
+                         pkg)
+            return False
         except HosterLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
                 e.hoster.base_url,
             )
@@ -499,8 +525,8 @@ def _run_single_changer(  # noqa: C901
         if publish_result.proposal:
             changer.describe(changer_result.mutator, publish_result)
         if diff:
-            for entry in changer_result.branches:
-                role = entry[0]
+            for branch_entry in changer_result.branches:
+                role = branch_entry[0]
                 if len(changer_result.branches) > 1:
                     sys.stdout.write("%s\n" % role)
                     sys.stdout.write(("-" * len(role)) + "\n")
@@ -510,6 +536,9 @@ def _run_single_changer(  # noqa: C901
                 )
                 if len(changer_result.branches) > 1:
                     sys.stdout.write("\n")
+        if preserve_repositories:
+            ws.defer_destroy()
+            logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
 
         return True
 
@@ -569,6 +598,8 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
             diff=args.diff,
             committer=args.committer,
             build_verify=args.build_verify,
+            preserve_repositories=args.preserve_repositories,
+            install=args.install,
             pre_check=args.pre_check,
             builder=args.builder,
             post_check=args.post_check,
@@ -587,40 +618,10 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
 
 BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
-        "run", "silver_platter.debian.run", attrs=("ScriptChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "lintian-brush", "silver_platter.debian.lintian", attrs=("LintianBrushChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "tidy", "silver_platter.debian.tidy", attrs=("TidyChanger",)
-    ),
-    pkg_resources.EntryPoint(
         "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
-    ),
-    pkg_resources.EntryPoint("cme-fix", "silver_platter.debian.cme", attrs=("CMEFixChanger",)),
-    pkg_resources.EntryPoint(
-        "apply-multiarch-hints",
-        "silver_platter.debian.multiarch",
-        attrs=("MultiArchHintsChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "rules-requires-root",
-        "silver_platter.debian.rrr",
-        attrs=("RulesRequiresRootChanger",),
     ),
     pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
-    ),
-    pkg_resources.EntryPoint(
-        "import-upload",
-        "silver_platter.debian.uncommitted",
-        attrs=("UncommittedChanger",),
-    ),
-    pkg_resources.EntryPoint(
-        "scrub-obsolete",
-        "silver_platter.debian.scrub_obsolete",
-        attrs=("ScrubObsoleteChanger",),
     ),
     pkg_resources.EntryPoint(
         "debianize", "silver_platter.debian.debianize", attrs=("DebianizeChanger",)
@@ -629,7 +630,7 @@ BUILTIN_ENTRYPOINTS = [
 
 
 def changer_subcommands() -> List[str]:
-    endpoints = pkg_resources.iter_entry_points("silver_platter.debian.changer")
+    endpoints = pkg_resources.iter_entry_points(__name__)
     ret = []
     for ep in BUILTIN_ENTRYPOINTS + list(endpoints):
         ret.append(ep.name)
@@ -640,7 +641,7 @@ def changer_subcommand(name: str) -> Type[DebianChanger]:
     for ep in BUILTIN_ENTRYPOINTS:
         if ep.name == name:
             return ep.resolve()
-    endpoints = pkg_resources.iter_entry_points("silver_platter.debian.changer", name)
+    endpoints = pkg_resources.iter_entry_points(__name__, name)
     for ep in endpoints:
         return ep.load()
     raise KeyError(name)
@@ -704,6 +705,7 @@ def run_mutator(changer_cls, argv=None):
         result_json = {
             "result-code": e.category,
             "description": e.summary,
+            "details": e.details,
         }
     else:
         result_json = {

@@ -1,0 +1,16 @@
+---
+name: new-upstream-snapshot
+command: deb-new-upstream --snapshot
+merge-proposal:
+  commit-message: "Merge new upstream snapshot {{ new_upstream_version }}"
+  description: |-
+    {% extends "base.md" %}
+    {% block runner %}
+    {% if role == 'pristine-tar' %}
+    pristine-tar data for new upstream version {{ upstream_version }}.
+    {% elif role == 'upstream' %}
+    Import of new upstream version {{ upstream_version }}.
+    {% elif role == 'main' %}
+    Merge new upstream version {{ upstream_version }}.
+    {% endif %}
+    {% endblock %}

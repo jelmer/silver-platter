@@ -1,0 +1,19 @@
+---
+# This uses the drop-mia-uploaders command from the debmutate package.
+#
+# It scans the Debian BTS for bugs filed by the MIA team, extracts
+# the e-mail addresses of MIA uploaders and drops those from the Uploaders
+# field.
+name: mia
+command: drop-mia-uploaders
+merge-proposal:
+  commit-message: Remove MIA uploaders
+  description: |-
+    {% extends "base.md" %}
+    {% block runner %}
+    Remove MIA uploaders:
+
+    {% for uploader in removed_uploaders %}
+    * {{ uploader }}
+    {% endfor %}
+    {% endblock %}

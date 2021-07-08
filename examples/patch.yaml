@@ -1,0 +1,11 @@
+---
+name: apply-patch
+command: |-
+    patch -p1 < $PATCH
+    echo "Apply patch $PATCH"
+mode: propose
+merge-request:
+  commit-message: Apply patch $PATCH
+  description:
+    markdown: |-
+      Apply the patch file $PATCH

@@ -1,0 +1,10 @@
+---
+name: scrub-obsolete
+command: deb-scrub-obsolete
+merge-proposal:
+  commit-message: Remove unnecessary constraints
+  description: |-
+    {% extends "base.md" %}
+    {% block runner %}
+    Remove unnecessary constraints.
+    {% endblock %}

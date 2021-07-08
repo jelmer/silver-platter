@@ -30,7 +30,11 @@ from .changer import (
     changer_subcommand,
 )
 
-from . import uploader as debian_uploader
+from . import (
+    apply as debian_apply,
+    run as debian_run,
+    uploader as debian_uploader,
+    )
 
 
 def run_changer_subcommand(name, changer_cls, argv):
@@ -55,6 +59,8 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
 
     subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
         "upload-pending": debian_uploader.main,
+        "apply": debian_apply.main,
+        "run": debian_run.main,
     }
 
     parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
@@ -64,13 +70,16 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         version="%(prog)s " + silver_platter.version_string,
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Be more verbose")
+    parser.add_argument(
         "--help", action="store_true", help="show this help message and exit"
     )
 
-    subcommands.update(main_subcommands.items())
-
-    # We have a debian-specific run command
-    del subcommands["run"]
+    for name, cmd in main_subcommands.items():
+        if name not in subcommands:
+            subcommands[name] = cmd
 
     parser.add_argument(
         "subcommand", type=str, choices=list(subcommands.keys()) + changer_subcommands()
@@ -82,7 +91,11 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
             parser.exit()
         else:
             rest.append("--help")
-
+    if args.debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format="%(message)s")
     if args.subcommand is None:
         parser.print_usage()
         return 1
@@ -93,7 +106,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        logging.basicConfig(level=logging.INFO)
         return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1

@@ -41,19 +41,10 @@ from breezy.propose import (
     HosterLoginRequired,
 )
 
-try:
-    from breezy.propose import (
-        iter_hoster_instances,
-        SourceNotDerivedFromTarget,
-    )
-except ImportError:  # breezy < 3.1.1
-
-    def iter_hoster_instances():
-        for name, hoster_cls in hosters.items():
-            for instance in hoster_cls.iter_instances():
-                yield instance
-
-    SourceNotDerivedFromTarget = None
+from breezy.propose import (
+    iter_hoster_instances,
+    SourceNotDerivedFromTarget,
+)
 
 import breezy.plugins.gitlab  # noqa: F401
 import breezy.plugins.github  # noqa: F401

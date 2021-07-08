@@ -1,0 +1,11 @@
+---
+# This runs the deb-enable-rrr command from the debmutate package.
+name: rrr
+command: deb-enable-rrr
+merge-proposal:
+  commit-message: Set the Rules-Requires-Root field.
+  description: |-
+    {% extends "base.md" %}
+    {% block runner -%}
+    Set Rules-Requires-Root.
+    {% endblock %}

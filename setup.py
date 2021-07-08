@@ -20,7 +20,7 @@ from setuptools import setup
 debian_deps = [
     'pyyaml',  # For reading debian/upstream/metadata
     'debmutate>=0.3',
-    'lintian-brush>=0.50',
+    'lintian-brush>=0.102',
     'python_debian',
     'distro-info',
     'upstream-ontologist',
@@ -33,7 +33,7 @@ setup(
     author_email="jelmer@jelmer.uk",
     url="https://jelmer.uk/code/silver-platter",
     description="Automatic merge proposal creeator",
-    version='0.4.1',
+    version='0.4.3',
     license='GNU GPL v2 or later',
     project_urls={
         "Bug Tracker": "https://github.com/jelmer/silver-platter/issues",
@@ -62,15 +62,12 @@ setup(
             'svp=silver_platter.__main__:main',
             'debian-svp=silver_platter.debian.__main__:main',
         ],
-        'silver_platter.debian.changer': [
-            'lintian-brush = '
-            'silver_platter.debian.lintian:LintianBrushChanger',
-        ],
     },
     test_suite='silver_platter.tests.test_suite',
     install_requires=[
-        'breezy>=3.1.0',
-        'dulwich',
+        'breezy>=3.2.0',
+        'dulwich>=0.20.23',
+        'jinja2',
     ],
     extras_require={
         'debian': debian_deps,
