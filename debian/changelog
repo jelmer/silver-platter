@@ -1,3 +1,9 @@
+silver-platter (0.4.3-1) UNRELEASED; urgency=low
+
+  * New upstream release.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 08 Jul 2021 09:20:21 -0000
+
 silver-platter (0.4.1-2) unstable; urgency=medium
 
   * Bump minimum breezy-debian version to something that supports

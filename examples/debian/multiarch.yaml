@@ -1,0 +1,17 @@
+---
+name: multiarch-fixes
+command: apply-multiarch-hints
+merge-proposal:
+  commit-message: Apply multi-arch hints
+  description: |-
+    {% extends "base.md" %}
+    {% block runner %}
+    Apply hints suggested by the multi-arch hinter.
+
+    {% for entry in applied %}
+    {% set kind = entry.link.split("#")[-1] %}
+    * {{ entry.binary }}: {% if entry.action %}{{ entry.action }}. This fixes: {{ entry.description }}. ([{{ kind }}]({{ entry.link }})){% else %}Fix: {{ entry.description }}. ([{{ kind }}]({{ entry.link }})){% endif %}
+    {% endfor %}
+
+    These changes were suggested on https://wiki.debian.org/MultiArch/Hints.
+    {% endblock %}

@@ -50,7 +50,6 @@ from breezy.plugins.debian.util import (
     changelog_find_previous_upload,
     dput_changes,
     find_changelog,
-    debsign,
     MissingChangelogError,
 )
 
@@ -58,6 +57,7 @@ from debian.changelog import get_maintainer
 
 from . import (
     apt_get_source_package,
+    connect_udd_mirror,
     source_package_vcs,
     split_vcs_url,
     Workspace,
@@ -71,6 +71,15 @@ from ..utils import (
     BranchMissing,
     BranchUnsupported,
 )
+
+
+def debsign(path, keyid=None):
+    (bd, changes_file) = os.path.split(path)
+    args = ["debsign"]
+    if keyid:
+        args.append("-k%s" % keyid)
+    args.append(changes_file)
+    subprocess.check_call(args, cwd=bd)
 
 
 class LastUploadMoreRecent(Exception):
@@ -281,14 +290,7 @@ def select_apt_packages(package_names, maintainer):
 def select_vcswatch_packages(
     packages: List[str], maintainer: List[str], autopkgtest_only: bool
 ):
-    import psycopg2
-
-    conn = psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )
+    conn = connect_udd_mirror()
     cursor = conn.cursor()
     args = []
     query = """\
@@ -377,6 +379,7 @@ def main(argv):  # noqa: C901
     )
 
     args = parser.parse_args(argv)
+
     ret = 0
 
     if not args.packages and not args.maintainer:
@@ -427,7 +430,9 @@ def main(argv):  # noqa: C901
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
-                logging.info("%s: no declared vcs location, skipping", pkg_source["Package"])
+                logging.info(
+                    "%s: no declared vcs location, skipping", pkg_source["Package"]
+                )
                 ret = 1
                 continue
             source_name = pkg_source["Package"]
@@ -471,8 +476,7 @@ def main(argv):  # noqa: C901
                     os.path.join(subpath, "debian/tests/control")
                 )
             ):
-                logging.info(
-                    "%s: Skipping, package has no autopkgtest.", source_name)
+                logging.info("%s: Skipping, package has no autopkgtest.", source_name)
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -532,17 +536,14 @@ def main(argv):  # noqa: C901
                 continue
             except RecentCommits as e:
                 logging.info(
-                    "%s: Recent commits (%d days), skipping.",
-                    source_name, e.commit_age
+                    "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges:
-                logging.info(
-                    "%s: No unuploaded changes, skipping.", source_name)
+                logging.info("%s: No unuploaded changes, skipping.", source_name)
                 continue
             except NoUnreleasedChanges:
-                logging.info(
-                    "%s: No unreleased changes, skipping.", source_name)
+                logging.info("%s: No unreleased changes, skipping.", source_name)
                 continue
 
             tags = []
@@ -553,8 +554,8 @@ def main(argv):  # noqa: C901
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
                 logging.info(
-                    "%s: Permission denied pushing to branch, skipping.",
-                    source_name)
+                    "%s: Permission denied pushing to branch, skipping.", source_name
+                )
                 ret = 1
                 continue
             if not args.dry_run:

@@ -2,6 +2,3 @@
 debian-svp = silver_platter.debian.__main__:main
 svp = silver_platter.__main__:main
 
-[silver_platter.debian.changer]
-lintian-brush = silver_platter.debian.lintian:LintianBrushChanger
-

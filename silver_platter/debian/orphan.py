@@ -19,13 +19,16 @@ import logging
 from urllib.parse import urlparse
 
 from breezy import osutils
+from breezy.branch import Branch
 
 from debmutate.control import ControlEditor
+from debmutate.deb822 import ChangeConflict
 from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 from . import (
     pick_additional_colocated_branches,
+    connect_udd_mirror,
     add_changelog_entry,
 )
 from .changer import (
@@ -40,16 +43,43 @@ from ..proposal import push_changes
 BRANCH_NAME = "orphan"
 
 
-def push_to_salsa(local_tree, user, name, dry_run=False):
+def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
+    from breezy import urlutils
     from breezy.branch import Branch
+    from breezy.errors import PermissionDenied
+    from breezy.propose import UnsupportedHoster, get_hoster, HosterLoginRequired
     from breezy.plugins.gitlab.hoster import GitLab
 
-    salsa = GitLab.probe_from_url("https://salsa.debian.org/")
-    # TODO(jelmer): Fork if the old branch was hosted on salsa
     if dry_run:
         logging.info("Creating and pushing to salsa project %s/%s", user, name)
         return
-    salsa.create_project("%s/%s" % (user, name))
+
+    try:
+        salsa = GitLab.probe_from_url("https://salsa.debian.org/")
+    except HosterLoginRequired:
+        logging.warning("No login for salsa known, not pushing branch.")
+        return
+
+    try:
+        orig_hoster = get_hoster(orig_branch)
+    except UnsupportedHoster:
+        logging.debug("Original branch %r not hosted on salsa.")
+        from_project = None
+    else:
+        if orig_hoster == salsa:
+            from_project = urlutils.from_string(orig_branch.controldir.user_url).path
+        else:
+            from_project = None
+
+    if from_project is not None:
+        salsa.fork_project(from_project, owner=user)
+    else:
+        try:
+            salsa.create_project("%s/%s" % (user, name))
+        except PermissionDenied as e:
+            logging.info('No permission to create new project under %s: %s',
+                         user, e)
+            return
     target_branch = Branch.open(
         "git+ssh://git@salsa.debian.org/%s/%s.git" % (user, name)
     )
@@ -67,13 +97,29 @@ def push_to_salsa(local_tree, user, name, dry_run=False):
 
 class OrphanResult(object):
     def __init__(
-        self, package=None, old_vcs_url=None, new_vcs_url=None, salsa_user=None
+        self,
+        package=None,
+        old_vcs_url=None,
+        new_vcs_url=None,
+        salsa_user=None,
+        wnpp_bug=None,
     ):
         self.package = package
         self.old_vcs_url = old_vcs_url
         self.new_vcs_url = new_vcs_url
         self.pushed = False
         self.salsa_user = salsa_user
+        self.wnpp_bug = wnpp_bug
+
+
+def find_wnpp_bug(source):
+    conn = connect_udd_mirror()
+    cursor = conn.cursor()
+    cursor.execute("select id from wnpp where type = 'O' and source = %s", (source,))
+    entry = cursor.fetchone()
+    if entry is None:
+        raise KeyError
+    return entry[0]
 
 
 class OrphanChanger(DebianChanger):
@@ -81,12 +127,18 @@ class OrphanChanger(DebianChanger):
     name = "orphan"
 
     def __init__(
-        self, update_vcs=True, salsa_push=True, salsa_user="debian", dry_run=False
+        self,
+        update_vcs=True,
+        salsa_push=True,
+        salsa_user="debian",
+        dry_run=False,
+        check_wnpp=True,
     ):
         self.update_vcs = update_vcs
         self.salsa_push = salsa_push
         self.salsa_user = salsa_user
         self.dry_run = dry_run
+        self.check_wnpp = check_wnpp
 
     @classmethod
     def setup_parser(cls, parser):
@@ -107,7 +159,9 @@ class OrphanChanger(DebianChanger):
             help="Update the VCS-* headers, but don't actually "
             "clone the repository.",
         )
-        parser.add_argument("--dry-run", action="store_true", help="Dry run changes.")
+        parser.add_argument(
+            "--no-check-wnpp", action="store_true", help="Do not check for WNPP bug."
+        )
 
     @classmethod
     def from_args(cls, args):
@@ -116,12 +170,13 @@ class OrphanChanger(DebianChanger):
             dry_run=args.dry_run,
             salsa_user=args.salsa_user,
             salsa_push=not args.just_update_headers,
+            check_wnpp=not args.no_check_wnpp,
         )
 
     def suggest_branch_name(self):
         return BRANCH_NAME
 
-    def make_changes(
+    def make_changes(  # noqa: C901
         self,
         local_tree,
         subpath,
@@ -132,15 +187,31 @@ class OrphanChanger(DebianChanger):
     ):
         base_revid = local_tree.last_revision()
         control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
+        changelog_entries = []
         try:
             with ControlEditor(path=control_path) as editor:
+                if self.check_wnpp:
+                    try:
+                        wnpp_bug = find_wnpp_bug(editor.source["Source"])
+                    except KeyError:
+                        raise ChangerError(
+                            "nothing-to-do",
+                            "Package is purported to be orphaned, "
+                            "but no open wnpp bug exists.",
+                        )
+                else:
+                    wnpp_bug = None
                 editor.source["Maintainer"] = "Debian QA Group <packages@qa.debian.org>"
                 try:
                     del editor.source["Uploaders"]
                 except KeyError:
                     pass
-
-            result = OrphanResult()
+            if editor.changed:
+                if wnpp_bug is not None:
+                    changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
+                else:
+                    changelog_entries.append("Orphan package.")
+            result = OrphanResult(wnpp_bug=wnpp_bug)
 
             if self.update_vcs:
                 with ControlEditor(path=control_path) as editor:
@@ -158,11 +229,17 @@ class OrphanChanger(DebianChanger):
                     result.salsa_user = self.salsa_user
                 if result.old_vcs_url == result.new_vcs_url:
                     result.old_vcs_url = result.new_vcs_url = None
+                if editor.changed:
+                    changelog_entries.append(
+                        "Update VCS URLs to point to Debian group."
+                    )
+            if not changelog_entries:
+                raise ChangerError("nothing-to-do", "Already orphaned")
             if update_changelog in (True, None):
                 add_changelog_entry(
                     local_tree,
                     osutils.pathjoin(subpath, "debian/changelog"),
-                    ["QA Upload.", "Move package to QA team."],
+                    ["QA Upload."] + changelog_entries,
                 )
             local_tree.commit(
                 "Move package to QA team.", committer=committer, allow_pointless=False
@@ -172,19 +249,31 @@ class OrphanChanger(DebianChanger):
                 "formatting-unpreservable",
                 "unable to preserve formatting while editing %s" % e.path,
             )
-        except GeneratedFile as e:
+        except (ChangeConflict, GeneratedFile) as e:
             raise ChangerError(
                 "generated-file", "unable to edit generated file: %r" % e
             )
 
+        result.pushed = False
         if self.update_vcs and self.salsa_push and result.new_vcs_url:
-            push_to_salsa(
-                local_tree, self.salsa_user, result.package_name, dry_run=self.dry_run
+            parent_branch_url = local_tree.branch.get_parent()
+            if parent_branch_url is not None:
+                parent_branch = Branch.open(parent_branch_url)
+            else:
+                parent_branch = local_tree.branch
+            push_result = push_to_salsa(
+                local_tree,
+                parent_branch,
+                self.salsa_user,
+                result.package_name,
+                dry_run=self.dry_run,
             )
-            result.pushed = True
-            reporter.report_metadata("old_vcs_url", result.old_vcs_url)
-            reporter.report_metadata("new_vcs_url", result.new_vcs_url)
-            reporter.report_metadata("pushed", result.pushed)
+            if push_result:
+                result.pushed = True
+        reporter.report_metadata("old_vcs_url", result.old_vcs_url)
+        reporter.report_metadata("new_vcs_url", result.new_vcs_url)
+        reporter.report_metadata("pushed", result.pushed)
+        reporter.report_metadata("wnpp_bug", result.wnpp_bug)
 
         branches = [("main", None, base_revid, local_tree.last_revision())]
 
@@ -209,9 +298,7 @@ class OrphanChanger(DebianChanger):
                 publish_result.proposal.url,
             )
         else:
-            logging.info(
-                "No changes for orphaned package %s",
-                result.package_name)
+            logging.info("No changes for orphaned package %s", result.package_name)
         if result.pushed:
             logging.info("Pushed new package to %s.", result.new_vcs_url)
         elif result.new_vcs_url:

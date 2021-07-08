@@ -25,6 +25,7 @@ from breezy import (
     revision as _mod_revision,
 )
 from breezy.errors import PermissionDenied
+from breezy.memorybranch import MemoryBranch
 from breezy.propose import (
     get_hoster,
     Hoster,
@@ -35,17 +36,13 @@ from breezy.propose import (
 )
 from breezy.transport import Transport
 
-try:
-    from breezy.propose import (
-        SourceNotDerivedFromTarget,
-    )
-except ImportError:  # breezy < 3.1.1
-    SourceNotDerivedFromTarget = None
+from breezy.propose import (
+    SourceNotDerivedFromTarget,
+)
 
 
 from .utils import (
     open_branch,
-    MemoryBranch,
     full_branch_url,
 )
 
@@ -61,6 +58,7 @@ __all__ = [
     "NoSuchProject",
     "PermissionDenied",
     "UnsupportedHoster",
+    "SourceNotDerivedFromTarget",
 ]
 
 
@@ -256,8 +254,7 @@ def propose_changes(  # noqa: C901
         try:
             resume_proposal.reopen()
         except ReopenFailed:
-            logging.info(
-                "Reopening existing proposal failed. Creating new proposal.")
+            logging.info("Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
     if resume_proposal is None:
         if not dry_run:
@@ -278,8 +275,7 @@ def propose_changes(  # noqa: C901
                     raise
                 resume_proposal = e.existing_proposal
             except errors.PermissionDenied:
-                logging.info(
-                    "Permission denied while trying to create " "proposal.")
+                logging.info("Permission denied while trying to create " "proposal.")
                 raise
             else:
                 return (mp, True)
@@ -435,6 +431,7 @@ def find_existing_proposed(
     name: str,
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
+    preferred_schemes: Optional[List[str]] = None,
 ) -> Tuple[Optional[Branch], Optional[bool], Optional[MergeProposal]]:
     """Find an existing derived branch with the specified name, and proposal.
 
@@ -444,13 +441,21 @@ def find_existing_proposed(
       name: Name of the derived branch
       overwrite_unrelated: Whether to overwrite existing (but unrelated)
         branches
+      preferred_schemes: List of preferred schemes
     Returns:
       Tuple with (resume_branch, overwrite_existing, existing_proposal)
       The resume_branch is the branch to continue from; overwrite_existing
       means there is an existing branch in place that should be overwritten.
     """
     try:
-        existing_branch = hoster.get_derived_branch(main_branch, name=name, owner=owner)
+        if preferred_schemes is not None:
+            existing_branch = hoster.get_derived_branch(
+                main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes
+            )
+        else:  # TODO: Support older versions of breezy without preferred_schemes
+            existing_branch = hoster.get_derived_branch(
+                main_branch, name=name, owner=owner
+            )
     except errors.NotBranchError:
         return (None, None, None)
     else:
@@ -546,6 +551,10 @@ class PublishResult(object):
     def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
         # Backwards compatibility
         return (self.proposal, self.is_new)
+
+
+class InsufficientChangesForNewProposal(Exception):
+    """There were not enough changes for a new merge proposal."""
 
 
 def publish_changes(
@@ -651,8 +660,7 @@ def publish_changes(
 
     assert mode == "propose"
     if not resume_branch and not allow_create_proposal:
-        # TODO(jelmer): Raise an exception of some sort here?
-        return PublishResult(mode)
+        raise InsufficientChangesForNewProposal()
 
     mp_description = get_proposal_description(
         getattr(hoster, "merge_proposal_description_format", "plain"),

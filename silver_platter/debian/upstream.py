@@ -20,6 +20,7 @@
 import silver_platter  # noqa: F401
 
 import argparse
+from email.utils import parseaddr
 import errno
 import logging
 import os
@@ -29,7 +30,7 @@ import tempfile
 import traceback
 from typing import List, Optional, Callable, Union
 
-from debian.changelog import Version, ChangelogParseError
+from debian.changelog import Version, ChangelogParseError, get_maintainer
 
 from ..utils import (
     full_branch_url,
@@ -40,7 +41,6 @@ from ..utils import (
 )
 
 from . import (
-    changelog_add_line,
     control_files_in_root,
 )
 from .changer import (
@@ -75,7 +75,6 @@ from breezy.plugins.debian.changelog import debcommit
 from breezy.transform import MalformedTransform
 
 from breezy.plugins.debian.merge_upstream import (
-    changelog_add_new_version,
     do_import,
     do_merge,
     get_tarballs,
@@ -122,6 +121,16 @@ from breezy.plugins.debian.upstream.branch import (
     DistCommandFailed,
     run_dist_command,
 )
+
+from debmutate.changelog import ChangelogEditor, upstream_merge_changelog_line
+from debmutate.versions import (
+    new_upstream_package_version,
+    initial_debian_revision,
+    debianize_upstream_version,
+    )
+
+from debmutate.watch import WatchSyntaxError
+
 from breezy.tree import Tree
 
 from lintian_brush.vcs import sanitize_url as sanitize_vcs_url
@@ -151,7 +160,16 @@ __all__ = [
     "UpstreamMetadataSyntaxError",
     "QuiltPatchPushFailure",
     "WatchLineWithoutMatches",
+    "BigVersionJump",
 ]
+
+
+class BigVersionJump(Exception):
+    """There was a big version jump."""
+
+    def __init__(self, old_upstream_version, new_upstream_version):
+        self.old_upstream_version = old_upstream_version
+        self.new_upstream_version = new_upstream_version
 
 
 class UpstreamMergeConflicted(Exception):
@@ -249,9 +267,25 @@ SNAPSHOT_BRANCH_NAME = "new-upstream-snapshot"
 DEFAULT_DISTRIBUTION = "unstable"
 
 
+def is_big_version_jump(old_upstream_version, new_upstream_version):
+    try:
+        old_major_version = int(str(old_upstream_version).split('.')[0])
+    except ValueError:
+        return False
+    try:
+        new_major_version = int(str(new_upstream_version).split('.')[0])
+    except ValueError:
+        return False
+    if old_major_version > 0 and new_major_version > 5*old_major_version:
+        return True
+    return False
+
+
 def get_upstream_branch_location(tree, subpath, config, trust_package=False):
     if config.upstream_branch is not None:
-        logging.info("Using upstream branch %s (from configuration)", config.upstream_branch)
+        logging.info(
+            "Using upstream branch %s (from configuration)", config.upstream_branch
+        )
         # TODO(jelmer): Make brz-debian sanitize the URL?
         upstream_branch_location = sanitize_vcs_url(config.upstream_branch)
         upstream_branch_browse = getattr(config, "upstream_branch_browse", None)
@@ -259,6 +293,7 @@ def get_upstream_branch_location(tree, subpath, config, trust_package=False):
         from upstream_ontologist.guess import (
             guess_upstream_metadata,
         )
+
         guessed_upstream_metadata = guess_upstream_metadata(
             tree.abspath(subpath),
             trust_package=trust_package,
@@ -305,12 +340,10 @@ def refresh_quilt_patches(
             if m and getattr(patches, "delete", None):
                 assert m.group(1) == name
                 patches.delete(name, remove=True)
-                changelog_add_line(
-                    local_tree,
-                    subpath,
-                    "Drop patch %s, present upstream." % name,
-                    email=committer,
-                )
+                with ChangelogEditor(
+                        local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
+                        ) as cl:
+                    cl.add_entry(["Drop patch %s, present upstream." % name])
                 debcommit(
                     local_tree,
                     committer=committer,
@@ -427,6 +460,8 @@ def find_new_upstream(  # noqa: C901
     top_level=False,
     create_dist=None,
     include_upstream_history: Optional[bool] = None,
+    force_big_version_jump: bool = False,
+    require_uscan: bool = False,
 ):
 
     # TODO(jelmer): Find the lastest upstream present in the upstream branch
@@ -460,7 +495,7 @@ def find_new_upstream(  # noqa: C901
                 config=config,
                 local_dir=tree.controldir,
                 create_dist=create_dist,
-                snapshot=snapshot,
+                version_kind=("snapshot" if snapshot else "release")
             )
         except InvalidHttpResponse as e:
             raise UpstreamBranchUnavailable(upstream_branch_location, str(e))
@@ -480,7 +515,7 @@ def find_new_upstream(  # noqa: C901
                 config=config,
                 local_dir=tree.controldir,
                 create_dist=create_dist,
-                snapshot=snapshot,
+                version_kind=("snapshot" if snapshot else "release")
             )
     else:
         if snapshot:
@@ -497,15 +532,26 @@ def find_new_upstream(  # noqa: C901
                 # watch file.
                 if upstream_branch_source is None:
                     raise NoUpstreamLocationsKnown(package)
+                if require_uscan:
+                    raise
                 primary_upstream_source = upstream_branch_source
 
     if new_upstream_version is None and primary_upstream_source is not None:
-        new_upstream_version = primary_upstream_source.get_latest_version(
+        unmangled_new_upstream_version, new_upstream_version = primary_upstream_source.get_latest_version(
             package, old_upstream_version
         )
+    else:
+        new_upstream_version = debianize_upstream_version(
+            new_upstream_version)
 
     if new_upstream_version is None:
         raise NewUpstreamMissing()
+
+    if not new_upstream_version[0].isdigit():
+        # dpkg forbids this, let's just refuse it early
+        raise InvalidFormatUpstreamVersion(
+            new_upstream_version, primary_upstream_source
+        )
 
     try:
         new_upstream_version = Version(new_upstream_version)
@@ -525,6 +571,8 @@ def find_new_upstream(  # noqa: C901
             raise NewerUpstreamAlreadyImported(
                 old_upstream_version, new_upstream_version
             )
+        if is_big_version_jump(old_upstream_version, new_upstream_version) and not force_big_version_jump:
+            raise BigVersionJump(old_upstream_version, new_upstream_version)
 
     # TODO(jelmer): Check if new_upstream_version is already imported
 
@@ -549,11 +597,11 @@ def find_new_upstream(  # noqa: C901
                 # The branch is our primary upstream source, so if it can't
                 # find the version then there's nothing we can do.
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch_source.upstream_branch, new_upstream_version
+                    upstream_branch_source.upstream_branch, str(new_upstream_version)
                 )
             elif not allow_ignore_upstream_branch:
                 raise UpstreamVersionMissingInUpstreamBranch(
-                    upstream_branch_source.upstream_branch, new_upstream_version
+                    upstream_branch_source.upstream_branch, str(new_upstream_version)
                 )
             else:
                 logging.warn(
@@ -597,6 +645,7 @@ def import_upstream(
     subpath: str = "",
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
+    force_big_version_jump: bool = False,
 ) -> ImportUpstreamResult:
     """Import a new upstream version into a tree.
 
@@ -668,6 +717,7 @@ def import_upstream(
         top_level=top_level,
         include_upstream_history=include_upstream_history,
         create_dist=create_dist,
+        force_big_version_jump=force_big_version_jump,
     )
 
     with tempfile.TemporaryDirectory() as target_dir:
@@ -782,6 +832,9 @@ def merge_upstream(  # noqa: C901
     subpath: str = "",
     include_upstream_history: Optional[bool] = None,
     create_dist: Optional[Callable[[Tree, str, Version, str], Optional[str]]] = None,
+    force_big_version_jump: bool = False,
+    debian_revision: Optional[str] = None,
+    require_uscan: bool = False
 ) -> MergeUpstreamResult:
     """Merge a new upstream version into a tree.
 
@@ -807,6 +860,7 @@ def merge_upstream(  # noqa: C901
       NoUpstreamLocationsKnown
       UpstreamMetadataSyntaxError
       NewerUpstreamAlreadyImported
+      WatchSyntaxError
     Returns:
       MergeUpstreamResult object
     """
@@ -853,6 +907,8 @@ def merge_upstream(  # noqa: C901
         top_level=top_level,
         include_upstream_history=include_upstream_history,
         create_dist=create_dist,
+        force_big_version_jump=force_big_version_jump,
+        require_uscan=require_uscan,
     )
 
     if need_upstream_tarball:
@@ -934,33 +990,47 @@ def merge_upstream(  # noqa: C901
 
     # Re-read changelog, since it may have been changed by the merge
     # from upstream.
-    (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
-    package = changelog.package
+    try:
+        (changelog, top_level) = find_changelog(tree, subpath, False, max_blocks=2)
+    except (ChangelogParseError, MissingChangelogError):
+        # If there was a conflict that affected debian/changelog, then that might be
+        # to blame.
+        if conflicts:
+            raise UpstreamMergeConflicted(old_upstream_version, conflicts)
+        raise
+    if top_level:
+        debian_path = subpath
+    else:
+        debian_path = os.path.join(subpath, "debian")
 
     if Version(old_upstream_version) >= Version(new_upstream_version):
         if conflicts:
             raise UpstreamMergeConflicted(old_upstream_version, conflicts)
         raise UpstreamAlreadyMerged(new_upstream_version)
-    if update_changelog:
-        changelog_add_new_version(
-            tree, subpath, new_upstream_version, distribution_name, changelog, package
-        )
+
+    with ChangelogEditor(
+            tree.abspath(os.path.join(debian_path, "changelog"))) as cl:
+        if debian_revision is None:
+            debian_revision = initial_debian_revision(distribution_name)
+        new_version = str(new_upstream_package_version(
+            new_upstream_version, debian_revision, cl[0].version.epoch))
+        if not update_changelog:
+            # We need to run "gbp dch" here, since the next "gbp dch" runs
+            # won't pick up the pending changes, as we're about to change
+            # debian/changelog.
+            from debmutate.changelog import gbp_dch
+            gbp_dch(tree.basedir)
+        cl.auto_version(new_version)
+
+        cl.add_entry([upstream_merge_changelog_line(new_upstream_version)])
+
     if not need_upstream_tarball:
-        logging.info(
-            "An entry for the new upstream version has been " "added to the changelog."
-        )
+        logging.info("The changelog has been updated for the new version.")
     else:
         if conflicts:
             raise UpstreamMergeConflicted(new_upstream_version, conflicts)
 
-    if update_changelog:
-        debcommit(tree, subpath=subpath, committer=committer)
-    else:
-        tree.commit(
-            committer=committer,
-            message="Merge new upstream release %s." % new_upstream_version,
-            specific_files=([subpath] if len(tree.get_parent_ids()) <= 1 else None),
-        )
+    debcommit(tree, subpath=subpath, committer=committer)
 
     return MergeUpstreamResult(
         include_upstream_history=include_upstream_history,
@@ -1009,6 +1079,10 @@ def update_packaging(
       old_tree: Old tree
       committer: Optional committer to use for changes
     """
+    if committer is None:
+        maintainer = get_maintainer()
+    else:
+        maintainer = parseaddr(committer)
     notes = []
     tree_delta = tree.changes_from(old_tree, specific_files=[subpath])
     for delta in tree_delta.added:
@@ -1020,13 +1094,12 @@ def update_packaging(
         path = path[len(subpath) :]
         if path == "autogen.sh":
             if override_dh_autoreconf_add_arguments(tree.basedir, [b"./autogen.sh"]):
-                logging.info("Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf.")
-                changelog_add_line(
-                    tree,
-                    subpath,
-                    "Invoke autogen.sh from dh_autoreconf.",
-                    email=committer,
+                logging.info(
+                    "Modifying debian/rules: " "Invoke autogen.sh from dh_autoreconf."
                 )
+                with ChangelogEditor(
+                        tree.abspath(os.path.join(subpath, 'debian/changelog'))) as cl:
+                    cl.add_entry(["Invoke autogen.sh from dh_autoreconf."], maintainer=maintainer)
                 debcommit(
                     tree,
                     committer=committer,
@@ -1051,6 +1124,10 @@ class NewUpstreamChanger(DebianChanger):
         dist_command,
         import_only=False,
         include_upstream_history=None,
+        chroot=None,
+        force_big_version_jump=False,
+        debian_revision=None,
+        require_uscan=False,
     ):
         self.snapshot = snapshot
         self.trust_package = trust_package
@@ -1059,6 +1136,10 @@ class NewUpstreamChanger(DebianChanger):
         self.dist_command = dist_command
         self.import_only = import_only
         self.include_upstream_history = include_upstream_history
+        self.schroot = chroot
+        self.force_big_version_jump = force_big_version_jump
+        self.debian_revision = debian_revision
+        self.require_uscan = require_uscan
 
     @classmethod
     def setup_parser(cls, parser):
@@ -1114,6 +1195,20 @@ class NewUpstreamChanger(DebianChanger):
             help="force inclusion of upstream history",
             default=None,
         )
+        parser.add_argument(
+            "--force-big-version-jump",
+            action="store_true",
+            help="force through big version jumps")
+        parser.add_argument(
+            "--debian-revision",
+            type=str,
+            help="Debian revision to use (e.g. '1' or '0ubuntu1')",
+            default=None)
+        parser.add_argument(
+            "--require-uscan",
+            action="store_true",
+            help=("Require that uscan provides a tarball"
+                  "(if --snapshot is not specified)"))
 
     def suggest_branch_name(self):
         if self.snapshot:
@@ -1131,10 +1226,11 @@ class NewUpstreamChanger(DebianChanger):
             dist_command=args.dist_command,
             import_only=args.import_only,
             include_upstream_history=args.include_upstream_history,
+            chroot=args.chroot,
+            force_big_version_jump=args.force_big_version_jump,
+            debian_revision=args.debian_revision,
+            require_uscan=args.require_uscan,
         )
-
-    def create_dist_from_command(self, tree, package, version, target_dir):
-        return run_dist_command(tree, package, version, target_dir, self.dist_command)
 
     def make_changes(  # noqa: C901
         self,
@@ -1157,9 +1253,10 @@ class NewUpstreamChanger(DebianChanger):
             )
 
         if self.dist_command:
-            create_dist = self.create_dist_from_command
+            def create_dist(self, tree, package, version, target_dir):
+                return run_dist_command(tree, package, version, target_dir, self.dist_command)
         else:
-            create_dist = None
+            create_dist = getattr(self, 'create_dist', None)
 
         try:
             if not self.import_only:
@@ -1173,6 +1270,9 @@ class NewUpstreamChanger(DebianChanger):
                         committer=committer,
                         include_upstream_history=self.include_upstream_history,
                         create_dist=create_dist,
+                        force_big_version_jump=self.force_big_version_jump,
+                        debian_revision=self.debian_revision,
+                        require_uscan=self.require_uscan,
                     )
                 except MalformedTransform:
                     traceback.print_exc()
@@ -1190,6 +1290,7 @@ class NewUpstreamChanger(DebianChanger):
                     committer=committer,
                     include_upstream_history=self.include_upstream_history,
                     create_dist=create_dist,
+                    force_big_version_jump=self.force_big_version_jump,
                 )
         except UpstreamAlreadyImported as e:
             reporter.report_context(str(e.version))
@@ -1217,6 +1318,10 @@ class NewUpstreamChanger(DebianChanger):
                 "Last upstream version %s already merged." % e.version,
                 e,
             )
+        except NoWatchFile:
+            raise ChangerError(
+                "no-watch-file",
+                "No watch file is present, but --require-uscan was specified")
         except PreviousVersionTagMissing as e:
             raise ChangerError(
                 "previous-upstream-missing",
@@ -1264,12 +1369,17 @@ class NewUpstreamChanger(DebianChanger):
         except UpstreamMergeConflicted as e:
             reporter.report_context(str(e.version))
             reporter.report_metadata("upstream_version", str(e.version))
-            reporter.report_metadata("conflicts", e.conflicts)
+            details = {}
+            if isinstance(e.conflicts, int):
+                conflicts = e.conflicts
+            else:
+                conflicts = [[c.path, c.typestring] for c in e.conflicts]
+                details['conflicts'] = conflicts
+            reporter.report_metadata("conflicts", conflicts)
             raise ChangerError(
                 "upstream-merged-conflicts",
                 "Merging upstream version %s resulted in conflicts." % e.version,
-                e,
-            )
+                e, details=details)
         except PackageIsNative as e:
             raise ChangerError(
                 "native-package",
@@ -1324,7 +1434,7 @@ class NewUpstreamChanger(DebianChanger):
         except MissingChangelogError as e:
             raise ChangerError("missing-changelog", "Missing changelog %s" % e, e)
         except DistCommandFailed as e:
-            raise ChangerError("dist-command-failed", "Dist command failed: %s" % e, e)
+            raise ChangerError("dist-command-failed", str(e), e)
         except MissingUpstreamTarball as e:
             raise ChangerError(
                 "missing-upstream-tarball", "Missing upstream tarball: %s" % e, e
@@ -1342,7 +1452,7 @@ class NewUpstreamChanger(DebianChanger):
             raise ChangerError(
                 "no-upstream-locations-known",
                 "No debian/watch file or Repository in "
-                "debian/upstream/metadata to retrieve new upstream version"
+                "debian/upstream/metadata to retrieve new upstream version "
                 "from.",
                 e,
             )
@@ -1353,6 +1463,16 @@ class NewUpstreamChanger(DebianChanger):
                 "A newer upstream release (%s) has already been imported. "
                 "Found: %s" % (e.old_upstream_version, e.new_upstream_version),
             )
+        except WatchSyntaxError as e:
+            raise ChangerError('watch-syntax-error', str(e))
+        except BigVersionJump as e:
+            raise ChangerError(
+                "big-version-jump",
+                "There was a big jump in upstream versions: %s ⇒ %s" % (
+                    e.old_upstream_version, e.new_upstream_version),
+                details={
+                    'old_upstream_version': str(e.old_upstream_version),
+                    'new_upstream_version': str(e.new_upstream_version)})
         except OSError as e:
             if e.errno == errno.ENOSPC:
                 raise ChangerError("no-space-on-device", str(e))
@@ -1439,7 +1559,7 @@ class NewUpstreamChanger(DebianChanger):
                 old_tree = local_tree.branch.repository.revision_tree(
                     result.old_revision
                 )
-                notes = update_packaging(local_tree, old_tree)
+                notes = update_packaging(local_tree, old_tree, committer=committer)
                 reporter.report_metadata("notes", notes)
                 for n in notes:
                     logging.info("%s", n)
@@ -1502,7 +1622,9 @@ class NewUpstreamChanger(DebianChanger):
     def describe(self, merge_upstream_result, publish_result):
         if publish_result.proposal:
             if publish_result.is_new:
-                logging.info("Created new merge proposal %s.", publish_result.proposal.url)
+                logging.info(
+                    "Created new merge proposal %s.", publish_result.proposal.url
+                )
             else:
                 logging.info("Updated merge proposal %s.", publish_result.proposal.url)
 

@@ -1,0 +1,16 @@
+---
+# This runs the "cme fix" command, which makes a number of improvements
+# to Debian packages. This requires the "cme" package.
+#
+# Since CME doesn't provide an easily consumable report of the changes
+# it made, the commit message and merge proposal description created
+# are currently a bit generic and unhelpful ("Run CME").
+name: cme-fix
+command: cme fix dpkg
+merge-proposal:
+  commit-message: Run CME fix.
+  description: |-
+    {% extends "base.md" %}
+    {% block runner -%}
+    Run CME.
+    {% endblock %}
