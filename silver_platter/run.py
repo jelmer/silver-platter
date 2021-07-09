@@ -93,6 +93,8 @@ def apply_and_publish(  # noqa: C901
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if refresh:
+        if resume_branch:
+            overwrite = True
         resume_branch = None
 
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
