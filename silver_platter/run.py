@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import sys
+import traceback
 from typing import Optional, List
 
 from breezy import osutils
@@ -299,4 +300,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    try:
+        sys.exit(main(sys.argv))
+    except:  # noqa: E722
+        traceback.print_exc()
+        sys.exit(2)
