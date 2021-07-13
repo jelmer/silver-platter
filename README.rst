@@ -44,7 +44,8 @@ Recipes
 ~~~~~~~
 
 To make this process a little bit easier to repeat, recipe files can be used.
-For this example, create one called ``framwork.yaml`` with the following contents::
+For the example above, we could create a ``framwork.yaml`` with the following
+contents::
 
     ---
     name: framwork
@@ -60,9 +61,10 @@ To execute this recipe, run::
 
     svp run --recipe=framwork.yaml https://github.com/jelmer/dulwich
 
-See `example.yaml` for an example recipe with plenty of comments
+See `example.yaml` for an example recipe with plenty of comments.
 
-In addition, you can run a particular recipe over a set of repositories by specifying a candidate list.
+In addition, you can run a particular recipe over a set of repositories by
+specifying a candidate list.
 For example, if *candidates.yaml* looked like this::
 
    ---
