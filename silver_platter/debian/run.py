@@ -36,6 +36,7 @@ from . import (
     )
 from .apply import (
     script_runner,
+    MissingChangelog,
     ScriptMadeNoChanges,
     ScriptFailed,
     install_built_package,
@@ -115,6 +116,9 @@ def apply_and_publish(  # noqa: C901
             result = script_runner(
                 ws.local_tree, command, commit_pending,
                 update_changelog=update_changelog)
+        except MissingChangelog as e:
+            logging.error("No debian changelog (%s) present", e.args[0])
+            return 1
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
             return 1

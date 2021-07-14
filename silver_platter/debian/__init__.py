@@ -348,23 +348,6 @@ def control_files_in_root(tree: Tree, subpath: str) -> bool:
     return False
 
 
-def control_file_present(tree: Tree, subpath: str) -> bool:
-    """Check whether there are any control files present in a tree.
-
-    Args:
-      tree: Tree to check
-      subpath: subpath to check
-    Returns:
-      whether control file is present
-    """
-    for name in ["debian/control", "debian/control.in", "control",
-                 "control.in", "debian/debcargo.toml"]:
-        name = os.path.join(subpath, name)
-        if tree.has_filename(name):
-            return True
-    return False
-
-
 def connect_udd_mirror():
     import psycopg2
 

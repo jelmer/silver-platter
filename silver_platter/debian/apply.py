@@ -46,6 +46,10 @@ from . import (
     )
 
 
+class MissingChangelog(Exception):
+    """No changelog file is present."""
+
+
 class DetailedFailure(Exception):
     """Detailed failure"""
 
@@ -137,9 +141,13 @@ def script_runner(   # noqa: C901
             # Assume yes.
             update_changelog = True
 
-    with open(local_tree.abspath(os.path.join(debian_path, 'changelog')), 'r') as f:
-        cl = Changelog(f)
-        source_name = cl[0].package
+    cl_path = os.path.join(debian_path, 'changelog')
+    try:
+        with open(local_tree.abspath(cl_path), 'r') as f:
+            cl = Changelog(f)
+            source_name = cl[0].package
+    except FileNotFoundError:
+        raise MissingChangelog(cl_path)
 
     if source_name:
         os.environ['DEB_SOURCE'] = source_name
@@ -292,9 +300,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     check_clean_tree(local_tree)
 
     try:
-        result = script_runner(
-            local_tree, script=command, commit_pending=commit_pending,
-            subpath=subpath, update_changelog=args.update_changelog)
+        try:
+            result = script_runner(
+                local_tree, script=command, commit_pending=commit_pending,
+                subpath=subpath, update_changelog=args.update_changelog)
+        except MissingChangelog as e:
+            logging.error('No debian changelog file (%s) present', e.args[0])
+            return False
 
         if result.description:
             logging.info('Succeeded: %s', result.description)
@@ -303,10 +315,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             try:
                 build(local_tree, subpath, builder=args.builder, result_dir=args.build_target_dir)
             except BuildFailedError:
-                logging.info("%s: build failed", result.source)
+                logging.error("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
-                logging.info("%s: unable to find upstream source", result.source)
+                logging.error("%s: unable to find upstream source", result.source)
                 return False
     except Exception:
         reset_tree(local_tree, subpath)
