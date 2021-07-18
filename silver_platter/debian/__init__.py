@@ -76,6 +76,10 @@ class NoSuchPackage(Exception):
     """No such package."""
 
 
+class NoVcsInformation(Exception):
+    """Package does not have any Vcs headers."""
+
+
 def add_changelog_entry(
     tree: MutableTree,
     path: str,
@@ -199,7 +203,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
-            raise Exception("Package %s does not have any VCS information" % location)
+            raise NoVcsInformation(location)
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
         url, params = urlutils.split_segment_parameters(location)

@@ -34,6 +34,7 @@ from . import (
     apply as debian_apply,
     run as debian_run,
     uploader as debian_uploader,
+    NoVcsInformation,
     )
 
 
@@ -106,7 +107,13 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
     except KeyError:
         pass
     else:
-        return run_changer_subcommand(args.subcommand, subcmd, rest)
+        try:
+            return run_changer_subcommand(args.subcommand, subcmd, rest)
+        except NoVcsInformation as e:
+            logging.fatal(
+                'Package %s does not have any Vcs-* headers. '
+                'Specify Git URL manually?', e.args[0])
+            return 1
     parser.print_usage()
     return 1
 
