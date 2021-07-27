@@ -269,6 +269,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--install", "-i",
         action="store_true",
         help="Install built package (implies --build-verify)")
+    parser.add_argument(
+        "--dump-context", action="store_true",
+        help="Report context on success")
 
     parser.add_argument(
         "--recipe", type=str, help="Recipe to use.")
@@ -337,4 +340,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             sys.stdout.buffer,
             old_label='old/',
             new_label='new/')
+
+    if args.dump_context:
+        json.dump(result.context, sys.stdout, indent=5)
     return 0
