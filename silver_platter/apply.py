@@ -64,6 +64,7 @@ class CommandResult(object):
 
     description: Optional[str] = None
     value: Optional[int] = None
+    serialized_context: Optional[str] = None
     context: Dict[str, str] = field(default_factory=dict)
     tags: List[Tuple[str, bytes]] = field(default_factory=list)
     old_revision: Optional[bytes] = None
@@ -81,6 +82,7 @@ class CommandResult(object):
             value=data.get('value', None),
             context=data.get('context', {}),
             description=data.get('description'),
+            serialized_context=data.get('serialized_context', None),
             tags=tags)
 
 
