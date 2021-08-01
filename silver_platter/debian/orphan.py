@@ -111,6 +111,16 @@ class OrphanResult(object):
         self.salsa_user = salsa_user
         self.wnpp_bug = wnpp_bug
 
+    def json(self):
+        return {
+            "package": self.package,
+            "old_vcs_url": self.old_vcs_url,
+            "new_vcs_url": self.new_vcs_url,
+            "pushed": self.pushed,
+            "salsa_user": self.salsa_user,
+            "wnpp_bug": self.wnpp_bug,
+        }
+
 
 def find_wnpp_bug(source):
     conn = connect_udd_mirror()

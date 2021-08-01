@@ -396,6 +396,12 @@ class ImportUpstreamResult(object):
         self.imported_revisions = imported_revisions
         self.include_upstream_history = include_upstream_history
 
+    def json(self):
+        return {
+            "old_upstream_version": self.old_upstream_version,
+            "new_upstream_version": self.new_upstream_version,
+            }
+
 
 def detect_include_upstream_history(
     tree, upstream_branch_source, package, old_upstream_version
@@ -813,9 +819,11 @@ class MergeUpstreamResult(object):
         self.new_revision = new_revision
         self.imported_revisions = imported_revisions
 
-    def __tuple__(self):
-        # Backwards compatibility
-        return (self.old_upstream_version, self.new_upstream_version)
+    def json(self):
+        return {
+            "old_upstream_version": self.old_upstream_version,
+            "new_upstream_version": self.new_upstream_version,
+            }
 
 
 def merge_upstream(  # noqa: C901
@@ -1543,7 +1551,7 @@ class NewUpstreamChanger(DebianChanger):
             return ChangerResult(
                 description="Imported new upstream version %s"
                 % (result.new_upstream_version),
-                mutator=result,
+                mutator=result.json(),
                 tags=tags,
                 branches=branches,
                 sufficient_for_proposal=True,
@@ -1605,7 +1613,7 @@ class NewUpstreamChanger(DebianChanger):
             return ChangerResult(
                 description="Merged new upstream version %s"
                 % (result.new_upstream_version),
-                mutator=result,
+                mutator=result.json(),
                 tags=tags,
                 branches=branches,
                 sufficient_for_proposal=True,
