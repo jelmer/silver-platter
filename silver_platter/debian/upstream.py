@@ -398,8 +398,12 @@ class ImportUpstreamResult(object):
 
     def json(self):
         return {
-            "old_upstream_version": self.old_upstream_version,
-            "new_upstream_version": self.new_upstream_version,
+            "old_upstream_version":
+                str(self.old_upstream_version)
+                if self.old_upstream_version else None,
+            "new_upstream_version":
+                str(self.new_upstream_version)
+                if self.new_upstream_version else None,
             }
 
 
@@ -821,8 +825,12 @@ class MergeUpstreamResult(object):
 
     def json(self):
         return {
-            "old_upstream_version": self.old_upstream_version,
-            "new_upstream_version": self.new_upstream_version,
+            "old_upstream_version":
+                str(self.old_upstream_version)
+                if self.old_upstream_version else None,
+            "new_upstream_version":
+                str(self.new_upstream_version)
+                if self.new_upstream_version else None,
             }
 
 
