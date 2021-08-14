@@ -202,11 +202,11 @@ def script_runner(   # noqa: C901
         # touch the branch.
         commit_pending = True
     if commit_pending:
-        if update_changelog and result.description:
+        if update_changelog and result.description and local_tree.has_changes():
             add_changelog_entry(
                 local_tree,
                 os.path.join(debian_path, 'changelog'),
-                result.description)
+                [result.description])
         try:
             new_revision = local_tree.commit(result.description, allow_pointless=False)
         except PointlessCommit:
@@ -214,7 +214,7 @@ def script_runner(   # noqa: C901
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision
-    result.new_revision = local_tree.last_revision()
+    result.new_revision = new_revision
     return result
 
 
