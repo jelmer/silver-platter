@@ -1,7 +1,14 @@
-Commands will be run in a clean VCS checkout, where
-they can make changes as they deem fit. Changes should be committed; by
-default pending changes will be discarded (but silver-platter will
-warn about them, and --autocommit can specified).
+The core of silver-platter are changer commands, which get run in version
+control checkouts to make changes.
+
+Commands will be run in a clean VCS checkout, where they can make changes as
+they deem fit. Changes should ideally be committed; by default pending changes
+will be discarded (but silver-platter will warn about them, and --autocommit
+can specified).
+
+However, if commands just make changes and don't touch the VCS at all,
+silver-platter will function in "autocommit" mode and create a single commit on
+their behalf with a reasonable commit message.
 
 Flags can be specified on the command-line or in a recipe:
 
@@ -28,7 +35,7 @@ If resuming is not supported then all older changes will be discarded
 
 Environment variables that will be set:
 
- * SVP_API: Currently set to 1
+ * SVP_API: Silver-platter API major version number. Currently set to 1
  * COMMITTER: Set to a committer identity (optional)
  * SVP_RESUME: Set to a file path with JSON results from the last run,
    if available and if --resume is enabled.
@@ -53,16 +60,3 @@ The following environment variables will be set as well:
  * DEB_SOURCE: Source package name
  * DEB_UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
  * ALLOW_REFORMATTING: boolean indicating whether reformatting is allowed
-
-Required Changes
-================
-
-1) add support for providing SVP_RESULT environment variable and reading it
-2) gradually move existing mutators over:
- + lintian-brush
- + deb-scrub-obsolete
- + apply-multiarch-hints
-3) move all logic for lintian-brush into actual lintian-brush binary
- + Add Enhances: silver-platter to lintian-brush
-4) move detect_gbp_dch out of lintian-brush
-5) add ability to specify candidate list (yaml) to debian-svp and svp
