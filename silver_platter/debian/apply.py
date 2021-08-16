@@ -168,7 +168,7 @@ def script_runner(   # noqa: C901
         if resume_metadata:
             env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
             with open(env['SVP_RESUME'], 'w') as f:
-                json.dump(f, resume_metadata)
+                json.dump(resume_metadata, f)
         p = subprocess.Popen(
             script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE, shell=True,
             env=env)
