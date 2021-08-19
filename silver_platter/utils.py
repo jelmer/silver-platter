@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 import os
 import shutil
 import socket
@@ -179,9 +180,10 @@ class BranchUnavailable(Exception):
 class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str, retry_after: Optional[int] = None):
         self.url = url
         self.description = description
+        self.retry_after = retry_after
 
     def __str__(self) -> str:
         return self.description
@@ -222,7 +224,16 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.InvalidHttpResponse):
         if "Unexpected HTTP status 429" in str(e):
-            raise BranchRateLimited(url, str(e))
+            try:
+                retry_after = int(e.headers['Retry-After'])  # type: Optional[int]
+            except TypeError:
+                logging.warning(
+                    'Unable to parse retry-after header: %s',
+                    e.headers['Retry-After'])
+                retry_after = None
+            else:
+                retry_after = None
+            raise BranchRateLimited(url, str(e), retry_after=retry_after)
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
