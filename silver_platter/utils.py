@@ -224,14 +224,18 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.InvalidHttpResponse):
         if "Unexpected HTTP status 429" in str(e):
-            try:
-                retry_after = int(e.headers['Retry-After'])  # type: Optional[int]
-            except TypeError:
-                logging.warning(
-                    'Unable to parse retry-after header: %s',
-                    e.headers['Retry-After'])
-                retry_after = None
+            if hasattr(e, 'headers'):
+                try:
+                    retry_after = int(e.headers['Retry-After'])  # type: Optional[int]
+                except TypeError:
+                    logging.warning(
+                        'Unable to parse retry-after header: %s',
+                        e.headers['Retry-After'])
+                    retry_after = None
+                else:
+                    retry_after = None
             else:
+                # Breezy < 3.2.1
                 retry_after = None
             raise BranchRateLimited(url, str(e), retry_after=retry_after)
         return BranchUnavailable(url, str(e))
