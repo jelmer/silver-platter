@@ -186,7 +186,10 @@ class BranchRateLimited(Exception):
         self.retry_after = retry_after
 
     def __str__(self) -> str:
-        return self.description
+        if self.retry_after is not None:
+            return "%s (retry after %s)" % (self.description, self.retry_after)
+        else:
+            return self.description
 
 
 class BranchMissing(Exception):
