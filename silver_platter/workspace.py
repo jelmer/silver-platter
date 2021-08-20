@@ -201,10 +201,11 @@ class Workspace(object):
             try:
                 hoster = get_hoster(self.main_branch)
             except UnsupportedHoster:
-                if isinstance(self.main_branch.control_transport, LocalTransport):
-                    hoster = None
-                else:
-                    raise
+                if not isinstance(self.main_branch.control_transport, LocalTransport):
+                    logging.warning(
+                        'Unable to find hoster for %s to determine push url, '
+                        'trying anyway.', self.main_branch.user_url)
+                hoster = None
         return push_changes(
             self.local_tree.branch,
             self.main_branch,
