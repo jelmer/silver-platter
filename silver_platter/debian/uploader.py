@@ -303,10 +303,10 @@ def select_vcswatch_packages(
     if autopkgtest_only:
         query += " AND sources.testsuite != '' "
     if maintainer:
-        query += " AND sources.maintainer_email IN (%s)"
+        query += " AND sources.maintainer_email in %s"
         args.append(tuple(maintainer))
     if packages:
-        query += " AND sources.source IN (%s)"
+        query += " AND sources.source IN %s"
         args.append(tuple(packages))
 
     cursor.execute(query, tuple(args))
