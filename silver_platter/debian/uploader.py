@@ -183,6 +183,10 @@ def get_maintainer_keys(context):
             yield subkey.keyid
 
 
+class GbpDchFailed(Exception):
+    """gbp dch failed to run"""
+
+
 def prepare_upload_package(
     local_tree,
     subpath,
@@ -194,9 +198,14 @@ def prepare_upload_package(
     allowed_committers=None,
 ):
     if local_tree.has_filename(os.path.join(subpath, "debian/gbp.conf")):
-        subprocess.check_call(
-            ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
-        )
+        try:
+            subprocess.check_call(
+                ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
+            )
+        except subprocess.CalledProcessError:
+            # TODO(jelmer): gbp dch sometimes fails when there is no existing
+            # open changelog entry; it fails invoking "dpkg --lt None <old-version>"
+            raise GbpDchFailed()
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
@@ -500,6 +509,9 @@ def main(argv):  # noqa: C901
                     min_commit_age=args.min_commit_age,
                     allowed_committers=args.allowed_committer,
                 )
+            except GbpDchFailed as e:
+                logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
+                continue
             except CommitterNotAllowed as e:
                 logging.warn(
                     "%s: committer %s not in allowed list: %r",
