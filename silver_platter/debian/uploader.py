@@ -52,6 +52,7 @@ from breezy.plugins.debian.util import (
     find_changelog,
     MissingChangelogError,
 )
+from breezy.plugins.debian.upstream import MissingUpstreamTarball
 
 from debian.changelog import get_maintainer
 
@@ -511,6 +512,9 @@ def main(argv):  # noqa: C901
                 )
             except GbpDchFailed as e:
                 logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
+                continue
+            except MissingUpstreamTarball as e:
+                logging.warning("%s: missing upstream tarball: %s", source_name, e)
                 continue
             except CommitterNotAllowed as e:
                 logging.warn(
