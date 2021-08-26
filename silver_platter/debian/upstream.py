@@ -1275,39 +1275,40 @@ class NewUpstreamChanger(DebianChanger):
             create_dist = getattr(self, 'create_dist', None)
 
         try:
-            if not self.import_only:
-                try:
-                    result = merge_upstream(
+            with local_tree.lock_write():
+                if not self.import_only:
+                    try:
+                        result = merge_upstream(
+                            tree=local_tree,
+                            snapshot=self.snapshot,
+                            trust_package=self.trust_package,
+                            update_changelog=update_changelog,
+                            subpath=subpath,
+                            committer=committer,
+                            include_upstream_history=self.include_upstream_history,
+                            create_dist=create_dist,
+                            force_big_version_jump=self.force_big_version_jump,
+                            debian_revision=self.debian_revision,
+                            require_uscan=self.require_uscan,
+                        )
+                    except MalformedTransform:
+                        traceback.print_exc()
+                        error_description = (
+                            "Malformed tree transform during new upstream merge"
+                        )
+                        error_code = "malformed-transform"
+                        raise ChangerError(error_code, error_description)
+                else:
+                    result = import_upstream(
                         tree=local_tree,
                         snapshot=self.snapshot,
                         trust_package=self.trust_package,
-                        update_changelog=update_changelog,
                         subpath=subpath,
                         committer=committer,
                         include_upstream_history=self.include_upstream_history,
                         create_dist=create_dist,
                         force_big_version_jump=self.force_big_version_jump,
-                        debian_revision=self.debian_revision,
-                        require_uscan=self.require_uscan,
                     )
-                except MalformedTransform:
-                    traceback.print_exc()
-                    error_description = (
-                        "Malformed tree transform during new upstream merge"
-                    )
-                    error_code = "malformed-transform"
-                    raise ChangerError(error_code, error_description)
-            else:
-                result = import_upstream(
-                    tree=local_tree,
-                    snapshot=self.snapshot,
-                    trust_package=self.trust_package,
-                    subpath=subpath,
-                    committer=committer,
-                    include_upstream_history=self.include_upstream_history,
-                    create_dist=create_dist,
-                    force_big_version_jump=self.force_big_version_jump,
-                )
         except UpstreamAlreadyImported as e:
             reporter.report_context(str(e.version))
             reporter.report_metadata("upstream_version", str(e.version))
