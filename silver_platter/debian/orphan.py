@@ -291,7 +291,7 @@ class OrphanChanger(DebianChanger):
 
         return ChangerResult(
             description="Move package to QA team.",
-            mutator=result,
+            mutator=result.json(),
             branches=branches,
             tags=tags,
             sufficient_for_proposal=True,
