@@ -188,7 +188,7 @@ class GbpDchFailed(Exception):
     """gbp dch failed to run"""
 
 
-def prepare_upload_package(
+def prepare_upload_package(  # noqa: C901
     local_tree,
     subpath,
     pkg,
