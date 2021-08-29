@@ -618,9 +618,6 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
 
 BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
-        "new-upstream", "silver_platter.debian.upstream", attrs=("NewUpstreamChanger",)
-    ),
-    pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
     pkg_resources.EntryPoint(
