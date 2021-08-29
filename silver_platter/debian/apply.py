@@ -117,7 +117,8 @@ def install_built_package(local_tree, subpath, build_target_dir):
 
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None
+    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None,
+    extra_env: Optional[Dict[str, str]] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -161,6 +162,7 @@ def script_runner(   # noqa: C901
 
     env = dict(os.environ)
     env['SVP_API'] = '1'
+    env.update(extra_env)
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
     with tempfile.TemporaryDirectory() as td:
