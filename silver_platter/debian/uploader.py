@@ -72,6 +72,7 @@ from ..utils import (
     BranchUnavailable,
     BranchMissing,
     BranchUnsupported,
+    BranchRateLimited,
 )
 
 
@@ -542,6 +543,13 @@ def main(argv):  # noqa: C901
             except MissingUpstreamTarball as e:
                 stats['missing-upstream-tarball'] += 1
                 logging.warning("%s: missing upstream tarball: %s", source_name, e)
+                continue
+            except BranchRateLimited as e:
+                stats['rate-limited'] += 1
+                logging.warning(
+                    '%s: rate limited by server (retrying after %s)',
+                    source_name, e.retry_after)
+                ret = 1
                 continue
             except CommitterNotAllowed as e:
                 stats['committer-not-allowed'] += 1
