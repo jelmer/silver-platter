@@ -162,7 +162,8 @@ def script_runner(   # noqa: C901
 
     env = dict(os.environ)
     env['SVP_API'] = '1'
-    env.update(extra_env)
+    if extra_env:
+        env.update(extra_env)
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
     with tempfile.TemporaryDirectory() as td:
