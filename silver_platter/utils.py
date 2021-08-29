@@ -25,7 +25,6 @@ from typing import Callable, Tuple, Optional, List
 
 from breezy import (
     errors,
-    osutils,
     urlutils,
 )
 
