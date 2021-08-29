@@ -231,7 +231,7 @@ class Workspace(object):
         owner: Optional[str] = None,
         allow_collaboration: bool = False,
         stop_revision: Optional[bytes] = None,
-    ) -> MergeProposal:
+    ) -> Tuple[MergeProposal, bool]:
         if hoster is None:
             hoster = get_hoster(self.main_branch)
         return propose_changes(
