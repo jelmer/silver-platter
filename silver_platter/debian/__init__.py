@@ -42,6 +42,7 @@ from breezy.plugins.debian.directory import (
 
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
+from breezy.workingtree import WorkingTree
 
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.upstream import (
@@ -126,7 +127,7 @@ def add_changelog_entry(
 
 
 def build(
-    tree: Tree,
+    tree: WorkingTree,
     subpath: str = "",
     builder: Optional[str] = None,
     result_dir: Optional[str] = None,

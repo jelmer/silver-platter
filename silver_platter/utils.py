@@ -20,6 +20,7 @@ import os
 import shutil
 import socket
 import subprocess
+import tempfile
 from typing import Callable, Tuple, Optional, List
 
 from breezy import (
@@ -52,7 +53,7 @@ def create_temp_sprout(
     This attempts to fetch the least amount of history as possible.
     """
     if path is None:
-        td = osutils.mkdtemp(dir=dir)
+        td = tempfile.mkdtemp(dir=dir)
     else:
         td = path
         os.mkdir(path)
