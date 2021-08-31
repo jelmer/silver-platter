@@ -620,9 +620,6 @@ BUILTIN_ENTRYPOINTS = [
     pkg_resources.EntryPoint(
         "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
     ),
-    pkg_resources.EntryPoint(
-        "debianize", "silver_platter.debian.debianize", attrs=("DebianizeChanger",)
-    ),
 ]
 
 
