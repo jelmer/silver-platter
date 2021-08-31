@@ -46,7 +46,7 @@ BRANCH_NAME = "orphan"
 def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
     from breezy import urlutils
     from breezy.branch import Branch
-    from breezy.errors import PermissionDenied
+    from breezy.errors import PermissionDenied, AlreadyControlDirError
     from breezy.propose import UnsupportedHoster, get_hoster, HosterLoginRequired
     from breezy.plugins.gitlab.hoster import GitLab
 
@@ -74,12 +74,15 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
     if from_project is not None:
         salsa.fork_project(from_project, owner=user)
     else:
+        to_project = "%s/%s" % (user, name)
         try:
-            salsa.create_project("%s/%s" % (user, name))
+            salsa.create_project(to_project)
         except PermissionDenied as e:
-            logging.info('No permission to create new project under %s: %s',
-                         user, e)
+            logging.info('No permission to create new project %s under %s: %s',
+                         name, user, e)
             return
+        except AlreadyControlDirError:
+            logging.info('Project %s already exists, using..', to_project)
     target_branch = Branch.open(
         "git+ssh://git@salsa.debian.org/%s/%s.git" % (user, name)
     )
