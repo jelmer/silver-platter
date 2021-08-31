@@ -136,23 +136,25 @@ class Workspace(object):
         )
         self.main_branch_revid = self.main_branch.last_revision()
         self.refreshed = False
-        with self.local_tree.branch.lock_write():
-            if self.cached_branch:
-                logger.debug(
-                    "Pulling in missing revisions from resume/main branch %r",
-                    self.resume_branch or self.main_branch,
-                )
-                self.local_tree.pull(
-                    self.resume_branch or self.main_branch, overwrite=True
-                )
-            if self.resume_branch:
-                logger.debug(
-                    "Pulling in missing revisions from main branch %r", self.main_branch
-                )
-                try:
-                    self.local_tree.pull(self.main_branch, overwrite=False)
-                except DivergedBranches:
-                    pass
+        if self.cached_branch:
+            logger.debug(
+                "Pulling in missing revisions from resume/main branch %r",
+                self.resume_branch or self.main_branch,
+            )
+            self.local_tree.pull(
+                self.resume_branch or self.main_branch, overwrite=True
+            )
+        if self.resume_branch:
+            logger.debug(
+                "Pulling in missing revisions from main branch %r", self.main_branch
+            )
+            try:
+                self.local_tree.pull(self.main_branch, overwrite=False)
+            except DivergedBranches:
+                self.refreshed = True
+                self.resume_branch = None
+                self.resume_branch_additional_colocated_branches = None
+            else:
                 logger.debug(
                     "Fetching colocated branches: %r",
                     self.additional_colocated_branches,
