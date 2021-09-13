@@ -178,7 +178,7 @@ class Workspace(object):
                     self.resume_branch = None
                     self.resume_branch_additional_colocated_branches = None
                     self.refreshed = True
-            self.orig_revid = self.local_tree.last_revision()
+        self.orig_revid = self.local_tree.last_revision()
         return self
 
     def defer_destroy(self) -> Optional[Callable[[], None]]:
