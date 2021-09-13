@@ -144,6 +144,8 @@ class Workspace(object):
             self.local_tree.pull(
                 self.resume_branch or self.main_branch, overwrite=True
             )
+        # At this point, we're either on the tip of the main branch or the tip
+        # of the resume branch
         if self.resume_branch:
             logger.debug(
                 "Pulling in missing revisions from main branch %r", self.main_branch
@@ -151,9 +153,12 @@ class Workspace(object):
             try:
                 self.local_tree.pull(self.main_branch, overwrite=False)
             except DivergedBranches:
+                logger.info("restarting branch")
                 self.refreshed = True
                 self.resume_branch = None
                 self.resume_branch_additional_colocated_branches = None
+                self.local_tree.pull(self.main_branch, overwrite=True)
+                self.local_tree.update(revision=self.main_branch_revid)
             else:
                 logger.debug(
                     "Fetching colocated branches: %r",
@@ -169,16 +174,7 @@ class Workspace(object):
                     self.local_tree.branch.controldir.push_branch(
                         name=branch_name, source=remote_colo_branch, overwrite=True
                     )
-                if merge_conflicts(self.main_branch, self.local_tree.branch):
-                    logger.info("restarting branch")
-                    self.local_tree.update(revision=self.main_branch_revid)
-                    self.local_tree.branch.generate_revision_history(
-                        self.main_branch_revid
-                    )
-                    self.resume_branch = None
-                    self.resume_branch_additional_colocated_branches = None
-                    self.refreshed = True
-        self.orig_revid = self.local_tree.last_revision()
+        self.base_revid = self.local_tree.last_revision()
         return self
 
     def defer_destroy(self) -> Optional[Callable[[], None]]:
@@ -189,8 +185,8 @@ class Workspace(object):
     def changes_since_main(self) -> bool:
         return self.local_tree.branch.last_revision() != self.main_branch_revid
 
-    def changes_since_resume(self) -> bool:
-        return self.orig_revid != self.local_tree.branch.last_revision()
+    def changes_since_base(self) -> bool:
+        return self.base_revid != self.local_tree.branch.last_revision()
 
     def push(
         self,
@@ -299,15 +295,15 @@ class Workspace(object):
             **kwargs
         )
 
-    def orig_tree(self) -> Tree:
-        return self.local_tree.branch.repository.revision_tree(self.orig_revid)
+    def base_tree(self) -> Tree:
+        return self.local_tree.branch.repository.revision_tree(self.base_revid)
 
     def show_diff(
         self, outf: BinaryIO, old_label: str = "old/", new_label: str = "new/"
     ) -> None:
-        orig_tree = self.orig_tree()
+        base_tree = self.base_tree()
         show_diff_trees(
-            orig_tree,
+            base_tree,
             self.local_tree.basis_tree(),
             outf,
             old_label=old_label,

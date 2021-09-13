@@ -452,7 +452,7 @@ def _run_single_changer(  # noqa: C901
             return None
 
         try:
-            run_post_check(ws.local_tree, post_check, ws.orig_revid)
+            run_post_check(ws.local_tree, post_check, ws.base_revid)
         except PostCheckFailed as e:
             logging.info("%s: %s", pkg, e)
             return False

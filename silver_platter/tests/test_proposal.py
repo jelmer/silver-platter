@@ -31,7 +31,7 @@ class WorkspaceTests(TestCaseWithTransport):
         with Workspace(b, dir=self.test_dir) as ws:
             self.assertIs(ws.resume_branch, None)
             self.assertFalse(ws.changes_since_main())
-            self.assertFalse(ws.changes_since_resume())
+            self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("foo")
             self.assertTrue(ws.changes_since_main())
             self.assertTrue(ws.changes_since_main())
@@ -46,10 +46,10 @@ class WorkspaceTests(TestCaseWithTransport):
             )
             self.assertIs(ws.resume_branch, c.branch)
             self.assertTrue(ws.changes_since_main())
-            self.assertFalse(ws.changes_since_resume())
+            self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("foo")
             self.assertTrue(ws.changes_since_main())
-            self.assertTrue(ws.changes_since_resume())
+            self.assertTrue(ws.changes_since_base())
 
     def test_with_resume_conflicting(self):
         b = self.make_branch_and_tree("target")
@@ -63,21 +63,22 @@ class WorkspaceTests(TestCaseWithTransport):
         c.commit("add conflict in resume")
         with Workspace(b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
             self.assertIs(ws.resume_branch, None)
+            self.assertEqual(ws.base_revid, b.branch.last_revision())
             self.assertEqual(
                 b.branch.last_revision(), ws.local_tree.branch.last_revision()
             )
             self.assertFalse(ws.changes_since_main())
-            self.assertFalse(ws.changes_since_resume())
+            self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("foo")
             self.assertTrue(ws.changes_since_main())
-            self.assertTrue(ws.changes_since_resume())
+            self.assertTrue(ws.changes_since_base())
 
-    def test_orig_tree(self):
+    def test_base_tree(self):
         b = self.make_branch_and_tree("target")
         cid = b.commit("some change")
         with Workspace(b.branch, dir=self.test_dir) as ws:
             ws.local_tree.commit("blah")
-            self.assertEqual(cid, ws.orig_tree().get_revision_id())
+            self.assertEqual(cid, ws.base_tree().get_revision_id())
 
     def test_show_diff(self):
         b = self.make_branch_and_tree("target")
@@ -88,7 +89,7 @@ class WorkspaceTests(TestCaseWithTransport):
             ws.local_tree.add(["foo"])
             ws.local_tree.commit("blah")
             self.assertTrue(ws.changes_since_main())
-            self.assertTrue(ws.changes_since_resume())
+            self.assertTrue(ws.changes_since_base())
             f = BytesIO()
             ws.show_diff(outf=f)
             self.assertContainsRe(f.getvalue().decode("utf-8"), "\\+some content")
