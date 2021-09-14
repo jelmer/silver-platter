@@ -158,7 +158,6 @@ class Workspace(object):
                 self.resume_branch = None
                 self.resume_branch_additional_colocated_branches = None
                 self.local_tree.pull(self.main_branch, overwrite=True)
-                self.local_tree.update(revision=self.main_branch_revid)
             else:
                 logger.debug(
                     "Fetching colocated branches: %r",
