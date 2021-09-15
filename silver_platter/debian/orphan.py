@@ -32,7 +32,6 @@ from . import (
     add_changelog_entry,
 )
 from .changer import (
-    run_mutator,
     DebianChanger,
     ChangerError,
     ChangerResult,
@@ -342,9 +341,3 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
         yield ""
         yield "    git clone %s %s" % (old_vcs_url, package_name)
         yield "    salsa --group=%s push_repo %s" % (salsa_user, package_name)
-
-
-if __name__ == "__main__":
-    import sys
-
-    sys.exit(run_mutator(OrphanChanger))
