@@ -52,6 +52,7 @@ from breezy.plugins.debian.util import (
     dput_changes,
     find_changelog,
     MissingChangelogError,
+    NoPreviousUpload,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
 
@@ -212,9 +213,13 @@ def prepare_upload_package(  # noqa: C901
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
-    previous_version_in_branch = changelog_find_previous_upload(cl)
-    if last_uploaded_version > previous_version_in_branch:
-        raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
+    try:
+        previous_version_in_branch = changelog_find_previous_upload(cl)
+    except NoPreviousUpload as e:
+        pass
+    else:
+        if last_uploaded_version > previous_version_in_branch:
+            raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
 
     logging.info("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
