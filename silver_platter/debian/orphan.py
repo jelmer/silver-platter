@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import ExitStack
 import logging
 from urllib.parse import urlparse
 
@@ -40,6 +41,7 @@ from ..proposal import push_changes
 
 
 BRANCH_NAME = "orphan"
+QA_MAINTAINER = "Debian QA Group <packages@qa.debian.org>"
 
 
 def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
@@ -134,6 +136,32 @@ def find_wnpp_bug(source):
     return entry[0]
 
 
+def set_vcs_fields_to_salsa_user(control, salsa_user):
+    old_vcs_url = control.source.get("Vcs-Git")
+    control.source["Vcs-Git"] = "https://salsa.debian.org/%s/%s.git" % (
+        salsa_user,
+        control.source['Source']
+    )
+    new_vcs_url = control.source["Vcs-Git"]
+    control.source["Vcs-Browser"] = "https://salsa.debian.org/%s/%s" % (
+        salsa_user,
+        control.source['Source']
+    )
+    return (old_vcs_url, new_vcs_url)
+
+
+def set_maintainer_to_qa_team(control):
+    if (QA_MAINTAINER == control.source.get('Maintainer') and
+            'Uploaders' not in control.source):
+        return False
+    control.source["Maintainer"] = QA_MAINTAINER
+    try:
+        del control.source["Uploaders"]
+    except KeyError:
+        pass
+    return True
+
+
 class OrphanChanger(DebianChanger):
 
     name = "orphan"
@@ -201,10 +229,11 @@ class OrphanChanger(DebianChanger):
         control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
         changelog_entries = []
         try:
-            with ControlEditor(path=control_path) as editor:
+            with ExitStack() as es:
+                control = es.enter_context(ControlEditor(path=control_path))
                 if self.check_wnpp:
                     try:
-                        wnpp_bug = find_wnpp_bug(editor.source["Source"])
+                        wnpp_bug = find_wnpp_bug(control.source["Source"])
                     except KeyError:
                         raise ChangerError(
                             "nothing-to-do",
@@ -213,38 +242,23 @@ class OrphanChanger(DebianChanger):
                         )
                 else:
                     wnpp_bug = None
-                editor.source["Maintainer"] = "Debian QA Group <packages@qa.debian.org>"
-                try:
-                    del editor.source["Uploaders"]
-                except KeyError:
-                    pass
-            if editor.changed:
-                if wnpp_bug is not None:
-                    changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
-                else:
-                    changelog_entries.append("Orphan package.")
-            result = OrphanResult(wnpp_bug=wnpp_bug)
+                if set_maintainer_to_qa_team(control):
+                    if wnpp_bug is not None:
+                        changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
+                    else:
+                        changelog_entries.append("Orphan package.")
+                result = OrphanResult(wnpp_bug=wnpp_bug, package=control.source["Source"])
 
-            if self.update_vcs:
-                with ControlEditor(path=control_path) as editor:
-                    result.package_name = editor.source["Source"]
-                    result.old_vcs_url = editor.source.get("Vcs-Git")
-                    editor.source["Vcs-Git"] = "https://salsa.debian.org/%s/%s.git" % (
-                        self.salsa_user,
-                        result.package_name,
-                    )
-                    result.new_vcs_url = editor.source["Vcs-Git"]
-                    editor.source["Vcs-Browser"] = "https://salsa.debian.org/%s/%s" % (
-                        self.salsa_user,
-                        result.package_name,
-                    )
+                if self.update_vcs:
+                    (result.old_vcs_url, result.new_vcs_url) = set_vcs_fields_to_salsa_user(
+                        control, self.salsa_user)
                     result.salsa_user = self.salsa_user
-                if result.old_vcs_url == result.new_vcs_url:
-                    result.old_vcs_url = result.new_vcs_url = None
-                if editor.changed:
-                    changelog_entries.append(
-                        "Update VCS URLs to point to Debian group."
-                    )
+                    if result.old_vcs_url == result.new_vcs_url:
+                        result.old_vcs_url = result.new_vcs_url = None
+                    else:
+                        changelog_entries.append(
+                            "Update VCS URLs to point to Debian group."
+                        )
             if not changelog_entries:
                 raise ChangerError("nothing-to-do", "Already orphaned")
             if update_changelog in (True, None):
@@ -277,7 +291,7 @@ class OrphanChanger(DebianChanger):
                 local_tree,
                 parent_branch,
                 self.salsa_user,
-                result.package_name,
+                result.package,
                 dry_run=self.dry_run,
             )
             if push_result:
