@@ -43,7 +43,7 @@ from breezy.transport import UnusableRedirect
 
 def create_temp_sprout(
     branch: Branch,
-    additional_colocated_branches: Optional[List[str]] = None,
+    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     dir: Optional[str] = None,
     path: Optional[str] = None,
 ) -> Tuple[WorkingTree, Callable[[], None]]:
@@ -75,13 +75,17 @@ def create_temp_sprout(
             stacked=use_stacking,
         )
         # TODO(jelmer): Fetch these during the initial clone
-        for branch_name in set(additional_colocated_branches or []):
+        for from_branch_name in set(additional_colocated_branches or []):
             try:
-                add_branch = branch.controldir.open_branch(name=branch_name)
+                add_branch = branch.controldir.open_branch(name=from_branch_name)
             except (errors.NotBranchError, errors.NoColocatedBranchSupport):
                 pass
             else:
-                local_add_branch = to_dir.create_branch(name=branch_name)
+                if isinstance(additional_colocated_branches, dict):
+                    to_branch_name = additional_colocated_branches[from_branch_name]
+                else:
+                    to_branch_name = from_branch_name
+                local_add_branch = to_dir.create_branch(name=to_branch_name)
                 add_branch.push(local_add_branch)
                 assert add_branch.last_revision() == local_add_branch.last_revision()
         return to_dir.open_workingtree(), destroy

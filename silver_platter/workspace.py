@@ -77,8 +77,8 @@ class Workspace(object):
         main_branch: Branch,
         resume_branch: Optional[Branch] = None,
         cached_branch: Optional[Branch] = None,
-        additional_colocated_branches: Optional[List[str]] = None,
-        resume_branch_additional_colocated_branches: Optional[List[str]] = None,
+        additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+        resume_branch_additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
         dir: Optional[str] = None,
         path: Optional[str] = None,
     ) -> None:
@@ -86,7 +86,7 @@ class Workspace(object):
         self.main_branch_revid = None
         self.cached_branch = cached_branch
         self.resume_branch = resume_branch
-        self.additional_colocated_branches = additional_colocated_branches or []
+        self.additional_colocated_branches = additional_colocated_branches or {}
         self.resume_branch_additional_colocated_branches = resume_branch_additional_colocated_branches
         self._destroy = None
         self._dir = dir
@@ -163,15 +163,19 @@ class Workspace(object):
                     "Fetching colocated branches: %r",
                     self.additional_colocated_branches,
                 )
-                for branch_name in self.resume_branch_additional_colocated_branches or []:
+                for from_branch_name in self.resume_branch_additional_colocated_branches or []:
                     try:
                         remote_colo_branch = self.main_branch.controldir.open_branch(
-                            name=branch_name
+                            name=from_branch_name
                         )
                     except (NotBranchError, NoColocatedBranchSupport):
                         continue
+                    if isinstance(self.resume_branch_additional_colocated_branches, dict):
+                        to_branch_name = self.resume_branch_additional_colocated_branches[from_branch_name]
+                    else:
+                        to_branch_name = from_branch_name
                     self.local_tree.branch.controldir.push_branch(
-                        name=branch_name, source=remote_colo_branch, overwrite=True
+                        name=to_branch_name, source=remote_colo_branch, overwrite=True
                     )
         self.base_revid = self.local_tree.last_revision()
         return self
