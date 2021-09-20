@@ -61,11 +61,14 @@ logger = logging.getLogger(__name__)
 class Workspace(object):
     """Workspace for creating changes to a branch.
 
-    main_branch: The upstream branch
-    resume_branch: Optional in-progress branch that we previously made changes
-        on, and should ideally continue from.
-    cached_branch: Branch to copy revisions from, if possible.
-    local_tree: The tree the user can work in
+    Args:
+        main_branch: The upstream branch
+        resume_branch: Optional in-progress branch that we previously made changes
+            on, and should ideally continue from.
+        resume_branch_additional_colocated_branches:
+            Additional list of colocated branches to fetch
+        cached_branch: Branch to copy revisions from, if possible.
+        local_tree: The tree the user can work in
     """
 
     _destroy: Optional[Callable[[], None]]
@@ -117,6 +120,13 @@ class Workspace(object):
                 self._path,
             )
         )
+
+    def _inverse_additional_colocated_branches(self):
+        if isinstance(self.additional_colocated_branches):
+            return self.additional_colocated_branches
+        else:
+            return {
+                v: k for (k, v) in self.additional_colocated_branches.items()}
 
     def __enter__(self) -> Any:
         for (sprout_base, sprout_coloc) in [
@@ -211,7 +221,7 @@ class Workspace(object):
             self.local_tree.branch,
             self.main_branch,
             hoster=hoster,
-            additional_colocated_branches=self.additional_colocated_branches,
+            additional_colocated_branches=self._inverse_additional_colocated_branches(),
             dry_run=dry_run,
             tags=tags,
             stop_revision=stop_revision,
@@ -249,7 +259,7 @@ class Workspace(object):
             commit_message=commit_message,
             reviewers=reviewers,
             owner=owner,
-            additional_colocated_branches=self.additional_colocated_branches,
+            additional_colocated_branches=self._inverse_additional_colocated_branches(),
             tags=tags,
             allow_collaboration=allow_collaboration,
             stop_revision=stop_revision,
