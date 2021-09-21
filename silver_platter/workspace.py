@@ -225,6 +225,12 @@ class Workspace(object):
     def changes_since_base(self) -> bool:
         return self.base_revid != self.local_tree.branch.last_revision()
 
+    def any_branch_changes(self):
+        for role, name, br, r in self.result_branches():
+            if br != r:
+                return True
+        return False
+
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
         branches = [(None, self.main_branch_revid, self.local_tree.last_revision())]
