@@ -16,7 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-from typing import Optional, Callable, List, Union, Dict, BinaryIO, Any, Tuple
+from typing import Optional, Callable, List, Union, Dict, BinaryIO, Any, Tuple, Iterator
 
 from breezy.branch import Branch
 from breezy.tree import Tree
@@ -37,7 +37,6 @@ from breezy.propose import (
 from breezy.transport.local import LocalTransport
 
 from .publish import (
-    merge_conflicts,
     propose_changes,
     push_changes,
     push_derived_changes,
@@ -58,6 +57,28 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+def pull_colocated(tree, from_branch, additional_colocated_branches):
+    logger.debug(
+        "Fetching colocated branches: %r",
+        additional_colocated_branches,
+    )
+
+    for from_branch_name in additional_colocated_branches or []:
+        try:
+            remote_colo_branch = from_branch.controldir.open_branch(
+                name=from_branch_name
+            )
+        except (NotBranchError, NoColocatedBranchSupport):
+            continue
+        if isinstance(additional_colocated_branches, dict):
+            to_branch_name = additional_colocated_branches[from_branch_name]
+        else:
+            to_branch_name = from_branch_name
+        tree.branch.controldir.push_branch(
+            name=to_branch_name, source=remote_colo_branch, overwrite=True
+        )
+
+
 class Workspace(object):
     """Workspace for creating changes to a branch.
 
@@ -74,6 +95,7 @@ class Workspace(object):
     _destroy: Optional[Callable[[], None]]
     local_tree: WorkingTree
     main_branch_revid: Optional[bytes]
+    main_colo_revid: Dict[str, bytes]
 
     def __init__(
         self,
@@ -81,7 +103,8 @@ class Workspace(object):
         resume_branch: Optional[Branch] = None,
         cached_branch: Optional[Branch] = None,
         additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
-        resume_branch_additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+        resume_branch_additional_colocated_branches:
+            Optional[Union[List[str], Dict[str, str]]] = None,
         dir: Optional[str] = None,
         path: Optional[str] = None,
     ) -> None:
@@ -94,6 +117,13 @@ class Workspace(object):
         self._destroy = None
         self._dir = dir
         self._path = path
+
+    def _iter_additional_colocated(self) -> Iterator[Tuple[Optional[str], str]]:
+        if isinstance(self.additional_colocated_branches, dict):
+            return iter(self.additional_colocated_branches.items())
+        else:
+            return iter(zip(self.additional_colocated_branches,
+                            self.additional_colocated_branches))
 
     def __str__(self):
         if self._path is None:
@@ -122,11 +152,9 @@ class Workspace(object):
         )
 
     def _inverse_additional_colocated_branches(self):
-        if isinstance(self.additional_colocated_branches):
-            return self.additional_colocated_branches
-        else:
-            return {
-                v: k for (k, v) in self.additional_colocated_branches.items()}
+        return {
+            to_name: from_name
+            for from_name, to_name in self._iter_additional_colocated()}
 
     def __enter__(self) -> Any:
         for (sprout_base, sprout_coloc) in [
@@ -145,6 +173,14 @@ class Workspace(object):
             path=self._path,
         )
         self.main_branch_revid = self.main_branch.last_revision()
+        self.main_colo_revid = {}
+        for from_name, to_name in self._iter_additional_colocated():
+            try:
+                branch = self.main_branch.controldir.open_branch(name=from_name)
+            except (NotBranchError, NoColocatedBranchSupport):
+                continue
+            self.main_colo_revid[to_name] = branch.last_revision()
+
         self.refreshed = False
         if self.cached_branch:
             logger.debug(
@@ -157,6 +193,8 @@ class Workspace(object):
         # At this point, we're either on the tip of the main branch or the tip
         # of the resume branch
         if self.resume_branch:
+            # If there's a resume branch at play, make sure it's derived from
+            # the main branch *or* reset back to the main branch.
             logger.debug(
                 "Pulling in missing revisions from main branch %r", self.main_branch
             )
@@ -168,25 +206,11 @@ class Workspace(object):
                 self.resume_branch = None
                 self.resume_branch_additional_colocated_branches = None
                 self.local_tree.pull(self.main_branch, overwrite=True)
+                pull_colocated(self.local_tree, self.main_branch, self.additional_colocated_branches)
             else:
-                logger.debug(
-                    "Fetching colocated branches: %r",
-                    self.additional_colocated_branches,
-                )
-                for from_branch_name in self.resume_branch_additional_colocated_branches or []:
-                    try:
-                        remote_colo_branch = self.main_branch.controldir.open_branch(
-                            name=from_branch_name
-                        )
-                    except (NotBranchError, NoColocatedBranchSupport):
-                        continue
-                    if isinstance(self.resume_branch_additional_colocated_branches, dict):
-                        to_branch_name = self.resume_branch_additional_colocated_branches[from_branch_name]
-                    else:
-                        to_branch_name = from_branch_name
-                    self.local_tree.branch.controldir.push_branch(
-                        name=to_branch_name, source=remote_colo_branch, overwrite=True
-                    )
+                pull_colocated(self.local_tree, self.resume_branch, self.resume_branch_additional_colocated_branches)
+        else:
+            pull_colocated(self.local_tree, self.main_branch, self.additional_colocated_branches)
         self.base_revid = self.local_tree.last_revision()
         return self
 
@@ -200,6 +224,25 @@ class Workspace(object):
 
     def changes_since_base(self) -> bool:
         return self.base_revid != self.local_tree.branch.last_revision()
+
+    def result_branches(self) -> List[
+            Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
+        branches = [(None, self.main_branch_revid, self.local_tree.last_revision())]
+        # TODO(jelmer): Perhaps include resume colocated branches that don't
+        # appear in additional_colocated_branches ?
+        for from_name, to_name in self._iter_additional_colocated():
+            to_revision: Optional[bytes]
+            try:
+                to_branch = self.local_tree.controldir.open_branch(name=to_name)
+            except (NotBranchError, NoColocatedBranchSupport):
+                to_revision = None
+            else:
+                to_revision = to_branch.last_revision()
+            from_revision = self.main_colo_revid.get(to_name)
+            if from_revision is None and to_revision is None:
+                continue
+            branches.append((from_name, from_revision, to_revision))
+        return branches
 
     def push(
         self,

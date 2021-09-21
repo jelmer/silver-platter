@@ -220,13 +220,20 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     return branch, subpath or ""
 
 
-def pick_additional_colocated_branches(main_branch):
-    ret = ["pristine-tar", "pristine-lfs", "upstream"]
-    ret.append("patch-queue/" + main_branch.name)
+def pick_additional_colocated_branches(
+        main_branch: Branch) -> List[Tuple[str, str]]:
+    ret = [
+        ("pristine-tar", "pristine-tar"),
+        ("pristine-lfs", "pristine-lfs"),
+        ("upstream", "upstream"),
+        ]
+    ret.append(
+        ("patch-queue",
+         "patch-queue/" + main_branch.name))
     if main_branch.name.startswith("debian/"):
         parts = main_branch.name.split("/")
         parts[0] = "upstream"
-        ret.append("/".join(parts))
+        ret.append(("upstream", "/".join(parts)))
     return ret
 
 

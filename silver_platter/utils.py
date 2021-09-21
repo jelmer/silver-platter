@@ -21,7 +21,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
-from typing import Callable, Tuple, Optional, List
+from typing import Callable, Tuple, Optional, List, Union, Dict
 
 from breezy import (
     errors,

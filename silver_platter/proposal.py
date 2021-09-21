@@ -65,10 +65,6 @@ from .publish import (
     find_existing_proposed,
     SUPPORTED_MODES,
 )
-from .workspace import (
-    Workspace,
-    PublishResult,
-)
 
 
 __all__ = [
@@ -83,8 +79,6 @@ __all__ = [
     "SUPPORTED_MODES",
     "push_derived_changes",
     "propose_changes",
-    "PublishResult",
-    "Workspace",
     "DryRunProposal",
     "check_proposal_diff",
     "EmptyMergeProposal",

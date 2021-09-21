@@ -215,7 +215,7 @@ def prepare_upload_package(  # noqa: C901
         raise NoUnuploadedChanges(cl.version)
     try:
         previous_version_in_branch = changelog_find_previous_upload(cl)
-    except NoPreviousUpload as e:
+    except NoPreviousUpload:
         pass
     else:
         if last_uploaded_version > previous_version_in_branch:
