@@ -226,7 +226,7 @@ class Workspace(object):
         return self.base_revid != self.local_tree.branch.last_revision()
 
     def any_branch_changes(self):
-        for role, name, br, r in self.result_branches():
+        for name, br, r in self.result_branches():
             if br != r:
                 return True
         return False
