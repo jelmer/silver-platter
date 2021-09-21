@@ -150,7 +150,7 @@ def script_runner(   # noqa: C901
             cl = Changelog(f)
             source_name = cl[0].package
     except FileNotFoundError:
-        raise MissingChangelog(cl_path)
+        source_name = None
 
     if source_name:
         os.environ['DEB_SOURCE'] = source_name
@@ -188,6 +188,15 @@ def script_runner(   # noqa: C901
             if result_json is not None:
                 raise DetailedFailure.from_json(source_name, result_json)
             raise ScriptFailed(script, p.returncode)
+        # If the changelog didn't exist earlier, then hopefully it was created
+        # now.
+        if source_name is None:
+            try:
+                with open(local_tree.abspath(cl_path), 'r') as f:
+                    cl = Changelog(f)
+                    source_name = cl[0].package
+            except FileNotFoundError:
+                raise MissingChangelog(cl_path)
         if result_json is not None:
             result = CommandResult.from_json(source_name, result_json)
         else:
