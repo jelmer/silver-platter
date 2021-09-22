@@ -1,6 +1,6 @@
 ---
 name: orphan
-command: deb-auto-orphan
+command: deb-move-orphan
 proposal:
   commit-message: Move orphaned package to the QA team
   description: |-

@@ -27,7 +27,6 @@ from . import (
     apply as debian_apply,
     run as debian_run,
     uploader as debian_uploader,
-    orphan as debian_orphan,
     )
 
 
@@ -42,7 +41,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "upload-pending": debian_uploader.main,
         "apply": debian_apply.main,
         "run": debian_run.main,
-        "orphan": debian_orphan.main,
     }
 
     parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
@@ -64,7 +62,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
             subcommands[name] = cmd
 
     parser.add_argument(
-        "subcommand", type=str, choices=list(subcommands.keys()) + ['orphan']
+        "subcommand", type=str, choices=list(subcommands.keys())
     )
     args, rest = parser.parse_known_args()
     if args.help:
