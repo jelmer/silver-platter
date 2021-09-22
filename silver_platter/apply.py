@@ -69,6 +69,7 @@ class CommandResult(object):
     tags: List[Tuple[str, bytes]] = field(default_factory=list)
     old_revision: Optional[bytes] = None
     new_revision: Optional[bytes] = None
+    target_branch_url: Optional[str] = None
 
     @classmethod
     def from_json(cls, data):
@@ -83,6 +84,7 @@ class CommandResult(object):
             context=data.get('context', {}),
             description=data.get('description'),
             serialized_context=data.get('serialized_context', None),
+            target_branch_url=data.get('target-branch-url', None),
             tags=tags)
 
 

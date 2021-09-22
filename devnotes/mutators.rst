@@ -21,6 +21,7 @@ Flags can be specified on the command-line or in a recipe:
  * optional propose threshold, with minimum value before merge proposals
    are created
  * whether to autocommit (defaults to true?)
+ * optional URL to target (if different from base URL)
 
 The command should exit with code 0 when successful, and 1 otherwise. In
 the case of failure, the branch is discarded.
@@ -50,6 +51,7 @@ The output JSON should include the following fields:
    (autodetected if not specified)
  * context: Optional command-specific result data, made available
         during template expansion
+ * target-branch-url: URL for branch to target, if different from original URL
 
 Debian operations
 -----------------
