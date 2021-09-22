@@ -31,6 +31,7 @@ from . import (
     pick_additional_colocated_branches,
     connect_udd_mirror,
     add_changelog_entry,
+    NoVcsInformation,
 )
 from .changer import (
     DebianChanger,
@@ -352,3 +353,33 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
         yield ""
         yield "    git clone %s %s" % (old_vcs_url, package_name)
         yield "    salsa --group=%s push_repo %s" % (salsa_user, package_name)
+
+
+def main(argv):
+    import argparse
+    from .changer import (
+        setup_parser_common,
+        run_single_changer,
+    )
+
+    try:
+        parser = argparse.ArgumentParser(prog="debian-svp orphan URL|package")
+        setup_parser_common(parser)
+        parser.add_argument("package", type=str, nargs="?")
+        OrphanChanger.setup_parser(parser)
+        args = parser.parse_args(argv)
+        if args.package is None:
+            parser.print_usage()
+            return 1
+        changer = OrphanChanger.from_args(args)
+        return run_single_changer(changer, args)
+    except NoVcsInformation as e:
+        logging.fatal(
+            'Package %s does not have any Vcs-* headers. '
+            'Specify Git URL manually?', e.args[0])
+        return 1
+
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main(sys.argv))

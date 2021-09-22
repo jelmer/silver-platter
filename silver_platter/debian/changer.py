@@ -591,28 +591,3 @@ def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
         return 1
     else:
         return 0
-
-
-BUILTIN_ENTRYPOINTS = [
-    pkg_resources.EntryPoint(
-        "orphan", "silver_platter.debian.orphan", attrs=("OrphanChanger",)
-    ),
-]
-
-
-def changer_subcommands() -> List[str]:
-    endpoints = pkg_resources.iter_entry_points(__name__)
-    ret = []
-    for ep in BUILTIN_ENTRYPOINTS + list(endpoints):
-        ret.append(ep.name)
-    return ret
-
-
-def changer_subcommand(name: str) -> Type[DebianChanger]:
-    for ep in BUILTIN_ENTRYPOINTS:
-        if ep.name == name:
-            return ep.resolve()
-    endpoints = pkg_resources.iter_entry_points(__name__, name)
-    for ep in endpoints:
-        return ep.load()
-    raise KeyError(name)
