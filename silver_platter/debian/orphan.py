@@ -301,14 +301,11 @@ class OrphanChanger(DebianChanger):
         reporter.report_metadata("pushed", result.pushed)
         reporter.report_metadata("wnpp_bug", result.wnpp_bug)
 
-        branches = [("main", None, base_revid, local_tree.last_revision())]
-
         tags = []
 
         return ChangerResult(
             description="Move package to QA team.",
             mutator=result.json(),
-            branches=branches,
             tags=tags,
             sufficient_for_proposal=True,
             proposed_commit_message=("Set the package maintainer to the QA team."),
