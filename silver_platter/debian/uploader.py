@@ -60,7 +60,6 @@ from debian.changelog import get_maintainer
 
 from . import (
     apt_get_source_package,
-    connect_udd_mirror,
     source_package_vcs,
     split_vcs_url,
     Workspace,
@@ -75,6 +74,17 @@ from ..utils import (
     BranchUnsupported,
     BranchRateLimited,
 )
+
+
+def connect_udd_mirror():
+    import psycopg2
+
+    return psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net",
+    )
 
 
 def debsign(path, keyid=None):
