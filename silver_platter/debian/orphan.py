@@ -32,13 +32,25 @@ from . import (
     connect_udd_mirror,
     add_changelog_entry,
     NoVcsInformation,
+    NoAptSources,
+    NoSuchPackage,
+    DEFAULT_BUILDER,
 )
 from .changer import (
-    DebianChanger,
     ChangerError,
     ChangerResult,
+    get_package,
 )
-from ..proposal import push_changes
+from ..proposal import (
+    push_changes,
+    NoSuchProject,
+    )
+from ..publish import SUPPORTED_MODES
+from ..utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    )
 
 
 BRANCH_NAME = "orphan"
@@ -69,7 +81,7 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
         from_project = None
     else:
         if orig_hoster == salsa:
-            from_project = urlutils.from_string(orig_branch.controldir.user_url).path
+            from_project = urlutils.URL.from_string(orig_branch.controldir.user_url).path
         else:
             from_project = None
 
@@ -163,7 +175,7 @@ def set_maintainer_to_qa_team(control):
     return True
 
 
-class OrphanChanger(DebianChanger):
+class OrphanChanger:
 
     name = "orphan"
 
@@ -226,7 +238,6 @@ class OrphanChanger(DebianChanger):
         committer,
         base_proposal=None,
     ):
-        base_revid = local_tree.last_revision()
         control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
         changelog_entries = []
         try:
@@ -357,14 +368,94 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
 
 def main(argv):
     import argparse
+    import silver_platter  # noqa: F401
     from .changer import (
-        setup_parser_common,
-        run_single_changer,
+        _run_single_changer,
     )
 
     try:
         parser = argparse.ArgumentParser(prog="debian-svp orphan URL|package")
-        setup_parser_common(parser)
+        parser.add_argument(
+            "--dry-run",
+            help="Create branches but don't push or propose anything.",
+            action="store_true",
+            default=False,
+        )
+        parser.add_argument(
+            "--build-verify",
+            help="Build package to verify it.",
+            dest="build_verify",
+            action="store_true",
+        )
+        parser.add_argument(
+            "--pre-check",
+            help="Command to run to check whether to process package.",
+            type=str,
+        )
+        parser.add_argument(
+            "--post-check", help="Command to run to check package before pushing.", type=str
+        )
+        parser.add_argument(
+            "--builder",
+            default=DEFAULT_BUILDER,
+            type=str,
+            help="Build command to use when verifying build.",
+        )
+        parser.add_argument(
+            "--refresh",
+            help="Discard old branch and apply fixers from scratch.",
+            action="store_true",
+        )
+        parser.add_argument("--committer", help="Committer identity", type=str)
+        parser.add_argument(
+            "--mode",
+            help="Mode for pushing",
+            choices=SUPPORTED_MODES,
+            default="propose",
+            type=str,
+        )
+        parser.add_argument(
+            "--no-update-changelog",
+            action="store_false",
+            default=None,
+            dest="update_changelog",
+            help="do not update the changelog",
+        )
+        parser.add_argument(
+            "--update-changelog",
+            action="store_true",
+            dest="update_changelog",
+            help="force updating of the changelog",
+            default=None,
+        )
+        parser.add_argument(
+            "--diff", action="store_true", help="Output diff of created merge proposal."
+        )
+        parser.add_argument(
+            "--build-target-dir",
+            type=str,
+            help=(
+                "Store built Debian files in specified directory " "(with --build-verify)"
+            ),
+        )
+        parser.add_argument(
+            "--install", "-i",
+            action="store_true",
+            help="Install built package (implies --build-verify)")
+        parser.add_argument(
+            "--overwrite", action="store_true", help="Overwrite existing branches."
+        )
+        parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
+        parser.add_argument(
+            "--derived-owner", type=str, default=None, help="Owner for derived branches."
+        )
+        parser.add_argument(
+            "--label", type=str, help="Label to attach", action="append", default=[]
+        )
+        parser.add_argument(
+            "--preserve-repositories", action="store_true",
+            help="Preserve temporary repositories.")
+
         parser.add_argument("package", type=str, nargs="?")
         OrphanChanger.setup_parser(parser)
         args = parser.parse_args(argv)
@@ -372,7 +463,75 @@ def main(argv):
             parser.print_usage()
             return 1
         changer = OrphanChanger.from_args(args)
-        return run_single_changer(changer, args)
+
+        if args.name:
+            branch_name = args.name
+        else:
+            branch_name = changer.suggest_branch_name()
+
+        try:
+            (
+                pkg,
+                main_branch,
+                subpath,
+                resume_branch,
+                hoster,
+                existing_proposal,
+                overwrite,
+            ) = get_package(
+                args.package,
+                branch_name,
+                overwrite_unrelated=args.overwrite,
+                refresh=args.refresh,
+                owner=args.derived_owner,
+            )
+        except NoSuchPackage:
+            logging.info("%s: no such package", args.package)
+            return 1
+        except NoSuchProject as e:
+            logging.info("%s: unable to find project: %s", args.package, e.project)
+            return 1
+        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+            logging.info("%s: ignoring: %s", args.package, e)
+            return 1
+        except NoAptSources:
+            logging.info(
+                "%s: no apt sources configured, unable to get package metadata.",
+                args.package,
+            )
+            return 1
+
+        if (
+            _run_single_changer(
+                changer,
+                pkg,
+                main_branch,
+                subpath,
+                resume_branch,
+                hoster,
+                existing_proposal,
+                overwrite,
+                args.mode,
+                branch_name,
+                diff=args.diff,
+                committer=args.committer,
+                build_verify=args.build_verify,
+                preserve_repositories=args.preserve_repositories,
+                install=args.install,
+                pre_check=args.pre_check,
+                builder=args.builder,
+                post_check=args.post_check,
+                dry_run=args.dry_run,
+                update_changelog=args.update_changelog,
+                label=args.label,
+                derived_owner=args.derived_owner,
+                build_target_dir=args.build_target_dir,
+            )
+            is False
+        ):
+            return 1
+        else:
+            return 0
     except NoVcsInformation as e:
         logging.fatal(
             'Package %s does not have any Vcs-* headers. '

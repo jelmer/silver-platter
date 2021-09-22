@@ -15,16 +15,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-__all__ = ["iter_conflicted"]
-
-import argparse
 from functools import partial
 import logging
 import os
 import sys
-from typing import Any, List, Optional, Dict, Iterable, Tuple, Type
-
-import pkg_resources
+from typing import Any, List, Optional, Dict, Iterable, Tuple
 
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
@@ -36,14 +31,11 @@ from . import (
     control_files_in_root,
     open_packaging_branch,
     guess_update_changelog,
-    NoSuchPackage,
-    NoAptSources,
     DEFAULT_BUILDER,
 )
 from ..proposal import (
     HosterLoginRequired,
     UnsupportedHoster,
-    NoSuchProject,
     enable_tag_pushing,
     find_existing_proposed,
     get_hoster,
@@ -51,14 +43,10 @@ from ..proposal import (
 )
 
 from ..publish import (
-    PublishResult,
     SUPPORTED_MODES,
     InsufficientChangesForNewProposal,
 )
 from ..utils import (
-    BranchMissing,
-    BranchUnavailable,
-    BranchUnsupported,
     run_pre_check,
     run_post_check,
     PostCheckFailed,
@@ -218,129 +206,6 @@ def iter_packages(
         )
 
 
-def setup_parser_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--build-verify",
-        help="Build package to verify it.",
-        dest="build_verify",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--pre-check",
-        help="Command to run to check whether to process package.",
-        type=str,
-    )
-    parser.add_argument(
-        "--post-check", help="Command to run to check package before pushing.", type=str
-    )
-    parser.add_argument(
-        "--builder",
-        default=DEFAULT_BUILDER,
-        type=str,
-        help="Build command to use when verifying build.",
-    )
-    parser.add_argument(
-        "--refresh",
-        help="Discard old branch and apply fixers from scratch.",
-        action="store_true",
-    )
-    parser.add_argument("--committer", help="Committer identity", type=str)
-    parser.add_argument(
-        "--mode",
-        help="Mode for pushing",
-        choices=SUPPORTED_MODES,
-        default="propose",
-        type=str,
-    )
-    parser.add_argument(
-        "--no-update-changelog",
-        action="store_false",
-        default=None,
-        dest="update_changelog",
-        help="do not update the changelog",
-    )
-    parser.add_argument(
-        "--update-changelog",
-        action="store_true",
-        dest="update_changelog",
-        help="force updating of the changelog",
-        default=None,
-    )
-    parser.add_argument(
-        "--diff", action="store_true", help="Output diff of created merge proposal."
-    )
-    parser.add_argument(
-        "--build-target-dir",
-        type=str,
-        help=(
-            "Store built Debian files in specified directory " "(with --build-verify)"
-        ),
-    )
-    parser.add_argument(
-        "--install", "-i",
-        action="store_true",
-        help="Install built package (implies --build-verify)")
-    parser.add_argument(
-        "--overwrite", action="store_true", help="Overwrite existing branches."
-    )
-    parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
-    parser.add_argument(
-        "--derived-owner", type=str, default=None, help="Owner for derived branches."
-    )
-    parser.add_argument(
-        "--label", type=str, help="Label to attach", action="append", default=[]
-    )
-    parser.add_argument(
-        "--preserve-repositories", action="store_true",
-        help="Preserve temporary repositories.")
-
-
-class DebianChanger(object):
-    """A class which can make and explain changes to a Debian package in VCS."""
-
-    name: str
-
-    @classmethod
-    def setup_parser(cls, parser: argparse.ArgumentParser) -> None:
-        raise NotImplementedError(cls.setup_parser)
-
-    @classmethod
-    def from_args(cls, args: List[str]) -> "DebianChanger":
-        raise NotImplementedError(cls.from_args)
-
-    def suggest_branch_name(self) -> str:
-        raise NotImplementedError(self.suggest_branch_name)
-
-    def make_changes(
-        self,
-        local_tree: WorkingTree,
-        subpath: str,
-        update_changelog: bool,
-        reporter: ChangerReporter,
-        committer: Optional[str],
-        base_proposal: Optional[MergeProposal] = None,
-    ) -> ChangerResult:
-        raise NotImplementedError(self.make_changes)
-
-    def get_proposal_description(
-        self, applied: Any, description_format: str, existing_proposal: MergeProposal
-    ) -> str:
-        raise NotImplementedError(self.get_proposal_description)
-
-    def describe(self, applied: Any, publish_result: PublishResult) -> None:
-        raise NotImplementedError(self.describe)
-
-    @classmethod
-    def describe_command(cls, command):
-        return cls.name
-
-
 class DummyChangerReporter(ChangerReporter):
     def report_context(self, context):
         pass
@@ -353,7 +218,7 @@ class DummyChangerReporter(ChangerReporter):
 
 
 def _run_single_changer(  # noqa: C901
-    changer: DebianChanger,
+    changer,
     pkg: str,
     main_branch: Branch,
     subpath: str,
@@ -518,76 +383,3 @@ def _run_single_changer(  # noqa: C901
             logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
 
         return True
-
-
-def run_single_changer(changer: DebianChanger, args: argparse.Namespace) -> int:
-    import silver_platter  # noqa: F401
-
-    if args.name:
-        branch_name = args.name
-    else:
-        branch_name = changer.suggest_branch_name()
-
-    try:
-        (
-            pkg,
-            main_branch,
-            subpath,
-            resume_branch,
-            hoster,
-            existing_proposal,
-            overwrite,
-        ) = get_package(
-            args.package,
-            branch_name,
-            overwrite_unrelated=args.overwrite,
-            refresh=args.refresh,
-            owner=args.derived_owner,
-        )
-    except NoSuchPackage:
-        logging.info("%s: no such package", args.package)
-        return 1
-    except NoSuchProject as e:
-        logging.info("%s: unable to find project: %s", args.package, e.project)
-        return 1
-    except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-        logging.info("%s: ignoring: %s", args.package, e)
-        return 1
-    except NoAptSources:
-        logging.info(
-            "%s: no apt sources configured, unable to get package metadata.",
-            args.package,
-        )
-        return 1
-
-    if (
-        _run_single_changer(
-            changer,
-            pkg,
-            main_branch,
-            subpath,
-            resume_branch,
-            hoster,
-            existing_proposal,
-            overwrite,
-            args.mode,
-            branch_name,
-            diff=args.diff,
-            committer=args.committer,
-            build_verify=args.build_verify,
-            preserve_repositories=args.preserve_repositories,
-            install=args.install,
-            pre_check=args.pre_check,
-            builder=args.builder,
-            post_check=args.post_check,
-            dry_run=args.dry_run,
-            update_changelog=args.update_changelog,
-            label=args.label,
-            derived_owner=args.derived_owner,
-            build_target_dir=args.build_target_dir,
-        )
-        is False
-    ):
-        return 1
-    else:
-        return 0
