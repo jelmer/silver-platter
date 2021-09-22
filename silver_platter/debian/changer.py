@@ -22,17 +22,6 @@ from typing import Any, List, Optional, Dict
 
 
 
-class ChangerReporter(object):
-    def report_context(self, context):
-        raise NotImplementedError(self.report_context)
-
-    def report_metadata(self, key, value):
-        raise NotImplementedError(self.report_metadata)
-
-    def get_base_metadata(self, key, default_value=None):
-        raise NotImplementedError(self.get_base_metadata)
-
-
 class ChangerError(Exception):
     def __init__(
             self, category: str, summary: str, original: Optional[Exception] = None, details: Any = None

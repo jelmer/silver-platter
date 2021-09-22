@@ -22,7 +22,7 @@ import os
 from typing import Any, List, Optional, Tuple, Dict
 from urllib.parse import urlparse
 
-from breezy import osutils
+from breezy import errors, osutils
 from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
 from breezy.propose import Hoster, MergeProposal, UnsupportedHoster, get_hoster, HosterLoginRequired
@@ -44,6 +44,9 @@ from . import (
     NoAptSources,
     NoSuchPackage,
     DEFAULT_BUILDER,
+    BuildFailedError,
+    MissingUpstreamTarball,
+    Workspace,
 )
 from .changer import (
     ChangerError,
@@ -249,49 +252,25 @@ class OrphanChanger:
         committer,
         base_proposal=None,
     ):
-        control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
-        changelog_entries = []
         try:
-            with ExitStack() as es:
-                control = es.enter_context(ControlEditor(path=control_path))
-                if self.check_wnpp:
-                    try:
-                        wnpp_bug = find_wnpp_bug(control.source["Source"])
-                    except KeyError:
-                        raise ChangerError(
-                            "nothing-to-do",
-                            "Package is purported to be orphaned, "
-                            "but no open wnpp bug exists.",
-                        )
-                else:
-                    wnpp_bug = None
-                if set_maintainer_to_qa_team(control):
-                    if wnpp_bug is not None:
-                        changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
-                    else:
-                        changelog_entries.append("Orphan package.")
-                result = OrphanResult(wnpp_bug=wnpp_bug, package=control.source["Source"])
-
-                if self.update_vcs:
-                    (result.old_vcs_url, result.new_vcs_url) = set_vcs_fields_to_salsa_user(
-                        control, self.salsa_user)
-                    result.salsa_user = self.salsa_user
-                    if result.old_vcs_url == result.new_vcs_url:
-                        result.old_vcs_url = result.new_vcs_url = None
-                    else:
-                        changelog_entries.append(
-                            "Update VCS URLs to point to Debian group."
-                        )
-            if not changelog_entries:
-                raise ChangerError("nothing-to-do", "Already orphaned")
-            if update_changelog in (True, None):
-                add_changelog_entry(
-                    local_tree,
-                    osutils.pathjoin(subpath, "debian/changelog"),
-                    ["QA Upload."] + changelog_entries,
+            result = orphan(
+                local_tree,
+                subpath,
+                update_changelog,
+                committer,
+                update_vcs=self.update_vcs,
+                salsa_push=self.salsa_push,
+                salsa_user=self.salsa_user,
+                dry_run=self.dry_run,
+                check_wnpp=self.check_wnpp
                 )
-            local_tree.commit(
-                "Move package to QA team.", committer=committer, allow_pointless=False
+        except AlreadyOrphaned:
+            raise ChangerError("nothing-to-do", "Already orphaned")
+        except NoWnppBug as e:
+            raise ChangerError(
+                "nothing-to-do",
+                "Package %s is purported to be orphaned, "
+                "but no open wnpp bug exists." % e.package,
             )
         except FormattingUnpreservable as e:
             raise ChangerError(
@@ -303,22 +282,6 @@ class OrphanChanger:
                 "generated-file", "unable to edit generated file: %r" % e
             )
 
-        result.pushed = False
-        if self.update_vcs and self.salsa_push and result.new_vcs_url:
-            parent_branch_url = local_tree.branch.get_parent()
-            if parent_branch_url is not None:
-                parent_branch = Branch.open(parent_branch_url)
-            else:
-                parent_branch = local_tree.branch
-            push_result = push_to_salsa(
-                local_tree,
-                parent_branch,
-                self.salsa_user,
-                result.package,
-                dry_run=self.dry_run,
-            )
-            if push_result:
-                result.pushed = True
         reporter.report_metadata("old_vcs_url", result.old_vcs_url)
         reporter.report_metadata("new_vcs_url", result.new_vcs_url)
         reporter.report_metadata("pushed", result.pushed)
@@ -333,6 +296,79 @@ class OrphanChanger:
             sufficient_for_proposal=True,
             proposed_commit_message=("Set the package maintainer to the QA team."),
         )
+
+
+class NoWnppBug(Exception):
+    """No wnpp bug exists."""
+
+    def __init__(self, package):
+        self.package = package
+
+
+class AlreadyOrphaned(Exception):
+    """Package is already orphaned."""
+
+
+def orphan(
+        local_tree, subpath, update_changelog, committer, update_vcs=True,
+        salsa_push=True, salsa_user="debian", dry_run=False, check_wnpp=True) -> OrphanResult:
+    control_path = local_tree.abspath(osutils.pathjoin(subpath, "debian/control"))
+    changelog_entries = []
+    with ExitStack() as es:
+        control = es.enter_context(ControlEditor(path=control_path))
+        if check_wnpp:
+            try:
+                wnpp_bug = find_wnpp_bug(control.source["Source"])
+            except KeyError:
+                raise NoWnppBug(control.source['Source'])
+        else:
+            wnpp_bug = None
+        if set_maintainer_to_qa_team(control):
+            if wnpp_bug is not None:
+                changelog_entries.append("Orphan package - see bug %d." % wnpp_bug)
+            else:
+                changelog_entries.append("Orphan package.")
+        result = OrphanResult(wnpp_bug=wnpp_bug, package=control.source["Source"])
+
+        if update_vcs:
+            (result.old_vcs_url, result.new_vcs_url) = set_vcs_fields_to_salsa_user(
+                control, salsa_user)
+            result.salsa_user = salsa_user
+            if result.old_vcs_url == result.new_vcs_url:
+                result.old_vcs_url = result.new_vcs_url = None
+            else:
+                changelog_entries.append(
+                    "Update VCS URLs to point to Debian group."
+                )
+    if not changelog_entries:
+        raise AlreadyOrphaned()
+    if update_changelog in (True, None):
+        add_changelog_entry(
+            local_tree,
+            osutils.pathjoin(subpath, "debian/changelog"),
+            ["QA Upload."] + changelog_entries,
+        )
+    local_tree.commit(
+        "Move package to QA team.", committer=committer, allow_pointless=False
+    )
+
+    result.pushed = False
+    if update_vcs and salsa_push and result.new_vcs_url:
+        parent_branch_url = local_tree.branch.get_parent()
+        if parent_branch_url is not None:
+            parent_branch = Branch.open(parent_branch_url)
+        else:
+            parent_branch = local_tree.branch
+        push_result = push_to_salsa(
+            local_tree,
+            parent_branch,
+            salsa_user,
+            result.package,
+            dry_run=dry_run,
+        )
+        if push_result:
+            result.pushed = True
+    return result
 
 
 def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
@@ -405,50 +441,142 @@ def get_package(
     )
 
 
-class DummyChangerReporter(ChangerReporter):
-    def report_context(self, context):
-        pass
+def main(argv):
+    import argparse
+    import silver_platter  # noqa: F401
 
-    def report_metadata(self, key, value):
-        pass
-
-    def get_base_metadata(self, key, default_value=None):
-        return None
-
-
-def _run_single_changer(  # noqa: C901
-    changer,
-    pkg: str,
-    main_branch: Branch,
-    subpath: str,
-    resume_branch: Optional[Branch],
-    hoster: Optional[Hoster],
-    existing_proposal: Optional[MergeProposal],
-    overwrite: Optional[bool],
-    mode: str,
-    branch_name: str,
-    diff: bool = False,
-    committer: Optional[str] = None,
-    build_verify: bool = False,
-    preserve_repositories: bool = False,
-    install: bool = False,
-    pre_check: Optional[str] = None,
-    post_check: Optional[str] = None,
-    builder: str = DEFAULT_BUILDER,
-    dry_run: bool = False,
-    update_changelog: Optional[bool] = None,
-    label: Optional[List[str]] = None,
-    derived_owner: Optional[str] = None,
-    build_target_dir: Optional[str] = None,
-) -> Optional[bool]:
-    from breezy import errors
-    from . import (
-        BuildFailedError,
-        MissingUpstreamTarball,
-        Workspace,
+    parser = argparse.ArgumentParser(prog="debian-svp orphan URL|package")
+    parser.add_argument(
+        "--dry-run",
+        help="Create branches but don't push or propose anything.",
+        action="store_true",
+        default=False,
     )
+    parser.add_argument(
+        "--build-verify",
+        help="Build package to verify it.",
+        dest="build_verify",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--pre-check",
+        help="Command to run to check whether to process package.",
+        type=str,
+    )
+    parser.add_argument(
+        "--post-check", help="Command to run to check package before pushing.", type=str
+    )
+    parser.add_argument(
+        "--builder",
+        default=DEFAULT_BUILDER,
+        type=str,
+        help="Build command to use when verifying build.",
+    )
+    parser.add_argument(
+        "--refresh",
+        help="Discard old branch and apply fixers from scratch.",
+        action="store_true",
+    )
+    parser.add_argument("--committer", help="Committer identity", type=str)
+    parser.add_argument(
+        "--mode",
+        help="Mode for pushing",
+        choices=SUPPORTED_MODES,
+        default="propose",
+        type=str,
+    )
+    parser.add_argument(
+        "--no-update-changelog",
+        action="store_false",
+        default=None,
+        dest="update_changelog",
+        help="do not update the changelog",
+    )
+    parser.add_argument(
+        "--update-changelog",
+        action="store_true",
+        dest="update_changelog",
+        help="force updating of the changelog",
+        default=None,
+    )
+    parser.add_argument(
+        "--diff", action="store_true", help="Output diff of created merge proposal."
+    )
+    parser.add_argument(
+        "--build-target-dir",
+        type=str,
+        help=(
+            "Store built Debian files in specified directory " "(with --build-verify)"
+        ),
+    )
+    parser.add_argument(
+        "--install", "-i",
+        action="store_true",
+        help="Install built package (implies --build-verify)")
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing branches."
+    )
+    parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
+    parser.add_argument(
+        "--derived-owner", type=str, default=None, help="Owner for derived branches."
+    )
+    parser.add_argument(
+        "--label", type=str, help="Label to attach", action="append", default=[]
+    )
+    parser.add_argument(
+        "--preserve-repositories", action="store_true",
+        help="Preserve temporary repositories.")
 
-    if hoster is None and mode == "attempt-push":
+    parser.add_argument("package", type=str, nargs="?")
+    setup_parser(parser)
+    args = parser.parse_args(argv)
+    if args.package is None:
+        parser.print_usage()
+        return 1
+
+    if args.name:
+        branch_name = args.name
+    else:
+        branch_name = 'orphan'
+
+    try:
+        (
+            pkg,
+            main_branch,
+            subpath,
+            resume_branch,
+            hoster,
+            existing_proposal,
+            overwrite,
+        ) = get_package(
+            args.package,
+            branch_name,
+            overwrite_unrelated=args.overwrite,
+            refresh=args.refresh,
+            owner=args.derived_owner,
+        )
+    except NoVcsInformation as e:
+        logging.fatal(
+            'Package %s does not have any Vcs-* headers. '
+            'Specify Git URL manually?', e.args[0])
+        return 1
+    except NoSuchPackage:
+        logging.info("%s: no such package", args.package)
+        return 1
+    except NoSuchProject as e:
+        logging.info("%s: unable to find project: %s", args.package, e.project)
+        return 1
+    except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
+        logging.info("%s: ignoring: %s", args.package, e)
+        return 1
+    except NoAptSources:
+        logging.info(
+            "%s: no apt sources configured, unable to get package metadata.",
+            args.package,
+        )
+        return 1
+
+    if hoster is None and args.mode == "attempt-push":
         logging.warn(
             "Unsupported hoster; will attempt to push to %s",
             full_branch_url(main_branch),
@@ -459,32 +587,49 @@ def _run_single_changer(  # noqa: C901
     ) as ws, ws.local_tree.lock_write():
         if ws.refreshed:
             overwrite = True
-        run_pre_check(ws.local_tree, pre_check)
+        run_pre_check(ws.local_tree, args.pre_check)
         if control_files_in_root(ws.local_tree, subpath):
             debian_path = subpath
         else:
             debian_path = os.path.join(subpath, "debian")
-        if update_changelog is None:
+        if args.update_changelog is None:
             dch_guess = guess_update_changelog(ws.local_tree, debian_path)
             if dch_guess:
                 logging.info('%s', dch_guess[1])
-                update_changelog = dch_guess[0]
+                args.update_changelog = dch_guess[0]
             else:
                 # Assume yes.
-                update_changelog = True
+                args.update_changelog = True
         try:
-            changer_result = changer.make_changes(
+            result = orphan(
                 ws.local_tree,
                 subpath=subpath,
-                update_changelog=update_changelog,
-                committer=committer,
-                reporter=DummyChangerReporter(),
+                update_changelog=args.update_changelog,
+                committer=args.committer,
+                update_vcs=not args.no_update_vcs,
+                dry_run=args.dry_run,
+                salsa_user=args.salsa_user,
+                salsa_push=not args.just_update_headers,
+                check_wnpp=not args.no_check_wnpp,
             )
-        except ChangerError as e:
-            logging.error('%s: %s', e.category, e.summary)
-            return False
-
-        result = changer_result.mutator
+        except AlreadyOrphaned:
+            logging.info('Package is already orphaned.')
+            return 0
+        except NoWnppBug as e:
+            logging.fatal(
+                "Package %s is purported to be orphaned, "
+                "but no open wnpp bug exists." % e.package,
+            )
+            return 1
+        except FormattingUnpreservable as e:
+            logging.fatal(
+                "unable to preserve formatting while editing %s" % e.path,
+            )
+            return 1
+        except (ChangeConflict, GeneratedFile) as e:
+            logging.fatal(
+                "unable to edit generated file: %r" % e)
+            return 1
 
         if not ws.changes_since_main():
             if existing_proposal:
@@ -495,13 +640,13 @@ def _run_single_changer(  # noqa: C901
             return None
 
         try:
-            run_post_check(ws.local_tree, post_check, ws.base_revid)
+            run_post_check(ws.local_tree, args.post_check, ws.base_revid)
         except PostCheckFailed as e:
             logging.info("%s: %s", pkg, e)
             return False
-        if build_verify or install:
+        if args.build_verify or args.install:
             try:
-                ws.build(builder=builder, result_dir=build_target_dir)
+                ws.build(builder=args.builder, result_dir=args.build_target_dir)
             except BuildFailedError:
                 logging.info("%s: build failed", pkg)
                 return False
@@ -509,9 +654,9 @@ def _run_single_changer(  # noqa: C901
                 logging.info("%s: unable to find upstream source", pkg)
                 return False
 
-        if install:
+        if args.install:
             from .apply import install_built_package
-            install_built_package(ws.local_tree, ws.subpath, build_target_dir)
+            install_built_package(ws.local_tree, ws.subpath, args.build_target_dir)
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -521,16 +666,15 @@ def _run_single_changer(  # noqa: C901
                 branch_name,
                 get_proposal_description=lambda df, mp: "Set the package maintainer to the QA team.",
                 get_proposal_commit_message=(
-                    lambda oldmp: changer_result.proposed_commit_message
+                    lambda oldmp: "Set the package maintainer to the QA team."
                 ),
-                dry_run=dry_run,
+                dry_run=args.dry_run,
                 hoster=hoster,
-                allow_create_proposal=changer_result.sufficient_for_proposal,
+                allow_create_proposal=True,
                 overwrite_existing=overwrite,
                 existing_proposal=existing_proposal,
-                derived_owner=derived_owner,
-                labels=label,
-                tags=changer_result.tags,
+                derived_owner=args.derived_owner,
+                labels=args.label,
             )
         except UnsupportedHoster as e:
             logging.error(
@@ -566,206 +710,25 @@ def _run_single_changer(  # noqa: C901
                     publish_result.proposal.url,
                 )
             else:
-                logging.info("No changes for orphaned package %s", result.package_name)
+                logging.info("No changes for orphaned package %s", result.package)
             if result.pushed:
                 logging.info("Pushed new package to %s.", result.new_vcs_url)
             elif result.new_vcs_url:
                 for line in move_instructions(
-                    result.package_name,
+                    result.package,
                     result.salsa_user,
                     result.old_vcs_url,
                     result.new_vcs_url,
                 ):
                     logging.info("%s", line)
 
-        if diff:
-            for branch_entry in changer_result.branches:
-                role = branch_entry[0]
-                if len(changer_result.branches) > 1:
-                    sys.stdout.write("%s\n" % role)
-                    sys.stdout.write(("-" * len(role)) + "\n")
-                sys.stdout.flush()
-                changer_result.show_diff(
-                    ws.local_tree.branch.repository, sys.stdout.buffer, role=role
-                )
-                if len(changer_result.branches) > 1:
-                    sys.stdout.write("\n")
-        if preserve_repositories:
+        if args.diff:
+            ws.show_diff(sys.stdout.buffer)
+        if args.preserve_repositories:
             ws.defer_destroy()
             logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
 
-        return True
-
-
-def main(argv):
-    import argparse
-    import silver_platter  # noqa: F401
-
-    try:
-        parser = argparse.ArgumentParser(prog="debian-svp orphan URL|package")
-        parser.add_argument(
-            "--dry-run",
-            help="Create branches but don't push or propose anything.",
-            action="store_true",
-            default=False,
-        )
-        parser.add_argument(
-            "--build-verify",
-            help="Build package to verify it.",
-            dest="build_verify",
-            action="store_true",
-        )
-        parser.add_argument(
-            "--pre-check",
-            help="Command to run to check whether to process package.",
-            type=str,
-        )
-        parser.add_argument(
-            "--post-check", help="Command to run to check package before pushing.", type=str
-        )
-        parser.add_argument(
-            "--builder",
-            default=DEFAULT_BUILDER,
-            type=str,
-            help="Build command to use when verifying build.",
-        )
-        parser.add_argument(
-            "--refresh",
-            help="Discard old branch and apply fixers from scratch.",
-            action="store_true",
-        )
-        parser.add_argument("--committer", help="Committer identity", type=str)
-        parser.add_argument(
-            "--mode",
-            help="Mode for pushing",
-            choices=SUPPORTED_MODES,
-            default="propose",
-            type=str,
-        )
-        parser.add_argument(
-            "--no-update-changelog",
-            action="store_false",
-            default=None,
-            dest="update_changelog",
-            help="do not update the changelog",
-        )
-        parser.add_argument(
-            "--update-changelog",
-            action="store_true",
-            dest="update_changelog",
-            help="force updating of the changelog",
-            default=None,
-        )
-        parser.add_argument(
-            "--diff", action="store_true", help="Output diff of created merge proposal."
-        )
-        parser.add_argument(
-            "--build-target-dir",
-            type=str,
-            help=(
-                "Store built Debian files in specified directory " "(with --build-verify)"
-            ),
-        )
-        parser.add_argument(
-            "--install", "-i",
-            action="store_true",
-            help="Install built package (implies --build-verify)")
-        parser.add_argument(
-            "--overwrite", action="store_true", help="Overwrite existing branches."
-        )
-        parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
-        parser.add_argument(
-            "--derived-owner", type=str, default=None, help="Owner for derived branches."
-        )
-        parser.add_argument(
-            "--label", type=str, help="Label to attach", action="append", default=[]
-        )
-        parser.add_argument(
-            "--preserve-repositories", action="store_true",
-            help="Preserve temporary repositories.")
-
-        parser.add_argument("package", type=str, nargs="?")
-        setup_parser(parser)
-        args = parser.parse_args(argv)
-        if args.package is None:
-            parser.print_usage()
-            return 1
-
-        if args.name:
-            branch_name = args.name
-        else:
-            branch_name = 'orphan'
-
-        try:
-            (
-                pkg,
-                main_branch,
-                subpath,
-                resume_branch,
-                hoster,
-                existing_proposal,
-                overwrite,
-            ) = get_package(
-                args.package,
-                branch_name,
-                overwrite_unrelated=args.overwrite,
-                refresh=args.refresh,
-                owner=args.derived_owner,
-            )
-        except NoSuchPackage:
-            logging.info("%s: no such package", args.package)
-            return 1
-        except NoSuchProject as e:
-            logging.info("%s: unable to find project: %s", args.package, e.project)
-            return 1
-        except (BranchMissing, BranchUnavailable, BranchUnsupported) as e:
-            logging.info("%s: ignoring: %s", args.package, e)
-            return 1
-        except NoAptSources:
-            logging.info(
-                "%s: no apt sources configured, unable to get package metadata.",
-                args.package,
-            )
-            return 1
-
-        changer = OrphanChanger.from_args(args)
-
-        if (
-            _run_single_changer(
-                changer,
-                pkg,
-                main_branch,
-                subpath,
-                resume_branch,
-                hoster,
-                existing_proposal,
-                overwrite,
-                args.mode,
-                branch_name,
-                diff=args.diff,
-                committer=args.committer,
-                build_verify=args.build_verify,
-                preserve_repositories=args.preserve_repositories,
-                install=args.install,
-                pre_check=args.pre_check,
-                builder=args.builder,
-                post_check=args.post_check,
-                dry_run=args.dry_run,
-                update_changelog=args.update_changelog,
-                label=args.label,
-                derived_owner=args.derived_owner,
-                build_target_dir=args.build_target_dir,
-            )
-            is False
-        ):
-            return 1
-        else:
-            return 0
-    except NoVcsInformation as e:
-        logging.fatal(
-            'Package %s does not have any Vcs-* headers. '
-            'Specify Git URL manually?', e.args[0])
-        return 1
+        return 0
 
 
 if __name__ == '__main__':
