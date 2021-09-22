@@ -233,7 +233,9 @@ class Workspace(object):
 
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
-        branches = [(self.main_branch.name, self.main_branch_revid, self.local_tree.last_revision())]
+        branches = [
+            (self.main_branch.name, self.main_branch_revid,
+             self.local_tree.last_revision())]
         # TODO(jelmer): Perhaps include resume colocated branches that don't
         # appear in additional_colocated_branches ?
         for from_name, to_name in self._iter_additional_colocated():
@@ -244,7 +246,7 @@ class Workspace(object):
                 to_revision = None
             else:
                 to_revision = to_branch.last_revision()
-            from_revision = self.main_colo_revid.get(to_name)
+            from_revision = self.main_colo_revid.get(from_name)
             if from_revision is None and to_revision is None:
                 continue
             branches.append((from_name, from_revision, to_revision))
