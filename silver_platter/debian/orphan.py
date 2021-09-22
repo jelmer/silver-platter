@@ -16,11 +16,17 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from contextlib import ExitStack
+from functools import partial
 import logging
+import os
+from typing import Any, List, Optional, Tuple, Dict
 from urllib.parse import urlparse
 
 from breezy import osutils
+from breezy import version_info as breezy_version_info
 from breezy.branch import Branch
+from breezy.propose import Hoster, MergeProposal, UnsupportedHoster, get_hoster, HosterLoginRequired
+from breezy.transport import Transport
 
 from debmutate.control import ControlEditor
 from debmutate.deb822 import ChangeConflict
@@ -28,7 +34,10 @@ from debmutate.reformatting import GeneratedFile, FormattingUnpreservable
 
 
 from . import (
+    control_files_in_root,
+    guess_update_changelog,
     pick_additional_colocated_branches,
+    open_packaging_branch,
     connect_udd_mirror,
     add_changelog_entry,
     NoVcsInformation,
@@ -39,17 +48,25 @@ from . import (
 from .changer import (
     ChangerError,
     ChangerResult,
-    get_package,
 )
 from ..proposal import (
     push_changes,
+    find_existing_proposed,
     NoSuchProject,
+    enable_tag_pushing,
     )
-from ..publish import SUPPORTED_MODES
+from ..publish import (
+    InsufficientChangesForNewProposal,
+    SUPPORTED_MODES,
+)
 from ..utils import (
     BranchMissing,
     BranchUnavailable,
     BranchUnsupported,
+    full_branch_url,
+    run_pre_check,
+    run_post_check,
+    PostCheckFailed,
     )
 
 
@@ -61,7 +78,6 @@ def push_to_salsa(local_tree, orig_branch, user, name, dry_run=False):
     from breezy import urlutils
     from breezy.branch import Branch
     from breezy.errors import PermissionDenied, AlreadyControlDirError
-    from breezy.propose import UnsupportedHoster, get_hoster, HosterLoginRequired
     from breezy.plugins.gitlab.hoster import GitLab
 
     if dry_run:
@@ -175,9 +191,30 @@ def set_maintainer_to_qa_team(control):
     return True
 
 
-class OrphanChanger:
+def setup_parser(parser):
+    parser.add_argument(
+        "--no-update-vcs",
+        action="store_true",
+        help="Do not move the VCS repository to the Debian team on Salsa.",
+    )
+    parser.add_argument(
+        "--salsa-user",
+        type=str,
+        default="debian",
+        help="Salsa user to push repository to.",
+    )
+    parser.add_argument(
+        "--just-update-headers",
+        action="store_true",
+        help="Update the VCS-* headers, but don't actually "
+        "clone the repository.",
+    )
+    parser.add_argument(
+        "--no-check-wnpp", action="store_true", help="Do not check for WNPP bug."
+    )
 
-    name = "orphan"
+
+class OrphanChanger:
 
     def __init__(
         self,
@@ -194,29 +231,6 @@ class OrphanChanger:
         self.check_wnpp = check_wnpp
 
     @classmethod
-    def setup_parser(cls, parser):
-        parser.add_argument(
-            "--no-update-vcs",
-            action="store_true",
-            help="Do not move the VCS repository to the Debian team on Salsa.",
-        )
-        parser.add_argument(
-            "--salsa-user",
-            type=str,
-            default="debian",
-            help="Salsa user to push repository to.",
-        )
-        parser.add_argument(
-            "--just-update-headers",
-            action="store_true",
-            help="Update the VCS-* headers, but don't actually "
-            "clone the repository.",
-        )
-        parser.add_argument(
-            "--no-check-wnpp", action="store_true", help="Do not check for WNPP bug."
-        )
-
-    @classmethod
     def from_args(cls, args):
         return cls(
             update_vcs=not args.no_update_vcs,
@@ -225,9 +239,6 @@ class OrphanChanger:
             salsa_push=not args.just_update_headers,
             check_wnpp=not args.no_check_wnpp,
         )
-
-    def suggest_branch_name(self):
-        return BRANCH_NAME
 
     def make_changes(  # noqa: C901
         self,
@@ -323,32 +334,6 @@ class OrphanChanger:
             proposed_commit_message=("Set the package maintainer to the QA team."),
         )
 
-    def get_proposal_description(self, applied, description_format, existing_proposal):
-        return "Set the package maintainer to the QA team."
-
-    def describe(self, result, publish_result):
-        if publish_result.is_new:
-            logging.info(
-                "Proposed change of maintainer to QA team: %s",
-                publish_result.proposal.url,
-            )
-        else:
-            logging.info("No changes for orphaned package %s", result.package_name)
-        if result.pushed:
-            logging.info("Pushed new package to %s.", result.new_vcs_url)
-        elif result.new_vcs_url:
-            for line in move_instructions(
-                result.package_name,
-                result.salsa_user,
-                result.old_vcs_url,
-                result.new_vcs_url,
-            ):
-                logging.info("%s", line)
-
-    @classmethod
-    def describe_command(cls, command):
-        return "Mark as orphaned"
-
 
 def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
     yield "Please move the repository from %s to %s." % (old_vcs_url, new_vcs_url)
@@ -366,12 +351,255 @@ def move_instructions(package_name, salsa_user, old_vcs_url, new_vcs_url):
         yield "    salsa --group=%s push_repo %s" % (salsa_user, package_name)
 
 
+def get_package(
+    package: str,
+    branch_name: str,
+    overwrite_unrelated: bool = False,
+    refresh: bool = False,
+    possible_transports: Optional[List[Transport]] = None,
+    possible_hosters: Optional[List[Hoster]] = None,
+    owner: Optional[str] = None,
+) -> Tuple[
+    str,
+    Branch,
+    str,
+    Optional[Branch],
+    Optional[Hoster],
+    Optional[MergeProposal],
+    Optional[bool],
+]:
+    main_branch, subpath = open_packaging_branch(
+        package, possible_transports=possible_transports
+    )
+
+    overwrite: Optional[bool] = False
+
+    try:
+        hoster = get_hoster(main_branch, possible_hosters=possible_hosters)
+    except UnsupportedHoster:
+        # We can't figure out what branch to resume from when there's no
+        # hoster that can tell us.
+        resume_branch = None
+        existing_proposal = None
+        hoster = None
+    else:
+        (resume_branch, overwrite, existing_proposal) = find_existing_proposed(
+            main_branch,
+            hoster,
+            branch_name,
+            owner=owner,
+            overwrite_unrelated=overwrite_unrelated,
+        )
+    if refresh:
+        overwrite = True
+        resume_branch = None
+
+    return (
+        package,
+        main_branch,
+        subpath,
+        resume_branch,
+        hoster,
+        existing_proposal,
+        overwrite,
+    )
+
+
+class DummyChangerReporter(ChangerReporter):
+    def report_context(self, context):
+        pass
+
+    def report_metadata(self, key, value):
+        pass
+
+    def get_base_metadata(self, key, default_value=None):
+        return None
+
+
+def _run_single_changer(  # noqa: C901
+    changer,
+    pkg: str,
+    main_branch: Branch,
+    subpath: str,
+    resume_branch: Optional[Branch],
+    hoster: Optional[Hoster],
+    existing_proposal: Optional[MergeProposal],
+    overwrite: Optional[bool],
+    mode: str,
+    branch_name: str,
+    diff: bool = False,
+    committer: Optional[str] = None,
+    build_verify: bool = False,
+    preserve_repositories: bool = False,
+    install: bool = False,
+    pre_check: Optional[str] = None,
+    post_check: Optional[str] = None,
+    builder: str = DEFAULT_BUILDER,
+    dry_run: bool = False,
+    update_changelog: Optional[bool] = None,
+    label: Optional[List[str]] = None,
+    derived_owner: Optional[str] = None,
+    build_target_dir: Optional[str] = None,
+) -> Optional[bool]:
+    from breezy import errors
+    from . import (
+        BuildFailedError,
+        MissingUpstreamTarball,
+        Workspace,
+    )
+
+    if hoster is None and mode == "attempt-push":
+        logging.warn(
+            "Unsupported hoster; will attempt to push to %s",
+            full_branch_url(main_branch),
+        )
+        mode = "push"
+    with Workspace(
+        main_branch, resume_branch=resume_branch
+    ) as ws, ws.local_tree.lock_write():
+        if ws.refreshed:
+            overwrite = True
+        run_pre_check(ws.local_tree, pre_check)
+        if control_files_in_root(ws.local_tree, subpath):
+            debian_path = subpath
+        else:
+            debian_path = os.path.join(subpath, "debian")
+        if update_changelog is None:
+            dch_guess = guess_update_changelog(ws.local_tree, debian_path)
+            if dch_guess:
+                logging.info('%s', dch_guess[1])
+                update_changelog = dch_guess[0]
+            else:
+                # Assume yes.
+                update_changelog = True
+        try:
+            changer_result = changer.make_changes(
+                ws.local_tree,
+                subpath=subpath,
+                update_changelog=update_changelog,
+                committer=committer,
+                reporter=DummyChangerReporter(),
+            )
+        except ChangerError as e:
+            logging.error('%s: %s', e.category, e.summary)
+            return False
+
+        result = changer_result.mutator
+
+        if not ws.changes_since_main():
+            if existing_proposal:
+                logging.info("%s: nothing left to do. Closing proposal.", pkg)
+                existing_proposal.close()
+            else:
+                logging.info("%s: nothing to do", pkg)
+            return None
+
+        try:
+            run_post_check(ws.local_tree, post_check, ws.base_revid)
+        except PostCheckFailed as e:
+            logging.info("%s: %s", pkg, e)
+            return False
+        if build_verify or install:
+            try:
+                ws.build(builder=builder, result_dir=build_target_dir)
+            except BuildFailedError:
+                logging.info("%s: build failed", pkg)
+                return False
+            except MissingUpstreamTarball:
+                logging.info("%s: unable to find upstream source", pkg)
+                return False
+
+        if install:
+            from .apply import install_built_package
+            install_built_package(ws.local_tree, ws.subpath, build_target_dir)
+
+        enable_tag_pushing(ws.local_tree.branch)
+
+        try:
+            publish_result = ws.publish_changes(
+                mode,
+                branch_name,
+                get_proposal_description=lambda df, mp: "Set the package maintainer to the QA team.",
+                get_proposal_commit_message=(
+                    lambda oldmp: changer_result.proposed_commit_message
+                ),
+                dry_run=dry_run,
+                hoster=hoster,
+                allow_create_proposal=changer_result.sufficient_for_proposal,
+                overwrite_existing=overwrite,
+                existing_proposal=existing_proposal,
+                derived_owner=derived_owner,
+                labels=label,
+                tags=changer_result.tags,
+            )
+        except UnsupportedHoster as e:
+            logging.error(
+                "%s: No known supported hoster for %s. Run 'svp login'?",
+                pkg,
+                full_branch_url(e.branch),
+            )
+            return False
+        except NoSuchProject as e:
+            logging.info("%s: project %s was not found", pkg, e.project)
+            return False
+        except errors.PermissionDenied as e:
+            logging.info("%s: %s", pkg, e)
+            return False
+        except errors.DivergedBranches:
+            logging.info("%s: a branch exists. Use --overwrite to discard it.", pkg)
+            return False
+        except InsufficientChangesForNewProposal:
+            logging.info('%s: insufficient changes for a new merge proposal',
+                         pkg)
+            return False
+        except HosterLoginRequired as e:
+            logging.error(
+                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
+                e.hoster.base_url,
+            )
+            return False
+
+        if publish_result.proposal:
+            if publish_result.is_new:
+                logging.info(
+                    "Proposed change of maintainer to QA team: %s",
+                    publish_result.proposal.url,
+                )
+            else:
+                logging.info("No changes for orphaned package %s", result.package_name)
+            if result.pushed:
+                logging.info("Pushed new package to %s.", result.new_vcs_url)
+            elif result.new_vcs_url:
+                for line in move_instructions(
+                    result.package_name,
+                    result.salsa_user,
+                    result.old_vcs_url,
+                    result.new_vcs_url,
+                ):
+                    logging.info("%s", line)
+
+        if diff:
+            for branch_entry in changer_result.branches:
+                role = branch_entry[0]
+                if len(changer_result.branches) > 1:
+                    sys.stdout.write("%s\n" % role)
+                    sys.stdout.write(("-" * len(role)) + "\n")
+                sys.stdout.flush()
+                changer_result.show_diff(
+                    ws.local_tree.branch.repository, sys.stdout.buffer, role=role
+                )
+                if len(changer_result.branches) > 1:
+                    sys.stdout.write("\n")
+        if preserve_repositories:
+            ws.defer_destroy()
+            logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
+
+        return True
+
+
 def main(argv):
     import argparse
     import silver_platter  # noqa: F401
-    from .changer import (
-        _run_single_changer,
-    )
 
     try:
         parser = argparse.ArgumentParser(prog="debian-svp orphan URL|package")
@@ -457,17 +685,16 @@ def main(argv):
             help="Preserve temporary repositories.")
 
         parser.add_argument("package", type=str, nargs="?")
-        OrphanChanger.setup_parser(parser)
+        setup_parser(parser)
         args = parser.parse_args(argv)
         if args.package is None:
             parser.print_usage()
             return 1
-        changer = OrphanChanger.from_args(args)
 
         if args.name:
             branch_name = args.name
         else:
-            branch_name = changer.suggest_branch_name()
+            branch_name = 'orphan'
 
         try:
             (
@@ -500,6 +727,8 @@ def main(argv):
                 args.package,
             )
             return 1
+
+        changer = OrphanChanger.from_args(args)
 
         if (
             _run_single_changer(
