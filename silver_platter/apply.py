@@ -90,7 +90,7 @@ class CommandResult(object):
 
 def script_runner(
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = ''
+    resume_metadata=None, subpath: str = '', committer: Optional[str] = None
 ) -> CommandResult:
     """Run a script in a tree and commit the result.
 
@@ -147,7 +147,9 @@ def script_runner(
         commit_pending = True
     if commit_pending:
         try:
-            new_revision = local_tree.commit(result.description, allow_pointless=False)
+            new_revision = local_tree.commit(
+                result.description, allow_pointless=False,
+                committer=committer)
         except PointlessCommit:
             pass
     if new_revision == last_revision:

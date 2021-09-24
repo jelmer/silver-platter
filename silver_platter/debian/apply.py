@@ -120,7 +120,8 @@ def install_built_package(local_tree, subpath, build_target_dir):
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None,
-    extra_env: Optional[Dict[str, str]] = None
+    extra_env: Optional[Dict[str, str]] = None,
+    committer: Optional[str] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -222,7 +223,9 @@ def script_runner(   # noqa: C901
                 os.path.join(debian_path, 'changelog'),
                 [result.description])
         try:
-            new_revision = local_tree.commit(result.description, allow_pointless=False)
+            new_revision = local_tree.commit(
+                result.description, allow_pointless=False,
+                committer=committer)
         except PointlessCommit:
             pass
     if new_revision == last_revision:
