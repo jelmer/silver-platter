@@ -221,28 +221,27 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
 
 
 def pick_additional_colocated_branches(
-        main_branch: Branch) -> List[Tuple[str, str]]:
-    ret = [
-        ("pristine-tar", "pristine-tar"),
-        ("pristine-lfs", "pristine-lfs"),
-        ("upstream", "upstream"),
-        ]
-    ret.append(
-        ("patch-queue",
-         "patch-queue/" + main_branch.name))
+        main_branch: Branch) -> Dict[str, str]:
+    ret = {
+        "pristine-tar": "pristine-tar",
+        "pristine-lfs": "pristine-lfs",
+        "upstream": "upstream",
+        }
+    ret["patch-queue/" + main_branch.name] = "patch-queue"
     if main_branch.name.startswith("debian/"):
         parts = main_branch.name.split("/")
         parts[0] = "upstream"
-        ret.append(("upstream", "/".join(parts)))
+        ret["/".join(parts)] = "upstream"
     return ret
 
 
 class Workspace(_mod_workspace.Workspace):
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
         if isinstance(main_branch.repository, GitRepository):
-            kwargs["additional_colocated_branches"] = kwargs.get(
-                "additional_colocated_branches", []
-            ) + pick_additional_colocated_branches(main_branch)
+            if "additional_colocated_branches" not in kwargs:
+                kwargs["additional_colocated_branches"] = {}
+            kwargs["additional_colocated_branches"].update(
+                pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
     def build(
