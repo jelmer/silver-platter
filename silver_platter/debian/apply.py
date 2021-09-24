@@ -155,18 +155,19 @@ def script_runner(   # noqa: C901
     except FileNotFoundError:
         source_name = None
 
-    if source_name:
-        os.environ['DEB_SOURCE'] = source_name
-
-    if update_changelog:
-        os.environ['DEB_UPDATE_CHANGELOG'] = 'update'
-    else:
-        os.environ['DEB_UPDATE_CHANGELOG'] = 'leave'
-
     env = dict(os.environ)
-    env['SVP_API'] = '1'
     if extra_env:
         env.update(extra_env)
+
+    env['SVP_API'] = '1'
+    if source_name:
+        env['DEB_SOURCE'] = source_name
+
+    if update_changelog:
+        env['DEB_UPDATE_CHANGELOG'] = 'update'
+    else:
+        env['DEB_UPDATE_CHANGELOG'] = 'leave'
+
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
     with tempfile.TemporaryDirectory() as td:
