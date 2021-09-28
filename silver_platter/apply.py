@@ -90,7 +90,8 @@ class CommandResult(object):
 
 def script_runner(
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', committer: Optional[str] = None
+    resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
+    extra_env: Optional[Dict[str, str]] = None,
 ) -> CommandResult:
     """Run a script in a tree and commit the result.
 
@@ -104,6 +105,8 @@ def script_runner(
          script)
     """
     env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
     env['SVP_API'] = '1'
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
