@@ -97,6 +97,10 @@ class Workspace(object):
     main_branch_revid: Optional[bytes]
     main_colo_revid: Dict[str, bytes]
 
+    @classmethod
+    def from_url(cls, url, dir=None):
+        return cls(main_branch=Branch.open(url), dir=dir)
+
     def __init__(
         self,
         main_branch: Branch,
@@ -124,6 +128,10 @@ class Workspace(object):
         else:
             return iter(zip(self.additional_colocated_branches,
                             self.additional_colocated_branches))
+
+    @property
+    def path(self):
+        return self.local_tree.abspath('.')
 
     def __str__(self):
         if self._path is None:

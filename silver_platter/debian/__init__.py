@@ -45,6 +45,7 @@ from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
 
 from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
 )
@@ -256,6 +257,11 @@ class Workspace(_mod_workspace.Workspace):
             builder=builder,
             result_dir=result_dir,
         )
+
+    def commit(self, message=None, subpath="", paths=None, committer=None, reporter=None):
+        return debcommit(
+            self.local_tree, committer=committer, subpath=subpath,
+            paths=paths, reporter=reporter, message=message)
 
 
 class UnsupportedVCSProber(Prober):
