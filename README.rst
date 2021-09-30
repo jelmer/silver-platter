@@ -157,9 +157,28 @@ And to log into a new hosting site, simply run ``svp login BASE-URL``, e.g.::
 
     svp login https://launchpad.net/
 
-
 Exit status
 ~~~~~~~~~~~
 
 ``svp run`` will exit 0 if no changes have been made, 1 if at least one
 repository has been changed and 2 in case of trouble.
+
+Python API
+~~~~~~~~~~
+
+Other than the command-line API, silver-platter also has a Python API.
+The core class is the ``Workspace`` context manager, which exists in two forms:
+
+ * ``silver_platter.workspace.Workspace`` (for generic projects)
+ * ``silver_platter.debian.Workspace`` (for Debian packages)
+
+An example, adding a new entry to a changelog file in the ``dulwich`` Debian
+package and creating a merge proposal with that change::
+
+    from silver_platter.debian import Workspace
+    import subprocess
+
+    with Workspace.from_apt_package(package="dulwich") as ws:
+        subprocess.check_call(['dch', 'some change'], cwd=ws.path)
+        ws.commit()  # Behaves like debcommit
+        ws.publish(mode='propose')
