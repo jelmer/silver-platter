@@ -245,6 +245,11 @@ class Workspace(_mod_workspace.Workspace):
                 pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
 
+    @classmethod
+    def from_apt_package(cls, package, dir=None):
+        main_branch = open_packaging_branch(package)
+        return cls(main_branch=main_branch, dir=dir)
+
     def build(
         self,
         builder: Optional[str] = None,
