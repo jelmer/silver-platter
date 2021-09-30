@@ -20,7 +20,6 @@ from setuptools import setup
 debian_deps = [
     'pyyaml',
     'debmutate>=0.3',
-    'lintian-brush>=0.102',
     'python_debian',
     'distro-info',
 ]
@@ -71,5 +70,5 @@ setup(
     extras_require={
         'debian': debian_deps,
     },
-    tests_require=['testtools', 'lintian-brush'] + debian_deps,
+    tests_require=['testtools'] + debian_deps,
 )
