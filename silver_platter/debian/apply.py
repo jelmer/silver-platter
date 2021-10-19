@@ -330,6 +330,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         except MissingChangelog as e:
             logging.error('No debian changelog file (%s) present', e.args[0])
             return False
+        except ScriptMadeNoChanges:
+            logging.info('Script made no changes')
+            return False
 
         if result.description:
             logging.info('Succeeded: %s', result.description)

@@ -102,6 +102,10 @@ def apply_and_publish(  # noqa: C901
             e,
             full_branch_url(main_branch),
         )
+    except _mod_propose.HosterLoginRequired as e:
+        logging.error(
+            '%s: Hoster login required: %s', full_branch_url(main_branch), e)
+        return 1
     else:
         (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
             main_branch, hoster, name, owner=derived_owner
