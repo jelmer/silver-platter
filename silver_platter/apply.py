@@ -88,7 +88,7 @@ class CommandResult(object):
             tags=tags)
 
 
-def script_runner(
+def script_runner(  # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
     extra_env: Optional[Dict[str, str]] = None,
