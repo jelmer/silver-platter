@@ -95,7 +95,7 @@ class Workspace(object):
     _destroy: Optional[Callable[[], None]]
     local_tree: WorkingTree
     main_branch_revid: Optional[bytes]
-    main_colo_revid: Dict[str, bytes]
+    main_colo_revid: Dict[Optional[str], bytes]
 
     @classmethod
     def from_url(cls, url, dir=None):
