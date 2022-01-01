@@ -1,9 +1,9 @@
-silver-platter (0.4.5-1) UNRELEASED; urgency=low
+silver-platter (0.4.5-1) unstable; urgency=low
 
   * New upstream release.
   * Update standards version to 4.6.0, no changes needed.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Sat, 01 Jan 2022 14:22:47 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sat, 01 Jan 2022 14:27:00 +0000
 
 silver-platter (0.4.3-1) unstable; urgency=low
 
