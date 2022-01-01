@@ -25,6 +25,7 @@ from typing import Optional, List
 
 from breezy import osutils
 from breezy import propose as _mod_propose
+from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
 
@@ -83,7 +84,10 @@ def apply_and_publish(  # noqa: C901
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        logging.exception("%s: %s", url, e)
+        logging.fatal("%s: %s", url, e)
+        return 1
+    except InvalidURL as e:
+        logging.fatal('%s: %s', url, e)
         return 1
 
     overwrite = False

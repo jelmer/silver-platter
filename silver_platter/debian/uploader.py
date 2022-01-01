@@ -290,8 +290,8 @@ def prepare_upload_package(  # noqa: C901
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder
     )
-    debsign(target_changes)
-    return target_changes, tag_name
+    debsign(target_changes['source'])
+    return target_changes['source'], tag_name
 
 
 def select_apt_packages(package_names, maintainer):
