@@ -98,7 +98,7 @@ def push_result(
         raise errors.PermissionDenied(path=full_branch_url(remote_branch), extra=e)
     for from_branch_name in additional_colocated_branches or []:
         try:
-            add_branch = local_branch.controldir.open_branch(name=from_branch_name)
+            add_branch = local_branch.controldir.open_branch(name=from_branch_name)  # type: ignore
         except errors.NotBranchError:
             pass
         else:
@@ -106,7 +106,7 @@ def push_result(
                 to_branch_name = additional_colocated_branches[from_branch_name]
             else:
                 to_branch_name = from_branch_name
-            remote_branch.controldir.push_branch(add_branch, name=to_branch_name, **kwargs)
+            remote_branch.controldir.push_branch(add_branch, name=to_branch_name, **kwargs)  # type: ignore
 
 
 def push_changes(
@@ -230,7 +230,7 @@ def propose_changes(  # noqa: C901
             )
         for from_branch_name in additional_colocated_branches or []:
             try:
-                local_colo_branch = local_branch.controldir.open_branch(
+                local_colo_branch = local_branch.controldir.open_branch(  # type: ignore
                     name=from_branch_name
                 )
             except errors.NotBranchError:
@@ -240,7 +240,7 @@ def propose_changes(  # noqa: C901
                     to_branch_name = additional_colocated_branches[from_branch_name]
                 else:
                     to_branch_name = from_branch_name
-                remote_branch.controldir.push_branch(
+                remote_branch.controldir.push_branch(  # type: ignore
                     source=local_colo_branch,
                     overwrite=overwrite_existing,
                     name=to_branch_name,
@@ -260,7 +260,7 @@ def propose_changes(  # noqa: C901
         )
 
         try:
-            resume_proposal.reopen()
+            resume_proposal.reopen()  # type: ignore
         except ReopenFailed:
             logging.info("Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
@@ -339,7 +339,7 @@ def check_proposal_diff(
             merger.find_base()
         except errors.UnrelatedBranches:
             merger.set_base_revision(_mod_revision.NULL_REVISION, other_branch)
-        merger.merge_type = _mod_merge.Merge3Merger
+        merger.merge_type = _mod_merge.Merge3Merger  # type: ignore
         tree_merger = merger.make_merger()
         with tree_merger.make_preview_transform() as tt:
             changes = tt.iter_changes()

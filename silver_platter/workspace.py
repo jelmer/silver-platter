@@ -184,7 +184,7 @@ class Workspace(object):
         self.main_colo_revid = {}
         for from_name, to_name in self._iter_additional_colocated():
             try:
-                branch = self.main_branch.controldir.open_branch(name=from_name)
+                branch = self.main_branch.controldir.open_branch(name=from_name)  # type: ignore
             except (NotBranchError, NoColocatedBranchSupport):
                 continue
             self.main_colo_revid[to_name] = branch.last_revision()
@@ -242,7 +242,7 @@ class Workspace(object):
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
         branches = [
-            (self.main_branch.name, self.main_branch_revid,
+            (self.main_branch.name, self.main_branch_revid,  # type: ignore
              self.local_tree.last_revision())]
         # TODO(jelmer): Perhaps include resume colocated branches that don't
         # appear in additional_colocated_branches ?

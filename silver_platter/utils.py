@@ -63,11 +63,12 @@ def create_temp_sprout(
     # Only use stacking if the remote repository supports chks because of
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
-        branch._format.supports_stacking() and branch.repository._format.supports_chks
+        branch._format.supports_stacking() and  # type: ignore
+        branch.repository._format.supports_chks
     )
     try:
         # preserve whatever source format we have.
-        to_dir = branch.controldir.sprout(
+        to_dir = branch.controldir.sprout(  # type: ignore
             td,
             None,
             create_tree_if_local=True,
@@ -77,7 +78,8 @@ def create_temp_sprout(
         # TODO(jelmer): Fetch these during the initial clone
         for from_branch_name in set(additional_colocated_branches or []):
             try:
-                add_branch = branch.controldir.open_branch(name=from_branch_name)
+                add_branch = branch.controldir.open_branch(  # type: ignore
+                    name=from_branch_name)
             except (errors.NotBranchError, errors.NoColocatedBranchSupport):
                 pass
             else:
@@ -233,11 +235,11 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         if "Unexpected HTTP status 429" in str(e):
             if hasattr(e, 'headers'):
                 try:
-                    retry_after = int(e.headers['Retry-After'])  # type: Optional[int]
+                    retry_after = int(e.headers['Retry-After'])  # type: ignore
                 except TypeError:
                     logging.warning(
                         'Unable to parse retry-after header: %s',
-                        e.headers['Retry-After'])
+                        e.headers['Retry-After'])  # type: ignore
                     retry_after = None
                 else:
                     retry_after = None
@@ -293,7 +295,7 @@ def open_branch_containing(
     """Open a branch by URL."""
     try:
         transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)
+        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)  # type: ignore
         return dir.open_branch(), subpath
     except Exception as e:
         converted = _convert_exception(url, e)

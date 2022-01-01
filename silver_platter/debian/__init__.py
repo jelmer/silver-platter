@@ -228,9 +228,9 @@ def pick_additional_colocated_branches(
         "pristine-lfs": "pristine-lfs",
         "upstream": "upstream",
         }
-    ret["patch-queue/" + main_branch.name] = "patch-queue"
-    if main_branch.name.startswith("debian/"):
-        parts = main_branch.name.split("/")
+    ret["patch-queue/" + main_branch.name] = "patch-queue"  # type: ignore
+    if main_branch.name.startswith("debian/"):  # type: ignore
+        parts = main_branch.name.split("/")  # type: ignore
         parts[0] = "upstream"
         ret["/".join(parts)] = "upstream"
     return ret
