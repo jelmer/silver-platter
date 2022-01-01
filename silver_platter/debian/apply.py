@@ -46,6 +46,10 @@ from . import (
     )
 
 
+class MissingChangelog(Exception):
+    """No changelog file is present."""
+
+
 class DetailedFailure(Exception):
     """Detailed failure"""
 
@@ -70,10 +74,12 @@ class CommandResult(object):
     source: Optional[str]
     description: Optional[str] = None
     value: Optional[int] = None
+    serialized_context: Optional[str] = None
     context: Dict[str, str] = field(default_factory=dict)
     tags: List[Tuple[str, bytes]] = field(default_factory=list)
     old_revision: Optional[bytes] = None
     new_revision: Optional[bytes] = None
+    target_branch_url: Optional[str] = None
 
     @classmethod
     def from_json(cls, source, data):
@@ -87,7 +93,9 @@ class CommandResult(object):
             source=source,
             value=data.get('value', None),
             context=data.get('context', {}),
+            serialized_context=data.get('serialized_context', None),
             description=data.get('description'),
+            target_branch_url=data.get('target-branch-url', None),
             tags=tags)
 
 
@@ -111,7 +119,9 @@ def install_built_package(local_tree, subpath, build_target_dir):
 
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None
+    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None,
+    extra_env: Optional[Dict[str, str]] = None,
+    committer: Optional[str] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -137,20 +147,27 @@ def script_runner(   # noqa: C901
             # Assume yes.
             update_changelog = True
 
-    with open(local_tree.abspath(os.path.join(debian_path, 'changelog')), 'r') as f:
-        cl = Changelog(f)
-        source_name = cl[0].package
-
-    if source_name:
-        os.environ['DEB_SOURCE'] = source_name
-
-    if update_changelog:
-        os.environ['DEB_UPDATE_CHANGELOG'] = 'update'
-    else:
-        os.environ['DEB_UPDATE_CHANGELOG'] = 'leave'
+    cl_path = os.path.join(debian_path, 'changelog')
+    try:
+        with open(local_tree.abspath(cl_path), 'r') as f:
+            cl = Changelog(f)
+            source_name = cl[0].package
+    except FileNotFoundError:
+        source_name = None
 
     env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
+
     env['SVP_API'] = '1'
+    if source_name:
+        env['DEB_SOURCE'] = source_name
+
+    if update_changelog:
+        env['DEB_UPDATE_CHANGELOG'] = 'update'
+    else:
+        env['DEB_UPDATE_CHANGELOG'] = 'leave'
+
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
     with tempfile.TemporaryDirectory() as td:
@@ -158,7 +175,7 @@ def script_runner(   # noqa: C901
         if resume_metadata:
             env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
             with open(env['SVP_RESUME'], 'w') as f:
-                json.dump(f, resume_metadata)
+                json.dump(resume_metadata, f)
         p = subprocess.Popen(
             script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE, shell=True,
             env=env)
@@ -175,6 +192,15 @@ def script_runner(   # noqa: C901
             if result_json is not None:
                 raise DetailedFailure.from_json(source_name, result_json)
             raise ScriptFailed(script, p.returncode)
+        # If the changelog didn't exist earlier, then hopefully it was created
+        # now.
+        if source_name is None:
+            try:
+                with open(local_tree.abspath(cl_path), 'r') as f:
+                    cl = Changelog(f)
+                    source_name = cl[0].package
+            except FileNotFoundError:
+                raise MissingChangelog(cl_path)
         if result_json is not None:
             result = CommandResult.from_json(source_name, result_json)
         else:
@@ -192,19 +218,21 @@ def script_runner(   # noqa: C901
         # touch the branch.
         commit_pending = True
     if commit_pending:
-        if update_changelog and result.description:
+        if update_changelog and result.description and local_tree.has_changes():
             add_changelog_entry(
                 local_tree,
                 os.path.join(debian_path, 'changelog'),
-                result.description)
+                [result.description])
         try:
-            new_revision = local_tree.commit(result.description, allow_pointless=False)
+            new_revision = local_tree.commit(
+                result.description, allow_pointless=False,
+                committer=committer)
         except PointlessCommit:
             pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision
-    result.new_revision = local_tree.last_revision()
+    result.new_revision = new_revision
     return result
 
 
@@ -261,6 +289,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--install", "-i",
         action="store_true",
         help="Install built package (implies --build-verify)")
+    parser.add_argument(
+        "--dump-context", action="store_true",
+        help="Report context on success")
 
     parser.add_argument(
         "--recipe", type=str, help="Recipe to use.")
@@ -292,9 +323,16 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     check_clean_tree(local_tree)
 
     try:
-        result = script_runner(
-            local_tree, script=command, commit_pending=commit_pending,
-            subpath=subpath, update_changelog=args.update_changelog)
+        try:
+            result = script_runner(
+                local_tree, script=command, commit_pending=commit_pending,
+                subpath=subpath, update_changelog=args.update_changelog)
+        except MissingChangelog as e:
+            logging.error('No debian changelog file (%s) present', e.args[0])
+            return False
+        except ScriptMadeNoChanges:
+            logging.info('Script made no changes')
+            return False
 
         if result.description:
             logging.info('Succeeded: %s', result.description)
@@ -303,10 +341,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             try:
                 build(local_tree, subpath, builder=args.builder, result_dir=args.build_target_dir)
             except BuildFailedError:
-                logging.info("%s: build failed", result.source)
+                logging.error("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
-                logging.info("%s: unable to find upstream source", result.source)
+                logging.error("%s: unable to find upstream source", result.source)
                 return False
     except Exception:
         reset_tree(local_tree, subpath)
@@ -325,4 +363,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             sys.stdout.buffer,
             old_label='old/',
             new_label='new/')
+
+    if args.dump_context:
+        json.dump(result.context, sys.stdout, indent=5)
     return 0

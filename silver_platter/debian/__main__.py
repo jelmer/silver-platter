@@ -23,31 +23,11 @@ import silver_platter  # noqa: F401
 import argparse
 import sys
 
-from .changer import (
-    setup_parser_common,
-    run_single_changer,
-    changer_subcommands,
-    changer_subcommand,
-)
-
 from . import (
     apply as debian_apply,
     run as debian_run,
     uploader as debian_uploader,
     )
-
-
-def run_changer_subcommand(name, changer_cls, argv):
-    parser = argparse.ArgumentParser(prog="debian-svp %s URL|package" % name)
-    setup_parser_common(parser)
-    parser.add_argument("package", type=str, nargs="?")
-    changer_cls.setup_parser(parser)
-    args = parser.parse_args(argv)
-    if args.package is None:
-        parser.print_usage()
-        return 1
-    changer = changer_cls.from_args(args)
-    return run_single_changer(changer, args)
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
@@ -82,7 +62,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
             subcommands[name] = cmd
 
     parser.add_argument(
-        "subcommand", type=str, choices=list(subcommands.keys()) + changer_subcommands()
+        "subcommand", type=str, choices=list(subcommands.keys())
     )
     args, rest = parser.parse_known_args()
     if args.help:
@@ -101,12 +81,6 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         return 1
     if args.subcommand in subcommands:
         return subcommands[args.subcommand](rest)
-    try:
-        subcmd = changer_subcommand(args.subcommand)
-    except KeyError:
-        pass
-    else:
-        return run_changer_subcommand(args.subcommand, subcmd, rest)
     parser.print_usage()
     return 1
 

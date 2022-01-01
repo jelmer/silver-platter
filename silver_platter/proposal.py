@@ -65,10 +65,6 @@ from .publish import (
     find_existing_proposed,
     SUPPORTED_MODES,
 )
-from .workspace import (
-    Workspace,
-    PublishResult,
-)
 
 
 __all__ = [
@@ -83,8 +79,6 @@ __all__ = [
     "SUPPORTED_MODES",
     "push_derived_changes",
     "propose_changes",
-    "PublishResult",
-    "Workspace",
     "DryRunProposal",
     "check_proposal_diff",
     "EmptyMergeProposal",
@@ -169,8 +163,8 @@ def iter_conflicted(
         resume_branch = open_branch(
             mp.get_source_branch_url(), possible_transports=possible_transports
         )
-        if resume_branch.name != branch_name and not (
-            not resume_branch.name and resume_branch.user_url.endswith(branch_name)
+        if resume_branch.name != branch_name and not (  # type: ignore
+            not resume_branch.name and resume_branch.user_url.endswith(branch_name)  # type: ignore
         ):
             continue
         # TODO(jelmer): Find out somehow whether we need to modify a subpath?

@@ -64,10 +64,12 @@ class CommandResult(object):
 
     description: Optional[str] = None
     value: Optional[int] = None
+    serialized_context: Optional[str] = None
     context: Dict[str, str] = field(default_factory=dict)
     tags: List[Tuple[str, bytes]] = field(default_factory=list)
     old_revision: Optional[bytes] = None
     new_revision: Optional[bytes] = None
+    target_branch_url: Optional[str] = None
 
     @classmethod
     def from_json(cls, data):
@@ -81,13 +83,16 @@ class CommandResult(object):
             value=data.get('value', None),
             context=data.get('context', {}),
             description=data.get('description'),
+            serialized_context=data.get('serialized_context', None),
+            target_branch_url=data.get('target-branch-url', None),
             tags=tags)
 
 
-def script_runner(
+def script_runner(  # noqa: C901
     local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = ''
-) -> CommandResult:
+    resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
     This ignores newly added files.
@@ -100,6 +105,8 @@ def script_runner(
          script)
     """
     env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
     env['SVP_API'] = '1'
     last_revision = local_tree.last_revision()
     orig_tags = local_tree.branch.tags.get_tag_dict()
@@ -108,7 +115,7 @@ def script_runner(
         if resume_metadata:
             env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
             with open(env['SVP_RESUME'], 'w') as f:
-                json.dump(f, resume_metadata)
+                json.dump(resume_metadata, f)
         p = subprocess.Popen(
             script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE, shell=True,
             env=env)
@@ -143,7 +150,9 @@ def script_runner(
         commit_pending = True
     if commit_pending:
         try:
-            new_revision = local_tree.commit(result.description, allow_pointless=False)
+            new_revision = local_tree.commit(
+                result.description, allow_pointless=False,
+                committer=committer)
         except PointlessCommit:
             pass
     if new_revision == last_revision:

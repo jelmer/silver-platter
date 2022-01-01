@@ -82,7 +82,7 @@ def _tag_selector_from_tags(tags):
 def push_result(
     local_branch: Branch,
     remote_branch: Branch,
-    additional_colocated_branches: Optional[List[str]] = None,
+    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
     stop_revision: Optional[bytes] = None,
 ) -> None:
@@ -96,13 +96,17 @@ def push_result(
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
         raise errors.PermissionDenied(path=full_branch_url(remote_branch), extra=e)
-    for branch_name in additional_colocated_branches or []:
+    for from_branch_name in additional_colocated_branches or []:
         try:
-            add_branch = local_branch.controldir.open_branch(name=branch_name)
+            add_branch = local_branch.controldir.open_branch(name=from_branch_name)  # type: ignore
         except errors.NotBranchError:
             pass
         else:
-            remote_branch.controldir.push_branch(add_branch, name=branch_name, **kwargs)
+            if isinstance(additional_colocated_branches, dict):
+                to_branch_name = additional_colocated_branches[from_branch_name]
+            else:
+                to_branch_name = from_branch_name
+            remote_branch.controldir.push_branch(add_branch, name=to_branch_name, **kwargs)  # type: ignore
 
 
 def push_changes(
@@ -110,7 +114,7 @@ def push_changes(
     main_branch: Branch,
     hoster: Optional[Hoster],
     possible_transports: Optional[List[Transport]] = None,
-    additional_colocated_branches: Optional[List[str]] = None,
+    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     dry_run: bool = False,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
     stop_revision: Optional[bytes] = None,
@@ -169,7 +173,7 @@ def propose_changes(  # noqa: C901
     labels: Optional[List[str]] = None,
     dry_run: bool = False,
     commit_message: Optional[str] = None,
-    additional_colocated_branches: Optional[List[str]] = None,
+    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     allow_empty: bool = False,
     reviewers: Optional[List[str]] = None,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
@@ -224,18 +228,22 @@ def propose_changes(  # noqa: C901
                 owner=owner,
                 **push_kwargs
             )
-        for colocated_branch_name in additional_colocated_branches or []:
+        for from_branch_name in additional_colocated_branches or []:
             try:
-                local_colo_branch = local_branch.controldir.open_branch(
-                    name=colocated_branch_name
+                local_colo_branch = local_branch.controldir.open_branch(  # type: ignore
+                    name=from_branch_name
                 )
             except errors.NotBranchError:
                 pass
             else:
-                remote_branch.controldir.push_branch(
+                if isinstance(additional_colocated_branches, dict):
+                    to_branch_name = additional_colocated_branches[from_branch_name]
+                else:
+                    to_branch_name = from_branch_name
+                remote_branch.controldir.push_branch(  # type: ignore
                     source=local_colo_branch,
                     overwrite=overwrite_existing,
-                    name=colocated_branch_name,
+                    name=to_branch_name,
                     **push_kwargs
                 )
     if resume_proposal is not None and dry_run:
@@ -252,7 +260,7 @@ def propose_changes(  # noqa: C901
         )
 
         try:
-            resume_proposal.reopen()
+            resume_proposal.reopen()  # type: ignore
         except ReopenFailed:
             logging.info("Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
@@ -331,7 +339,7 @@ def check_proposal_diff(
             merger.find_base()
         except errors.UnrelatedBranches:
             merger.set_base_revision(_mod_revision.NULL_REVISION, other_branch)
-        merger.merge_type = _mod_merge.Merge3Merger
+        merger.merge_type = _mod_merge.Merge3Merger  # type: ignore
         tree_merger = merger.make_merger()
         with tree_merger.make_preview_transform() as tt:
             changes = tt.iter_changes()

@@ -5,7 +5,5 @@ jinja2
 [debian]
 debmutate>=0.3
 distro-info
-lintian-brush>=0.102
 python_debian
 pyyaml
-upstream-ontologist

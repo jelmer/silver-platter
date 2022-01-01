@@ -30,6 +30,7 @@ from typing import List
 
 from debmutate.changelog import (
     ChangelogEditor,
+    ChangelogParseError,
     changeblock_ensure_first_line,
 )
 from debmutate.control import ControlEditor
@@ -51,13 +52,14 @@ from breezy.plugins.debian.util import (
     dput_changes,
     find_changelog,
     MissingChangelogError,
+    NoPreviousUpload,
 )
+from breezy.plugins.debian.upstream import MissingUpstreamTarball
 
 from debian.changelog import get_maintainer
 
 from . import (
     apt_get_source_package,
-    connect_udd_mirror,
     source_package_vcs,
     split_vcs_url,
     Workspace,
@@ -70,7 +72,19 @@ from ..utils import (
     BranchUnavailable,
     BranchMissing,
     BranchUnsupported,
+    BranchRateLimited,
 )
+
+
+def connect_udd_mirror():
+    import psycopg2
+
+    return psycopg2.connect(
+        database="udd",
+        user="udd-mirror",
+        password="udd-mirror",
+        host="udd-mirror.debian.net",
+    )
 
 
 def debsign(path, keyid=None):
@@ -183,7 +197,11 @@ def get_maintainer_keys(context):
             yield subkey.keyid
 
 
-def prepare_upload_package(
+class GbpDchFailed(Exception):
+    """gbp dch failed to run"""
+
+
+def prepare_upload_package(  # noqa: C901
     local_tree,
     subpath,
     pkg,
@@ -194,15 +212,24 @@ def prepare_upload_package(
     allowed_committers=None,
 ):
     if local_tree.has_filename(os.path.join(subpath, "debian/gbp.conf")):
-        subprocess.check_call(
-            ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
-        )
+        try:
+            subprocess.check_call(
+                ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
+            )
+        except subprocess.CalledProcessError:
+            # TODO(jelmer): gbp dch sometimes fails when there is no existing
+            # open changelog entry; it fails invoking "dpkg --lt None <old-version>"
+            raise GbpDchFailed()
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
-    previous_version_in_branch = changelog_find_previous_upload(cl)
-    if last_uploaded_version > previous_version_in_branch:
-        raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
+    try:
+        previous_version_in_branch = changelog_find_previous_upload(cl)
+    except NoPreviousUpload:
+        pass
+    else:
+        if last_uploaded_version > previous_version_in_branch:
+            raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
 
     logging.info("Checking revisions since %s" % last_uploaded_version)
     with local_tree.lock_read():
@@ -263,8 +290,8 @@ def prepare_upload_package(
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder
     )
-    debsign(target_changes)
-    return target_changes, tag_name
+    debsign(target_changes['source'])
+    return target_changes['source'], tag_name
 
 
 def select_apt_packages(package_names, maintainer):
@@ -303,10 +330,10 @@ def select_vcswatch_packages(
     if autopkgtest_only:
         query += " AND sources.testsuite != '' "
     if maintainer:
-        query += " AND sources.maintainer_email IN (%s)"
+        query += " AND sources.maintainer_email in %s"
         args.append(tuple(maintainer))
     if packages:
-        query += " AND sources.source IN (%s)"
+        query += " AND sources.source IN %s"
         args.append(tuple(packages))
 
     cursor.execute(query, tuple(args))
@@ -413,6 +440,26 @@ def main(argv):  # noqa: C901
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
 
+    stats = {
+        'not-in-apt': 0,
+        'not-in-vcs': 0,
+        'vcs-inaccessible': 0,
+        'gbp-dch-failed': 0,
+        'missing-upstream-tarball': 0,
+        'committer-not-allowed': 0,
+        'build-failed': 0,
+        'last-release-missing': 0,
+        'last-upload-not-in-vcs': 0,
+        'missing-changelog': 0,
+        'recent-commits': 0,
+        'no-unuploaded-changes': 0,
+        'no-unreleased-changes': 0,
+        'vcs-permission-denied': 0,
+        'changelog-parse-error': 0,
+        }
+    if args.autopkgtest_only:
+        stats['no-autopkgtest'] = 0
+
     if len(packages) > 1:
         logging.info("Uploading packages: %s", ", ".join(packages))
 
@@ -424,12 +471,14 @@ def main(argv):  # noqa: C901
             try:
                 pkg_source = apt_get_source_package(package)
             except NoSuchPackage:
+                stats['not-in-apt'] += 1
                 logging.info("%s: package not found in apt", package)
                 ret = 1
                 continue
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
+                stats['not-in-vcs'] += 1
                 logging.info(
                     "%s: no declared vcs location, skipping", pkg_source["Package"]
                 )
@@ -453,6 +502,7 @@ def main(argv):  # noqa: C901
         try:
             main_branch = open_branch(location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
+            stats['vcs-inaccessible'] += 1
             logging.exception("%s: %s", vcs_url, e)
             ret = 1
             continue
@@ -477,6 +527,7 @@ def main(argv):  # noqa: C901
                 )
             ):
                 logging.info("%s: Skipping, package has no autopkgtest.", source_name)
+                stats['no-autopkgtest'] += 1
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -500,7 +551,23 @@ def main(argv):  # noqa: C901
                     min_commit_age=args.min_commit_age,
                     allowed_committers=args.allowed_committer,
                 )
+            except GbpDchFailed as e:
+                logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
+                stats['gbp-dch-failed'] += 1
+                continue
+            except MissingUpstreamTarball as e:
+                stats['missing-upstream-tarball'] += 1
+                logging.warning("%s: missing upstream tarball: %s", source_name, e)
+                continue
+            except BranchRateLimited as e:
+                stats['rate-limited'] += 1
+                logging.warning(
+                    '%s: rate limited by server (retrying after %s)',
+                    source_name, e.retry_after)
+                ret = 1
+                continue
             except CommitterNotAllowed as e:
+                stats['committer-not-allowed'] += 1
                 logging.warn(
                     "%s: committer %s not in allowed list: %r",
                     source_name,
@@ -510,6 +577,7 @@ def main(argv):  # noqa: C901
                 continue
             except BuildFailedError as e:
                 logging.warn("%s: package failed to build: %s", source_name, e)
+                stats['build-failed'] += 1
                 ret = 1
                 continue
             except LastReleaseRevisionNotFound as e:
@@ -519,9 +587,11 @@ def main(argv):  # noqa: C901
                     source_name,
                     e.version,
                 )
+                stats['last-release-missing'] += 1
                 ret = 1
                 continue
             except LastUploadMoreRecent as e:
+                stats['last-upload-not-in-vcs'] += 1
                 logging.warn(
                     "%s: Last upload (%s) was more recent than VCS (%s)",
                     source_name,
@@ -530,19 +600,28 @@ def main(argv):  # noqa: C901
                 )
                 ret = 1
                 continue
+            except ChangelogParseError as e:
+                stats['changelog-parse-error'] += 1
+                logging.info("%s: Error parsing changelog: %s", source_name, e)
+                ret = 1
+                continue
             except MissingChangelogError:
+                stats['missing-changelog'] += 1
                 logging.info("%s: No changelog found, skipping.", source_name)
                 ret = 1
                 continue
             except RecentCommits as e:
+                stats['recent-commits'] += 1
                 logging.info(
                     "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges:
+                stats['no-unuploaded-changes'] += 1
                 logging.info("%s: No unuploaded changes, skipping.", source_name)
                 continue
             except NoUnreleasedChanges:
+                stats['no-unreleased-changes'] += 1
                 logging.info("%s: No unreleased changes, skipping.", source_name)
                 continue
 
@@ -553,6 +632,7 @@ def main(argv):  # noqa: C901
             try:
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
+                stats['vcs-permission-denied'] += 1
                 logging.info(
                     "%s: Permission denied pushing to branch, skipping.", source_name
                 )
@@ -564,6 +644,11 @@ def main(argv):  # noqa: C901
                 sys.stdout.flush()
                 ws.show_diff(sys.stdout.buffer)
                 sys.stdout.buffer.flush()
+
+    if len(packages) > 1:
+        logging.info('Results:')
+        for error, c in stats.items():
+            logging.info('  %s: %d', error, c)
 
     return ret
 

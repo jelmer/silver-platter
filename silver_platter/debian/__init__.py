@@ -42,8 +42,10 @@ from breezy.plugins.debian.directory import (
 
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
+from breezy.workingtree import WorkingTree
 
 from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
 )
@@ -74,6 +76,10 @@ DEFAULT_BUILDER = "sbuild --no-clean-source"
 
 class NoSuchPackage(Exception):
     """No such package."""
+
+
+class NoVcsInformation(Exception):
+    """Package does not have any Vcs headers."""
 
 
 def add_changelog_entry(
@@ -122,7 +128,7 @@ def add_changelog_entry(
 
 
 def build(
-    tree: Tree,
+    tree: WorkingTree,
     subpath: str = "",
     builder: Optional[str] = None,
     result_dir: Optional[str] = None,
@@ -199,7 +205,7 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
-            raise Exception("Package %s does not have any VCS information" % location)
+            raise NoVcsInformation(location)
         (url, branch_name, subpath) = split_vcs_url(vcs_url)
     else:
         url, params = urlutils.split_segment_parameters(location)
@@ -215,23 +221,34 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
     return branch, subpath or ""
 
 
-def pick_additional_colocated_branches(main_branch):
-    ret = ["pristine-tar", "pristine-lfs", "upstream"]
-    ret.append("patch-queue/" + main_branch.name)
-    if main_branch.name.startswith("debian/"):
-        parts = main_branch.name.split("/")
+def pick_additional_colocated_branches(
+        main_branch: Branch) -> Dict[str, str]:
+    ret = {
+        "pristine-tar": "pristine-tar",
+        "pristine-lfs": "pristine-lfs",
+        "upstream": "upstream",
+        }
+    ret["patch-queue/" + main_branch.name] = "patch-queue"  # type: ignore
+    if main_branch.name.startswith("debian/"):  # type: ignore
+        parts = main_branch.name.split("/")  # type: ignore
         parts[0] = "upstream"
-        ret.append("/".join(parts))
+        ret["/".join(parts)] = "upstream"
     return ret
 
 
 class Workspace(_mod_workspace.Workspace):
     def __init__(self, main_branch: Branch, *args, **kwargs) -> None:
         if isinstance(main_branch.repository, GitRepository):
-            kwargs["additional_colocated_branches"] = kwargs.get(
-                "additional_colocated_branches", []
-            ) + pick_additional_colocated_branches(main_branch)
+            if "additional_colocated_branches" not in kwargs:
+                kwargs["additional_colocated_branches"] = {}
+            kwargs["additional_colocated_branches"].update(
+                pick_additional_colocated_branches(main_branch))
         super(Workspace, self).__init__(main_branch, *args, **kwargs)
+
+    @classmethod
+    def from_apt_package(cls, package, dir=None):
+        main_branch = open_packaging_branch(package)
+        return cls(main_branch=main_branch, dir=dir)
 
     def build(
         self,
@@ -245,6 +262,11 @@ class Workspace(_mod_workspace.Workspace):
             builder=builder,
             result_dir=result_dir,
         )
+
+    def commit(self, message=None, subpath="", paths=None, committer=None, reporter=None):
+        return debcommit(
+            self.local_tree, committer=committer, subpath=subpath,
+            paths=paths, reporter=reporter, message=message)
 
 
 class UnsupportedVCSProber(Prober):
@@ -346,31 +368,3 @@ def control_files_in_root(tree: Tree, subpath: str) -> bool:
     if tree.has_filename(control_path + ".in"):
         return True
     return False
-
-
-def control_file_present(tree: Tree, subpath: str) -> bool:
-    """Check whether there are any control files present in a tree.
-
-    Args:
-      tree: Tree to check
-      subpath: subpath to check
-    Returns:
-      whether control file is present
-    """
-    for name in ["debian/control", "debian/control.in", "control",
-                 "control.in", "debian/debcargo.toml"]:
-        name = os.path.join(subpath, name)
-        if tree.has_filename(name):
-            return True
-    return False
-
-
-def connect_udd_mirror():
-    import psycopg2
-
-    return psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )

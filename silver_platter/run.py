@@ -68,7 +68,7 @@ def apply_and_publish(  # noqa: C901
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
         logging.exception("%s: %s", url, e)
-        return 1
+        return 2
 
     overwrite = False
 
@@ -93,6 +93,8 @@ def apply_and_publish(  # noqa: C901
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if refresh:
+        if resume_branch:
+            overwrite = True
         resume_branch = None
 
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
@@ -100,10 +102,10 @@ def apply_and_publish(  # noqa: C901
             result = script_runner(ws.local_tree, command, commit_pending)
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
-            return 1
+            return 0
         except ScriptFailed:
             logging.error("Script failed to run.")
-            return 1
+            return 2
 
         if verify_command:
             try:
@@ -112,7 +114,7 @@ def apply_and_publish(  # noqa: C901
                 )
             except subprocess.CalledProcessError:
                 logging.error("Verify command failed.")
-                return 1
+                return 2
 
         enable_tag_pushing(ws.local_tree.branch)
 
@@ -135,16 +137,16 @@ def apply_and_publish(  # noqa: C901
                 "No known supported hoster for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
-            return 1
+            return 2
         except InsufficientChangesForNewProposal:
             logging.info('Insufficient changes for a new merge proposal')
-            return 0
+            return 1
         except _mod_propose.HosterLoginRequired as e:
             logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
                 e.hoster.base_url,
             )
-            return 1
+            return 2
 
         if publish_result.proposal:
             if publish_result.is_new:
@@ -157,6 +159,8 @@ def apply_and_publish(  # noqa: C901
 
         if diff:
             ws.show_diff(sys.stdout.buffer)
+
+        return 1
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
@@ -283,15 +287,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     retcode = 0
 
     for url in urls:
-        if apply_and_publish(
+        result = apply_and_publish(
                 url, name=name, command=command, mode=args.mode,
                 commit_pending=commit_pending, dry_run=args.dry_run,
                 labels=args.label, diff=args.diff,
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,
                 get_commit_message=get_commit_message,
-                get_description=get_description):
-            retcode = 1
+                get_description=get_description)
+        retcode = max(retcode, result)
 
     return retcode
 

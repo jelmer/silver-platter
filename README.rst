@@ -13,7 +13,8 @@ that have been proposed for merging - such as restarting them if they
 have conflicts due to upstream changes.
 
 Silver-Platter powers the Debian Janitor (https://janitor.debian.org/) and
-Kali Janitor (https://kali.janitor.org/). The UI is still a bit rough around
+Kali Janitor (https://kali.janitor.org/). However, it is an independent project
+and can be used fine as a standalone tool. The UI is still a bit rough around
 the edges, I'd be grateful for any feedback from people using it - please file bugs in
 the issue tracker at https://github.com/jelmer/silver-platter/issues/new.
 
@@ -44,7 +45,8 @@ Recipes
 ~~~~~~~
 
 To make this process a little bit easier to repeat, recipe files can be used.
-For this example, create one called ``framwork.yaml`` with the following contents::
+For the example above, we could create a ``framwork.yaml`` with the following
+contents::
 
     ---
     name: framwork
@@ -60,9 +62,10 @@ To execute this recipe, run::
 
     svp run --recipe=framwork.yaml https://github.com/jelmer/dulwich
 
-See `example.yaml` for an example recipe with plenty of comments
+See `example.yaml` for an example recipe with plenty of comments.
 
-In addition, you can run a particular recipe over a set of repositories by specifying a candidate list.
+In addition, you can run a particular recipe over a set of repositories by
+specifying a candidate list.
 For example, if *candidates.yaml* looked like this::
 
    ---
@@ -154,3 +157,29 @@ silver-platter is aware of::
 And to log into a new hosting site, simply run ``svp login BASE-URL``, e.g.::
 
     svp login https://launchpad.net/
+
+Exit status
+~~~~~~~~~~~
+
+``svp run`` will exit 0 if no changes have been made, 1 if at least one
+repository has been changed and 2 in case of trouble.
+
+Python API
+~~~~~~~~~~
+
+Other than the command-line API, silver-platter also has a Python API.
+The core class is the ``Workspace`` context manager, which exists in two forms:
+
+ * ``silver_platter.workspace.Workspace`` (for generic projects)
+ * ``silver_platter.debian.Workspace`` (for Debian packages)
+
+An example, adding a new entry to a changelog file in the ``dulwich`` Debian
+package and creating a merge proposal with that change::
+
+    from silver_platter.debian import Workspace
+    import subprocess
+
+    with Workspace.from_apt_package(package="dulwich") as ws:
+        subprocess.check_call(['dch', 'some change'], cwd=ws.path)
+        ws.commit()  # Behaves like debcommit
+        ws.publish(mode='propose')

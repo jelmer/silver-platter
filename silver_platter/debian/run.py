@@ -25,6 +25,7 @@ from typing import Optional, List
 
 from breezy import osutils
 from breezy import propose as _mod_propose
+from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
 
@@ -36,6 +37,7 @@ from . import (
     )
 from .apply import (
     script_runner,
+    MissingChangelog,
     ScriptMadeNoChanges,
     ScriptFailed,
     install_built_package,
@@ -82,7 +84,10 @@ def apply_and_publish(  # noqa: C901
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        logging.exception("%s: %s", url, e)
+        logging.fatal("%s: %s", url, e)
+        return 1
+    except InvalidURL as e:
+        logging.fatal('%s: %s', url, e)
         return 1
 
     overwrite = False
@@ -101,6 +106,10 @@ def apply_and_publish(  # noqa: C901
             e,
             full_branch_url(main_branch),
         )
+    except _mod_propose.HosterLoginRequired as e:
+        logging.error(
+            '%s: Hoster login required: %s', full_branch_url(main_branch), e)
+        return 1
     else:
         (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
             main_branch, hoster, name, owner=derived_owner
@@ -115,6 +124,9 @@ def apply_and_publish(  # noqa: C901
             result = script_runner(
                 ws.local_tree, command, commit_pending,
                 update_changelog=update_changelog)
+        except MissingChangelog as e:
+            logging.error("No debian changelog (%s) present", e.args[0])
+            return 1
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
             return 1
