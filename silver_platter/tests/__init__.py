@@ -22,7 +22,6 @@ def test_suite():
     names = [
         "candidates",
         "debian",
-        "debian_upstream",
         "proposal",
         "publish",
         "recipe",

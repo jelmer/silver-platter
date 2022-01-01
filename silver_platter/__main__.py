@@ -61,21 +61,21 @@ def login_main(argv: List[str]) -> Optional[int]:
     if hoster == "gitlab":
         from breezy.plugins.gitlab.cmds import cmd_gitlab_login
 
-        cmd = cmd_gitlab_login()
-        cmd._setup_outf()
-        return cmd.run(args.url)
+        cmd_gl = cmd_gitlab_login()
+        cmd_gl._setup_outf()
+        return cmd_gl.run(args.url)
     elif hoster == "github":
         from breezy.plugins.github.cmds import cmd_github_login
 
-        cmd = cmd_github_login()
-        cmd._setup_outf()
-        return cmd.run()
+        cmd_gh = cmd_github_login()
+        cmd_gh._setup_outf()
+        return cmd_gh.run()
     elif hoster == "launchpad":
         from breezy.plugins.launchpad.cmds import cmd_launchpad_login
 
-        cmd = cmd_launchpad_login()
-        cmd._setup_outf()
-        cmd.run()
+        cmd_lp = cmd_launchpad_login()
+        cmd_lp._setup_outf()
+        cmd_lp.run()
         from breezy.plugins.launchpad import lp_api
 
         lp_api.connect_launchpad(lp_service_root, version="devel")

@@ -15,15 +15,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import logging
 import os
 import shutil
 import socket
 import subprocess
-from typing import Callable, Tuple, Optional, List
+import tempfile
+from typing import Callable, Tuple, Optional, List, Union, Dict
 
 from breezy import (
     errors,
-    osutils,
     urlutils,
 )
 
@@ -42,7 +43,7 @@ from breezy.transport import UnusableRedirect
 
 def create_temp_sprout(
     branch: Branch,
-    additional_colocated_branches: Optional[List[str]] = None,
+    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     dir: Optional[str] = None,
     path: Optional[str] = None,
 ) -> Tuple[WorkingTree, Callable[[], None]]:
@@ -51,7 +52,7 @@ def create_temp_sprout(
     This attempts to fetch the least amount of history as possible.
     """
     if path is None:
-        td = osutils.mkdtemp(dir=dir)
+        td = tempfile.mkdtemp(dir=dir)
     else:
         td = path
         os.mkdir(path)
@@ -62,11 +63,12 @@ def create_temp_sprout(
     # Only use stacking if the remote repository supports chks because of
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
-        branch._format.supports_stacking() and branch.repository._format.supports_chks
+        branch._format.supports_stacking() and  # type: ignore
+        branch.repository._format.supports_chks
     )
     try:
         # preserve whatever source format we have.
-        to_dir = branch.controldir.sprout(
+        to_dir = branch.controldir.sprout(  # type: ignore
             td,
             None,
             create_tree_if_local=True,
@@ -74,13 +76,18 @@ def create_temp_sprout(
             stacked=use_stacking,
         )
         # TODO(jelmer): Fetch these during the initial clone
-        for branch_name in set(additional_colocated_branches or []):
+        for from_branch_name in set(additional_colocated_branches or []):
             try:
-                add_branch = branch.controldir.open_branch(name=branch_name)
+                add_branch = branch.controldir.open_branch(  # type: ignore
+                    name=from_branch_name)
             except (errors.NotBranchError, errors.NoColocatedBranchSupport):
                 pass
             else:
-                local_add_branch = to_dir.create_branch(name=branch_name)
+                if isinstance(additional_colocated_branches, dict):
+                    to_branch_name = additional_colocated_branches[from_branch_name]
+                else:
+                    to_branch_name = from_branch_name
+                local_add_branch = to_dir.create_branch(name=to_branch_name)
                 add_branch.push(local_add_branch)
                 assert add_branch.last_revision() == local_add_branch.last_revision()
         return to_dir.open_workingtree(), destroy
@@ -179,12 +186,16 @@ class BranchUnavailable(Exception):
 class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str, retry_after: Optional[int] = None):
         self.url = url
         self.description = description
+        self.retry_after = retry_after
 
     def __str__(self) -> str:
-        return self.description
+        if self.retry_after is not None:
+            return "%s (retry after %s)" % (self.description, self.retry_after)
+        else:
+            return self.description
 
 
 class BranchMissing(Exception):
@@ -222,7 +233,20 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.InvalidHttpResponse):
         if "Unexpected HTTP status 429" in str(e):
-            raise BranchRateLimited(url, str(e))
+            if hasattr(e, 'headers'):
+                try:
+                    retry_after = int(e.headers['Retry-After'])  # type: ignore
+                except TypeError:
+                    logging.warning(
+                        'Unable to parse retry-after header: %s',
+                        e.headers['Retry-After'])  # type: ignore
+                    retry_after = None
+                else:
+                    retry_after = None
+            else:
+                # Breezy < 3.2.1
+                retry_after = None
+            raise BranchRateLimited(url, str(e), retry_after=retry_after)
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.TransportError):
         return BranchUnavailable(url, str(e))
@@ -271,7 +295,7 @@ def open_branch_containing(
     """Open a branch by URL."""
     try:
         transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)
+        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)  # type: ignore
         return dir.open_branch(), subpath
     except Exception as e:
         converted = _convert_exception(url, e)

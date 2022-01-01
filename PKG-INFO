@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: silver-platter
-Version: 0.4.3
+Version: 0.4.5
 Summary: Automatic merge proposal creeator
 Home-page: https://jelmer.uk/code/silver-platter
 Author: Jelmer Vernooij
@@ -9,7 +9,6 @@ License: GNU GPL v2 or later
 Project-URL: Bug Tracker, https://github.com/jelmer/silver-platter/issues
 Project-URL: Repository, https://jelmer.uk/code/silver-platter
 Project-URL: GitHub, https://github.com/jelmer/silver-platter
-Description: UNKNOWN
 Keywords: git bzr vcs github gitlab launchpad
 Platform: UNKNOWN
 Classifier: Development Status :: 3 - Alpha
@@ -22,3 +21,8 @@ Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Operating System :: POSIX
 Classifier: Topic :: Software Development :: Version Control
 Provides-Extra: debian
+License-File: LICENSE
+License-File: AUTHORS
+
+UNKNOWN
+

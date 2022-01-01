@@ -54,17 +54,11 @@ silver_platter.egg-info/top_level.txt
 silver_platter/debian/__init__.py
 silver_platter/debian/__main__.py
 silver_platter/debian/apply.py
-silver_platter/debian/changer.py
-silver_platter/debian/debianize.py
-silver_platter/debian/orphan.py
 silver_platter/debian/run.py
 silver_platter/debian/uploader.py
-silver_platter/debian/upstream.py
 silver_platter/tests/__init__.py
 silver_platter/tests/test_candidates.py
 silver_platter/tests/test_debian.py
-silver_platter/tests/test_debian_lintian.py
-silver_platter/tests/test_debian_upstream.py
 silver_platter/tests/test_proposal.py
 silver_platter/tests/test_publish.py
 silver_platter/tests/test_recipe.py
