@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Union
 from breezy.commit import PointlessCommit
 from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
@@ -89,7 +89,8 @@ class CommandResult(object):
 
 
 def script_runner(  # noqa: C901
-    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
+    local_tree: WorkingTree, script: Union[str, List[str]],
+    commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
     extra_env: Optional[Dict[str, str]] = None,
 ) -> CommandResult:  # noqa: C901

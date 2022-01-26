@@ -21,7 +21,7 @@ import json
 import os
 import sys
 import tempfile
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Union
 import subprocess
 from debian.changelog import Changelog
 from debian.deb822 import Deb822
@@ -118,7 +118,8 @@ def install_built_package(local_tree, subpath, build_target_dir):
 
 
 def script_runner(   # noqa: C901
-    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
+    local_tree: WorkingTree, script: Union[str, List[str]],
+    commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None,
     extra_env: Optional[Dict[str, str]] = None,
     committer: Optional[str] = None
