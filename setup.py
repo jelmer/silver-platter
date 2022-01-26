@@ -21,7 +21,6 @@ debian_deps = [
     'pyyaml',
     'debmutate>=0.3',
     'python_debian',
-    'distro-info',
 ]
 
 
