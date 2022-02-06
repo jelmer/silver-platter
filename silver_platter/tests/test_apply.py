@@ -47,6 +47,27 @@ echo Did a thing
         self.assertEqual(result.new_revision, tree.last_revision())
         self.assertEqual(result.description, 'Did a thing\n')
 
+    def test_api(self):
+        tree = self.make_branch_and_tree('t')
+        self.build_tree_contents([
+            ('script.sh', """\
+#!/bin/sh
+echo foo > bar
+echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
+"""),
+            ('t/bar', 'initial')])
+        os.chmod('script.sh', 0o755)
+        tree.add('bar')
+        old_revid = tree.commit('initial')
+        result = script_runner(
+            tree,
+            script=os.path.abspath('script.sh'),
+            committer='Joe Example <joe@example.com>')
+        self.assertFalse(tree.has_changes())
+        self.assertEqual(result.old_revision, old_revid)
+        self.assertEqual(result.new_revision, tree.last_revision())
+        self.assertEqual(result.description, 'Did a thing')
+
     def test_new_file(self):
         tree = self.make_branch_and_tree('t')
         self.build_tree_contents([
