@@ -224,6 +224,7 @@ def script_runner(   # noqa: C901
                 local_tree,
                 os.path.join(debian_path, 'changelog'),
                 [result.description])
+        local_tree.smart_add([local_tree.abspath(subpath)])
         try:
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,

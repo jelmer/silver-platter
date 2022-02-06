@@ -20,6 +20,7 @@ import unittest
 
 def test_suite():
     names = [
+        "apply",
         "candidates",
         "debian",
         "proposal",

@@ -151,6 +151,7 @@ def script_runner(  # noqa: C901
         # touch the branch.
         commit_pending = True
     if commit_pending:
+        local_tree.smart_add([local_tree.abspath(subpath)])
         try:
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
