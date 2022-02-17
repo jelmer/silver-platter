@@ -142,8 +142,12 @@ def script_runner(   # noqa: C901
     if update_changelog is None:
         dch_guess = guess_update_changelog(local_tree, debian_path)
         if dch_guess:
-            logging.info('%s', dch_guess[1])
-            update_changelog = dch_guess[0]
+            if isinstance(dch_guess, tuple):  # lintian-brush < 1.22
+                update_changelog, explanation = dch_guess
+            else:
+                update_changelog = dch_guess.update_changelog
+                explanation = dch_guess.explanation
+            logging.info('%s', explanation)
         else:
             # Assume yes.
             update_changelog = True
