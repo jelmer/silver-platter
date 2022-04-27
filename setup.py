@@ -65,6 +65,7 @@ setup(
         'breezy>=3.2.0',
         'dulwich>=0.20.23',
         'jinja2',
+        'pyyaml',
     ],
     extras_require={
         'debian': debian_deps,
