@@ -68,6 +68,7 @@ setup(
     ],
     extras_require={
         'debian': debian_deps,
+        'launchpad': ['launchpadlib'],
     },
     tests_require=['testtools'] + debian_deps,
 )

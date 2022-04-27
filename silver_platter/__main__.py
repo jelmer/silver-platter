@@ -45,7 +45,12 @@ def login_main(argv: List[str]) -> Optional[int]:
     parser.add_argument("url", help="URL of branch to work on.", type=str)
     args = parser.parse_args(argv)
 
-    from launchpadlib import uris as lp_uris
+    try:
+        from launchpadlib import uris as lp_uris
+    except ModuleNotFoundError:
+        logging.warning(
+            'launchpadlib is not installed, unable to log in to launchpad')
+        lp_uris = []
 
     hoster = None
     # TODO(jelmer): Don't special case various hosters here
