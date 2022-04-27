@@ -34,6 +34,7 @@ from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
+import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
