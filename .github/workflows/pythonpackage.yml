@@ -24,7 +24,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        sudo apt install devscripts cython3 bzr
+        sudo apt -y update
+        sudo apt -y install devscripts cython3 bzr
         python -m pip install --upgrade pip
         pip install -U pip setuptools flake8 mypy debmutate pyyaml testtools
         mkdir $HOME/.config/breezy/plugins -p
