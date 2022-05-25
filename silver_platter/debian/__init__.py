@@ -233,7 +233,8 @@ def pick_additional_colocated_branches(
         parts = main_branch.name.split("/")  # type: ignore
         parts[0] = "upstream"
         ret["/".join(parts)] = "upstream"
-    return ret
+    existing_branch_names = main_branch.controldir.branch_names()
+    return {k: v for (k, v) in ret.items() if k in existing_branch_names}
 
 
 class Workspace(_mod_workspace.Workspace):
