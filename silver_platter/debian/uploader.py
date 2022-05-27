@@ -290,7 +290,7 @@ def prepare_upload_package(  # noqa: C901
         )
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
-    builder = builder.replace("${LAST_VERSION}", last_uploaded_version)
+    builder = builder.replace("${LAST_VERSION}", str(last_uploaded_version))
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder
     )
