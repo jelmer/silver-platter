@@ -26,7 +26,9 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import List
+from typing import List, Optional
+
+from debian.changelog import Version
 
 from debmutate.changelog import (
     ChangelogEditor,
@@ -55,6 +57,8 @@ from breezy.plugins.debian.util import (
     NoPreviousUpload,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
+
+from breezy.workingtree import WorkingTree
 
 from debian.changelog import get_maintainer
 
@@ -202,12 +206,12 @@ class GbpDchFailed(Exception):
 
 
 def prepare_upload_package(  # noqa: C901
-    local_tree,
-    subpath,
-    pkg,
-    last_uploaded_version,
-    builder,
-    gpg_strategy=None,
+    local_tree: WorkingTree,
+    subpath: str,
+    pkg: str,
+    last_uploaded_version: Version,
+    builder: str,
+    gpg_strategy: Optional[str] = None,
     min_commit_age=None,
     allowed_committers=None,
 ):
@@ -487,13 +491,13 @@ def main(argv):  # noqa: C901
             source_name = pkg_source["Package"]
             if source_name in args.exclude:
                 continue
-            source_version = pkg_source["Version"]
+            archive_version = pkg_source["Version"]
             has_testsuite = "Testsuite" in pkg_source
         else:
             vcs_url = package
             vcs_type = None
             source_name = None
-            source_version = None
+            archive_version = None
             has_testsuite = None
         (location, branch_name, subpath) = split_vcs_url(vcs_url)
         if subpath is None:
@@ -512,10 +516,14 @@ def main(argv):  # noqa: C901
                     ws.local_tree.abspath(os.path.join(subpath, "debian/control"))
                 ) as ce:
                     source_name = ce.source["Source"]
-                with ChangelogEditor(
-                    ws.local_tree.abspath(os.path.join(subpath, "debian/changelog"))
-                ) as cle:
-                    source_version = cle[0].version
+                    try:
+                        pkg_source = apt_get_source_package(source_name)
+                    except NoSuchPackage:
+                        stats['not-in-apt'] += 1
+                        logging.info("%s: package not found in apt", package)
+                        ret = 1
+                        continue
+                    archive_version = pkg_source['Version']
                 has_testsuite = "Testsuite" in ce.source
             if source_name in args.exclude:
                 continue
@@ -545,7 +553,7 @@ def main(argv):  # noqa: C901
                     ws.local_tree,
                     subpath,
                     source_name,
-                    source_version,
+                    archive_version,
                     builder=args.builder,
                     gpg_strategy=gpg_strategy,
                     min_commit_age=args.min_commit_age,
@@ -616,9 +624,10 @@ def main(argv):  # noqa: C901
                     "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
                 )
                 continue
-            except NoUnuploadedChanges:
+            except NoUnuploadedChanges as e:
                 stats['no-unuploaded-changes'] += 1
-                logging.info("%s: No unuploaded changes, skipping.", source_name)
+                logging.info("%s: No unuploaded changes (%s), skipping.",
+                             source_name, e.archive_version)
                 continue
             except NoUnreleasedChanges:
                 stats['no-unreleased-changes'] += 1
