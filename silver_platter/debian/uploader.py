@@ -444,25 +444,11 @@ def main(argv):  # noqa: C901
     # TODO(jelmer): Sort packages by last commit date; least recently changed
     # commits are more likely to be successful.
 
-    stats = {
-        'not-in-apt': 0,
-        'not-in-vcs': 0,
-        'vcs-inaccessible': 0,
-        'gbp-dch-failed': 0,
-        'missing-upstream-tarball': 0,
-        'committer-not-allowed': 0,
-        'build-failed': 0,
-        'last-release-missing': 0,
-        'last-upload-not-in-vcs': 0,
-        'missing-changelog': 0,
-        'recent-commits': 0,
-        'no-unuploaded-changes': 0,
-        'no-unreleased-changes': 0,
-        'vcs-permission-denied': 0,
-        'changelog-parse-error': 0,
-        }
-    if args.autopkgtest_only:
-        stats['no-autopkgtest'] = 0
+    stats = {}
+
+    def inc_stats(result):
+        stats.setdefault(result, 0)
+        stats[result] += 1
 
     if len(packages) > 1:
         logging.info("Uploading packages: %s", ", ".join(packages))
@@ -475,14 +461,14 @@ def main(argv):  # noqa: C901
             try:
                 pkg_source = apt_get_source_package(package)
             except NoSuchPackage:
-                stats['not-in-apt'] += 1
+                inc_stats('not-in-apt')
                 logging.info("%s: package not found in apt", package)
                 ret = 1
                 continue
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
-                stats['not-in-vcs'] += 1
+                inc_stats('not-in-vcs')
                 logging.info(
                     "%s: no declared vcs location, skipping", pkg_source["Package"]
                 )
@@ -506,7 +492,7 @@ def main(argv):  # noqa: C901
         try:
             main_branch = open_branch(location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-            stats['vcs-inaccessible'] += 1
+            inc_stats('vcs-inaccessible')
             logging.exception("%s: %s", vcs_url, e)
             ret = 1
             continue
@@ -519,7 +505,7 @@ def main(argv):  # noqa: C901
                     try:
                         pkg_source = apt_get_source_package(source_name)
                     except NoSuchPackage:
-                        stats['not-in-apt'] += 1
+                        inc_stats('not-in-apt')
                         logging.info("%s: package not found in apt", package)
                         ret = 1
                         continue
@@ -535,7 +521,7 @@ def main(argv):  # noqa: C901
                 )
             ):
                 logging.info("%s: Skipping, package has no autopkgtest.", source_name)
-                stats['no-autopkgtest'] += 1
+                inc_stats('no-autopkgtest')
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
             if args.gpg_verification:
@@ -561,21 +547,21 @@ def main(argv):  # noqa: C901
                 )
             except GbpDchFailed as e:
                 logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
-                stats['gbp-dch-failed'] += 1
+                inc_stats('gbp-dch-failed')
                 continue
             except MissingUpstreamTarball as e:
-                stats['missing-upstream-tarball'] += 1
+                inc_stats('missing-upstream-tarball')
                 logging.warning("%s: missing upstream tarball: %s", source_name, e)
                 continue
             except BranchRateLimited as e:
-                stats['rate-limited'] += 1
+                inc_stats('rate-limited')
                 logging.warning(
                     '%s: rate limited by server (retrying after %s)',
                     source_name, e.retry_after)
                 ret = 1
                 continue
             except CommitterNotAllowed as e:
-                stats['committer-not-allowed'] += 1
+                inc_stats('committer-not-allowed')
                 logging.warn(
                     "%s: committer %s not in allowed list: %r",
                     source_name,
@@ -585,7 +571,7 @@ def main(argv):  # noqa: C901
                 continue
             except BuildFailedError as e:
                 logging.warn("%s: package failed to build: %s", source_name, e)
-                stats['build-failed'] += 1
+                inc_stats('build-failed')
                 ret = 1
                 continue
             except LastReleaseRevisionNotFound as e:
@@ -595,11 +581,11 @@ def main(argv):  # noqa: C901
                     source_name,
                     e.version,
                 )
-                stats['last-release-missing'] += 1
+                inc_stats('last-release-missing')
                 ret = 1
                 continue
             except LastUploadMoreRecent as e:
-                stats['last-upload-not-in-vcs'] += 1
+                inc_stats('last-upload-not-in-vcs')
                 logging.warn(
                     "%s: Last upload (%s) was more recent than VCS (%s)",
                     source_name,
@@ -609,28 +595,28 @@ def main(argv):  # noqa: C901
                 ret = 1
                 continue
             except ChangelogParseError as e:
-                stats['changelog-parse-error'] += 1
+                inc_stats('changelog-parse-error')
                 logging.info("%s: Error parsing changelog: %s", source_name, e)
                 ret = 1
                 continue
             except MissingChangelogError:
-                stats['missing-changelog'] += 1
+                inc_stats('missing-changelog')
                 logging.info("%s: No changelog found, skipping.", source_name)
                 ret = 1
                 continue
             except RecentCommits as e:
-                stats['recent-commits'] += 1
+                inc_stats('recent-commits')
                 logging.info(
                     "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges as e:
-                stats['no-unuploaded-changes'] += 1
+                inc_stats('no-unuploaded-changes')
                 logging.info("%s: No unuploaded changes (%s), skipping.",
                              source_name, e.archive_version)
                 continue
             except NoUnreleasedChanges:
-                stats['no-unreleased-changes'] += 1
+                inc_stats('no-unreleased-changes')
                 logging.info("%s: No unreleased changes, skipping.", source_name)
                 continue
 
@@ -641,7 +627,7 @@ def main(argv):  # noqa: C901
             try:
                 ws.push(dry_run=args.dry_run, tags=tags)
             except PermissionDenied:
-                stats['vcs-permission-denied'] += 1
+                inc_stats('vcs-permission-denied')
                 logging.info(
                     "%s: Permission denied pushing to branch, skipping.", source_name
                 )
