@@ -386,7 +386,7 @@ def main(argv):  # noqa: C901
         "--maintainer",
         type=str,
         action="append",
-        help="Select all packages maintainer by specified maintainer.",
+        help="Select all packages maintained by specified maintainer.",
     )
     parser.add_argument(
         "--vcswatch",
