@@ -34,6 +34,7 @@ from debmutate.changelog import (
     ChangelogEditor,
     ChangelogParseError,
     changeblock_ensure_first_line,
+    gbp_dch,
 )
 from debmutate.control import ControlEditor
 
@@ -41,6 +42,7 @@ from breezy import gpg
 from breezy.config import extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter
+from breezy.revision import NULL_REVISION
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -209,40 +211,45 @@ def prepare_upload_package(  # noqa: C901
     local_tree: WorkingTree,
     subpath: str,
     pkg: str,
-    last_uploaded_version: Version,
+    last_uploaded_version: Optional[Version],
     builder: str,
     gpg_strategy: Optional[str] = None,
     min_commit_age=None,
     allowed_committers=None,
 ):
-    if local_tree.has_filename(os.path.join(subpath, "debian/gbp.conf")):
+    debian_path = os.path.join(subpath, "debian")
+    if local_tree.has_filename(os.path.join(debian_path, "gbp.conf")):
         try:
-            subprocess.check_call(
-                ["gbp", "dch", "--ignore-branch"], cwd=local_tree.abspath(".")
-            )
+            gbp_dch(local_tree.abspath("."))
         except subprocess.CalledProcessError:
             # TODO(jelmer): gbp dch sometimes fails when there is no existing
             # open changelog entry; it fails invoking "dpkg --lt None <old-version>"
             raise GbpDchFailed()
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
-    if cl.version == last_uploaded_version:
+    if last_uploaded_version is not None and cl.version == last_uploaded_version:
         raise NoUnuploadedChanges(cl.version)
     try:
         previous_version_in_branch = changelog_find_previous_upload(cl)
     except NoPreviousUpload:
         pass
     else:
-        if last_uploaded_version > previous_version_in_branch:
-            raise LastUploadMoreRecent(last_uploaded_version, previous_version_in_branch)
+        if (last_uploaded_version is not None and
+                last_uploaded_version > previous_version_in_branch):
+            raise LastUploadMoreRecent(
+                last_uploaded_version, previous_version_in_branch)
 
-    logging.info("Checking revisions since %s" % last_uploaded_version)
+    if last_uploaded_version is not None:
+        logging.info("Checking revisions since %s", last_uploaded_version)
     with local_tree.lock_read():
-        try:
-            last_release_revid = find_last_release_revid(
-                local_tree.branch, last_uploaded_version
-            )
-        except NoSuchTag:
-            raise LastReleaseRevisionNotFound(pkg, last_uploaded_version)
+        if last_uploaded_version is not None:
+            try:
+                last_release_revid = find_last_release_revid(
+                    local_tree.branch, last_uploaded_version
+                )
+            except NoSuchTag:
+                raise LastReleaseRevisionNotFound(pkg, last_uploaded_version)
+        else:
+            last_release_revid = NULL_REVISION
         graph = local_tree.branch.repository.get_graph()
         revids = list(
             graph.iter_lefthand_ancestry(
@@ -268,7 +275,7 @@ def prepare_upload_package(  # noqa: C901
             raise NoUnreleasedChanges(cl.version)
     qa_upload = False
     team_upload = False
-    control_path = local_tree.abspath(os.path.join(subpath, "debian/control"))
+    control_path = local_tree.abspath(os.path.join(debian_path, "control"))
     with ControlEditor(control_path) as e:
         maintainer = parseaddr(e.source["Maintainer"])
         if maintainer[1] == "packages@qa.debian.org":
@@ -276,21 +283,27 @@ def prepare_upload_package(  # noqa: C901
         # TODO(jelmer): Check whether this is a team upload
         # TODO(jelmer): determine whether this is a NMU upload
     if qa_upload or team_upload:
-        changelog_path = local_tree.abspath(os.path.join(subpath, "debian/changelog"))
+        changelog_path = local_tree.abspath(os.path.join(debian_path, "changelog"))
         with ChangelogEditor(changelog_path) as e:
             if qa_upload:
                 changeblock_ensure_first_line(e[0], "QA upload.")
+                message = "Mention QA Upload."
             elif team_upload:
                 changeblock_ensure_first_line(e[0], "Team upload.")
-        local_tree.commit(
-            specific_files=[os.path.join(subpath, "debian/changelog")],
-            message="Mention QA Upload.",
-            allow_pointless=False,
-            reporter=NullCommitReporter(),
-        )
+                message = "Mention Team Upload."
+            else:
+                message = None
+        if message is not None:
+            local_tree.commit(
+                specific_files=[os.path.join(debian_path, "changelog")],
+                message=message,
+                allow_pointless=False,
+                reporter=NullCommitReporter(),
+            )
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
-    builder = builder.replace("${LAST_VERSION}", str(last_uploaded_version))
+    if last_uploaded_version is not None:
+        builder = builder.replace("${LAST_VERSION}", str(last_uploaded_version))
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder
     )
