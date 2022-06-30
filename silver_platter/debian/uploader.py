@@ -421,6 +421,9 @@ def main(argv):  # noqa: C901
         action="append",
         help="Require that all new commits are from specified committers",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true")
 
     args = parser.parse_args(argv)
 
@@ -506,7 +509,11 @@ def main(argv):  # noqa: C901
             main_branch = open_branch(location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             inc_stats('vcs-inaccessible')
-            logging.exception("%s: %s", vcs_url, e)
+            if args.debug:
+                logging.exception("%s: %s", vcs_url, e)
+            else:
+                logging.info(
+                    "%s: branch unavailable: %s", vcs_url, e)
             ret = 1
             continue
         with Workspace(main_branch) as ws:
