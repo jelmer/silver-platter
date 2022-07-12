@@ -30,9 +30,7 @@ from breezy import (
 
 from breezy.bzr import LineEndingError
 
-from breezy.branch import (
-    Branch,
-)
+from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
 from breezy.git.remote import RemoteGitError
 from breezy.transport import Transport, get_transport
@@ -304,7 +302,7 @@ def open_branch_containing(
         raise e
 
 
-def full_branch_url(branch):
+def full_branch_url(branch: Branch) -> str:
     """Get the full URL for a branch.
 
     Ideally this should just return Branch.user_url,
