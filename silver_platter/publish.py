@@ -26,20 +26,27 @@ from breezy import (
 )
 from breezy.errors import PermissionDenied
 from breezy.memorybranch import MemoryBranch
-from breezy.propose import (
-    get_hoster,
-    Hoster,
-    MergeProposal,
-    MergeProposalExists,
-    NoSuchProject,
-    UnsupportedHoster,
-)
+try:
+    from breezy.forge import (
+        get_forge,
+        Forge,
+        MergeProposal,
+        MergeProposalExists,
+        NoSuchProject,
+        UnsupportedForge,
+        SourceNotDerivedFromTarget,
+        )
+except ModuleNotFoundError:
+    from breezy.propose import (
+        get_hoster as get_forge,
+        Hoster as Forge,
+        MergeProposal,
+        MergeProposalExists,
+        NoSuchProject,
+        UnsupportedHoster as UnsupportedForge,
+        SourceNotDerivedFromTarget,
+    )
 from breezy.transport import Transport
-
-from breezy.propose import (
-    SourceNotDerivedFromTarget,
-)
-
 
 from .utils import (
     open_branch,
@@ -57,7 +64,7 @@ __all__ = [
     "find_existing_proposed",
     "NoSuchProject",
     "PermissionDenied",
-    "UnsupportedHoster",
+    "UnsupportedForge",
     "SourceNotDerivedFromTarget",
 ]
 
@@ -112,7 +119,7 @@ def push_result(
 def push_changes(
     local_branch: Branch,
     main_branch: Branch,
-    hoster: Optional[Hoster],
+    forge: Optional[Forge],
     possible_transports: Optional[List[Transport]] = None,
     additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
     dry_run: bool = False,
@@ -120,10 +127,10 @@ def push_changes(
     stop_revision: Optional[bytes] = None,
 ) -> None:
     """Push changes to a branch."""
-    if hoster is None:
+    if forge is None:
         push_url = main_branch.user_url
     else:
-        push_url = hoster.get_push_url(main_branch)
+        push_url = forge.get_push_url(main_branch)
     logging.info("pushing to %s", push_url)
     target_branch = open_branch(push_url, possible_transports=possible_transports)
     if not dry_run:
@@ -139,7 +146,7 @@ def push_changes(
 def push_derived_changes(
     local_branch: Branch,
     main_branch: Branch,
-    hoster: Hoster,
+    forge: Forge,
     name: str,
     overwrite_existing: Optional[bool] = False,
     owner: Optional[str] = None,
@@ -149,7 +156,7 @@ def push_derived_changes(
     kwargs = {}
     if tags is not None:
         kwargs["tag_selector"] = _tag_selector_from_tags(tags)
-    remote_branch, public_branch_url = hoster.publish_derived(
+    remote_branch, public_branch_url = forge.publish_derived(
         local_branch,
         main_branch,
         name=name,
@@ -164,7 +171,7 @@ def push_derived_changes(
 def propose_changes(  # noqa: C901
     local_branch: Branch,
     main_branch: Branch,
-    hoster: Hoster,
+    forge: Forge,
     name: str,
     mp_description: str,
     resume_branch: Optional[Branch] = None,
@@ -186,7 +193,7 @@ def propose_changes(  # noqa: C901
     Args:
       local_branch: Local branch with changes to propose
       main_branch: Target branch to propose against
-      hoster: Associated hoster for main branch
+      forge: Associated forge for main branch
       mp_description: Merge proposal description
       resume_branch: Existing derived branch
       resume_proposal: Existing merge proposal to resume
@@ -219,7 +226,7 @@ def propose_changes(  # noqa: C901
             )
             remote_branch = resume_branch
         else:
-            remote_branch, public_branch_url = hoster.publish_derived(
+            remote_branch, public_branch_url = forge.publish_derived(
                 local_branch,
                 main_branch,
                 name=name,
@@ -266,7 +273,7 @@ def propose_changes(  # noqa: C901
             resume_proposal = None
     if resume_proposal is None:
         if not dry_run:
-            proposal_builder = hoster.get_proposer(remote_branch, main_branch)
+            proposal_builder = forge.get_proposer(remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
             kwargs["commit_message"] = commit_message
             kwargs["allow_collaboration"] = allow_collaboration
@@ -279,7 +286,7 @@ def propose_changes(  # noqa: C901
                 )
             except MergeProposalExists as e:
                 if getattr(e, "existing_proposal", None) is None:
-                    # Hoster didn't tell us where the actual proposal is.
+                    # Forge didn't tell us where the actual proposal is.
                     raise
                 resume_proposal = e.existing_proposal
             except errors.PermissionDenied:
@@ -435,7 +442,7 @@ class DryRunProposal(MergeProposal):
 
 def find_existing_proposed(
     main_branch: Branch,
-    hoster: Hoster,
+    forge: Forge,
     name: str,
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
@@ -445,7 +452,7 @@ def find_existing_proposed(
 
     Args:
       main_branch: Main branch
-      hoster: The hoster
+      forge: The forge
       name: Name of the derived branch
       overwrite_unrelated: Whether to overwrite existing (but unrelated)
         branches
@@ -457,11 +464,11 @@ def find_existing_proposed(
     """
     try:
         if preferred_schemes is not None:
-            existing_branch = hoster.get_derived_branch(
+            existing_branch = forge.get_derived_branch(
                 main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes
             )
         else:  # TODO: Support older versions of breezy without preferred_schemes
-            existing_branch = hoster.get_derived_branch(
+            existing_branch = forge.get_derived_branch(
                 main_branch, name=name, owner=owner
             )
     except errors.NotBranchError:
@@ -474,7 +481,7 @@ def find_existing_proposed(
         )
         # If there is an open or rejected merge proposal, resume that.
         merged_proposal = None
-        for mp in hoster.iter_proposals(existing_branch, main_branch, status="all"):
+        for mp in forge.iter_proposals(existing_branch, main_branch, status="all"):
             if not mp.is_closed() and not mp.is_merged():
                 return (existing_branch, False, mp)
             else:
@@ -576,7 +583,7 @@ def publish_changes(
         [Optional[MergeProposal]], Optional[str]
     ] = None,
     dry_run: bool = False,
-    hoster: Optional[Hoster] = None,
+    forge: Optional[Forge] = None,
     allow_create_proposal: bool = True,
     labels: Optional[List[str]] = None,
     overwrite_existing: Optional[bool] = True,
@@ -596,7 +603,7 @@ def publish_changes(
       get_proposal_description: Function to retrieve proposal description
       get_proposal_commit_message: Function to retrieve proposal commit message
       dry_run: Whether to dry run
-      hoster: Hoster, if known
+      forge: Forge, if known
       allow_create_proposal: Whether to allow creating proposals
       labels: Labels to set for any merge proposals
       overwrite_existing: Whether to overwrite existing (but unrelated) branch
@@ -625,14 +632,14 @@ def publish_changes(
         # merge proposal last time.
         logging.info("No changes added; making sure merge proposal is up to date.")
 
-    if hoster is None:
-        hoster = get_hoster(main_branch)
+    if forge is None:
+        forge = get_forge(main_branch)
 
     if mode == MODE_PUSH_DERIVED:
         (remote_branch, public_url) = push_derived_changes(
             local_branch,
             main_branch,
-            hoster=hoster,
+            forge=forge,
             name=name,
             overwrite_existing=overwrite_existing,
             tags=tags,
@@ -651,7 +658,7 @@ def publish_changes(
             push_changes(
                 local_branch,
                 main_branch,
-                hoster=hoster,
+                forge=forge,
                 dry_run=dry_run,
                 tags=tags,
                 stop_revision=stop_revision,
@@ -671,7 +678,7 @@ def publish_changes(
         raise InsufficientChangesForNewProposal()
 
     mp_description = get_proposal_description(
-        getattr(hoster, "merge_proposal_description_format", "plain"),
+        getattr(forge, "merge_proposal_description_format", "plain"),
         existing_proposal if resume_branch else None,
     )
     if get_proposal_commit_message is not None:
@@ -681,7 +688,7 @@ def publish_changes(
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
-        hoster=hoster,
+        forge=forge,
         name=name,
         mp_description=mp_description,
         resume_branch=resume_branch,

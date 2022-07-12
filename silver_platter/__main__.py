@@ -27,14 +27,13 @@ from . import (
 )
 
 
-def hosters_main(argv: List[str]) -> Optional[int]:
-    from breezy.propose import hosters
-
-    parser = argparse.ArgumentParser(prog="svp hosters")
+def forges_main(argv: List[str]) -> Optional[int]:
+    from .proposal import forges
+    parser = argparse.ArgumentParser(prog="svp forges")
     parser.parse_args(argv)
 
-    for name, hoster_cls in hosters.items():
-        for instance in hoster_cls.iter_instances():
+    for name, forge_cls in forges.items():
+        for instance in forge_cls.iter_instances():
             print("%s (%s)" % (instance.base_url, name))
 
     return None
@@ -52,30 +51,30 @@ def login_main(argv: List[str]) -> Optional[int]:
             'launchpadlib is not installed, unable to log in to launchpad')
         lp_uris = []
 
-    hoster = None
-    # TODO(jelmer): Don't special case various hosters here
+    forge = None
+    # TODO(jelmer): Don't special case various forges here
     if args.url.startswith("https://github.com"):
-        hoster = "github"
+        forge = "github"
     for key, root in lp_uris.web_roots.items():
         if args.url.startswith(root) or args.url == root.rstrip("/"):
-            hoster = "launchpad"
+            forge = "launchpad"
             lp_service_root = lp_uris.service_roots[key]
-    if hoster is None:
-        hoster = "gitlab"
+    if forge is None:
+        forge = "gitlab"
 
-    if hoster == "gitlab":
+    if forge == "gitlab":
         from breezy.plugins.gitlab.cmds import cmd_gitlab_login
 
         cmd_gl = cmd_gitlab_login()
         cmd_gl._setup_outf()
         return cmd_gl.run(args.url)
-    elif hoster == "github":
+    elif forge == "github":
         from breezy.plugins.github.cmds import cmd_github_login
 
         cmd_gh = cmd_github_login()
         cmd_gh._setup_outf()
         return cmd_gh.run()
-    elif hoster == "launchpad":
+    elif forge == "launchpad":
         from breezy.plugins.launchpad.cmds import cmd_launchpad_login
 
         cmd_lp = cmd_launchpad_login()
@@ -86,7 +85,7 @@ def login_main(argv: List[str]) -> Optional[int]:
         lp_api.connect_launchpad(lp_service_root, version="devel")
         return None
     else:
-        logging.exception("Unknown hoster %r.", hoster)
+        logging.exception("Unknown forge %r.", forge)
         return 1
 
 
@@ -103,12 +102,12 @@ def proposals_main(argv: List[str]) -> None:
     )
     args = parser.parse_args(argv)
 
-    for hoster, proposal, status in iter_all_mps([args.status]):
+    for forge, proposal, status in iter_all_mps([args.status]):
         print(proposal.url)
 
 
 subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
-    "hosters": hosters_main,
+    "forges": forges_main,
     "login": login_main,
     "proposals": proposals_main,
     "run": run.main,

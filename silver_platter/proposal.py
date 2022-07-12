@@ -26,25 +26,36 @@ from breezy.branch import Branch
 from breezy.errors import (
     PermissionDenied,
 )
+try:
+    from breezy.forge import (
+        ForgeLoginRequired,
+        UnsupportedForge,
+        get_forge,
+        forges,
+        Forge,
+        MergeProposal,
+        NoSuchProject,
+        iter_forge_instances,
+        SourceNotDerivedFromTarget,
+        )
+except ModuleNotFoundError:
+    from breezy.propose import (
+        HosterLoginRequired as ForgeLoginRequired,
+        UnsupportedHoster as UnsupportedForge,
+        get_hoster as get_forge,
+        hosters as forges,
+        Hoster as Forge,
+        MergeProposal,
+        NoSuchProject,
+        iter_hoster_instances as iter_forge_instances,
+        SourceNotDerivedFromTarget,
+        )
+
 from breezy.merge_directive import (
     MergeDirective,
     MergeDirective2,
 )
 from breezy.transport import Transport
-from breezy.propose import (
-    get_hoster,
-    hosters,
-    Hoster,
-    MergeProposal,
-    NoSuchProject,
-    UnsupportedHoster,
-    HosterLoginRequired,
-)
-
-from breezy.propose import (
-    iter_hoster_instances,
-    SourceNotDerivedFromTarget,
-)
 
 import breezy.plugins.gitlab  # noqa: F401
 import breezy.plugins.github  # noqa: F401
@@ -68,12 +79,12 @@ from .publish import (
 
 
 __all__ = [
-    "HosterLoginRequired",
-    "UnsupportedHoster",
+    "ForgeLoginRequired",
+    "UnsupportedForge",
     "PermissionDenied",
     "NoSuchProject",
-    "get_hoster",
-    "hosters",
+    "get_forge",
+    "forges",
     "iter_all_mps",
     "push_changes",
     "SUPPORTED_MODES",
@@ -97,7 +108,7 @@ def enable_tag_pushing(branch: Branch) -> None:
 def merge_directive_changes(
     local_branch: Branch,
     main_branch: Branch,
-    hoster: Hoster,
+    forge: Forge,
     name: str,
     message: str,
     include_patch: bool = False,
@@ -107,7 +118,7 @@ def merge_directive_changes(
     from breezy import osutils
     import time
 
-    remote_branch, public_branch_url = hoster.publish_derived(
+    remote_branch, public_branch_url = forge.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing
     )
     public_branch = open_branch(public_branch_url)
@@ -128,29 +139,29 @@ def merge_directive_changes(
 
 def iter_all_mps(
     statuses: Optional[List[str]] = None,
-) -> Iterator[Tuple[Hoster, MergeProposal, str]]:
+) -> Iterator[Tuple[Forge, MergeProposal, str]]:
     """iterate over all existing merge proposals."""
     if statuses is None:
         statuses = ["open", "merged", "closed"]
-    for instance in iter_hoster_instances():
+    for instance in iter_forge_instances():
         for status in statuses:
             try:
                 for mp in instance.iter_my_proposals(status=status):
                     yield instance, mp, status
-            except HosterLoginRequired:
+            except ForgeLoginRequired:
                 pass
 
 
 def iter_conflicted(
     branch_name: str,
-) -> Iterator[Tuple[str, Branch, str, Branch, Hoster, MergeProposal, bool]]:
+) -> Iterator[Tuple[str, Branch, str, Branch, Forge, MergeProposal, bool]]:
     """Find conflicted branches owned by the current user.
 
     Args:
       branch_name: Branch name to search for
     """
     possible_transports: List[Transport] = []
-    for hoster, mp, status in iter_all_mps(["open"]):
+    for forge, mp, status in iter_all_mps(["open"]):
         try:
             if mp.can_be_merged():
                 continue
@@ -174,7 +185,7 @@ def iter_conflicted(
             main_branch,
             subpath,
             resume_branch,
-            hoster,
+            forge,
             mp,
             True,
         )

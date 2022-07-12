@@ -27,11 +27,11 @@ from breezy.errors import (
     NotBranchError,
     NoColocatedBranchSupport,
 )
-from breezy.propose import (
-    get_hoster,
-    Hoster,
+from .proposal import (
+    get_forge,
+    Forge,
     MergeProposal,
-    UnsupportedHoster,
+    UnsupportedForge,
 )
 
 from breezy.transport.local import LocalTransport
@@ -262,24 +262,24 @@ class Workspace(object):
 
     def push(
         self,
-        hoster: Optional[Hoster] = None,
+        forge: Optional[Forge] = None,
         dry_run: bool = False,
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
         stop_revision: Optional[bytes] = None,
     ) -> None:
-        if hoster is None:
+        if forge is None:
             try:
-                hoster = get_hoster(self.main_branch)
-            except UnsupportedHoster:
+                forge = get_forge(self.main_branch)
+            except UnsupportedForge:
                 if not isinstance(self.main_branch.control_transport, LocalTransport):
                     logging.warning(
-                        'Unable to find hoster for %s to determine push url, '
+                        'Unable to find forge for %s to determine push url, '
                         'trying anyway.', self.main_branch.user_url)
-                hoster = None
+                forge = None
         return push_changes(
             self.local_tree.branch,
             self.main_branch,
-            hoster=hoster,
+            forge=forge,
             additional_colocated_branches=self._inverse_additional_colocated_branches(),
             dry_run=dry_run,
             tags=tags,
@@ -290,7 +290,7 @@ class Workspace(object):
         self,
         name: str,
         description: str,
-        hoster: Optional[Hoster] = None,
+        forge: Optional[Forge] = None,
         existing_proposal: Optional[MergeProposal] = None,
         overwrite_existing: Optional[bool] = None,
         labels: Optional[List[str]] = None,
@@ -302,12 +302,12 @@ class Workspace(object):
         allow_collaboration: bool = False,
         stop_revision: Optional[bytes] = None,
     ) -> Tuple[MergeProposal, bool]:
-        if hoster is None:
-            hoster = get_hoster(self.main_branch)
+        if forge is None:
+            forge = get_forge(self.main_branch)
         return propose_changes(
             self.local_tree.branch,
             self.main_branch,
-            hoster=hoster,
+            forge=forge,
             name=name,
             mp_description=description,
             resume_branch=self.resume_branch,
@@ -327,7 +327,7 @@ class Workspace(object):
     def push_derived(
         self,
         name: str,
-        hoster: Optional[Hoster] = None,
+        forge: Optional[Forge] = None,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
@@ -337,19 +337,19 @@ class Workspace(object):
 
         Args:
           name: Branch name
-          hoster: Optional hoster to use
+          forge: Optional forge to use
           overwrite_existing: Whether to overwrite an existing branch
           tags: Tags list to push
           owner: Owner name
         Returns:
           tuple with remote_branch and public_branch_url
         """
-        if hoster is None:
-            hoster = get_hoster(self.main_branch)
+        if forge is None:
+            forge = get_forge(self.main_branch)
         return push_derived_changes(
             self.local_tree.branch,
             self.main_branch,
-            hoster,
+            forge,
             name,
             overwrite_existing=overwrite_existing,
             owner=owner,

@@ -25,16 +25,16 @@ import sys
 from typing import Optional, List
 
 from breezy import osutils
-from breezy import propose as _mod_propose
 
 import silver_platter  # noqa: F401
 
 from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
 from .proposal import (
-    UnsupportedHoster,
+    ForgeLoginRequired,
+    UnsupportedForge,
     enable_tag_pushing,
     find_existing_proposed,
-    get_hoster,
+    get_forge,
 )
 from .workspace import (
     Workspace,
@@ -73,22 +73,22 @@ def apply_and_publish(  # noqa: C901
     overwrite = False
 
     try:
-        hoster = get_hoster(main_branch)
-    except UnsupportedHoster as e:
+        forge = get_forge(main_branch)
+    except UnsupportedForge as e:
         if mode != "push":
             raise
-        # We can't figure out what branch to resume from when there's no hoster
+        # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
         existing_proposal = None
         logging.warn(
-            "Unsupported hoster (%s), will attempt to push to %s",
+            "Unsupported forge (%s), will attempt to push to %s",
             e,
             full_branch_url(main_branch),
         )
     else:
         (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
-            main_branch, hoster, name, owner=derived_owner
+            main_branch, forge, name, owner=derived_owner
         )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
@@ -126,25 +126,25 @@ def apply_and_publish(  # noqa: C901
                 get_proposal_commit_message=lambda ep: get_commit_message(result, ep),
                 allow_create_proposal=lambda: allow_create_proposal(result),
                 dry_run=dry_run,
-                hoster=hoster,
+                forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
                 existing_proposal=existing_proposal,
             )
-        except UnsupportedHoster as e:
+        except UnsupportedForge as e:
             logging.exception(
-                "No known supported hoster for %s. Run 'svp login'?",
+                "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
             return 2
         except InsufficientChangesForNewProposal:
             logging.info('Insufficient changes for a new merge proposal')
             return 1
-        except _mod_propose.HosterLoginRequired as e:
+        except ForgeLoginRequired as e:
             logging.exception(
                 "Credentials for hosting site at %r missing. " "Run 'svp login'?",
-                e.hoster.base_url,
+                e.forge.base_url,
             )
             return 2
 
