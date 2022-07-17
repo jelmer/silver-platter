@@ -19,13 +19,16 @@ import logging
 from typing import Optional, Callable, List, Union, Dict, BinaryIO, Any, Tuple, Iterator
 
 from breezy.branch import Branch
+try:
+    from breezy.controldir import NoColocatedBranchSupport
+except ImportError:  # breezy < 3.3
+    from breezy.errors import NoColocatedBranchSupport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 from breezy.diff import show_diff_trees
 from breezy.errors import (
     DivergedBranches,
     NotBranchError,
-    NoColocatedBranchSupport,
 )
 from .proposal import (
     get_forge,

@@ -32,6 +32,10 @@ from breezy.bzr import LineEndingError
 
 from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
+try:
+    from breezy.controldir import NoColocatedBranchSupport
+except ImportError:  # breezy < 3.3
+    from breezy.errors import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
 from breezy.transport import Transport, get_transport
 from breezy.workingtree import WorkingTree
@@ -78,7 +82,7 @@ def create_temp_sprout(
             try:
                 add_branch = branch.controldir.open_branch(  # type: ignore
                     name=from_branch_name)
-            except (errors.NotBranchError, errors.NoColocatedBranchSupport):
+            except (errors.NotBranchError, NoColocatedBranchSupport):
                 pass
             else:
                 if isinstance(additional_colocated_branches, dict):
