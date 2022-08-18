@@ -40,7 +40,8 @@ class WorkspaceTests(TestCaseWithTransport):
         b = self.make_branch_and_tree("target")
         c = b.controldir.sprout("resume").open_workingtree()
         c.commit("some change")
-        with Workspace(b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
+        with Workspace(
+                b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
             self.assertEqual(
                 ws.local_tree.branch.last_revision(), c.branch.last_revision()
             )
@@ -61,7 +62,8 @@ class WorkspaceTests(TestCaseWithTransport):
         b.commit("add conflict in main")
         self.build_tree_contents([("resume/foo", "new contents in resume\n")])
         c.commit("add conflict in resume")
-        with Workspace(b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
+        with Workspace(
+                b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
             self.assertIs(ws.resume_branch, None)
             self.assertEqual(ws.base_revid, b.branch.last_revision())
             self.assertEqual(
@@ -84,7 +86,8 @@ class WorkspaceTests(TestCaseWithTransport):
         b = self.make_branch_and_tree("target")
         with Workspace(b.branch, dir=self.test_dir) as ws:
             self.build_tree_contents(
-                [(os.path.join(ws.local_tree.basedir, "foo"), "some content\n")]
+                [(os.path.join(ws.local_tree.basedir, "foo"),
+                  "some content\n")]
             )
             ws.local_tree.add(["foo"])
             ws.local_tree.commit("blah")
@@ -92,4 +95,5 @@ class WorkspaceTests(TestCaseWithTransport):
             self.assertTrue(ws.changes_since_base())
             f = BytesIO()
             ws.show_diff(outf=f)
-            self.assertContainsRe(f.getvalue().decode("utf-8"), "\\+some content")
+            self.assertContainsRe(
+                f.getvalue().decode("utf-8"), "\\+some content")

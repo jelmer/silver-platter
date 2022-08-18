@@ -93,7 +93,8 @@ class RunPostCheckTests(TestCaseWithTransport):
         tree = self.make_branch_and_tree("tree")
         cid = tree.commit("a")
         self.assertRaises(
-            PostCheckFailed, run_post_check, tree, "/bin/false", since_revid=cid
+            PostCheckFailed, run_post_check, tree, "/bin/false",
+            since_revid=cid
         )
 
     def test_true(self):

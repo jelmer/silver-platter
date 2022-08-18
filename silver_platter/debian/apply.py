@@ -102,12 +102,16 @@ class CommandResult(object):
 def install_built_package(local_tree, subpath, build_target_dir):
     import re
     import subprocess
-    with open(local_tree.abspath(os.path.join(subpath, 'debian/changelog')), 'r') as f:
+    abspath = local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
+    with open(abspath, 'r') as f:
         cl = Changelog(f)
     non_epoch_version = cl[0].version.upstream_version
     if cl[0].version.debian_version is not None:
         non_epoch_version += "-%s" % cl[0].version.debian_version
-    c = re.compile('%s_%s_(.*).changes' % (re.escape(cl[0].package), re.escape(non_epoch_version)))  # type: ignore
+    c = re.compile(
+        '%s_%s_(.*).changes' % (
+            re.escape(cl[0].package),
+            re.escape(non_epoch_version)))  # type: ignore
     for entry in os.scandir(build_target_dir):
         if not c.match(entry.name):
             continue
@@ -120,7 +124,8 @@ def install_built_package(local_tree, subpath, build_target_dir):
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: Union[str, List[str]],
     commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', update_changelog: Optional[bool] = None,
+    resume_metadata=None,
+    subpath: str = '', update_changelog: Optional[bool] = None,
     extra_env: Optional[Dict[str, str]] = None,
     committer: Optional[str] = None
 ) -> CommandResult:  # noqa: C901
@@ -223,7 +228,9 @@ def script_runner(   # noqa: C901
         # touch the branch.
         commit_pending = True
     if commit_pending:
-        if update_changelog and result.description and local_tree.has_changes():
+        if (update_changelog
+                and result.description
+                and local_tree.has_changes()):
             add_changelog_entry(
                 local_tree,
                 os.path.join(debian_path, 'changelog'),
@@ -288,7 +295,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--build-target-dir",
         type=str,
         help=(
-            "Store built Debian files in specified directory " "(with --build-verify)"
+            "Store built Debian files in specified directory "
+            "(with --build-verify)"
         ),
     )
     parser.add_argument(
@@ -310,7 +318,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         recipe = None
 
     if args.commit_pending:
-        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {
+            "auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -345,12 +354,14 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
         if args.build_verify or args.install:
             try:
-                build(local_tree, subpath, builder=args.builder, result_dir=args.build_target_dir)
+                build(local_tree, subpath, builder=args.builder,
+                      result_dir=args.build_target_dir)
             except BuildFailedError:
                 logging.error("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
-                logging.error("%s: unable to find upstream source", result.source)
+                logging.error(
+                    "%s: unable to find upstream source", result.source)
                 return False
     except Exception:
         reset_tree(local_tree, subpath)

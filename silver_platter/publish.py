@@ -89,7 +89,8 @@ def _tag_selector_from_tags(tags):
 def push_result(
     local_branch: Branch,
     remote_branch: Branch,
-    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches:
+        Optional[Union[List[str], Dict[str, str]]] = None,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
     stop_revision: Optional[bytes] = None,
 ) -> None:
@@ -98,22 +99,27 @@ def push_result(
         kwargs["tag_selector"] = _tag_selector_from_tags(tags)
     try:
         local_branch.push(
-            remote_branch, overwrite=False, stop_revision=stop_revision, **kwargs
+            remote_branch, overwrite=False, stop_revision=stop_revision,
+            **kwargs
         )
     except errors.LockFailed as e:
         # Almost certainly actually a PermissionDenied error..
-        raise errors.PermissionDenied(path=full_branch_url(remote_branch), extra=e)
+        raise errors.PermissionDenied(
+            path=full_branch_url(remote_branch), extra=e)
     for from_branch_name in additional_colocated_branches or []:
         try:
-            add_branch = local_branch.controldir.open_branch(name=from_branch_name)  # type: ignore
+            add_branch = local_branch.controldir.open_branch(
+                name=from_branch_name)  # type: ignore
         except errors.NotBranchError:
             pass
         else:
             if isinstance(additional_colocated_branches, dict):
-                to_branch_name = additional_colocated_branches[from_branch_name]
+                to_branch_name = additional_colocated_branches[
+                    from_branch_name]
             else:
                 to_branch_name = from_branch_name
-            remote_branch.controldir.push_branch(add_branch, name=to_branch_name, **kwargs)  # type: ignore
+            remote_branch.controldir.push_branch(
+                add_branch, name=to_branch_name, **kwargs)  # type: ignore
 
 
 def push_changes(
@@ -121,7 +127,8 @@ def push_changes(
     main_branch: Branch,
     forge: Optional[Forge],
     possible_transports: Optional[List[Transport]] = None,
-    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches:
+        Optional[Union[List[str], Dict[str, str]]] = None,
     dry_run: bool = False,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
     stop_revision: Optional[bytes] = None,
@@ -132,7 +139,8 @@ def push_changes(
     else:
         push_url = forge.get_push_url(main_branch)
     logging.info("pushing to %s", push_url)
-    target_branch = open_branch(push_url, possible_transports=possible_transports)
+    target_branch = open_branch(
+        push_url, possible_transports=possible_transports)
     if not dry_run:
         push_result(
             local_branch,
@@ -180,7 +188,8 @@ def propose_changes(  # noqa: C901
     labels: Optional[List[str]] = None,
     dry_run: bool = False,
     commit_message: Optional[str] = None,
-    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches:
+        Optional[Union[List[str], Dict[str, str]]] = None,
     allow_empty: bool = False,
     reviewers: Optional[List[str]] = None,
     tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
@@ -237,14 +246,15 @@ def propose_changes(  # noqa: C901
             )
         for from_branch_name in additional_colocated_branches or []:
             try:
-                local_colo_branch = local_branch.controldir.open_branch(  # type: ignore
+                local_colo_branch = local_branch.controldir.open_branch(
                     name=from_branch_name
-                )
+                )  # type: ignore
             except errors.NotBranchError:
                 pass
             else:
                 if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[from_branch_name]
+                    to_branch_name = additional_colocated_branches[
+                        from_branch_name]
                 else:
                     to_branch_name = from_branch_name
                 remote_branch.controldir.push_branch(  # type: ignore
@@ -269,7 +279,8 @@ def propose_changes(  # noqa: C901
         try:
             resume_proposal.reopen()  # type: ignore
         except ReopenFailed:
-            logging.info("Reopening existing proposal failed. Creating new proposal.")
+            logging.info(
+                "Reopening existing proposal failed. Creating new proposal.")
             resume_proposal = None
     if resume_proposal is None:
         if not dry_run:
@@ -290,7 +301,8 @@ def propose_changes(  # noqa: C901
                     raise
                 resume_proposal = e.existing_proposal
             except errors.PermissionDenied:
-                logging.info("Permission denied while trying to create " "proposal.")
+                logging.info(
+                    "Permission denied while trying to create " "proposal.")
                 raise
             else:
                 return (mp, True)
@@ -328,7 +340,8 @@ class EmptyMergeProposal(Exception):
 
 
 def check_proposal_diff(
-    other_branch: Branch, main_branch: Branch, stop_revision: Optional[bytes] = None
+    other_branch: Branch, main_branch: Branch,
+    stop_revision: Optional[bytes] = None
 ) -> None:
     if stop_revision is None:
         stop_revision = other_branch.last_revision()
@@ -337,7 +350,8 @@ def check_proposal_diff(
     with other_branch.lock_read():
         main_tree = other_branch.repository.revision_tree(main_revid)
         revision_graph = other_branch.repository.get_graph()
-        tree_branch = MemoryBranch(other_branch.repository, (None, main_revid), None)
+        tree_branch = MemoryBranch(
+            other_branch.repository, (None, main_revid), None)
         merger = _mod_merge.Merger(
             tree_branch, this_tree=main_tree, revision_graph=revision_graph
         )
@@ -465,9 +479,12 @@ def find_existing_proposed(
     try:
         if preferred_schemes is not None:
             existing_branch = forge.get_derived_branch(
-                main_branch, name=name, owner=owner, preferred_schemes=preferred_schemes
+                main_branch, name=name, owner=owner,
+                preferred_schemes=preferred_schemes
             )
-        else:  # TODO: Support older versions of breezy without preferred_schemes
+        else:
+            # TODO: Support older versions of breezy without
+            # preferred_schemes
             existing_branch = forge.get_derived_branch(
                 main_branch, name=name, owner=owner
             )
@@ -481,7 +498,8 @@ def find_existing_proposed(
         )
         # If there is an open or rejected merge proposal, resume that.
         merged_proposal = None
-        for mp in forge.iter_proposals(existing_branch, main_branch, status="all"):
+        for mp in forge.iter_proposals(
+                existing_branch, main_branch, status="all"):
             if not mp.is_closed() and not mp.is_merged():
                 return (existing_branch, False, mp)
             else:
@@ -504,7 +522,8 @@ def find_existing_proposed(
 
 
 def merge_conflicts(
-    main_branch: Branch, other_branch: Branch, other_revision: Optional[bytes] = None
+    main_branch: Branch, other_branch: Branch,
+    other_revision: Optional[bytes] = None
 ) -> bool:
     """Check whether two branches are conflicted when merged.
 
@@ -550,14 +569,16 @@ def merge_conflicts(
         with tree_merger.make_preview_transform():
             return bool(tree_merger.cooked_conflicts)
     finally:
-        _mod_merge.Merger.hooks["merge_file_content"] = old_file_content_mergers
+        _mod_merge.Merger.hooks["merge_file_content"] = (
+            old_file_content_mergers)
 
 
 class PublishResult(object):
     """A object describing the result of a publish action."""
 
     def __init__(
-        self, mode: str, proposal: Optional[MergeProposal] = None, is_new: bool = False
+        self, mode: str, proposal: Optional[MergeProposal] = None,
+        is_new: bool = False
     ) -> None:
         self.mode = mode
         self.proposal = proposal
@@ -630,7 +651,8 @@ def publish_changes(
         # No new revisions added on this iteration, but changes since main
         # branch. We may not have gotten round to updating/creating the
         # merge proposal last time.
-        logging.info("No changes added; making sure merge proposal is up to date.")
+        logging.info(
+            "No changes added; making sure merge proposal is up to date.")
 
     if forge is None:
         forge = get_forge(main_branch)
@@ -653,7 +675,8 @@ def publish_changes(
             # breezy would do this check too, but we want to be *really* sure.
             with local_branch.lock_read():
                 graph = local_branch.repository.get_graph()
-                if not graph.is_ancestor(main_branch.last_revision(), stop_revision):
+                if not graph.is_ancestor(
+                        main_branch.last_revision(), stop_revision):
                     raise errors.DivergedBranches(main_branch, local_branch)
             push_changes(
                 local_branch,

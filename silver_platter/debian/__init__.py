@@ -103,7 +103,8 @@ def add_changelog_entry(
     # TODO(jelmer): This logic should ideally be in python-debian.
     with tree.get_file(path) as f:
         cl = Changelog()
-        cl.parse_changelog(f, max_blocks=None, allow_empty_author=True, strict=False)
+        cl.parse_changelog(
+            f, max_blocks=None, allow_empty_author=True, strict=False)
         _changelog_add_entry(
             cl,
             summary=summary,
@@ -147,7 +148,8 @@ def build(
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([tree.abspath(subpath)], builder=builder, result_dir=result_dir)
+    cmd_builddeb().run(
+        [tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 class NoAptSources(Exception):
@@ -169,7 +171,8 @@ def apt_get_source_package(name: str) -> Deb822:
     try:
         sources = apt_pkg.SourceRecords()
     except apt_pkg.Error as e:
-        if e.args[0] == ("E:You must put some 'deb-src' URIs in your sources.list"):
+        if e.args[0] == (
+                "E:You must put some 'deb-src' URIs in your sources.list"):
             raise NoAptSources()
         raise
 
@@ -217,7 +220,8 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         subpath = ""
     probers = select_probers(vcs_type)
     branch = open_branch(
-        url, possible_transports=possible_transports, probers=probers, name=branch_name
+        url, possible_transports=possible_transports, probers=probers,
+        name=branch_name
     )
     return branch, subpath or ""
 
@@ -265,7 +269,8 @@ class Workspace(_mod_workspace.Workspace):
             result_dir=result_dir,
         )
 
-    def commit(self, message=None, subpath="", paths=None, committer=None, reporter=None):
+    def commit(self, message=None, subpath="", paths=None, committer=None,
+               reporter=None):
         return debcommit(
             self.local_tree, committer=committer, subpath=subpath,
             paths=paths, reporter=reporter, message=message)
@@ -276,7 +281,8 @@ class UnsupportedVCSProber(Prober):
         self.vcs_type = vcs_type
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) and other.vcs_type == self.vcs_type
+        return (isinstance(other, type(self))
+                and other.vcs_type == self.vcs_type)
 
     def __call__(self):
         # The prober expects to be registered as a class.
