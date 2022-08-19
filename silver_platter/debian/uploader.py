@@ -120,7 +120,8 @@ class NoUnuploadedChanges(Exception):
     def __init__(self, archive_version):
         self.archive_version = archive_version
         super(NoUnuploadedChanges, self).__init__(
-            "nothing to upload, latest version is in archive: %s" % archive_version
+            "nothing to upload, latest version is in archive: %s" %
+            archive_version
         )
 
 
@@ -130,7 +131,8 @@ class NoUnreleasedChanges(Exception):
     def __init__(self, version):
         self.version = version
         super(NoUnreleasedChanges, self).__init__(
-            "nothing to upload, latest version in vcs is not unreleased: %s" % version
+            "nothing to upload, latest version in vcs is not unreleased: %s" %
+            version
         )
 
 
@@ -165,7 +167,8 @@ class LastReleaseRevisionNotFound(Exception):
         self.package = package
         self.version = version
         super(LastReleaseRevisionNotFound, self).__init__(
-            "Unable to find revision matching version %r for %s" % (version, package)
+            "Unable to find revision matching version %r for %s" %
+            (version, package)
         )
 
 
@@ -197,7 +200,8 @@ def find_last_release_revid(branch, version):
 
 
 def get_maintainer_keys(context):
-    for key in context.keylist(source="/usr/share/keyrings/debian-keyring.gpg"):
+    for key in context.keylist(
+            source="/usr/share/keyrings/debian-keyring.gpg"):
         yield key.fpr
         for subkey in key.subkeys:
             yield subkey.keyid
@@ -223,10 +227,12 @@ def prepare_upload_package(  # noqa: C901
             gbp_dch(local_tree.abspath("."))
         except subprocess.CalledProcessError:
             # TODO(jelmer): gbp dch sometimes fails when there is no existing
-            # open changelog entry; it fails invoking "dpkg --lt None <old-version>"
+            # open changelog entry; it fails invoking
+            # "dpkg --lt None <old-version>"
             raise GbpDchFailed()
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
-    if last_uploaded_version is not None and cl.version == last_uploaded_version:
+    if (last_uploaded_version is not None
+            and cl.version == last_uploaded_version):
         raise NoUnuploadedChanges(cl.version)
     try:
         previous_version_in_branch = changelog_find_previous_upload(cl)
@@ -266,7 +272,8 @@ def prepare_upload_package(  # noqa: C901
             )
             for revid, code, key in result:
                 if code != gpg.SIGNATURE_VALID:
-                    raise Exception("No valid GPG signature on %r: %d" % (revid, code))
+                    raise Exception(
+                        "No valid GPG signature on %r: %d" % (revid, code))
         for revid, rev in local_tree.branch.repository.iter_revisions(revids):
             if rev is not None:
                 check_revision(rev, min_commit_age, allowed_committers)
@@ -283,7 +290,8 @@ def prepare_upload_package(  # noqa: C901
         # TODO(jelmer): Check whether this is a team upload
         # TODO(jelmer): determine whether this is a NMU upload
     if qa_upload or team_upload:
-        changelog_path = local_tree.abspath(os.path.join(debian_path, "changelog"))
+        changelog_path = local_tree.abspath(
+            os.path.join(debian_path, "changelog"))
         with ChangelogEditor(changelog_path) as e:
             if qa_upload:
                 changeblock_ensure_first_line(e[0], "QA upload.")
@@ -303,7 +311,8 @@ def prepare_upload_package(  # noqa: C901
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
-        builder = builder.replace("${LAST_VERSION}", str(last_uploaded_version))
+        builder = builder.replace(
+            "${LAST_VERSION}", str(last_uploaded_version))
     target_changes = _build_helper(
         local_tree, subpath, local_tree.branch, target_dir, builder=builder
     )
@@ -366,7 +375,8 @@ def main(argv):  # noqa: C901
 
     parser = argparse.ArgumentParser(prog="upload-pending-commits")
     parser.add_argument("packages", nargs="*")
-    parser.add_argument("--dry-run", action="store_true", help="Dry run changes.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Dry run changes.")
     parser.add_argument(
         "--acceptable-keys",
         help="List of acceptable GPG keys",
@@ -408,7 +418,8 @@ def main(argv):  # noqa: C901
         help="Use vcswatch to determine what packages need uploading.",
     )
     parser.add_argument(
-        "--exclude", type=str, action="append", default=[], help="Ignore source package"
+        "--exclude", type=str, action="append", default=[],
+        help="Ignore source package"
     )
     parser.add_argument(
         "--autopkgtest-only",
@@ -486,7 +497,8 @@ def main(argv):  # noqa: C901
             except KeyError:
                 inc_stats('not-in-vcs')
                 logging.info(
-                    "%s: no declared vcs location, skipping", pkg_source["Package"]
+                    "%s: no declared vcs location, skipping",
+                    pkg_source["Package"]
                 )
                 ret = 1
                 continue
@@ -506,7 +518,8 @@ def main(argv):  # noqa: C901
             subpath = ""
         probers = select_probers(vcs_type)
         try:
-            main_branch = open_branch(location, probers=probers, name=branch_name)
+            main_branch = open_branch(
+                location, probers=probers, name=branch_name)
         except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
             inc_stats('vcs-inaccessible')
             if args.debug:
@@ -519,7 +532,8 @@ def main(argv):  # noqa: C901
         with Workspace(main_branch) as ws:
             if source_name is None:
                 with ControlEditor(
-                    ws.local_tree.abspath(os.path.join(subpath, "debian/control"))
+                    ws.local_tree.abspath(
+                        os.path.join(subpath, "debian/control"))
                 ) as ce:
                     source_name = ce.source["Source"]
                     try:
@@ -540,7 +554,8 @@ def main(argv):  # noqa: C901
                     os.path.join(subpath, "debian/tests/control")
                 )
             ):
-                logging.info("%s: Skipping, package has no autopkgtest.", source_name)
+                logging.info(
+                    "%s: Skipping, package has no autopkgtest.", source_name)
                 inc_stats('no-autopkgtest')
                 continue
             branch_config = ws.local_tree.branch.get_config_stack()
@@ -549,7 +564,8 @@ def main(argv):  # noqa: C901
                 if args.acceptable_keys:
                     acceptable_keys = args.acceptable_keys
                 else:
-                    acceptable_keys = list(get_maintainer_keys(gpg_strategy.context))
+                    acceptable_keys = list(
+                        get_maintainer_keys(gpg_strategy.context))
                 gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
             else:
                 gpg_strategy = None
@@ -571,7 +587,8 @@ def main(argv):  # noqa: C901
                 continue
             except MissingUpstreamTarball as e:
                 inc_stats('missing-upstream-tarball')
-                logging.warning("%s: missing upstream tarball: %s", source_name, e)
+                logging.warning(
+                    "%s: missing upstream tarball: %s", source_name, e)
                 continue
             except BranchRateLimited as e:
                 inc_stats('rate-limited')
@@ -627,7 +644,8 @@ def main(argv):  # noqa: C901
             except RecentCommits as e:
                 inc_stats('recent-commits')
                 logging.info(
-                    "%s: Recent commits (%d days), skipping.", source_name, e.commit_age
+                    "%s: Recent commits (%d days), skipping.",
+                    source_name, e.commit_age
                 )
                 continue
             except NoUnuploadedChanges as e:
@@ -637,7 +655,8 @@ def main(argv):  # noqa: C901
                 continue
             except NoUnreleasedChanges:
                 inc_stats('no-unreleased-changes')
-                logging.info("%s: No unreleased changes, skipping.", source_name)
+                logging.info(
+                    "%s: No unreleased changes, skipping.", source_name)
                 continue
 
             tags = []
@@ -649,7 +668,8 @@ def main(argv):  # noqa: C901
             except PermissionDenied:
                 inc_stats('vcs-permission-denied')
                 logging.info(
-                    "%s: Permission denied pushing to branch, skipping.", source_name
+                    "%s: Permission denied pushing to branch, skipping.",
+                    source_name
                 )
                 ret = 1
                 continue

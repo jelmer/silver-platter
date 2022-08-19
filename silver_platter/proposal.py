@@ -175,7 +175,8 @@ def iter_conflicted(
             mp.get_source_branch_url(), possible_transports=possible_transports
         )
         if resume_branch.name != branch_name and not (  # type: ignore
-            not resume_branch.name and resume_branch.user_url.endswith(branch_name)  # type: ignore
+            not resume_branch.name
+            and resume_branch.user_url.endswith(branch_name)  # type: ignore
         ):
             continue
         # TODO(jelmer): Find out somehow whether we need to modify a subpath?

@@ -111,9 +111,9 @@ def apply_and_publish(  # noqa: C901
             '%s: Forge login required: %s', full_branch_url(main_branch), e)
         return 1
     else:
-        (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
-            main_branch, forge, name, owner=derived_owner
-        )
+        (resume_branch, resume_overwrite,
+         existing_proposal) = find_existing_proposed(
+             main_branch, forge, name, owner=derived_owner)
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if refresh:
@@ -136,12 +136,14 @@ def apply_and_publish(  # noqa: C901
 
         if build_verify or install:
             try:
-                build(ws.local_tree, subpath, builder=builder, result_dir=build_target_dir)
+                build(ws.local_tree, subpath, builder=builder,
+                      result_dir=build_target_dir)
             except BuildFailedError:
                 logging.info("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
-                logging.info("%s: unable to find upstream source", result.source)
+                logging.info(
+                    "%s: unable to find upstream source", result.source)
                 return False
 
         if install:
@@ -153,9 +155,12 @@ def apply_and_publish(  # noqa: C901
             publish_result = ws.publish_changes(
                 mode,
                 name,
-                get_proposal_description=lambda df, ep: get_description(result, df, ep),
-                get_proposal_commit_message=lambda ep: get_commit_message(result, ep),
-                allow_create_proposal=lambda: allow_create_proposal(result),
+                get_proposal_description=(
+                    lambda df, ep: get_description(result, df, ep)),
+                get_proposal_commit_message=(
+                    lambda ep: get_commit_message(result, ep)),
+                allow_create_proposal=(
+                    lambda: allow_create_proposal(result)),
                 dry_run=dry_run,
                 forge=forge,
                 labels=labels,
@@ -174,7 +179,8 @@ def apply_and_publish(  # noqa: C901
             return 0
         except ForgeLoginRequired as e:
             logging.exception(
-                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
+                "Credentials for hosting site at %r missing. "
+                "Run 'svp login'?",
                 e.forge.base_url,
             )
             return 1
@@ -186,14 +192,16 @@ def apply_and_publish(  # noqa: C901
                 logging.info("Merge proposal updated.")
             if publish_result.proposal.url:
                 logging.info("URL: %s", publish_result.proposal.url)
-            logging.info("Description: %s", publish_result.proposal.get_description())
+            logging.info(
+                "Description: %s", publish_result.proposal.get_description())
 
         if diff:
             ws.show_diff(sys.stdout.buffer)
 
         if preserve_repositories:
             ws.defer_destroy()
-            logging.info('Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
+            logging.info(
+                'Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
@@ -202,7 +210,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser.add_argument(
         "--command", help="Path to script to run.", type=str)
     parser.add_argument(
-        "--derived-owner", type=str, default=None, help="Owner for derived branches."
+        "--derived-owner", type=str, default=None,
+        help="Owner for derived branches."
     )
     parser.add_argument(
         "--refresh",
@@ -210,13 +219,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         help="Refresh changes if branch already exists",
     )
     parser.add_argument(
-        "--label", type=str, help="Label to attach", action="append", default=[]
+        "--label", type=str, help="Label to attach",
+        action="append", default=[]
     )
     parser.add_argument(
         "--preserve-repositories", action="store_true",
         help="Preserve temporary repositories.")
 
-    parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
+    parser.add_argument(
+        "--name", type=str, help="Proposed branch name", default=None)
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -256,7 +267,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--build-target-dir",
         type=str,
         help=(
-            "Store built Debian files in specified directory " "(with --build-verify)"
+            "Store built Debian files in specified directory "
+            "(with --build-verify)"
         ),
     )
     parser.add_argument(
@@ -301,7 +313,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         candidates.extend(candidatelist)
 
     if args.commit_pending:
-        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {
+            "auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:

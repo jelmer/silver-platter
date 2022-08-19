@@ -195,7 +195,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         recipe = None
 
     if args.commit_pending:
-        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {
+            "auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -224,7 +225,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         if args.verify_command:
             try:
                 subprocess.check_call(
-                    args.verify_command, shell=True, cwd=local_tree.abspath(subpath)
+                    args.verify_command, shell=True,
+                    cwd=local_tree.abspath(subpath)
                 )
             except subprocess.CalledProcessError:
                 logging.exception("Verify command failed.")

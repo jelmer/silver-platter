@@ -16,7 +16,17 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-from typing import Optional, Callable, List, Union, Dict, BinaryIO, Any, Tuple, Iterator
+from typing import (
+    Optional,
+    Callable,
+    List,
+    Union,
+    Dict,
+    BinaryIO,
+    Any,
+    Tuple,
+    Iterator,
+)
 
 from breezy.branch import Branch
 try:
@@ -87,8 +97,8 @@ class Workspace(object):
 
     Args:
         main_branch: The upstream branch
-        resume_branch: Optional in-progress branch that we previously made changes
-            on, and should ideally continue from.
+        resume_branch: Optional in-progress branch that we previously made
+            changes on, and should ideally continue from.
         resume_branch_additional_colocated_branches:
             Additional list of colocated branches to fetch
         cached_branch: Branch to copy revisions from, if possible.
@@ -109,7 +119,8 @@ class Workspace(object):
         main_branch: Branch,
         resume_branch: Optional[Branch] = None,
         cached_branch: Optional[Branch] = None,
-        additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+        additional_colocated_branches:
+            Optional[Union[List[str], Dict[str, str]]] = None,
         resume_branch_additional_colocated_branches:
             Optional[Union[List[str], Dict[str, str]]] = None,
         dir: Optional[str] = None,
@@ -119,13 +130,16 @@ class Workspace(object):
         self.main_branch_revid = None
         self.cached_branch = cached_branch
         self.resume_branch = resume_branch
-        self.additional_colocated_branches = additional_colocated_branches or {}
-        self.resume_branch_additional_colocated_branches = resume_branch_additional_colocated_branches
+        self.additional_colocated_branches = (
+            additional_colocated_branches or {})
+        self.resume_branch_additional_colocated_branches = (
+            resume_branch_additional_colocated_branches)
         self._destroy = None
         self._dir = dir
         self._path = path
 
-    def _iter_additional_colocated(self) -> Iterator[Tuple[Optional[str], str]]:
+    def _iter_additional_colocated(self
+                                   ) -> Iterator[Tuple[Optional[str], str]]:
         if isinstance(self.additional_colocated_branches, dict):
             return iter(self.additional_colocated_branches.items())
         else:
@@ -170,7 +184,8 @@ class Workspace(object):
     def __enter__(self) -> Any:
         for (sprout_base, sprout_coloc) in [
                 (self.cached_branch, self.additional_colocated_branches),
-                (self.resume_branch, self.resume_branch_additional_colocated_branches),
+                (self.resume_branch,
+                    self.resume_branch_additional_colocated_branches),
                 (self.main_branch, self.additional_colocated_branches)]:
             if sprout_base:
                 break
@@ -187,7 +202,8 @@ class Workspace(object):
         self.main_colo_revid = {}
         for from_name, to_name in self._iter_additional_colocated():
             try:
-                branch = self.main_branch.controldir.open_branch(name=from_name)  # type: ignore
+                branch = self.main_branch.controldir.open_branch(
+                    name=from_name)  # type: ignore
             except (NotBranchError, NoColocatedBranchSupport):
                 continue
             self.main_colo_revid[to_name] = branch.last_revision()
@@ -207,7 +223,8 @@ class Workspace(object):
             # If there's a resume branch at play, make sure it's derived from
             # the main branch *or* reset back to the main branch.
             logger.debug(
-                "Pulling in missing revisions from main branch %r", self.main_branch
+                "Pulling in missing revisions from main branch %r",
+                self.main_branch
             )
             try:
                 self.local_tree.pull(self.main_branch, overwrite=False)
@@ -217,11 +234,17 @@ class Workspace(object):
                 self.resume_branch = None
                 self.resume_branch_additional_colocated_branches = None
                 self.local_tree.pull(self.main_branch, overwrite=True)
-                pull_colocated(self.local_tree, self.main_branch, self.additional_colocated_branches)
+                pull_colocated(
+                    self.local_tree, self.main_branch,
+                    self.additional_colocated_branches)
             else:
-                pull_colocated(self.local_tree, self.resume_branch, self.resume_branch_additional_colocated_branches)
+                pull_colocated(
+                    self.local_tree, self.resume_branch,
+                    self.resume_branch_additional_colocated_branches)
         else:
-            pull_colocated(self.local_tree, self.main_branch, self.additional_colocated_branches)
+            pull_colocated(
+                self.local_tree, self.main_branch,
+                self.additional_colocated_branches)
         self.base_revid = self.local_tree.last_revision()
         return self
 
@@ -252,7 +275,8 @@ class Workspace(object):
         for from_name, to_name in self._iter_additional_colocated():
             to_revision: Optional[bytes]
             try:
-                to_branch = self.local_tree.controldir.open_branch(name=to_name)
+                to_branch = self.local_tree.controldir.open_branch(
+                    name=to_name)
             except (NotBranchError, NoColocatedBranchSupport):
                 to_revision = None
             else:
@@ -274,7 +298,8 @@ class Workspace(object):
             try:
                 forge = get_forge(self.main_branch)
             except UnsupportedForge:
-                if not isinstance(self.main_branch.control_transport, LocalTransport):
+                if not isinstance(
+                        self.main_branch.control_transport, LocalTransport):
                     logging.warning(
                         'Unable to find forge for %s to determine push url, '
                         'trying anyway.', self.main_branch.user_url)
@@ -283,7 +308,8 @@ class Workspace(object):
             self.local_tree.branch,
             self.main_branch,
             forge=forge,
-            additional_colocated_branches=self._inverse_additional_colocated_branches(),
+            additional_colocated_branches=(
+                self._inverse_additional_colocated_branches()),
             dry_run=dry_run,
             tags=tags,
             stop_revision=stop_revision,
@@ -321,7 +347,8 @@ class Workspace(object):
             commit_message=commit_message,
             reviewers=reviewers,
             owner=owner,
-            additional_colocated_branches=self._inverse_additional_colocated_branches(),
+            additional_colocated_branches=(
+                self._inverse_additional_colocated_branches()),
             tags=tags,
             allow_collaboration=allow_collaboration,
             stop_revision=stop_revision,

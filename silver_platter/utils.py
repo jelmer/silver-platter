@@ -45,7 +45,8 @@ from breezy.transport import UnusableRedirect
 
 def create_temp_sprout(
     branch: Branch,
-    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches:
+        Optional[Union[List[str], Dict[str, str]]] = None,
     dir: Optional[str] = None,
     path: Optional[str] = None,
 ) -> Tuple[WorkingTree, Callable[[], None]]:
@@ -86,12 +87,14 @@ def create_temp_sprout(
                 pass
             else:
                 if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[from_branch_name]
+                    to_branch_name = additional_colocated_branches[
+                        from_branch_name]
                 else:
                     to_branch_name = from_branch_name
                 local_add_branch = to_dir.create_branch(name=to_branch_name)
                 add_branch.push(local_add_branch)
-                assert add_branch.last_revision() == local_add_branch.last_revision()
+                assert add_branch.last_revision() \
+                    == local_add_branch.last_revision()
         return to_dir.open_workingtree(), destroy
     except BaseException as e:
         destroy()
@@ -168,7 +171,8 @@ def run_post_check(
         return
     try:
         subprocess.check_call(
-            script, shell=True, cwd=tree.basedir, env={"SINCE_REVID": since_revid}
+            script, shell=True, cwd=tree.basedir,
+            env={"SINCE_REVID": since_revid}
         )
     except subprocess.CalledProcessError:
         raise PostCheckFailed()
@@ -188,7 +192,8 @@ class BranchUnavailable(Exception):
 class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
-    def __init__(self, url: str, description: str, retry_after: Optional[int] = None):
+    def __init__(self, url: str, description: str,
+                 retry_after: Optional[int] = None):
         self.url = url
         self.description = description
         self.retry_after = retry_after
@@ -297,7 +302,8 @@ def open_branch_containing(
     """Open a branch by URL."""
     try:
         transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)  # type: ignore
+        dir, subpath = ControlDir.open_containing_from_transport(
+            transport, probers)  # type: ignore
         return dir.open_branch(), subpath
     except Exception as e:
         converted = _convert_exception(url, e)
