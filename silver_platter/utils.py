@@ -238,6 +238,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.PermissionDenied):
         return BranchUnavailable(url, str(e))
+    if isinstance(e, urlutils.InvalidURL):
+        return BranchUnavailable(url, str(e))
     if isinstance(e, errors.InvalidHttpResponse):
         if "Unexpected HTTP status 429" in str(e):
             if hasattr(e, 'headers'):
