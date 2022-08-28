@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import List, Optional
+from typing import Optional
 
 from debian.changelog import Version
 
@@ -341,7 +341,6 @@ class PackageIgnored(Exception):
         self.reason = reason
 
 
-
 def get_vcswatch_data(package):
     from .. import version_string
     from urllib.request import Request, urlopen
@@ -397,14 +396,14 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
             return cls(commit_id, headers, message)
 
     lines = []
-    for l in vcslog.splitlines():
-        if l == '' and lines[-1][0].isspace():
+    for line in vcslog.splitlines():
+        if line == '' and lines[-1][0].isspace():
             check_revision(
                 GitRevision.from_lines(lines), min_commit_age,
                 allowed_committers)
             lines = []
         else:
-            lines.append(l)
+            lines.append(line)
     if lines:
         check_revision(
             GitRevision.from_lines(lines), min_commit_age, allowed_committers)
@@ -414,7 +413,7 @@ def process_package(
         package, builder: str, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
-        diff: bool = False, min_commit_age = None, allowed_committers = None,
+        diff: bool = False, min_commit_age=None, allowed_committers=None,
         vcswatch: bool = False):
     if exclude is None:
         exclude = set()
@@ -625,8 +624,6 @@ def process_package(
             sys.stdout.flush()
             ws.show_diff(sys.stdout.buffer)
             sys.stdout.buffer.flush()
-
-
 
 
 def main(argv):  # noqa: C901
