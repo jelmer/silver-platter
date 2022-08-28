@@ -82,17 +82,6 @@ from ..utils import (
 )
 
 
-def connect_udd_mirror():
-    import psycopg2
-
-    return psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )
-
-
 def debsign(path, keyid=None):
     (bd, changes_file) = os.path.split(path)
     args = ["debsign"]
@@ -340,36 +329,6 @@ def select_apt_packages(package_names, maintainer):
     return packages
 
 
-def select_vcswatch_packages(
-    packages: List[str], maintainer: List[str], autopkgtest_only: bool
-):
-    conn = connect_udd_mirror()
-    cursor = conn.cursor()
-    args = []
-    query = """\
-    SELECT sources.source, vcswatch.url
-    FROM vcswatch JOIN sources ON sources.source = vcswatch.source
-    WHERE
-     vcswatch.status IN ('COMMITS', 'NEW') AND
-     sources.release = 'sid'
-"""
-    if autopkgtest_only:
-        query += " AND sources.testsuite != '' "
-    if maintainer:
-        query += " AND sources.maintainer_email in %s"
-        args.append(tuple(maintainer))
-    if packages:
-        query += " AND sources.source IN %s"
-        args.append(tuple(packages))
-
-    cursor.execute(query, tuple(args))
-
-    packages = []
-    for package, vcs_url in cursor.fetchall():
-        packages.append(package)
-    return packages
-
-
 class PackageProcessingFailure(Exception):
 
     def __init__(self, reason):
@@ -382,17 +341,125 @@ class PackageIgnored(Exception):
         self.reason = reason
 
 
+
+def get_vcswatch_data(package):
+    from .. import version_string
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
+    import json
+    url = ("https://qa.debian.org/cgi-bin/vcswatch?json=1"
+           "&package={package}".format(package=package))
+    request = Request(url, headers={
+        'User-Agent': "silver-platter/%s" % version_string})
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        if e.status == 404:
+            logging.warning(
+                'vcswatch data for %s is missing', package)
+            return None
+        raise
+
+
+def check_git_commits(vcslog, min_commit_age, allowed_committers):
+    class GitRevision:
+
+        @property
+        def committer(self):
+            return self.headers.get('Committer') or self.headers.get('Author')
+
+        @property
+        def timestamp(self):
+            datestr = self.headers.get('Date')
+            dt = datetime.datetime.strptime(
+                datestr.strip(), "%a %b %d %H:%M:%S %Y %z")
+            return dt.timestamp()
+
+        def __init__(self, commit_id, headers, message):
+            self.commit_id = commit_id
+            self.headers = headers
+            self.message = message
+
+        @classmethod
+        def from_lines(cls, lines):
+            commit_id = None
+            message = []
+            headers = {}
+            for i, line in enumerate(lines):
+                if line.startswith('commit '):
+                    commit_id = line[len('commit '):]
+                elif line == '':
+                    message = lines[i+1:]
+                    break
+                else:
+                    name, value = line.split(': ')
+                    headers[name] = value
+            return cls(commit_id, headers, message)
+
+    lines = []
+    for l in vcslog.splitlines():
+        if l == '' and lines[-1][0].isspace():
+            check_revision(
+                GitRevision.from_lines(lines), min_commit_age,
+                allowed_committers)
+            lines = []
+        else:
+            lines.append(l)
+    if lines:
+        check_revision(
+            GitRevision.from_lines(lines), min_commit_age, allowed_committers)
+
+
 def process_package(
         package, builder: str, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
-        diff: bool = False, min_commit_age = None, allowed_committers = None):
+        diff: bool = False, min_commit_age = None, allowed_committers = None,
+        vcswatch: bool = False):
     if exclude is None:
         exclude = set()
     logging.info("Processing %s", package)
+    if vcswatch:
+        from debian.deb822 import Deb822
+        vw = get_vcswatch_data(package)
+    else:
+        vw = None
+    if vw is not None:
+        vcs_url = vw["url"]
+        vcs_type = vw["vcs"]
+        source_name = vw["package"]
+        archive_version = vw["package_version"]
+        pkg_source = Deb822(vw["controlfile"])
+        has_testsuite = "Testsuite" in pkg_source
+        logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
+        if vw["commits"] == 0:
+            raise PackageIgnored('no-unuploaded-changes')
+        if vcs_type is None:
+            raise PackageProcessingFailure('not-in-vcs')
+        if source_name in exclude:
+            raise PackageIgnored('excluded')
+        if vcs_type == 'Git' and vw["vcslog"] is not None:
+            try:
+                check_git_commits(
+                    vw["vcslog"], min_commit_age=min_commit_age,
+                    allowed_committers=allowed_committers)
+            except CommitterNotAllowed as e:
+                logging.warn(
+                    "%s: committer %s not in allowed list: %r",
+                    source_name,
+                    e.committer,
+                    e.allowed_committers,
+                )
+                raise PackageIgnored('committer-not-allowed')
+            except RecentCommits as e:
+                logging.info(
+                    "%s: Recent commits (%d days), skipping.",
+                    source_name, e.commit_age
+                )
+                raise PackageIgnored('recent-commits')
     # Can't use open_packaging_branch here, since we want to use pkg_source
     # later on.
-    if "/" not in package:
+    elif "/" not in package:
         try:
             pkg_source = apt_get_source_package(package)
         except NoSuchPackage:
@@ -408,7 +475,7 @@ def process_package(
             raise PackageProcessingFailure('not-in-vcs')
         source_name = pkg_source["Package"]
         if source_name in exclude:
-            return
+            raise PackageIgnored('excluded')
         archive_version = pkg_source["Version"]
         has_testsuite = "Testsuite" in pkg_source
     else:
@@ -446,7 +513,7 @@ def process_package(
                 archive_version = pkg_source['Version']
             has_testsuite = "Testsuite" in ce.source
         if source_name in exclude:
-            return
+            raise PackageIgnored('excluded')
         if (
             autopkgtest_only
             and not has_testsuite
@@ -607,7 +674,7 @@ def main(argv):  # noqa: C901
         "--vcswatch",
         action="store_true",
         default=False,
-        help="Use vcswatch to determine what packages need uploading.",
+        help="Use vcswatch to determine what packages need uploading."
     )
     parser.add_argument(
         "--exclude", type=str, action="append", default=[],
@@ -641,19 +708,15 @@ def main(argv):  # noqa: C901
             parser.print_usage()
             sys.exit(1)
 
-    if args.vcswatch:
-        packages = select_vcswatch_packages(
-            args.packages, args.maintainer, args.autopkgtest_only
-        )
-    else:
+    if not args.vcswatch:
         logging.info(
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
-        if args.maintainer:
-            packages = select_apt_packages(args.packages, args.maintainer)
-        else:
-            packages = args.packages
+    if args.maintainer:
+        packages = select_apt_packages(args.packages, args.maintainer)
+    else:
+        packages = args.packages
 
     if not packages:
         logging.info("No packages found.")
@@ -681,7 +744,8 @@ def main(argv):  # noqa: C901
                 acceptable_keys=args.acceptable_keys,
                 debug=args.debug, dry_run=args.dry_run,
                 diff=args.diff, min_commit_age=args.min_commit_age,
-                allowed_committers=args.allowed_committer)
+                allowed_committers=args.allowed_committer,
+                vcswatch=args.vcswatch)
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             ret = 1
