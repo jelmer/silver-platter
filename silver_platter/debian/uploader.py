@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import List, Optional
+from typing import Optional
 
 from debian.changelog import Version
 
@@ -80,17 +80,6 @@ from ..utils import (
     BranchUnsupported,
     BranchRateLimited,
 )
-
-
-def connect_udd_mirror():
-    import psycopg2
-
-    return psycopg2.connect(
-        database="udd",
-        user="udd-mirror",
-        password="udd-mirror",
-        host="udd-mirror.debian.net",
-    )
 
 
 def debsign(path, keyid=None):
@@ -340,34 +329,301 @@ def select_apt_packages(package_names, maintainer):
     return packages
 
 
-def select_vcswatch_packages(
-    packages: List[str], maintainer: List[str], autopkgtest_only: bool
-):
-    conn = connect_udd_mirror()
-    cursor = conn.cursor()
-    args = []
-    query = """\
-    SELECT sources.source, vcswatch.url
-    FROM vcswatch JOIN sources ON sources.source = vcswatch.source
-    WHERE
-     vcswatch.status IN ('COMMITS', 'NEW') AND
-     sources.release = 'sid'
-"""
-    if autopkgtest_only:
-        query += " AND sources.testsuite != '' "
-    if maintainer:
-        query += " AND sources.maintainer_email in %s"
-        args.append(tuple(maintainer))
-    if packages:
-        query += " AND sources.source IN %s"
-        args.append(tuple(packages))
+class PackageProcessingFailure(Exception):
 
-    cursor.execute(query, tuple(args))
+    def __init__(self, reason):
+        self.reason = reason
 
-    packages = []
-    for package, vcs_url in cursor.fetchall():
-        packages.append(package)
-    return packages
+
+class PackageIgnored(Exception):
+
+    def __init__(self, reason):
+        self.reason = reason
+
+
+def get_vcswatch_data(package):
+    from .. import version_string
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
+    import json
+    url = ("https://qa.debian.org/cgi-bin/vcswatch?json=1"
+           "&package={package}".format(package=package))
+    request = Request(url, headers={
+        'User-Agent': "silver-platter/%s" % version_string})
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        if e.status == 404:
+            logging.warning(
+                'vcswatch data for %s is missing', package)
+            return None
+        raise
+
+
+def check_git_commits(vcslog, min_commit_age, allowed_committers):
+    class GitRevision:
+
+        @property
+        def committer(self):
+            return self.headers.get('Committer') or self.headers.get('Author')
+
+        @property
+        def timestamp(self):
+            datestr = self.headers.get('Date')
+            dt = datetime.datetime.strptime(
+                datestr.strip(), "%a %b %d %H:%M:%S %Y %z")
+            return dt.timestamp()
+
+        def __init__(self, commit_id, headers, message):
+            self.commit_id = commit_id
+            self.headers = headers
+            self.message = message
+
+        @classmethod
+        def from_lines(cls, lines):
+            commit_id = None
+            message = []
+            headers = {}
+            for i, line in enumerate(lines):
+                if line.startswith('commit '):
+                    commit_id = line[len('commit '):]
+                elif line == '':
+                    message = lines[i+1:]
+                    break
+                else:
+                    name, value = line.split(': ')
+                    headers[name] = value
+            return cls(commit_id, headers, message)
+
+    lines = []
+    for line in vcslog.splitlines():
+        if line == '' and lines[-1][0].isspace():
+            check_revision(
+                GitRevision.from_lines(lines), min_commit_age,
+                allowed_committers)
+            lines = []
+        else:
+            lines.append(line)
+    if lines:
+        check_revision(
+            GitRevision.from_lines(lines), min_commit_age, allowed_committers)
+
+
+def process_package(
+        package, builder: str, exclude=None, autopkgtest_only: bool = False,
+        gpg_verification: bool = False,
+        acceptable_keys=None, debug: bool = False, dry_run: bool = False,
+        diff: bool = False, min_commit_age=None, allowed_committers=None,
+        vcswatch: bool = False):
+    if exclude is None:
+        exclude = set()
+    logging.info("Processing %s", package)
+    if vcswatch:
+        from debian.deb822 import Deb822
+        vw = get_vcswatch_data(package)
+    else:
+        vw = None
+    if vw is not None:
+        vcs_url = vw["url"]
+        vcs_type = vw["vcs"]
+        source_name = vw["package"]
+        archive_version = vw["package_version"]
+        pkg_source = Deb822(vw["controlfile"])
+        has_testsuite = "Testsuite" in pkg_source
+        logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
+        if vw["commits"] == 0:
+            raise PackageIgnored('no-unuploaded-changes')
+        if vcs_type is None:
+            raise PackageProcessingFailure('not-in-vcs')
+        if source_name in exclude:
+            raise PackageIgnored('excluded')
+        if vcs_type == 'Git' and vw["vcslog"] is not None:
+            try:
+                check_git_commits(
+                    vw["vcslog"], min_commit_age=min_commit_age,
+                    allowed_committers=allowed_committers)
+            except CommitterNotAllowed as e:
+                logging.warn(
+                    "%s: committer %s not in allowed list: %r",
+                    source_name,
+                    e.committer,
+                    e.allowed_committers,
+                )
+                raise PackageIgnored('committer-not-allowed')
+            except RecentCommits as e:
+                logging.info(
+                    "%s: Recent commits (%d days), skipping.",
+                    source_name, e.commit_age
+                )
+                raise PackageIgnored('recent-commits')
+    # Can't use open_packaging_branch here, since we want to use pkg_source
+    # later on.
+    elif "/" not in package:
+        try:
+            pkg_source = apt_get_source_package(package)
+        except NoSuchPackage:
+            logging.info("%s: package not found in apt", package)
+            raise PackageProcessingFailure('not-in-apt')
+        try:
+            vcs_type, vcs_url = source_package_vcs(pkg_source)
+        except KeyError:
+            logging.info(
+                "%s: no declared vcs location, skipping",
+                pkg_source["Package"]
+            )
+            raise PackageProcessingFailure('not-in-vcs')
+        source_name = pkg_source["Package"]
+        if source_name in exclude:
+            raise PackageIgnored('excluded')
+        archive_version = pkg_source["Version"]
+        has_testsuite = "Testsuite" in pkg_source
+    else:
+        vcs_url = package
+        vcs_type = None
+        source_name = None
+        archive_version = None
+        has_testsuite = None
+    (location, branch_name, subpath) = split_vcs_url(vcs_url)
+    if subpath is None:
+        subpath = ""
+    probers = select_probers(vcs_type)
+    try:
+        main_branch = open_branch(
+            location, probers=probers, name=branch_name)
+    except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
+        if debug:
+            logging.exception("%s: %s", vcs_url, e)
+        else:
+            logging.info(
+                "%s: branch unavailable: %s", vcs_url, e)
+        raise PackageProcessingFailure('vcs-inaccessible')
+    with Workspace(main_branch) as ws:
+        if source_name is None:
+            with ControlEditor(
+                ws.local_tree.abspath(
+                    os.path.join(subpath, "debian/control"))
+            ) as ce:
+                source_name = ce.source["Source"]
+                try:
+                    pkg_source = apt_get_source_package(source_name)
+                except NoSuchPackage:
+                    logging.info("%s: package not found in apt", package)
+                    raise PackageProcessingFailure('not-in-apt')
+                archive_version = pkg_source['Version']
+            has_testsuite = "Testsuite" in ce.source
+        if source_name in exclude:
+            raise PackageIgnored('excluded')
+        if (
+            autopkgtest_only
+            and not has_testsuite
+            and not ws.local_tree.has_filename(
+                os.path.join(subpath, "debian/tests/control")
+            )
+        ):
+            logging.info(
+                "%s: Skipping, package has no autopkgtest.", source_name)
+            raise PackageIgnored('no-autopkgtest')
+        branch_config = ws.local_tree.branch.get_config_stack()
+        if gpg_verification:
+            gpg_strategy = gpg.GPGStrategy(branch_config)
+            if acceptable_keys:
+                acceptable_keys = acceptable_keys
+            else:
+                acceptable_keys = list(
+                    get_maintainer_keys(gpg_strategy.context))
+            gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
+        else:
+            gpg_strategy = None
+
+        try:
+            target_changes, tag_name = prepare_upload_package(
+                ws.local_tree,
+                subpath,
+                source_name,
+                archive_version,
+                builder=builder,
+                gpg_strategy=gpg_strategy,
+                min_commit_age=min_commit_age,
+                allowed_committers=allowed_committers,
+            )
+        except GbpDchFailed as e:
+            logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
+            raise PackageProcessingFailure('gbp-dch-failed')
+        except MissingUpstreamTarball as e:
+            logging.warning(
+                "%s: missing upstream tarball: %s", source_name, e)
+            raise PackageProcessingFailure('missing-upstream-tarball')
+        except BranchRateLimited as e:
+            logging.warning(
+                '%s: rate limited by server (retrying after %s)',
+                source_name, e.retry_after)
+            raise PackageProcessingFailure('rate-limited')
+        except CommitterNotAllowed as e:
+            logging.warn(
+                "%s: committer %s not in allowed list: %r",
+                source_name,
+                e.committer,
+                e.allowed_committers,
+            )
+            raise PackageIgnored('committer-not-allowed')
+        except BuildFailedError as e:
+            logging.warn("%s: package failed to build: %s", source_name, e)
+            raise PackageProcessingFailure('build-failed')
+        except LastReleaseRevisionNotFound as e:
+            logging.warn(
+                "%s: Unable to find revision matching last release "
+                "%s, skipping.",
+                source_name,
+                e.version,
+            )
+            raise PackageProcessingFailure('last-release-missing')
+        except LastUploadMoreRecent as e:
+            logging.warn(
+                "%s: Last upload (%s) was more recent than VCS (%s)",
+                source_name,
+                e.archive_version,
+                e.vcs_version,
+            )
+            raise PackageProcessingFailure('last-upload-not-in-vcs')
+        except ChangelogParseError as e:
+            logging.info("%s: Error parsing changelog: %s", source_name, e)
+            raise PackageProcessingFailure('changelog-parse-error')
+        except MissingChangelogError:
+            logging.info("%s: No changelog found, skipping.", source_name)
+            raise PackageProcessingFailure('missing-changelog')
+        except RecentCommits as e:
+            logging.info(
+                "%s: Recent commits (%d days), skipping.",
+                source_name, e.commit_age
+            )
+            raise PackageIgnored('recent-commits')
+        except NoUnuploadedChanges as e:
+            logging.info("%s: No unuploaded changes (%s), skipping.",
+                         source_name, e.archive_version)
+            raise PackageIgnored('no-unuploaded-changes')
+        except NoUnreleasedChanges:
+            logging.info(
+                "%s: No unreleased changes, skipping.", source_name)
+            raise PackageIgnored('no-unreleased-changes')
+
+        tags = []
+        if tag_name is not None:
+            logging.info("Pushing tag %s", tag_name)
+            tags.append(tag_name)
+        try:
+            ws.push(dry_run=dry_run, tags=tags)
+        except PermissionDenied:
+            logging.info(
+                "%s: Permission denied pushing to branch, skipping.",
+                source_name
+            )
+            raise PackageProcessingFailure('vcs-permission-denied')
+        if not dry_run:
+            dput_changes(target_changes)
+        if diff:
+            sys.stdout.flush()
+            ws.show_diff(sys.stdout.buffer)
+            sys.stdout.buffer.flush()
 
 
 def main(argv):  # noqa: C901
@@ -415,7 +671,7 @@ def main(argv):  # noqa: C901
         "--vcswatch",
         action="store_true",
         default=False,
-        help="Use vcswatch to determine what packages need uploading.",
+        help="Use vcswatch to determine what packages need uploading."
     )
     parser.add_argument(
         "--exclude", type=str, action="append", default=[],
@@ -449,19 +705,15 @@ def main(argv):  # noqa: C901
             parser.print_usage()
             sys.exit(1)
 
-    if args.vcswatch:
-        packages = select_vcswatch_packages(
-            args.packages, args.maintainer, args.autopkgtest_only
-        )
-    else:
+    if not args.vcswatch:
         logging.info(
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
-        if args.maintainer:
-            packages = select_apt_packages(args.packages, args.maintainer)
-        else:
-            packages = args.packages
+    if args.maintainer:
+        packages = select_apt_packages(args.packages, args.maintainer)
+    else:
+        packages = args.packages
 
     if not packages:
         logging.info("No packages found.")
@@ -481,204 +733,21 @@ def main(argv):  # noqa: C901
         logging.info("Uploading packages: %s", ", ".join(packages))
 
     for package in packages:
-        logging.info("Processing %s", package)
-        # Can't use open_packaging_branch here, since we want to use pkg_source
-        # later on.
-        if "/" not in package:
-            try:
-                pkg_source = apt_get_source_package(package)
-            except NoSuchPackage:
-                inc_stats('not-in-apt')
-                logging.info("%s: package not found in apt", package)
-                ret = 1
-                continue
-            try:
-                vcs_type, vcs_url = source_package_vcs(pkg_source)
-            except KeyError:
-                inc_stats('not-in-vcs')
-                logging.info(
-                    "%s: no declared vcs location, skipping",
-                    pkg_source["Package"]
-                )
-                ret = 1
-                continue
-            source_name = pkg_source["Package"]
-            if source_name in args.exclude:
-                continue
-            archive_version = pkg_source["Version"]
-            has_testsuite = "Testsuite" in pkg_source
-        else:
-            vcs_url = package
-            vcs_type = None
-            source_name = None
-            archive_version = None
-            has_testsuite = None
-        (location, branch_name, subpath) = split_vcs_url(vcs_url)
-        if subpath is None:
-            subpath = ""
-        probers = select_probers(vcs_type)
         try:
-            main_branch = open_branch(
-                location, probers=probers, name=branch_name)
-        except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-            inc_stats('vcs-inaccessible')
-            if args.debug:
-                logging.exception("%s: %s", vcs_url, e)
-            else:
-                logging.info(
-                    "%s: branch unavailable: %s", vcs_url, e)
+            process_package(
+                package, builder=args.builder, exclude=args.exclude,
+                autopkgtest_only=args.autopkgtest_only,
+                gpg_verification=args.gpg_verification,
+                acceptable_keys=args.acceptable_keys,
+                debug=args.debug, dry_run=args.dry_run,
+                diff=args.diff, min_commit_age=args.min_commit_age,
+                allowed_committers=args.allowed_committer,
+                vcswatch=args.vcswatch)
+        except PackageProcessingFailure as e:
+            inc_stats(e.reason)
             ret = 1
-            continue
-        with Workspace(main_branch) as ws:
-            if source_name is None:
-                with ControlEditor(
-                    ws.local_tree.abspath(
-                        os.path.join(subpath, "debian/control"))
-                ) as ce:
-                    source_name = ce.source["Source"]
-                    try:
-                        pkg_source = apt_get_source_package(source_name)
-                    except NoSuchPackage:
-                        inc_stats('not-in-apt')
-                        logging.info("%s: package not found in apt", package)
-                        ret = 1
-                        continue
-                    archive_version = pkg_source['Version']
-                has_testsuite = "Testsuite" in ce.source
-            if source_name in args.exclude:
-                continue
-            if (
-                args.autopkgtest_only
-                and not has_testsuite
-                and not ws.local_tree.has_filename(
-                    os.path.join(subpath, "debian/tests/control")
-                )
-            ):
-                logging.info(
-                    "%s: Skipping, package has no autopkgtest.", source_name)
-                inc_stats('no-autopkgtest')
-                continue
-            branch_config = ws.local_tree.branch.get_config_stack()
-            if args.gpg_verification:
-                gpg_strategy = gpg.GPGStrategy(branch_config)
-                if args.acceptable_keys:
-                    acceptable_keys = args.acceptable_keys
-                else:
-                    acceptable_keys = list(
-                        get_maintainer_keys(gpg_strategy.context))
-                gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
-            else:
-                gpg_strategy = None
-
-            try:
-                target_changes, tag_name = prepare_upload_package(
-                    ws.local_tree,
-                    subpath,
-                    source_name,
-                    archive_version,
-                    builder=args.builder,
-                    gpg_strategy=gpg_strategy,
-                    min_commit_age=args.min_commit_age,
-                    allowed_committers=args.allowed_committer,
-                )
-            except GbpDchFailed as e:
-                logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
-                inc_stats('gbp-dch-failed')
-                continue
-            except MissingUpstreamTarball as e:
-                inc_stats('missing-upstream-tarball')
-                logging.warning(
-                    "%s: missing upstream tarball: %s", source_name, e)
-                continue
-            except BranchRateLimited as e:
-                inc_stats('rate-limited')
-                logging.warning(
-                    '%s: rate limited by server (retrying after %s)',
-                    source_name, e.retry_after)
-                ret = 1
-                continue
-            except CommitterNotAllowed as e:
-                inc_stats('committer-not-allowed')
-                logging.warn(
-                    "%s: committer %s not in allowed list: %r",
-                    source_name,
-                    e.committer,
-                    e.allowed_committers,
-                )
-                continue
-            except BuildFailedError as e:
-                logging.warn("%s: package failed to build: %s", source_name, e)
-                inc_stats('build-failed')
-                ret = 1
-                continue
-            except LastReleaseRevisionNotFound as e:
-                logging.warn(
-                    "%s: Unable to find revision matching last release "
-                    "%s, skipping.",
-                    source_name,
-                    e.version,
-                )
-                inc_stats('last-release-missing')
-                ret = 1
-                continue
-            except LastUploadMoreRecent as e:
-                inc_stats('last-upload-not-in-vcs')
-                logging.warn(
-                    "%s: Last upload (%s) was more recent than VCS (%s)",
-                    source_name,
-                    e.archive_version,
-                    e.vcs_version,
-                )
-                ret = 1
-                continue
-            except ChangelogParseError as e:
-                inc_stats('changelog-parse-error')
-                logging.info("%s: Error parsing changelog: %s", source_name, e)
-                ret = 1
-                continue
-            except MissingChangelogError:
-                inc_stats('missing-changelog')
-                logging.info("%s: No changelog found, skipping.", source_name)
-                ret = 1
-                continue
-            except RecentCommits as e:
-                inc_stats('recent-commits')
-                logging.info(
-                    "%s: Recent commits (%d days), skipping.",
-                    source_name, e.commit_age
-                )
-                continue
-            except NoUnuploadedChanges as e:
-                inc_stats('no-unuploaded-changes')
-                logging.info("%s: No unuploaded changes (%s), skipping.",
-                             source_name, e.archive_version)
-                continue
-            except NoUnreleasedChanges:
-                inc_stats('no-unreleased-changes')
-                logging.info(
-                    "%s: No unreleased changes, skipping.", source_name)
-                continue
-
-            tags = []
-            if tag_name is not None:
-                logging.info("Pushing tag %s", tag_name)
-                tags.append(tag_name)
-            try:
-                ws.push(dry_run=args.dry_run, tags=tags)
-            except PermissionDenied:
-                inc_stats('vcs-permission-denied')
-                logging.info(
-                    "%s: Permission denied pushing to branch, skipping.",
-                    source_name
-                )
-                ret = 1
-                continue
-            if not args.dry_run:
-                dput_changes(target_changes)
-            if args.diff:
-                sys.stdout.flush()
-                ws.show_diff(sys.stdout.buffer)
-                sys.stdout.buffer.flush()
+        except PackageIgnored as e:
+            inc_stats(e.reason)
 
     if len(packages) > 1:
         logging.info('Results:')
