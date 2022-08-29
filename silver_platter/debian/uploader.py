@@ -211,14 +211,24 @@ def prepare_upload_package(  # noqa: C901
     allowed_committers=None,
 ):
     debian_path = os.path.join(subpath, "debian")
-    if local_tree.has_filename(os.path.join(debian_path, "gbp.conf")):
+    try:
+        from lintian_brush.detect_gbp_dch import guess_update_changelog
+    except ImportError:
+        run_gbp_dch = True   # Let's just try
+    else:
+        cl_behaviour = guess_update_changelog(local_tree, debian_path)
+        run_gbp_dch = (cl_behaviour is None or not cl_behaviour.update_changelog)
+    if run_gbp_dch:
         try:
-            gbp_dch(local_tree.abspath("."))
+            gbp_dch(local_tree.abspath(subpath))
         except subprocess.CalledProcessError:
             # TODO(jelmer): gbp dch sometimes fails when there is no existing
             # open changelog entry; it fails invoking
             # "dpkg --lt None <old-version>"
             raise GbpDchFailed()
+        local_tree.commit(
+            specific_files=[os.path.join(debian_path, 'changelog')],
+            message='update changelog\n\nGbp-Dch: Ignore')
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
     if (last_uploaded_version is not None
             and cl.version == last_uploaded_version):
