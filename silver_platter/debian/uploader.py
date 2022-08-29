@@ -217,7 +217,8 @@ def prepare_upload_package(  # noqa: C901
         run_gbp_dch = True   # Let's just try
     else:
         cl_behaviour = guess_update_changelog(local_tree, debian_path)
-        run_gbp_dch = (cl_behaviour is None or not cl_behaviour.update_changelog)
+        run_gbp_dch = (
+            cl_behaviour is None or not cl_behaviour.update_changelog)
     if run_gbp_dch:
         try:
             gbp_dch(local_tree.abspath(subpath))
@@ -607,7 +608,7 @@ def vcswatch_prescan_package(
         raise PackageIgnored('no-unuploaded-changes')
     if vw['status'] == 'ERROR':
         logging.warning(
-            'vcswatch: unable to access %s: %s', vw['package'], vw['error']) 
+            'vcswatch: unable to access %s: %s', vw['package'], vw['error'])
         raise PackageProcessingFailure('vcs-inaccessible')
     logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
     if vcs_type == 'Git' and vw["vcslog"] is not None:
