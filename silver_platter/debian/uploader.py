@@ -398,10 +398,13 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 
 def process_package(
-        package, builder: str, exclude=None, autopkgtest_only: bool = False,
+        package,
+        builder: str, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
-        diff: bool = False, min_commit_age=None, allowed_committers=None):
+        diff: bool = False, min_commit_age=None, allowed_committers=None,
+        vcs_type=None, vcs_url=None, source_name=None,
+        archive_version=None):
     if exclude is None:
         exclude = set()
     logging.info("Processing %s", package)
@@ -413,24 +416,25 @@ def process_package(
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
             raise PackageProcessingFailure('not-in-apt')
-        try:
-            vcs_type, vcs_url = source_package_vcs(pkg_source)
-        except KeyError:
-            logging.info(
-                "%s: no declared vcs location, skipping",
-                pkg_source["Package"]
-            )
-            raise PackageProcessingFailure('not-in-vcs')
-        source_name = pkg_source["Package"]
+        if vcs_type is None or vcs_url is None:
+            try:
+                vcs_type, vcs_url = source_package_vcs(pkg_source)
+            except KeyError:
+                logging.info(
+                    "%s: no declared vcs location, skipping",
+                    pkg_source["Package"]
+                )
+                raise PackageProcessingFailure('not-in-vcs')
+        if source_name is None:
+            source_name = pkg_source["Package"]
         if source_name in exclude:
             raise PackageIgnored('excluded')
-        archive_version = pkg_source["Version"]
+        if archive_version is None:
+            archive_version = pkg_source["Version"]
         has_testsuite = "Testsuite" in pkg_source
     else:
-        vcs_url = package
-        vcs_type = None
-        source_name = None
-        archive_version = None
+        if vcs_url is None:
+            vcs_url = package
         has_testsuite = None
     (location, branch_name, subpath) = split_vcs_url(vcs_url)
     if subpath is None:
@@ -581,17 +585,21 @@ def vcswatch_prescan_package(
     vcs_url = vw["url"]
     vcs_type = vw["vcs"]
     source_name = vw["package"]
+    if source_name in exclude:
+        raise PackageIgnored('excluded')
+    if vcs_url is None or vcs_type is None:
+        raise PackageProcessingFailure('not-in-vcs')
     # TODO(jelmer): check autopkgtest_only ?
     # from debian.deb822 import Deb822
     # pkg_source = Deb822(vw["controlfile"])
     # has_testsuite = "Testsuite" in pkg_source
-    logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
     if vw["commits"] == 0:
         raise PackageIgnored('no-unuploaded-changes')
-    if vcs_url is None or vcs_type is None:
-        raise PackageProcessingFailure('not-in-vcs')
-    if source_name in exclude:
-        raise PackageIgnored('excluded')
+    if vw['status'] == 'ERROR':
+        logging.warning(
+            'vcswatch: unable to access %s: %s', vw['package'], vw['error']) 
+        raise PackageProcessingFailure('vcs-inaccessible')
+    logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
     if vcs_type == 'Git' and vw["vcslog"] is not None:
         try:
             return check_git_commits(
@@ -649,7 +657,8 @@ def vcswatch_prescan_packages(
             by_ts[package] = ts
     return ([k for (k, v) in
              sorted(by_ts.items(), key=lambda k: k[1] or 0, reverse=True)],
-            failures)
+            failures,
+            vcswatch)
 
 
 def main(argv):  # noqa: C901
@@ -761,17 +770,24 @@ def main(argv):  # noqa: C901
         stats[result] += 1
 
     if args.vcswatch:
-        packages, failures = vcswatch_prescan_packages(
+        packages, failures, extra_data = vcswatch_prescan_packages(
             packages, inc_stats, exclude=args.exclude,
             min_commit_age=args.min_commit_age,
             allowed_committers=args.allowed_committer)
         if failures > 0:
             ret = 1
+    else:
+        extra_data = {}
 
     if len(packages) > 1:
         logging.info("Uploading packages: %s", ", ".join(packages))
 
     for package in packages:
+        vcs_type = extra_data.get(package, {}).get('vcs_type')
+        vcs_url = extra_data.get(package, {}).get('vcs_url')
+        archive_version = extra_data.get(package, {}).get('archive_version')
+        source_name = extra_data.get(package, {}).get('package')
+
         try:
             process_package(
                 package, builder=args.builder, exclude=args.exclude,
@@ -780,7 +796,10 @@ def main(argv):  # noqa: C901
                 acceptable_keys=args.acceptable_keys,
                 debug=args.debug, dry_run=args.dry_run,
                 diff=args.diff, min_commit_age=args.min_commit_age,
-                allowed_committers=args.allowed_committer)
+                allowed_committers=args.allowed_committer,
+                vcs_type=vcs_type, vcs_url=vcs_url,
+                archive_version=archive_version,
+                source_name=source_name)
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             ret = 1
