@@ -75,7 +75,7 @@ class CheckProposalDiffBase(object):
 
         self.build_tree_contents([("proposal/b", "b")])
         if proposal.supports_setting_file_ids():
-            proposal.add(["b"], [orig.path2id("b")])
+            proposal.add(["b"], ids=[orig.path2id("b")])
         else:
             proposal.add(["b"])
         proposal.commit("not pointless")

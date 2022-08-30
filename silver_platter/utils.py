@@ -37,10 +37,13 @@ try:
 except ImportError:  # breezy < 3.3
     from breezy.errors import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
-from breezy.transport import Transport, get_transport
+from breezy.transport import Transport, get_transport, UnusableRedirect
 from breezy.workingtree import WorkingTree
 
-from breezy.transport import UnusableRedirect
+try:
+    from breezy.transport import UnsupportedProtocol
+except ImportError:
+    from breezy.errors import UnsupportedProtocol
 
 
 def create_temp_sprout(
@@ -232,7 +235,7 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, "Socket error: %s" % e)
     if isinstance(e, errors.NotBranchError):
         return BranchMissing(url, "Branch does not exist: %s" % e)
-    if isinstance(e, errors.UnsupportedProtocol):
+    if isinstance(e, UnsupportedProtocol):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.ConnectionError):
         return BranchUnavailable(url, str(e))
