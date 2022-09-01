@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from http.client import IncompleteRead
 import logging
 import os
 import shutil
@@ -271,6 +272,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, RemoteGitError):
         return BranchUnavailable(url, str(e))
     if isinstance(e, LineEndingError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, IncompleteRead):
         return BranchUnavailable(url, str(e))
     return None
 
