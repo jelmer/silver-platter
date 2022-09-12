@@ -22,7 +22,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
-from typing import Callable, Tuple, Optional, List, Union, Dict
+from typing import Callable, Tuple, Optional, List, Dict
 
 from breezy import (
     errors,
@@ -49,8 +49,7 @@ except ImportError:
 
 def create_temp_sprout(
     branch: Branch,
-    additional_colocated_branches:
-        Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches: Optional[Dict[str, str]] = None,
     dir: Optional[str] = None,
     path: Optional[str] = None,
 ) -> Tuple[WorkingTree, Callable[[], None]]:
@@ -114,7 +113,7 @@ class TemporarySprout(object):
     def __init__(
         self,
         branch: Branch,
-        additional_colocated_branches: Optional[List[str]] = None,
+        additional_colocated_branches: Optional[Dict[str, str]] = None,
         dir: Optional[str] = None,
     ):
         self.branch = branch

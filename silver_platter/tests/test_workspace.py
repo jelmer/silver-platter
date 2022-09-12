@@ -17,6 +17,7 @@
 
 import os
 
+from breezy.controldir import ControlDir
 from breezy.revision import NULL_REVISION
 from breezy.tests import (
     TestCaseWithTransport,
@@ -56,6 +57,29 @@ class TestWorkspace(TestCaseWithTransport):
             self.assertEqual(
                 [('', revid1, ws.local_tree.last_revision())],
                 ws.result_branches())
+
+    def test_cached_branch_up_to_date(self):
+        tree = self.make_branch_and_tree('origin')
+        revid1 = tree.commit('first commit')
+        cached = tree.branch.controldir.sprout('cached')
+        with Workspace(tree.branch, cached_branch=cached.open_branch(),
+                       dir=self.test_dir) as ws:
+            self.assertFalse(ws.changes_since_main())
+            self.assertFalse(ws.any_branch_changes())
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), revid1)
+
+    def test_cached_branch_out_of_date(self):
+        tree = self.make_branch_and_tree('origin')
+        tree.commit('first commit')
+        cached = tree.branch.controldir.sprout('cached')
+        revid2 = tree.commit('first commit')
+        with Workspace(tree.branch, cached_branch=cached.open_branch(),
+                       dir=self.test_dir) as ws:
+            self.assertFalse(ws.changes_since_main())
+            self.assertFalse(ws.any_branch_changes())
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), revid2)
 
     def test_colocated(self):
         tree = self.make_branch_and_tree('origin')
