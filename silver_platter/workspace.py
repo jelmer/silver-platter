@@ -232,8 +232,6 @@ class Workspace(object):
             except DivergedBranches:
                 logger.info("restarting branch")
                 self.refreshed = True
-                self.resume_branch = None
-                self.resume_branch_additional_colocated_branches = None
                 self.local_tree.pull(self.main_branch, overwrite=True)
                 fetch_colocated(
                     self.local_tree.branch.controldir,
@@ -242,8 +240,15 @@ class Workspace(object):
             else:
                 fetch_colocated(
                     self.local_tree.branch.controldir,
-                    self.resume_branch.controldir,
-                    self.resume_branch_additional_colocated_branches or {})
+                    self.main_branch.controldir,
+                    self.additional_colocated_branches)
+                if self.resume_branch_additional_colocated_branches:
+                    fetch_colocated(
+                        self.local_tree.branch.controldir,
+                        self.resume_branch.controldir,
+                        self.resume_branch_additional_colocated_branches)
+                    self.additional_colocated_branches.update(
+                        self.resume_branch_additional_colocated_branches)
         else:
             fetch_colocated(
                 self.local_tree.branch.controldir,
@@ -278,8 +283,6 @@ class Workspace(object):
         branches = [
             (self.main_branch.name, self.main_branch_revid,  # type: ignore
              self.local_tree.last_revision())]
-        # TODO(jelmer): Perhaps include resume colocated branches that don't
-        # appear in additional_colocated_branches ?
         for from_name, to_name in self.additional_colocated_branches.items():
             to_revision: Optional[bytes]
             try:

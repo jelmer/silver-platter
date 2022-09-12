@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import os
+import shutil
 
 from breezy.revision import NULL_REVISION
 from breezy.tests import (
@@ -80,12 +81,19 @@ class TestWorkspace(TestCaseWithTransport):
             self.assertFalse(ws.changes_since_base())
             self.assertEqual(ws.local_tree.last_revision(), revid2)
 
+    def commit_on_colo(self, controldir, name, message):
+        colo_branch = controldir.create_branch('colo')
+        colo_checkout = colo_branch.create_checkout(name)
+        try:
+            return colo_checkout.commit(message)
+        finally:
+            shutil.rmtree(name)
+
     def test_colocated(self):
         tree = self.make_branch_and_tree('origin')
         revid1 = tree.commit('main')
-        colo_branch = tree.branch.controldir.create_branch('colo')
-        colo_checkout = colo_branch.create_checkout('../colo')
-        colo_revid1 = colo_checkout.commit('Another')
+        colo_revid1 = self.commit_on_colo(
+            tree.branch.controldir, 'colo', 'Another')
         self.assertEqual(tree.branch.last_revision(), revid1)
         with Workspace(
                 tree.branch, dir=self.test_dir,
@@ -118,7 +126,7 @@ class TestWorkspace(TestCaseWithTransport):
             self.assertEqual([
                 ('', revid1, resume_revid1)], ws.result_branches())
 
-    def test_resume_refresh(self):
+    def test_resume_discard(self):
         tree = self.make_branch_and_tree('origin')
         tree.commit('first commit')
         resume = tree.branch.controldir.sprout('resume')
@@ -133,3 +141,48 @@ class TestWorkspace(TestCaseWithTransport):
             self.assertFalse(ws.changes_since_base())
             self.assertEqual(ws.local_tree.last_revision(), revid2)
             self.assertEqual([('', revid2, revid2)], ws.result_branches())
+
+    def test_resume_continue_with_unchanged_colocated(self):
+        tree = self.make_branch_and_tree('origin')
+        revid1 = tree.commit('first commit')
+        colo_revid1 = self.commit_on_colo(
+            tree.branch.controldir, 'colo', 'First colo')
+        resume = tree.branch.controldir.sprout('resume')
+        resume_tree = resume.open_workingtree()
+        resume_revid1 = resume_tree.commit('resume')
+        with Workspace(tree.branch, resume_branch=resume_tree.branch,
+                       dir=self.test_dir,
+                       additional_colocated_branches=['colo']) as ws:
+            self.assertTrue(ws.changes_since_main())
+            self.assertTrue(ws.any_branch_changes())
+            self.assertFalse(ws.refreshed)
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), resume_revid1)
+            self.assertEqual([
+                ('', revid1, resume_revid1),
+                ('colo', colo_revid1, colo_revid1),
+            ], ws.result_branches())
+
+    def test_resume_discard_with_unchanged_colocated(self):
+        tree = self.make_branch_and_tree('origin')
+        tree.commit('first commit')
+        colo_revid1 = self.commit_on_colo(
+            tree.branch.controldir, 'colo', 'First colo')
+        resume = tree.branch.controldir.sprout('resume')
+        resume_colo_revid1 = self.commit_on_colo(
+            resume, 'colo', 'First colo on resume')
+        revid2 = tree.commit('second commit')
+        resume_tree = resume.open_workingtree()
+        resume_tree.commit('resume')
+        with Workspace(tree.branch, resume_branch=resume_tree.branch,
+                       dir=self.test_dir,
+                       additional_colocated_branches=['colo']) as ws:
+            self.assertFalse(ws.changes_since_main())
+            self.assertFalse(ws.any_branch_changes())
+            self.assertTrue(ws.refreshed)
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), revid2)
+            self.assertEqual([
+                ('', revid2, revid2),
+                ('colo', colo_revid1, colo_revid1),
+            ], ws.result_branches())
