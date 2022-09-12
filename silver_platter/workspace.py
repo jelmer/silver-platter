@@ -277,7 +277,9 @@ class Workspace(object):
             try:
                 to_branch = self.local_tree.controldir.open_branch(
                     name=to_name)
-            except (NotBranchError, NoColocatedBranchSupport):
+            except NoColocatedBranchSupport:
+                continue
+            except NotBranchError:
                 to_revision = None
             else:
                 to_revision = to_branch.last_revision()
