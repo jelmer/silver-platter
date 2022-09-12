@@ -243,7 +243,7 @@ class Workspace(object):
                 fetch_colocated(
                     self.local_tree.branch.controldir,
                     self.resume_branch.controldir,
-                    self.resume_branch_additional_colocated_branches)
+                    self.resume_branch_additional_colocated_branches or {})
         else:
             fetch_colocated(
                 self.local_tree.branch.controldir,
@@ -264,6 +264,10 @@ class Workspace(object):
         return self.base_revid != self.local_tree.branch.last_revision()
 
     def any_branch_changes(self):
+        """Have any branch changes at all been made?
+
+        Includes changes that already existed in the resume branch.
+        """
         for name, br, r in self.result_branches():
             if br != r:
                 return True

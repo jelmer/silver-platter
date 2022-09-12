@@ -17,7 +17,6 @@
 
 import os
 
-from breezy.controldir import ControlDir
 from breezy.revision import NULL_REVISION
 from breezy.tests import (
     TestCaseWithTransport,
@@ -102,3 +101,35 @@ class TestWorkspace(TestCaseWithTransport):
                 [('', revid1, ws.local_tree.last_revision()),
                  ('colo', colo_revid1, colo_revid1)],
                 ws.result_branches())
+
+    def test_resume_continue(self):
+        tree = self.make_branch_and_tree('origin')
+        revid1 = tree.commit('first commit')
+        resume = tree.branch.controldir.sprout('resume')
+        resume_tree = resume.open_workingtree()
+        resume_revid1 = resume_tree.commit('resume')
+        with Workspace(tree.branch, resume_branch=resume_tree.branch,
+                       dir=self.test_dir) as ws:
+            self.assertTrue(ws.changes_since_main())
+            self.assertTrue(ws.any_branch_changes())
+            self.assertFalse(ws.refreshed)
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), resume_revid1)
+            self.assertEqual([
+                ('', revid1, resume_revid1)], ws.result_branches())
+
+    def test_resume_refresh(self):
+        tree = self.make_branch_and_tree('origin')
+        tree.commit('first commit')
+        resume = tree.branch.controldir.sprout('resume')
+        revid2 = tree.commit('second commit')
+        resume_tree = resume.open_workingtree()
+        resume_tree.commit('resume')
+        with Workspace(tree.branch, resume_branch=resume_tree.branch,
+                       dir=self.test_dir) as ws:
+            self.assertFalse(ws.changes_since_main())
+            self.assertFalse(ws.any_branch_changes())
+            self.assertTrue(ws.refreshed)
+            self.assertFalse(ws.changes_since_base())
+            self.assertEqual(ws.local_tree.last_revision(), revid2)
+            self.assertEqual([('', revid2, revid2)], ws.result_branches())
