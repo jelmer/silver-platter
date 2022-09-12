@@ -25,7 +25,6 @@ from typing import (
     BinaryIO,
     Any,
     Tuple,
-    Iterator,
 )
 
 from breezy.branch import Branch

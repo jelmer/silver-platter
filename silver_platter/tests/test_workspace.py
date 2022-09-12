@@ -169,8 +169,7 @@ class TestWorkspace(TestCaseWithTransport):
         colo_revid1 = self.commit_on_colo(
             tree.branch.controldir, 'colo', 'First colo')
         resume = tree.branch.controldir.sprout('resume')
-        resume_colo_revid1 = self.commit_on_colo(
-            resume, 'colo', 'First colo on resume')
+        self.commit_on_colo(resume, 'colo', 'First colo on resume')
         revid2 = tree.commit('second commit')
         resume_tree = resume.open_workingtree()
         resume_tree.commit('resume')

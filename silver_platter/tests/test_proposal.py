@@ -64,7 +64,7 @@ class WorkspaceTests(TestCaseWithTransport):
         c.commit("add conflict in resume")
         with Workspace(
                 b.branch, resume_branch=c.branch, dir=self.test_dir) as ws:
-            self.assertIs(ws.resume_branch, None)
+            self.assertTrue(ws.refreshed)
             self.assertEqual(ws.base_revid, b.branch.last_revision())
             self.assertEqual(
                 b.branch.last_revision(), ws.local_tree.branch.last_revision()
