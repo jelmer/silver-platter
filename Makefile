@@ -1,15 +1,19 @@
 all:
 
-check:
+check:: style
+
+style:
 	flake8
-	mypy silver_platter/
-	python3 setup.py test
+
+check:: typing
 
 typing:
 	mypy silver_platter/
 
-style:
-	flake8
+check:: testsuite
+
+testsuite:
+	python3 setup.py test
 
 %_pb2.py: %.proto
 	protoc --python_out=. $<
