@@ -206,7 +206,7 @@ def prepare_upload_package(  # noqa: C901
     pkg: str,
     last_uploaded_version: Optional[Version],
     builder: str,
-    gpg_strategy: Optional[str] = None,
+    gpg_strategy: Optional[gpg.GPGStrategy] = None,
     min_commit_age=None,
     allowed_committers=None,
 ):

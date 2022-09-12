@@ -70,15 +70,15 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def pull_colocated(tree, from_branch, additional_colocated_branches):
+def fetch_colocated(controldir, from_controldir,
+                    additional_colocated_branches):
     logger.debug(
         "Fetching colocated branches: %r",
         additional_colocated_branches,
     )
-
     for from_branch_name in additional_colocated_branches or []:
         try:
-            remote_colo_branch = from_branch.controldir.open_branch(
+            remote_colo_branch = from_controldir.open_branch(
                 name=from_branch_name
             )
         except (NotBranchError, NoColocatedBranchSupport):
@@ -87,7 +87,7 @@ def pull_colocated(tree, from_branch, additional_colocated_branches):
             to_branch_name = additional_colocated_branches[from_branch_name]
         else:
             to_branch_name = from_branch_name
-        tree.branch.controldir.push_branch(
+        controldir.push_branch(
             name=to_branch_name, source=remote_colo_branch, overwrite=True
         )
 
@@ -111,8 +111,8 @@ class Workspace(object):
     main_colo_revid: Dict[Optional[str], bytes]
 
     @classmethod
-    def from_url(cls, url, dir=None):
-        return cls(main_branch=Branch.open(url), dir=dir)
+    def from_url(cls, url, **kwargs):
+        return cls(main_branch=Branch.open(url), **kwargs)
 
     def __init__(
         self,
@@ -234,16 +234,19 @@ class Workspace(object):
                 self.resume_branch = None
                 self.resume_branch_additional_colocated_branches = None
                 self.local_tree.pull(self.main_branch, overwrite=True)
-                pull_colocated(
-                    self.local_tree, self.main_branch,
+                fetch_colocated(
+                    self.local_tree.branch.controldir,
+                    self.main_branch.controldir,
                     self.additional_colocated_branches)
             else:
-                pull_colocated(
-                    self.local_tree, self.resume_branch,
+                fetch_colocated(
+                    self.local_tree.branch.controldir,
+                    self.resume_branch.controldir,
                     self.resume_branch_additional_colocated_branches)
         else:
-            pull_colocated(
-                self.local_tree, self.main_branch,
+            fetch_colocated(
+                self.local_tree.branch.controldir,
+                self.main_branch.controldir,
                 self.additional_colocated_branches)
         self.base_revid = self.local_tree.last_revision()
         return self
