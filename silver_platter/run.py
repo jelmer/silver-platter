@@ -31,6 +31,7 @@ import silver_platter  # noqa: F401
 from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
 from .proposal import (
     ForgeLoginRequired,
+    MergeProposal,
     UnsupportedForge,
     enable_tag_pushing,
     find_existing_proposed,
@@ -80,7 +81,7 @@ def apply_and_publish(  # noqa: C901
         # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
-        existing_proposal = None
+        existing_proposals: Optional[List[MergeProposal]] = []
         logging.warn(
             "Unsupported forge (%s), will attempt to push to %s",
             e,
@@ -88,7 +89,7 @@ def apply_and_publish(  # noqa: C901
         )
     else:
         (resume_branch, resume_overwrite,
-         existing_proposal) = find_existing_proposed(
+         existing_proposals) = find_existing_proposed(
             main_branch, forge, name, owner=derived_owner
         )
         if resume_overwrite is not None:
@@ -134,7 +135,8 @@ def apply_and_publish(  # noqa: C901
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
-                existing_proposal=existing_proposal,
+                existing_proposal=(
+                    existing_proposals[0] if existing_proposals else None),
             )
         except UnsupportedForge as e:
             logging.exception(

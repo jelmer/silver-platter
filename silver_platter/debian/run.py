@@ -44,6 +44,7 @@ from .apply import (
 from ..candidates import CandidateList, Candidate
 from ..proposal import (
     UnsupportedForge,
+    MergeProposal,
     enable_tag_pushing,
     find_existing_proposed,
     get_forge,
@@ -100,7 +101,7 @@ def apply_and_publish(  # noqa: C901
         # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
-        existing_proposal = None
+        existing_proposals: Optional[List[MergeProposal]] = []
         logging.warn(
             "Unsupported forge (%s), will attempt to push to %s",
             e,
@@ -112,7 +113,7 @@ def apply_and_publish(  # noqa: C901
         return 1
     else:
         (resume_branch, resume_overwrite,
-         existing_proposal) = find_existing_proposed(
+         existing_proposals) = find_existing_proposed(
              main_branch, forge, name, owner=derived_owner)
         if resume_overwrite is not None:
             overwrite = resume_overwrite
@@ -166,7 +167,8 @@ def apply_and_publish(  # noqa: C901
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
-                existing_proposal=existing_proposal,
+                existing_proposal=(
+                    existing_proposals[0] if existing_proposals else None),
             )
         except UnsupportedForge as e:
             logging.exception(

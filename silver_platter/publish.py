@@ -461,7 +461,7 @@ def find_existing_proposed(
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
     preferred_schemes: Optional[List[str]] = None,
-) -> Tuple[Optional[Branch], Optional[bool], Optional[MergeProposal]]:
+) -> Tuple[Optional[Branch], Optional[bool], Optional[List[MergeProposal]]]:
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
@@ -506,7 +506,7 @@ def find_existing_proposed(
             else:
                 merged_proposals.append(mp)
         if open_proposals:
-            return (existing_branch, False, open_proposals[0])
+            return (existing_branch, False, open_proposals)
 
         if merged_proposals:
             logging.info(
