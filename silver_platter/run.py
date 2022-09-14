@@ -25,12 +25,14 @@ import sys
 from typing import Optional, List
 
 from breezy import osutils
+from breezy.branch import Branch
 
 import silver_platter  # noqa: F401
 
 from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
 from .proposal import (
     ForgeLoginRequired,
+    MergeProposal,
     UnsupportedForge,
     enable_tag_pushing,
     find_existing_proposed,
@@ -80,7 +82,7 @@ def apply_and_publish(  # noqa: C901
         # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
-        existing_proposal = None
+        existing_proposals: Optional[List[MergeProposal]] = []
         logging.warn(
             "Unsupported forge (%s), will attempt to push to %s",
             e,
@@ -88,7 +90,7 @@ def apply_and_publish(  # noqa: C901
         )
     else:
         (resume_branch, resume_overwrite,
-         existing_proposal) = find_existing_proposed(
+         existing_proposals) = find_existing_proposed(
             main_branch, forge, name, owner=derived_owner
         )
         if resume_overwrite is not None:
@@ -97,6 +99,16 @@ def apply_and_publish(  # noqa: C901
         if resume_branch:
             overwrite = True
         resume_branch = None
+
+    if existing_proposals and len(existing_proposals) > 1:
+        logging.warning(
+            'Multiple open merge proposals for branch at %s: %r',
+            resume_branch.user_url,  # type: ignore
+            [mp.url for mp in existing_proposals])
+        existing_proposal = existing_proposals[0]
+        logging.info('Updating %s', existing_proposal.url)
+    else:
+        existing_proposal = None
 
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:

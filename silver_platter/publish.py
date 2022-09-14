@@ -461,7 +461,7 @@ def find_existing_proposed(
     overwrite_unrelated: bool = False,
     owner: Optional[str] = None,
     preferred_schemes: Optional[List[str]] = None,
-) -> Tuple[Optional[Branch], Optional[bool], Optional[MergeProposal]]:
+) -> Tuple[Optional[Branch], Optional[bool], Optional[List[MergeProposal]]]:
     """Find an existing derived branch with the specified name, and proposal.
 
     Args:
@@ -496,29 +496,32 @@ def find_existing_proposed(
             name,
             full_branch_url(existing_branch),
         )
+        open_proposals = []
         # If there is an open or rejected merge proposal, resume that.
-        merged_proposal = None
+        merged_proposals = []
         for mp in forge.iter_proposals(
                 existing_branch, main_branch, status="all"):
             if not mp.is_closed() and not mp.is_merged():
-                return (existing_branch, False, mp)
+                open_proposals.append(mp)
             else:
-                merged_proposal = mp
+                merged_proposals.append(mp)
+        if open_proposals:
+            return (existing_branch, False, open_proposals)
+
+        if merged_proposals:
+            logging.info(
+                "There is a proposal that has already been merged at %s.",
+                merged_proposals[0].url,
+            )
+            return (None, True, None)
         else:
-            if merged_proposal is not None:
-                logging.info(
-                    "There is a proposal that has already been merged at %s.",
-                    merged_proposal.url,
-                )
+            # No related merge proposals found, but there is an existing
+            # branch (perhaps for a different target branch?)
+            if overwrite_unrelated:
                 return (None, True, None)
             else:
-                # No related merge proposals found, but there is an existing
-                # branch (perhaps for a different target branch?)
-                if overwrite_unrelated:
-                    return (None, True, None)
-                else:
-                    # TODO(jelmer): What to do in this case?
-                    return (None, False, None)
+                # TODO(jelmer): What to do in this case?
+                return (None, False, None)
 
 
 def merge_conflicts(
