@@ -25,7 +25,6 @@ import sys
 from typing import Optional, List
 
 from breezy import osutils
-from breezy.branch import Branch
 
 import silver_platter  # noqa: F401
 

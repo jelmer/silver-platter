@@ -52,6 +52,8 @@ The output JSON should include the following fields:
  * context: Optional command-specific result data, made available
         during template expansion
  * target-branch-url: URL for branch to target, if different from original URL
+ * versions: Dictionary with software used. Project name as key,
+        version as value.
 
 Debian operations
 -----------------
