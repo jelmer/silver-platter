@@ -25,6 +25,7 @@ import sys
 from typing import Optional, List
 
 from breezy import osutils
+from breezy.branch import Branch
 
 import silver_platter  # noqa: F401
 
@@ -99,6 +100,16 @@ def apply_and_publish(  # noqa: C901
             overwrite = True
         resume_branch = None
 
+    if existing_proposals and len(existing_proposals) > 1:
+        logging.warning(
+            'Multiple open merge proposals for branch at %s: %r',
+            resume_branch.user_url,  # type: ignore
+            [mp.url for mp in existing_proposals])
+        existing_proposal = existing_proposals[0]
+        logging.info('Updating %s', existing_proposal.url)
+    else:
+        existing_proposal = None
+
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
             result = script_runner(ws.local_tree, command, commit_pending)
@@ -135,8 +146,7 @@ def apply_and_publish(  # noqa: C901
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
-                existing_proposal=(
-                    existing_proposals[0] if existing_proposals else None),
+                existing_proposal=existing_proposal,
             )
         except UnsupportedForge as e:
             logging.exception(

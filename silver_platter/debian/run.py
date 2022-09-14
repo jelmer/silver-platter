@@ -120,6 +120,16 @@ def apply_and_publish(  # noqa: C901
     if refresh:
         resume_branch = None
 
+    if existing_proposals and len(existing_proposals) > 1:
+        logging.warning(
+            'Multiple open merge proposals for branch at %s: %r',
+            resume_branch.user_url,  # type: ignore
+            [mp.url for mp in existing_proposals])
+        existing_proposal = existing_proposals[0]
+        logging.info('Updating just %s', existing_proposal.url)
+    else:
+        existing_proposal = None
+
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
             result = script_runner(
