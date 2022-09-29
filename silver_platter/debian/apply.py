@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from dataclasses import dataclass, field
+from email.utils import parseaddr
 import logging
 import json
 import os
@@ -234,7 +235,8 @@ def script_runner(   # noqa: C901
             add_changelog_entry(
                 local_tree,
                 os.path.join(debian_path, 'changelog'),
-                [result.description])
+                [result.description],
+                maintainer=(parseaddr(committer) if committer else None))
         local_tree.smart_add([local_tree.abspath(subpath)])
         try:
             new_revision = local_tree.commit(

@@ -14,11 +14,11 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from datetime import datetime
-from debian.deb822 import Deb822
-from debian.changelog import Version
 import os
 from typing import Optional, Dict, List, Tuple
 
+from debian.deb822 import Deb822
+from debian.changelog import Version
 from debmutate.vcs import split_vcs_url
 from debmutate.changelog import (
     Changelog,
