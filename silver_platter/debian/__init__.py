@@ -18,7 +18,7 @@ import os
 from typing import Optional, Dict, List, Tuple
 
 from debian.deb822 import Deb822
-from debian.changelog import Version
+from debian.changelog import Version, get_maintainer
 from debmutate.vcs import split_vcs_url
 from debmutate.changelog import (
     Changelog,
@@ -376,3 +376,13 @@ def control_files_in_root(tree: Tree, subpath: str) -> bool:
     if tree.has_filename(control_path + ".in"):
         return True
     return False
+
+
+def _get_maintainer_from_env(env):
+    old_env = os.environ
+    try:
+        os.environ = dict(os.environ.items())
+        os.environ.update(env)
+        return get_maintainer()
+    finally:
+        os.environ = old_env

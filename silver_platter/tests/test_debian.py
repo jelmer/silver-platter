@@ -35,6 +35,7 @@ from ..debian import (
     convert_debian_vcs_url,
     UnsupportedVCSProber,
     add_changelog_entry,
+    _get_maintainer_from_env,
 )
 
 
@@ -455,3 +456,19 @@ lintian-brush (0.35) unstable; urgency=medium
 """,
             "debian/changelog",
         )
+
+
+class GetMaintainerFromEnvTests(TestCase):
+
+    def test_normal(self):
+        t = _get_maintainer_from_env({})
+        self.assertIsInstance(t, tuple)
+        self.assertIsInstance(t[0], str)
+        self.assertIsInstance(t[1], str)
+
+    def test_env(self):
+        t = _get_maintainer_from_env({
+            'DEBFULLNAME': 'Jelmer',
+            'DEBEMAIL': 'jelmer@example.com',
+        })
+        self.assertEqual(('Jelmer', 'jelmer@example.com'), t)
