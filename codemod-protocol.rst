@@ -1,4 +1,7 @@
-The core of silver-platter are changer commands, which get run in version
+Silver-Platter Codemod Protocol, v1
+===================================
+
+The core of silver-platter are codemod commands, which get run in version
 control checkouts to make changes.
 
 Commands will be run in a clean VCS checkout, where they can make changes as
@@ -45,20 +48,25 @@ Environment variables that will be set:
 
 The output JSON should include the following fields:
 
- * description: Optional one-line text description of the error or changes made
- * value: Optional integer with an indicator of the value of the changes made
- * tags: Optional list of names of tags that should be included with the change
-   (autodetected if not specified)
- * context: Optional command-specific result data, made available
+ * *description*: Optional one-line text description of the error or changes made
+ * *value*: Optional integer with an indicator of the value of the changes made
+ * *tags*: Optional list of names of tags that should be included with the change
+        (autodetected if not specified)
+ * *context*: Optional command-specific result data, made available
         during template expansion
- * target-branch-url: URL for branch to target, if different from original URL
+ * *target-branch-url*: URL for branch to target, if different from original URL
+
+The *value* of a run can be used when e.g. prioritizing the publishing of results,
+if there are multiple runs. It's only meaningful relative to the value of other
+runs.
 
 Debian operations
 -----------------
 
-For Debian branches, branches will be provided named according to DEP-13.
+For Debian branches, branches will be provided named according to
+`DEP-14 <https://dep-team.pages.debian.net/deps/dep14/>`_.
 The following environment variables will be set as well:
 
- * DEB_SOURCE: Source package name
- * DEB_UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
- * ALLOW_REFORMATTING: boolean indicating whether reformatting is allowed
+ * *DEB_SOURCE*: Source package name
+ * *DEB_UPDATE_CHANGELOG*: Set to either update_changelog/leave_changelog (optional)
+ * *ALLOW_REFORMATTING*: boolean indicating whether reformatting is allowed
