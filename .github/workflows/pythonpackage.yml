@@ -25,9 +25,9 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt -y update
-        sudo apt -y install devscripts cython3 bzr
+        sudo apt -y install devscripts cython3 bzr rustc cargo
         python -m pip install --upgrade pip cython
-        pip install -U pip setuptools flake8 mypy debmutate pyyaml testtools
+        pip install -U pip setuptools flake8 mypy debmutate pyyaml testtools setuptools-rust
         mkdir $HOME/.config/breezy/plugins -p
         bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
         pip install -U git+https://salsa.debian.org/python-debian-team/python-debian \
