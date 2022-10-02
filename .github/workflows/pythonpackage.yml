@@ -25,15 +25,10 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt -y update
-        sudo apt -y install devscripts cython3 bzr
-        python -m pip install --upgrade pip cython
-        pip install -U pip setuptools flake8 mypy debmutate pyyaml testtools
-        mkdir $HOME/.config/breezy/plugins -p
-        bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
-        pip install -U git+https://salsa.debian.org/python-debian-team/python-debian \
-                       git+https://salsa.debian.org/jelmer/lintian-brush \
-                       bzr+https://code.launchpad.net/brz \
-                       "git+https://salsa.debian.org/debian/distro-info#egg=distro-info&subdirectory=python"
+        sudo apt -y install devscripts bzr rustc cargo
+        pip install --upgrade pip
+        pip install -U pip setuptools flake8 mypy testtools
+        pip install -e ".[debian,launchpad]"
         python setup.py develop
     - name: Style checks
       run: |
@@ -44,6 +39,6 @@ jobs:
         python -m mypy silver_platter
     - name: Test suite run
       run: |
-        python setup.py test
+        python -m unittest silver_platter.tests.test_suite
       env:
         PYTHONHASHSEED: random
