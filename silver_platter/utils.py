@@ -192,6 +192,10 @@ class BranchUnavailable(Exception):
         return self.description
 
 
+class BranchTemporarilyUnavailable(BranchUnavailable):
+    """Branch unavailable for temporary reasons, e.g. DNS failed."""
+
+
 class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
@@ -238,6 +242,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, UnsupportedProtocol):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.ConnectionError):
+        if "Temporary failure in name resolution" in str(e):
+            return BranchTemporarilyUnavailable(url, str(e))
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.PermissionDenied):
         return BranchUnavailable(url, str(e))
