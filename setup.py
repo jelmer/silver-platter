@@ -20,6 +20,7 @@ from setuptools import setup
 debian_deps = [
     'debmutate>=0.3',
     'python_debian',
+    'brz-debian@git+https://github.com/breezy-team/breezy-debian',
 ]
 
 
