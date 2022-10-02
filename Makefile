@@ -1,5 +1,11 @@
 all:
 
+coverage:
+	python3 -m coverage run -m unittest silver_platter.tests.test_suite
+
+coverage-html:
+	python3 -m coverage html
+
 check:: style
 
 style:
