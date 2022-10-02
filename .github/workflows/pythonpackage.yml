@@ -30,8 +30,7 @@ jobs:
         pip install -U pip setuptools flake8 mypy pyyaml testtools setuptools-rust
         mkdir $HOME/.config/breezy/plugins -p
         bzr branch lp:brz-debian ~/.config/breezy/plugins/debian
-        pip install -U git+https://salsa.debian.org/python-debian-team/python-debian \
-                       git+https://salsa.debian.org/jelmer/debmutate \
+        pip install -U git+https://salsa.debian.org/jelmer/debmutate \
                        git+https://salsa.debian.org/jelmer/lintian-brush \
                        bzr+https://code.launchpad.net/brz \
                        "git+https://salsa.debian.org/debian/distro-info#egg=distro-info&subdirectory=python"
