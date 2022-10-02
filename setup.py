@@ -72,6 +72,7 @@ setup(
     extras_require={
         'debian': debian_deps,
         'launchpad': ['launchpadlib'],
+        'detect-gbp-dch': ['lintian-brush'],
     },
     tests_require=['testtools'] + debian_deps,
 )

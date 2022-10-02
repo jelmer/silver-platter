@@ -14,6 +14,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from datetime import datetime
+import logging
 import os
 from typing import Optional, Dict, List, Tuple
 
@@ -51,8 +52,6 @@ from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
 )
 
-from lintian_brush.detect_gbp_dch import guess_update_changelog
-
 from .. import workspace as _mod_workspace
 from ..utils import (
     open_branch,
@@ -81,6 +80,36 @@ class NoSuchPackage(Exception):
 
 class NoVcsInformation(Exception):
     """Package does not have any Vcs headers."""
+
+
+try:
+    from lintian_brush.detect_gbp_dch import guess_update_changelog
+except ModuleNotFoundError:
+
+    class ChangelogBehaviour(object):
+
+        def __init__(self, update_changelog, explanation):
+            self.update_changelog = update_changelog
+            self.explanation = explanation
+
+        def __str__(self):
+            return self.explanation
+
+        def __repr__(self):
+            return "%s(update_changelog=%r, explanation=%r)" % (
+                type(self).__name__, self.update_changelog,
+                self.explanation)
+
+    def guess_update_changelog(
+        tree: WorkingTree, debian_path: str, cl: Optional[Changelog] = None
+    ) -> Optional[ChangelogBehaviour]:
+        logging.warning(
+            'Install lintian-brush to detect automatically whether '
+            'the changelog should be updated.')
+        return ChangelogBehaviour(
+            'update_changelog',
+            'defaulting to updating changelog since '
+            'lintian-brush is not installed')
 
 
 def add_changelog_entry(
