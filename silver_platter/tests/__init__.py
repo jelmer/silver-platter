@@ -28,7 +28,6 @@ def test_suite():
         "recipe",
         "run",
         "utils",
-        "version",
         "workspace",
     ]
     module_names = [__name__ + ".test_" + name for name in names]
