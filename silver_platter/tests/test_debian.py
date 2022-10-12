@@ -27,31 +27,11 @@ from breezy.tests import (
 )
 
 
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
-
 from ..debian import (
-    select_probers,
     convert_debian_vcs_url,
-    UnsupportedVCSProber,
     add_changelog_entry,
     _get_maintainer_from_env,
 )
-
-
-class SelectProbersTests(TestCase):
-    def test_none(self):
-        self.assertIs(None, select_probers())
-        self.assertIs(None, select_probers(None))
-
-    def test_bzr(self):
-        self.assertEqual([RemoteBzrProber], select_probers("bzr"))
-
-    def test_git(self):
-        self.assertEqual([RemoteGitProber], select_probers("git"))
-
-    def test_unsupported(self):
-        self.assertEqual([UnsupportedVCSProber("foo")], select_probers("foo"))
 
 
 class ConvertDebianVcsUrlTests(TestCase):
