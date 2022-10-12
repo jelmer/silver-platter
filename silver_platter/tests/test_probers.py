@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2018 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,22 +15,29 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import unittest
+from breezy.tests import (
+    TestCase,
+)
+
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
+
+from ..probers import (
+    select_probers,
+    UnsupportedVCSProber,
+)
 
 
-def test_suite():
-    names = [
-        "apply",
-        "candidates",
-        "debian",
-        "probers",
-        "proposal",
-        "publish",
-        "recipe",
-        "run",
-        "utils",
-        "workspace",
-    ]
-    module_names = [__name__ + ".test_" + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+class SelectProbersTests(TestCase):
+    def test_none(self):
+        self.assertIs(None, select_probers())
+        self.assertIs(None, select_probers(None))
+
+    def test_bzr(self):
+        self.assertEqual([RemoteBzrProber], select_probers("bzr"))
+
+    def test_git(self):
+        self.assertEqual([RemoteGitProber], select_probers("git"))
+
+    def test_unsupported(self):
+        self.assertEqual([UnsupportedVCSProber("foo")], select_probers("foo"))

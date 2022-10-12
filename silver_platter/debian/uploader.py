@@ -70,7 +70,6 @@ from . import (
     split_vcs_url,
     Workspace,
     DEFAULT_BUILDER,
-    select_probers,
     NoSuchPackage,
 )
 from ..utils import (
@@ -79,6 +78,9 @@ from ..utils import (
     BranchMissing,
     BranchUnsupported,
     BranchRateLimited,
+)
+from ..probers import (
+    select_probers,
 )
 
 

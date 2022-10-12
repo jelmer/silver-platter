@@ -29,10 +29,6 @@ from debmutate.changelog import (
 
 from breezy import urlutils
 from breezy.branch import Branch
-from breezy.errors import UnsupportedFormatError
-from breezy.controldir import Prober, ControlDirFormat
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
 import breezy.plugins.debian  # For apt: URL support  # noqa: F401
@@ -56,6 +52,7 @@ from .. import workspace as _mod_workspace
 from ..utils import (
     open_branch,
 )
+from ..probers import select_probers
 
 
 __all__ = [
@@ -303,91 +300,6 @@ class Workspace(_mod_workspace.Workspace):
         return debcommit(
             self.local_tree, committer=committer, subpath=subpath,
             paths=paths, reporter=reporter, message=message)
-
-
-class UnsupportedVCSProber(Prober):
-    def __init__(self, vcs_type):
-        self.vcs_type = vcs_type
-
-    def __eq__(self, other):
-        return (isinstance(other, type(self))
-                and other.vcs_type == self.vcs_type)
-
-    def __call__(self):
-        # The prober expects to be registered as a class.
-        return self
-
-    def priority(self, transport):
-        return 200
-
-    def probe_transport(self, transport):
-        raise UnsupportedFormatError(
-            "This VCS %s is not currently supported." % self.vcs_type
-        )
-
-    @classmethod
-    def known_formats(klass):
-        return []
-
-
-prober_registry = {
-    "bzr": RemoteBzrProber,
-    "git": RemoteGitProber,
-}
-
-try:
-    from breezy.plugins.fossil import RemoteFossilProber
-except ImportError:
-    pass
-else:
-    prober_registry["fossil"] = RemoteFossilProber
-
-try:
-    from breezy.plugins.svn import SvnRepositoryProber
-except ImportError:
-    pass
-else:
-    prober_registry["svn"] = SvnRepositoryProber
-
-try:
-    from breezy.plugins.hg import SmartHgProber
-except ImportError:
-    pass
-else:
-    prober_registry["hg"] = SmartHgProber
-
-try:
-    from breezy.plugins.darcs import DarcsProber
-except ImportError:
-    pass
-else:
-    prober_registry["darcs"] = DarcsProber
-
-try:
-    from breezy.plugins.cvs import CVSProber
-except ImportError:
-    pass
-else:
-    prober_registry["cvs"] = CVSProber
-
-
-def select_probers(vcs_type=None):
-    if vcs_type is None:
-        return None
-    try:
-        return [prober_registry[vcs_type.lower()]]
-    except KeyError:
-        return [UnsupportedVCSProber(vcs_type)]
-
-
-def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
-    probers = list(ControlDirFormat.all_probers())
-    if vcs_type:
-        try:
-            probers.insert(0, prober_registry[vcs_type.lower()])
-        except KeyError:
-            pass
-    return probers
 
 
 def is_debcargo_package(tree: Tree, subpath: str) -> bool:
