@@ -586,8 +586,9 @@ def process_package(
                 else:
                     raise PackageProcessingFailure(
                         'verify-command-error',
-                        '%s: Error running verify command %r: returncode %d' % (
-                            source_name, verify_command, e.returncode))
+                        f"{source_name}: "
+                        f"Error running verify command {verify_command}: "
+                        f"returncode {e.returncode}")
 
         tags = []
         if tag_name is not None:
