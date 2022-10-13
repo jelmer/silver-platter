@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from debian.changelog import Version
 
@@ -209,9 +209,9 @@ def prepare_upload_package(  # noqa: C901
     last_uploaded_version: Optional[Version],
     builder: str,
     gpg_strategy: Optional[gpg.GPGStrategy] = None,
-    min_commit_age=None,
-    allowed_committers=None,
-):
+    min_commit_age: Optional[int] = None,
+    allowed_committers: Optional[List[str]] = None,
+) -> Tuple[str, str]:
     debian_path = os.path.join(subpath, "debian")
     try:
         from lintian_brush.detect_gbp_dch import guess_update_changelog
@@ -344,14 +344,16 @@ def select_apt_packages(package_names, maintainer):
 
 class PackageProcessingFailure(Exception):
 
-    def __init__(self, reason):
+    def __init__(self, reason, description=None):
         self.reason = reason
+        self.description = description
 
 
 class PackageIgnored(Exception):
 
-    def __init__(self, reason):
+    def __init__(self, reason, description=None):
         self.reason = reason
+        self.description = description
 
 
 def check_git_commits(vcslog, min_commit_age, allowed_committers):
@@ -417,7 +419,7 @@ def process_package(
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
         vcs_type=None, vcs_url=None, source_name=None,
-        archive_version=None):
+        archive_version=None, verify_command: Optional[str] = None):
     if exclude is None:
         exclude = set()
     logging.info("Processing %s", package)
@@ -571,6 +573,21 @@ def process_package(
             logging.info(
                 "%s: No unreleased changes, skipping.", source_name)
             raise PackageIgnored('no-unreleased-changes')
+
+        if verify_command:
+            try:
+                subprocess.check_call([verify_command, target_changes])
+            except subprocess.CalledProcessError as e:
+                if e.returncode == 1:
+                    raise PackageIgnored(
+                        'verify-command',
+                        "%s: Verify command %r declined upload" % (
+                            source_name, verify_command))
+                else:
+                    raise PackageProcessingFailure(
+                        'verify-command-error',
+                        '%s: Error running verify command %r: returncode %d' % (
+                            source_name, verify_command, e.returncode))
 
         tags = []
         if tag_name is not None:
@@ -743,6 +760,10 @@ def main(argv):  # noqa: C901
         "--shuffle",
         action="store_true",
         help="Randomize order packages are processed in.")
+    parser.add_argument(
+        "--verify-command", type=str, default=None,
+        help=("Command to verify whether upload is necessary. "
+              "Should return 1 to decline, 0 to upload."))
 
     args = parser.parse_args(argv)
 
@@ -812,7 +833,8 @@ def main(argv):  # noqa: C901
                 allowed_committers=args.allowed_committer,
                 vcs_type=vcs_type, vcs_url=vcs_url,
                 archive_version=archive_version,
-                source_name=source_name)
+                source_name=source_name,
+                verify_command=args.verify_command)
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             ret = 1
