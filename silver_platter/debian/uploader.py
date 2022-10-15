@@ -322,24 +322,22 @@ def prepare_upload_package(  # noqa: C901
     return target_changes['source'], tag_name
 
 
-def select_apt_packages(package_names, maintainer):
+def select_apt_packages(apt_repo, package_names, maintainer):
     packages = []
-    import apt_pkg
 
-    apt_pkg.init()
-    sources = apt_pkg.SourceRecords()
-    while sources.step():
-        if maintainer:
-            fullname, email = parseaddr(sources.maintainer)
-            if email not in maintainer:
+    with apt_repo:
+        for source in apt_repo.iter_sources():
+            if maintainer:
+                fullname, email = parseaddr(source['Maintainer'])
+                if email not in maintainer:
+                    continue
+
+            if package_names and source['Package'] not in package_names:
                 continue
 
-        if package_names and sources.package not in package_names:
-            continue
+            packages.append(source['Package'])
 
-        packages.append(sources.package)
-
-    return packages
+        return packages
 
 
 class PackageProcessingFailure(Exception):
@@ -413,7 +411,7 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 
 def process_package(
-        package,
+        apt_repo, package,
         builder: str, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
@@ -427,7 +425,7 @@ def process_package(
     # later on.
     if "/" not in package:
         try:
-            pkg_source = apt_get_source_package(package)
+            pkg_source = apt_get_source_package(apt_repo, package)
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
             raise PackageProcessingFailure('not-in-apt')
@@ -473,7 +471,7 @@ def process_package(
             ) as ce:
                 source_name = ce.source["Source"]
                 try:
-                    pkg_source = apt_get_source_package(source_name)
+                    pkg_source = apt_get_source_package(apt_repo, source_name)
                 except NoSuchPackage:
                     logging.info("%s: package not found in apt", package)
                     raise PackageProcessingFailure('not-in-apt')
@@ -784,6 +782,10 @@ def main(argv):  # noqa: C901
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
+
+    from breezy.plugins.debian.apt_repo import LocalApt
+    apt_repo = LocalApt()
+
     if args.maintainer:
         packages = select_apt_packages(args.packages, args.maintainer)
     else:
@@ -825,7 +827,8 @@ def main(argv):  # noqa: C901
 
         try:
             process_package(
-                package, builder=args.builder, exclude=args.exclude,
+                package, apt_repo=apt_repo,
+                builder=args.builder, exclude=args.exclude,
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
                 acceptable_keys=args.acceptable_keys,
