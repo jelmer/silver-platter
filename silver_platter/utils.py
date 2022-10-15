@@ -33,18 +33,12 @@ from breezy.bzr import LineEndingError
 
 from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
-try:
-    from breezy.controldir import NoColocatedBranchSupport
-except ImportError:  # breezy < 3.3
-    from breezy.errors import NoColocatedBranchSupport
+from breezy.controldir import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
 from breezy.transport import Transport, get_transport, UnusableRedirect
 from breezy.workingtree import WorkingTree
 
-try:
-    from breezy.transport import UnsupportedProtocol
-except ImportError:
-    from breezy.errors import UnsupportedProtocol
+from breezy.transport import UnsupportedProtocol
 
 
 def create_temp_sprout(

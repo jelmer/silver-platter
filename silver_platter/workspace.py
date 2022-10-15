@@ -29,10 +29,7 @@ from typing import (
 
 from breezy.branch import Branch
 from breezy.controldir import ControlDir
-try:
-    from breezy.controldir import NoColocatedBranchSupport
-except ImportError:  # breezy < 3.3
-    from breezy.errors import NoColocatedBranchSupport
+from breezy.controldir import NoColocatedBranchSupport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 from breezy.diff import show_diff_trees
