@@ -334,3 +334,11 @@ def full_branch_url(branch: Branch) -> str:
     if branch.name != "":
         params["branch"] = urlutils.quote(branch.name, "")
     return urlutils.join_segment_parameters(url, params)
+
+
+def get_branch_vcs_type(branch):
+    vcs = getattr(branch.repository, "vcs", None)
+    if vcs:
+        return vcs.abbreviation
+    else:
+        return "bzr"
