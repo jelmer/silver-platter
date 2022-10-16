@@ -19,8 +19,6 @@ from datetime import datetime
 
 from debian.changelog import ChangelogCreateError
 
-import breezy
-
 from breezy.tests import (
     TestCase,
     TestCaseWithTransport,
