@@ -787,7 +787,8 @@ def main(argv):  # noqa: C901
     apt_repo = LocalApt()
 
     if args.maintainer:
-        packages = select_apt_packages(args.packages, args.maintainer)
+        packages = select_apt_packages(
+            apt_repo, args.packages, args.maintainer)
     else:
         packages = args.packages
 
@@ -828,7 +829,7 @@ def main(argv):  # noqa: C901
 
         try:
             process_package(
-                package, apt_repo=apt_repo,
+                apt_repo, package,
                 builder=args.builder, exclude=args.exclude,
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
