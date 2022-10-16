@@ -817,7 +817,8 @@ def main(argv):  # noqa: C901
         extra_data = {}
 
     if len(packages) > 1:
-        logging.info("Uploading packages: %s", ", ".join(packages))
+        logging.info(
+            "Uploading %d packages: %s", len(packages), ", ".join(packages))
 
     for package in packages:
         vcs_type = extra_data.get(package, {}).get('vcs_type')

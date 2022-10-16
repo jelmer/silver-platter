@@ -43,8 +43,6 @@ class ConvertDebianVcsUrlTests(TestCase):
         )
 
     def test_git_ssh(self):
-        if breezy.version_info < (3, 1, 1):
-            self.knownFailure("breezy < 3.1.1 can not deal with ssh:// URLs")
         self.assertIn(
             convert_debian_vcs_url(
                 "Git", "ssh://git@git.kali.org/jelmer/blah.git"),
