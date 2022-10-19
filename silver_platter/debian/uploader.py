@@ -266,7 +266,7 @@ def prepare_upload_package(  # noqa: C901
         )
         if not revids:
             logging.info("No pending changes")
-            return
+            raise NoUnuploadedChanges(cl.version)
         if gpg_strategy:
             logging.info("Verifying GPG signatures...")
             count, result, all_verifiables = gpg.bulk_verify_signatures(
