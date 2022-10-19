@@ -49,6 +49,7 @@ The output JSON should include the following fields:
   + *success*: Changes were successfully made
   + *nothing-to-do*: There were no relevant changes that could be made
 * *transient*: Optional boolean indicating whether the error was transient
+* *stage*: Optional list with the name of the stage the codemod was in when it failed
 * *description*: Optional one-line text description of the error or changes made
 * *value*: Optional integer with an indicator of the value of the changes made
 * *tags*: Optional list of names of tags that should be included with the change (autodetected if not specified)

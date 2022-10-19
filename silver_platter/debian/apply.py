@@ -54,11 +54,13 @@ class MissingChangelog(Exception):
 class DetailedFailure(Exception):
     """Detailed failure"""
 
-    def __init__(self, source_name, result_code, description, details=None):
+    def __init__(self, source_name, result_code, description, stage=None,
+                 details=None):
         self.source = source_name
         self.result_code = result_code
         self.description = description
         self.details = details
+        self.stage = stage
 
     @classmethod
     def from_json(cls, source_name, json):
@@ -66,6 +68,7 @@ class DetailedFailure(Exception):
             source_name,
             result_code=json.get('result_code'),
             description=json.get('description'),
+            stage=tuple(json['stage']) if 'stage' in json else None,
             details=json.get('details'))
 
 

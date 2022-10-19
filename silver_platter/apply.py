@@ -39,9 +39,10 @@ class ScriptFailed(Exception):
 class DetailedFailure(Exception):
     """Detailed failure"""
 
-    def __init__(self, result_code, description, details=None):
+    def __init__(self, result_code, description, stage=None, details=None):
         self.result_code = result_code
         self.description = description
+        self.stage = stage
         self.details = details
 
     @classmethod
@@ -49,6 +50,7 @@ class DetailedFailure(Exception):
         return cls(
             result_code=json.get('result_code'),
             description=json.get('description'),
+            stage=tuple(json['stage']) if 'stage' in json else None,
             details=json.get('details'))
 
 
