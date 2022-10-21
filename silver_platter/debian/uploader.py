@@ -578,7 +578,7 @@ def process_package(
             except subprocess.CalledProcessError as e:
                 if e.returncode == 1:
                     raise PackageIgnored(
-                        'verify-command',
+                        'verify-command-declined',
                         "%s: Verify command %r declined upload" % (
                             source_name, verify_command))
                 else:
