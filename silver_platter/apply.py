@@ -50,7 +50,7 @@ class DetailedFailure(Exception):
         return cls(
             result_code=json.get('result_code'),
             description=json.get('description'),
-            stage=tuple(json['stage']) if 'stage' in json else None,
+            stage=tuple(json['stage']) if json.get('stage') else None,
             details=json.get('details'))
 
 
