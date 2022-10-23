@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Union
 from breezy.commit import PointlessCommit
 from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
@@ -89,7 +89,8 @@ class CommandResult(object):
 
 
 def script_runner(  # noqa: C901
-    local_tree: WorkingTree, script: str, commit_pending: Optional[bool] = None,
+    local_tree: WorkingTree, script: Union[str, List[str]],
+    commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
     extra_env: Optional[Dict[str, str]] = None,
 ) -> CommandResult:  # noqa: C901
@@ -117,7 +118,8 @@ def script_runner(  # noqa: C901
             with open(env['SVP_RESUME'], 'w') as f:
                 json.dump(resume_metadata, f)
         p = subprocess.Popen(
-            script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE, shell=True,
+            script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE,
+            shell=isinstance(script, str),
             env=env)
         (description_encoded, err) = p.communicate(b"")
         try:
@@ -149,6 +151,7 @@ def script_runner(  # noqa: C901
         # touch the branch.
         commit_pending = True
     if commit_pending:
+        local_tree.smart_add([local_tree.abspath(subpath)])
         try:
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
@@ -192,7 +195,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         recipe = None
 
     if args.commit_pending:
-        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {
+            "auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -221,7 +225,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         if args.verify_command:
             try:
                 subprocess.check_call(
-                    args.verify_command, shell=True, cwd=local_tree.abspath(subpath)
+                    args.verify_command, shell=True,
+                    cwd=local_tree.abspath(subpath)
                 )
             except subprocess.CalledProcessError:
                 logging.exception("Verify command failed.")

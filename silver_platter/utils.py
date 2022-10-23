@@ -15,13 +15,14 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from http.client import IncompleteRead
 import logging
 import os
 import shutil
 import socket
 import subprocess
 import tempfile
-from typing import Callable, Tuple, Optional, List, Union, Dict
+from typing import Callable, Tuple, Optional, List, Dict
 
 from breezy import (
     errors,
@@ -30,20 +31,25 @@ from breezy import (
 
 from breezy.bzr import LineEndingError
 
-from breezy.branch import (
-    Branch,
-)
+from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
+try:
+    from breezy.controldir import NoColocatedBranchSupport
+except ImportError:  # breezy < 3.3
+    from breezy.errors import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
-from breezy.transport import Transport, get_transport
+from breezy.transport import Transport, get_transport, UnusableRedirect
 from breezy.workingtree import WorkingTree
 
-from breezy.transport import UnusableRedirect
+try:
+    from breezy.transport import UnsupportedProtocol
+except ImportError:
+    from breezy.errors import UnsupportedProtocol
 
 
 def create_temp_sprout(
     branch: Branch,
-    additional_colocated_branches: Optional[Union[List[str], Dict[str, str]]] = None,
+    additional_colocated_branches: Optional[Dict[str, str]] = None,
     dir: Optional[str] = None,
     path: Optional[str] = None,
 ) -> Tuple[WorkingTree, Callable[[], None]]:
@@ -80,16 +86,18 @@ def create_temp_sprout(
             try:
                 add_branch = branch.controldir.open_branch(  # type: ignore
                     name=from_branch_name)
-            except (errors.NotBranchError, errors.NoColocatedBranchSupport):
+            except (errors.NotBranchError, NoColocatedBranchSupport):
                 pass
             else:
                 if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[from_branch_name]
+                    to_branch_name = additional_colocated_branches[
+                        from_branch_name]
                 else:
                     to_branch_name = from_branch_name
                 local_add_branch = to_dir.create_branch(name=to_branch_name)
                 add_branch.push(local_add_branch)
-                assert add_branch.last_revision() == local_add_branch.last_revision()
+                assert add_branch.last_revision() \
+                    == local_add_branch.last_revision()
         return to_dir.open_workingtree(), destroy
     except BaseException as e:
         destroy()
@@ -105,7 +113,7 @@ class TemporarySprout(object):
     def __init__(
         self,
         branch: Branch,
-        additional_colocated_branches: Optional[List[str]] = None,
+        additional_colocated_branches: Optional[Dict[str, str]] = None,
         dir: Optional[str] = None,
     ):
         self.branch = branch
@@ -166,7 +174,8 @@ def run_post_check(
         return
     try:
         subprocess.check_call(
-            script, shell=True, cwd=tree.basedir, env={"SINCE_REVID": since_revid}
+            script, shell=True, cwd=tree.basedir,
+            env={"SINCE_REVID": since_revid}
         )
     except subprocess.CalledProcessError:
         raise PostCheckFailed()
@@ -183,10 +192,15 @@ class BranchUnavailable(Exception):
         return self.description
 
 
+class BranchTemporarilyUnavailable(BranchUnavailable):
+    """Branch unavailable for temporary reasons, e.g. DNS failed."""
+
+
 class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
-    def __init__(self, url: str, description: str, retry_after: Optional[int] = None):
+    def __init__(self, url: str, description: str,
+                 retry_after: Optional[int] = None):
         self.url = url
         self.description = description
         self.retry_after = retry_after
@@ -225,26 +239,26 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, "Socket error: %s" % e)
     if isinstance(e, errors.NotBranchError):
         return BranchMissing(url, "Branch does not exist: %s" % e)
-    if isinstance(e, errors.UnsupportedProtocol):
+    if isinstance(e, UnsupportedProtocol):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.ConnectionError):
+        if "Temporary failure in name resolution" in str(e):
+            return BranchTemporarilyUnavailable(url, str(e))
         return BranchUnavailable(url, str(e))
     if isinstance(e, errors.PermissionDenied):
         return BranchUnavailable(url, str(e))
+    if isinstance(e, urlutils.InvalidURL):
+        return BranchUnavailable(url, str(e))
     if isinstance(e, errors.InvalidHttpResponse):
         if "Unexpected HTTP status 429" in str(e):
-            if hasattr(e, 'headers'):
-                try:
-                    retry_after = int(e.headers['Retry-After'])  # type: ignore
-                except TypeError:
-                    logging.warning(
-                        'Unable to parse retry-after header: %s',
-                        e.headers['Retry-After'])  # type: ignore
-                    retry_after = None
-                else:
-                    retry_after = None
+            try:
+                retry_after = int(e.headers['Retry-After'])  # type: ignore
+            except TypeError:
+                logging.warning(
+                    'Unable to parse retry-after header: %s',
+                    e.headers['Retry-After'])  # type: ignore
+                retry_after = None
             else:
-                # Breezy < 3.2.1
                 retry_after = None
             raise BranchRateLimited(url, str(e), retry_after=retry_after)
         return BranchUnavailable(url, str(e))
@@ -259,6 +273,8 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
     if isinstance(e, RemoteGitError):
         return BranchUnavailable(url, str(e))
     if isinstance(e, LineEndingError):
+        return BranchUnavailable(url, str(e))
+    if isinstance(e, IncompleteRead):
         return BranchUnavailable(url, str(e))
     return None
 
@@ -295,7 +311,8 @@ def open_branch_containing(
     """Open a branch by URL."""
     try:
         transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(transport, probers)  # type: ignore
+        dir, subpath = ControlDir.open_containing_from_transport(
+            transport, probers)  # type: ignore
         return dir.open_branch(), subpath
     except Exception as e:
         converted = _convert_exception(url, e)
@@ -304,7 +321,7 @@ def open_branch_containing(
         raise e
 
 
-def full_branch_url(branch):
+def full_branch_url(branch: Branch) -> str:
     """Get the full URL for a branch.
 
     Ideally this should just return Branch.user_url,

@@ -35,6 +35,7 @@ from ..debian import (
     convert_debian_vcs_url,
     UnsupportedVCSProber,
     add_changelog_entry,
+    _get_maintainer_from_env,
 )
 
 
@@ -57,15 +58,18 @@ class ConvertDebianVcsUrlTests(TestCase):
     def test_git(self):
         self.assertEqual(
             "https://salsa.debian.org/jelmer/blah.git",
-            convert_debian_vcs_url("Git", "https://salsa.debian.org/jelmer/blah.git"),
+            convert_debian_vcs_url(
+                "Git", "https://salsa.debian.org/jelmer/blah.git"),
         )
 
     def test_git_ssh(self):
         if breezy.version_info < (3, 1, 1):
             self.knownFailure("breezy < 3.1.1 can not deal with ssh:// URLs")
         self.assertIn(
-            convert_debian_vcs_url("Git", "ssh://git@git.kali.org/jelmer/blah.git"),
-            ("git+ssh://git@git.kali.org/jelmer/blah.git", "ssh://git@git.kali.org/jelmer/blah.git")
+            convert_debian_vcs_url(
+                "Git", "ssh://git@git.kali.org/jelmer/blah.git"),
+            ("git+ssh://git@git.kali.org/jelmer/blah.git",
+             "ssh://git@git.kali.org/jelmer/blah.git")
         )
 
 
@@ -386,7 +390,8 @@ lintian-brush (0.35) unstable; urgency=medium
         self.overrideEnv("DEBFULLNAME", "Joe Example")
         self.overrideEnv("DEBEMAIL", "joe@example.com")
         try:
-            add_changelog_entry(tree, "debian/changelog", ["And this one is new."])
+            add_changelog_entry(
+                tree, "debian/changelog", ["And this one is new."])
         except ChangelogCreateError:
             self.skipTest(
                 "python-debian does not allow serializing changelog "
@@ -428,7 +433,8 @@ lintian-brush (0.35) unstable; urgency=medium
         self.overrideEnv("DEBFULLNAME", "Joe Example")
         self.overrideEnv("DEBEMAIL", "joe@example.com")
         try:
-            add_changelog_entry(tree, "debian/changelog", ["And this one is new."])
+            add_changelog_entry(
+                tree, "debian/changelog", ["And this one is new."])
         except ChangelogCreateError:
             self.skipTest(
                 "python-debian does not allow serializing changelog "
@@ -450,3 +456,19 @@ lintian-brush (0.35) unstable; urgency=medium
 """,
             "debian/changelog",
         )
+
+
+class GetMaintainerFromEnvTests(TestCase):
+
+    def test_normal(self):
+        t = _get_maintainer_from_env({})
+        self.assertIsInstance(t, tuple)
+        self.assertIsInstance(t[0], str)
+        self.assertIsInstance(t[1], str)
+
+    def test_env(self):
+        t = _get_maintainer_from_env({
+            'DEBFULLNAME': 'Jelmer',
+            'DEBEMAIL': 'jelmer@example.com',
+        })
+        self.assertEqual(('Jelmer', 'jelmer@example.com'), t)

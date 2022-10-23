@@ -63,7 +63,8 @@ class TemporarySproutTests(TestCaseWithTransport):
         )
         builder.finish_series()
         branch = builder.get_branch()
-        with TemporarySprout(branch, ["foo"], dir=self.test_dir) as tree:
+        with TemporarySprout(
+                branch, {"foo": "foo"}, dir=self.test_dir) as tree:
             self.assertNotEqual(branch.control_url, tree.branch.control_url)
             tree.commit("blah")
             # Commits in the temporary sprout don't affect the original branch.
@@ -93,7 +94,8 @@ class RunPostCheckTests(TestCaseWithTransport):
         tree = self.make_branch_and_tree("tree")
         cid = tree.commit("a")
         self.assertRaises(
-            PostCheckFailed, run_post_check, tree, "/bin/false", since_revid=cid
+            PostCheckFailed, run_post_check, tree, "/bin/false",
+            since_revid=cid
         )
 
     def test_true(self):
