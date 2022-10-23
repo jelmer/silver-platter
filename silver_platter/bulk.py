@@ -210,7 +210,8 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
             resume_branch,
             mode,
             bulk_name,
-            get_proposal_description=lambda df, ep: description,
+            get_proposal_description=(
+                lambda df, ep: description),  # type: ignore
             get_proposal_commit_message=lambda ep: commit_message,
             allow_create_proposal=True,
             dry_run=dry_run,
@@ -262,7 +263,8 @@ def publish(directory, *, dry_run: bool = False):
         try:
             publish_result = publish_one(
                 entry['url'], os.path.join(directory, name), bulk_name,
-                entry['mode'], entry['patch'], subpath=entry.get('subpath', ''),
+                entry['mode'], entry['patch'],
+                subpath=entry.get('subpath', ''),
                 labels=entry.get('labels', []),
                 dry_run=dry_run, derived_owner=entry.get('derived-owner'),
                 commit_message=entry.get('commit-message'),
