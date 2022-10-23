@@ -58,7 +58,8 @@ class CheckProposalDiffBase(object):
 
         self.addCleanup(proposal.lock_write().unlock)
         self.assertRaises(
-            EmptyMergeProposal, check_proposal_diff, proposal.branch, orig.branch
+            EmptyMergeProposal, check_proposal_diff, proposal.branch,
+            orig.branch
         )
 
     def test_indep(self):
@@ -74,15 +75,15 @@ class CheckProposalDiffBase(object):
 
         self.build_tree_contents([("proposal/b", "b")])
         if proposal.supports_setting_file_ids():
-            proposal.add(["b"], [orig.path2id("b")])
+            proposal.add(["b"], ids=[orig.path2id("b")])
         else:
             proposal.add(["b"])
         proposal.commit("not pointless")
 
         self.addCleanup(proposal.lock_write().unlock)
         self.assertRaises(
-            EmptyMergeProposal, check_proposal_diff, proposal.branch, orig.branch
-        )
+            EmptyMergeProposal, check_proposal_diff, proposal.branch,
+            orig.branch)
 
     def test_changes(self):
         orig = self.make_branch_and_tree("orig", format=self.format)

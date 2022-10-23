@@ -14,11 +14,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from datetime import datetime
-from debian.deb822 import Deb822
-from debian.changelog import Version
+import logging
 import os
 from typing import Optional, Dict, List, Tuple
 
+from debian.deb822 import Deb822
+from debian.changelog import Version, get_maintainer
 from debmutate.vcs import split_vcs_url
 from debmutate.changelog import (
     Changelog,
@@ -34,6 +35,7 @@ from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
+import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
@@ -49,8 +51,6 @@ from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.upstream import (
     MissingUpstreamTarball,
 )
-
-from lintian_brush.detect_gbp_dch import guess_update_changelog
 
 from .. import workspace as _mod_workspace
 from ..utils import (
@@ -82,6 +82,36 @@ class NoVcsInformation(Exception):
     """Package does not have any Vcs headers."""
 
 
+try:
+    from lintian_brush.detect_gbp_dch import guess_update_changelog
+except ModuleNotFoundError:
+
+    class ChangelogBehaviour(object):
+
+        def __init__(self, update_changelog, explanation):
+            self.update_changelog = update_changelog
+            self.explanation = explanation
+
+        def __str__(self):
+            return self.explanation
+
+        def __repr__(self):
+            return "%s(update_changelog=%r, explanation=%r)" % (
+                type(self).__name__, self.update_changelog,
+                self.explanation)
+
+    def guess_update_changelog(
+        tree: WorkingTree, debian_path: str, cl: Optional[Changelog] = None
+    ) -> Optional[ChangelogBehaviour]:
+        logging.warning(
+            'Install lintian-brush to detect automatically whether '
+            'the changelog should be updated.')
+        return ChangelogBehaviour(
+            'update_changelog',
+            'defaulting to updating changelog since '
+            'lintian-brush is not installed')
+
+
 def add_changelog_entry(
     tree: MutableTree,
     path: str,
@@ -102,7 +132,8 @@ def add_changelog_entry(
     # TODO(jelmer): This logic should ideally be in python-debian.
     with tree.get_file(path) as f:
         cl = Changelog()
-        cl.parse_changelog(f, max_blocks=None, allow_empty_author=True, strict=False)
+        cl.parse_changelog(
+            f, max_blocks=None, allow_empty_author=True, strict=False)
         _changelog_add_entry(
             cl,
             summary=summary,
@@ -146,7 +177,8 @@ def build(
     # TODO(jelmer): Refactor brz-debian so it's not necessary
     # to call out to cmd_builddeb, but to lower-level
     # functions instead.
-    cmd_builddeb().run([tree.abspath(subpath)], builder=builder, result_dir=result_dir)
+    cmd_builddeb().run(
+        [tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 class NoAptSources(Exception):
@@ -168,7 +200,8 @@ def apt_get_source_package(name: str) -> Deb822:
     try:
         sources = apt_pkg.SourceRecords()
     except apt_pkg.Error as e:
-        if e.args[0] == ("E:You must put some 'deb-src' URIs in your sources.list"):
+        if e.args[0] == (
+                "E:You must put some 'deb-src' URIs in your sources.list"):
             raise NoAptSources()
         raise
 
@@ -216,7 +249,8 @@ def open_packaging_branch(location, possible_transports=None, vcs_type=None):
         subpath = ""
     probers = select_probers(vcs_type)
     branch = open_branch(
-        url, possible_transports=possible_transports, probers=probers, name=branch_name
+        url, possible_transports=possible_transports, probers=probers,
+        name=branch_name
     )
     return branch, subpath or ""
 
@@ -233,7 +267,8 @@ def pick_additional_colocated_branches(
         parts = main_branch.name.split("/")  # type: ignore
         parts[0] = "upstream"
         ret["/".join(parts)] = "upstream"
-    return ret
+    existing_branch_names = main_branch.controldir.branch_names()
+    return {k: v for (k, v) in ret.items() if k in existing_branch_names}
 
 
 class Workspace(_mod_workspace.Workspace):
@@ -263,7 +298,8 @@ class Workspace(_mod_workspace.Workspace):
             result_dir=result_dir,
         )
 
-    def commit(self, message=None, subpath="", paths=None, committer=None, reporter=None):
+    def commit(self, message=None, subpath="", paths=None, committer=None,
+               reporter=None):
         return debcommit(
             self.local_tree, committer=committer, subpath=subpath,
             paths=paths, reporter=reporter, message=message)
@@ -274,7 +310,8 @@ class UnsupportedVCSProber(Prober):
         self.vcs_type = vcs_type
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) and other.vcs_type == self.vcs_type
+        return (isinstance(other, type(self))
+                and other.vcs_type == self.vcs_type)
 
     def __call__(self):
         # The prober expects to be registered as a class.
@@ -368,3 +405,13 @@ def control_files_in_root(tree: Tree, subpath: str) -> bool:
     if tree.has_filename(control_path + ".in"):
         return True
     return False
+
+
+def _get_maintainer_from_env(env):
+    old_env = os.environ
+    try:
+        os.environ = dict(os.environ.items())
+        os.environ.update(env)
+        return get_maintainer()
+    finally:
+        os.environ = old_env

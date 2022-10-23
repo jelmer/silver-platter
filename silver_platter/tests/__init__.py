@@ -20,6 +20,7 @@ import unittest
 
 def test_suite():
     names = [
+        "apply",
         "candidates",
         "debian",
         "proposal",
@@ -27,7 +28,7 @@ def test_suite():
         "recipe",
         "run",
         "utils",
-        "version",
+        "workspace",
     ]
     module_names = [__name__ + ".test_" + name for name in names]
     loader = unittest.TestLoader()

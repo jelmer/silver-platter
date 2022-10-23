@@ -25,16 +25,17 @@ import sys
 from typing import Optional, List
 
 from breezy import osutils
-from breezy import propose as _mod_propose
 
 import silver_platter  # noqa: F401
 
 from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
 from .proposal import (
-    UnsupportedHoster,
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
     enable_tag_pushing,
     find_existing_proposed,
-    get_hoster,
+    get_forge,
 )
 from .workspace import (
     Workspace,
@@ -73,22 +74,23 @@ def apply_and_publish(  # noqa: C901
     overwrite = False
 
     try:
-        hoster = get_hoster(main_branch)
-    except UnsupportedHoster as e:
+        forge = get_forge(main_branch)
+    except UnsupportedForge as e:
         if mode != "push":
             raise
-        # We can't figure out what branch to resume from when there's no hoster
+        # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
-        existing_proposal = None
+        existing_proposals: Optional[List[MergeProposal]] = []
         logging.warn(
-            "Unsupported hoster (%s), will attempt to push to %s",
+            "Unsupported forge (%s), will attempt to push to %s",
             e,
             full_branch_url(main_branch),
         )
     else:
-        (resume_branch, resume_overwrite, existing_proposal) = find_existing_proposed(
-            main_branch, hoster, name, owner=derived_owner
+        (resume_branch, resume_overwrite,
+         existing_proposals) = find_existing_proposed(
+            main_branch, forge, name, owner=derived_owner
         )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
@@ -96,6 +98,16 @@ def apply_and_publish(  # noqa: C901
         if resume_branch:
             overwrite = True
         resume_branch = None
+
+    if existing_proposals and len(existing_proposals) > 1:
+        logging.warning(
+            'Multiple open merge proposals for branch at %s: %r',
+            resume_branch.user_url,  # type: ignore
+            [mp.url for mp in existing_proposals])
+        existing_proposal = existing_proposals[0]
+        logging.info('Updating %s', existing_proposal.url)
+    else:
+        existing_proposal = None
 
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
@@ -122,29 +134,33 @@ def apply_and_publish(  # noqa: C901
             publish_result = ws.publish_changes(
                 mode,
                 name,
-                get_proposal_description=lambda df, ep: get_description(result, df, ep),
-                get_proposal_commit_message=lambda ep: get_commit_message(result, ep),
-                allow_create_proposal=lambda: allow_create_proposal(result),
+                get_proposal_description=(
+                    lambda df, ep: get_description(result, df, ep)),
+                get_proposal_commit_message=(
+                    lambda ep: get_commit_message(result, ep)),
+                allow_create_proposal=(
+                    lambda: allow_create_proposal(result)),
                 dry_run=dry_run,
-                hoster=hoster,
+                forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
                 existing_proposal=existing_proposal,
             )
-        except UnsupportedHoster as e:
+        except UnsupportedForge as e:
             logging.exception(
-                "No known supported hoster for %s. Run 'svp login'?",
+                "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
             return 2
         except InsufficientChangesForNewProposal:
             logging.info('Insufficient changes for a new merge proposal')
             return 1
-        except _mod_propose.HosterLoginRequired as e:
+        except ForgeLoginRequired as e:
             logging.exception(
-                "Credentials for hosting site at %r missing. " "Run 'svp login'?",
-                e.hoster.base_url,
+                "Credentials for hosting site at %r missing. "
+                "Run 'svp login'?",
+                e.forge.base_url,
             )
             return 2
 
@@ -155,7 +171,8 @@ def apply_and_publish(  # noqa: C901
                 logging.info("Merge proposal updated.")
             if publish_result.proposal.url:
                 logging.info("URL: %s", publish_result.proposal.url)
-            logging.info("Description: %s", publish_result.proposal.get_description())
+            logging.info(
+                "Description: %s", publish_result.proposal.get_description())
 
         if diff:
             ws.show_diff(sys.stdout.buffer)
@@ -165,11 +182,13 @@ def apply_and_publish(  # noqa: C901
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
-    parser.add_argument("url", help="URL of branch to work on.", type=str, nargs="?")
+    parser.add_argument(
+        "url", help="URL of branch to work on.", type=str, nargs="?")
     parser.add_argument(
         "--command", help="Path to script to run.", type=str)
     parser.add_argument(
-        "--derived-owner", type=str, default=None, help="Owner for derived branches."
+        "--derived-owner", type=str, default=None,
+        help="Owner for derived branches."
     )
     parser.add_argument(
         "--refresh",
@@ -177,9 +196,11 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         help="Refresh changes if branch already exists",
     )
     parser.add_argument(
-        "--label", type=str, help="Label to attach", action="append", default=[]
+        "--label", type=str, help="Label to attach", action="append",
+        default=[]
     )
-    parser.add_argument("--name", type=str, help="Proposed branch name", default=None)
+    parser.add_argument(
+        "--name", type=str, help="Proposed branch name", default=None)
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -232,7 +253,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         urls.extend([candidate.url for candidate in candidatelist])
 
     if args.commit_pending:
-        commit_pending = {"auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {
+            "auto": None, "yes": True, "no": False}[args.commit_pending]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
