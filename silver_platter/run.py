@@ -64,7 +64,7 @@ def apply_and_publish(  # noqa: C901
         verify_command: Optional[str] = None,
         derived_owner: Optional[str] = None,
         refresh: bool = False, allow_create_proposal=None,
-        get_commit_message=None, get_description=None):
+        get_commit_message=None, get_title=None, get_description=None):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -138,6 +138,8 @@ def apply_and_publish(  # noqa: C901
                     lambda df, ep: get_description(result, df, ep)),
                 get_proposal_commit_message=(
                     lambda ep: get_commit_message(result, ep)),
+                get_proposal_title=(
+                    lambda ep: get_title(result, ep)),
                 allow_create_proposal=(
                     lambda: allow_create_proposal(result)),
                 dry_run=dry_run,
@@ -301,6 +303,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             return existing_proposal.get_commit_message()
         return None
 
+    def get_title(result, existing_proposal):
+        if recipe:
+            return recipe.render_merge_request_title(result.context)
+        if existing_proposal is not None:
+            return existing_proposal.get_title()
+        return None
+
     def get_description(result, description_format, existing_proposal):
         if recipe:
             description = recipe.render_merge_request_description(
@@ -323,6 +332,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,
                 get_commit_message=get_commit_message,
+                get_title=get_title,
                 get_description=get_description)
         retcode = max(retcode, result)
 

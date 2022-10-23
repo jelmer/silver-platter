@@ -35,6 +35,10 @@ from breezy.forge import (
     UnsupportedForge,
     SourceNotDerivedFromTarget,
     )
+try:
+    from breezy.forge import TitleUnsupported
+except ImportError:  # breezy < 3.3.1
+    from breezy.errors import UnsupportedOperation as TitleUnsupported
 
 from breezy.transport import Transport
 
@@ -179,6 +183,7 @@ def propose_changes(  # noqa: C901
     labels: Optional[List[str]] = None,
     dry_run: bool = False,
     commit_message: Optional[str] = None,
+    title: Optional[str] = None,
     additional_colocated_branches:
         Optional[Union[List[str], Dict[str, str]]] = None,
     allow_empty: bool = False,
@@ -201,6 +206,7 @@ def propose_changes(  # noqa: C901
       labels: Labels to add
       dry_run: Whether to just dry-run the change
       commit_message: Optional commit message
+      title: Optional title
       additional_colocated_branches: Additional colocated branches to propose
       allow_empty: Whether to allow empty merge proposals
       reviewers: List of reviewers
@@ -260,7 +266,6 @@ def propose_changes(  # noqa: C901
         )
     if (
         resume_proposal is not None
-        and getattr(resume_proposal, "is_closed", None)
         and resume_proposal.is_closed()
     ):
         from breezy.propose import (
@@ -277,7 +282,10 @@ def propose_changes(  # noqa: C901
         if not dry_run:
             proposal_builder = forge.get_proposer(remote_branch, main_branch)
             kwargs: Dict[str, Any] = {}
-            kwargs["commit_message"] = commit_message
+            if forge.supports_merge_proposal_commit_message:
+                kwargs["commit_message"] = commit_message
+            if getattr(forge, "supports_merge_proposal_title", False):
+                kwargs["title"] = title
             kwargs["allow_collaboration"] = allow_collaboration
             try:
                 mp = proposal_builder.create_proposal(
@@ -287,7 +295,7 @@ def propose_changes(  # noqa: C901
                     **kwargs
                 )
             except MergeProposalExists as e:
-                if getattr(e, "existing_proposal", None) is None:
+                if e.existing_proposal is None:
                     # Forge didn't tell us where the actual proposal is.
                     raise
                 resume_proposal = e.existing_proposal
@@ -304,6 +312,7 @@ def propose_changes(  # noqa: C901
                 labels=labels,
                 description=mp_description,
                 commit_message=commit_message,
+                title=title,
                 reviewers=reviewers,
                 owner=owner,
                 stop_revision=stop_revision,
@@ -372,6 +381,7 @@ class DryRunProposal(MergeProposal):
         labels: Optional[List[str]] = None,
         description: Optional[str] = None,
         commit_message: Optional[str] = None,
+        title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
         owner: Optional[str] = None,
         stop_revision: Optional[bytes] = None,
@@ -382,6 +392,7 @@ class DryRunProposal(MergeProposal):
         self.source_branch = source_branch
         self.target_branch = target_branch
         self.commit_message = commit_message
+        self.title = title
         self.url = None
         self.reviewers = reviewers
         self.owner = owner
@@ -394,11 +405,16 @@ class DryRunProposal(MergeProposal):
         if source_branch is None:
             source_branch = open_branch(mp.get_source_branch_url())
         commit_message = mp.get_commit_message()
+        try:
+            title = mp.get_title()
+        except TitleUnsupported:
+            title = None
         return cls(
             source_branch=source_branch,
             target_branch=open_branch(mp.get_target_branch_url()),
             description=mp.get_description(),
             commit_message=commit_message,
+            title=title,
         )
 
     def __repr__(self) -> str:
@@ -420,6 +436,12 @@ class DryRunProposal(MergeProposal):
 
     def set_commit_message(self, commit_message: str) -> None:
         self.commit_message = commit_message
+
+    def get_title(self) -> Optional[str]:
+        return self.title
+
+    def set_title(self, title: str) -> None:
+        self.title = title
 
     def get_source_branch_url(self) -> str:
         """Return the source branch."""
@@ -598,6 +620,8 @@ def publish_changes(
     get_proposal_commit_message: Callable[
         [Optional[MergeProposal]], Optional[str]
     ] = None,
+    get_proposal_title:
+        Callable[[Optional[MergeProposal]], Optional[str]] = None,
     dry_run: bool = False,
     forge: Optional[Forge] = None,
     allow_create_proposal: bool = True,
@@ -618,6 +642,7 @@ def publish_changes(
       name: Branch name to push
       get_proposal_description: Function to retrieve proposal description
       get_proposal_commit_message: Function to retrieve proposal commit message
+      get_proposal_title: Function to retrieve proposal title
       dry_run: Whether to dry run
       forge: Forge, if known
       allow_create_proposal: Whether to allow creating proposals
@@ -703,6 +728,10 @@ def publish_changes(
         commit_message = get_proposal_commit_message(
             existing_proposal if resume_branch else None
         )
+    if get_proposal_title is not None:
+        title = get_proposal_title(
+            existing_proposal if resume_branch else None
+        )
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
@@ -715,6 +744,7 @@ def publish_changes(
         labels=labels,
         dry_run=dry_run,
         commit_message=commit_message,
+        title=title,
         reviewers=reviewers,
         tags=tags,
         owner=derived_owner,

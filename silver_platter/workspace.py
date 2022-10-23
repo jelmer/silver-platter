@@ -334,6 +334,7 @@ class Workspace(object):
         labels: Optional[List[str]] = None,
         dry_run: bool = False,
         commit_message: Optional[str] = None,
+        title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
         owner: Optional[str] = None,
@@ -354,6 +355,7 @@ class Workspace(object):
             labels=labels,
             dry_run=dry_run,
             commit_message=commit_message,
+            title=title,
             reviewers=reviewers,
             owner=owner,
             additional_colocated_branches=(

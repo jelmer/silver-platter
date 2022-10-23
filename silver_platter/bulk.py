@@ -92,6 +92,10 @@ def generate_for_candidate(recipe, basepath, url, name: str,
                 result.context)
             if commit_message:
                 entry['commit-message'] = commit_message
+            title = recipe.render_merge_request_title(
+                result.context)
+            if title:
+                entry['title'] = title
             if recipe.mode:
                 entry['mode'] = recipe.mode
             if recipe.labels:
@@ -156,6 +160,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
                 labels: Optional[List[str]] = None, dry_run: bool = False,
                 derived_owner: Optional[str] = None, refresh: bool = False,
                 commit_message: Optional[str] = None,
+                title: Optional[str] = None,
                 description: Optional[str] = None, overwrite: bool = False):
     try:
         main_branch = open_branch(url)
@@ -213,6 +218,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
             get_proposal_description=(
                 lambda df, ep: description),  # type: ignore
             get_proposal_commit_message=lambda ep: commit_message,
+            get_proposal_title=lambda ep: title,
             allow_create_proposal=True,
             dry_run=dry_run,
             forge=forge,
@@ -268,6 +274,7 @@ def publish(directory, *, dry_run: bool = False):
                 labels=entry.get('labels', []),
                 dry_run=dry_run, derived_owner=entry.get('derived-owner'),
                 commit_message=entry.get('commit-message'),
+                title=entry.get('title'),
                 description=entry.get('description'))
         except EmptyMergeProposal:
             logging.info('No changes left')
