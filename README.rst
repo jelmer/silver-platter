@@ -3,7 +3,7 @@ Silver-Platter
 
 Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system
-(`"codemods" <https://github.com/jelmer/awesome-codemods>`_`).
+(`codemods <https://github.com/jelmer/awesome-codemods>`_).
 
 It automatically creates a local checkout of a remote repository,
 makes user-specified changes, publishes those changes on the remote hosting
@@ -82,8 +82,8 @@ then the following command would process each repository in turn::
 Bulk Mode
 ~~~~~~~~~
 
-Use bulk mode you're going to make a large number of changes and would like to
-review the diffs before sending them out::
+Use bulk mode when you're going to make a large number of changes and would
+like to review or modify the diffs before sending them out::
 
     svp bulk generate --recipe=framwork.yaml --candidates=candidate.syml framwork
 
@@ -106,6 +106,8 @@ This will then create a directory called "framwork", with a file called
 
 The directory also contains ``.patch`` files that can be used to easily review
 the generated changes and directories with clones with the changes.
+The patch files are just for your convenience and are otherwise ignored by
+silver-platter.
 
 You can now review the changes, and edit bulk.yaml as you see fit - remove
 entries that don't appear to be correct, edit the details for the merge
@@ -118,8 +120,9 @@ Once you're happy, you can publish the results in bulk::
 This will publish all the changes, using the mode and parameters specified in
 ``bulk.yaml``.
 
-``bulk.yaml`` is automatically stripped of any changes that have fully landed,
-i.e. where the merge request has been merged or where the changes were pushed.
+``bulk.yaml`` is automatically stripped of any entries in work that have fully
+landed, i.e. where the pull request has been merged or where the changes were
+pushed to the origin.
 
 To check up on the status of your changes, run ``svp bulk status``::
 
