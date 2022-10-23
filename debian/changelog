@@ -1,10 +1,10 @@
-silver-platter (0.5.0-1) UNRELEASED; urgency=medium
+silver-platter (0.5.0-1) unstable; urgency=medium
 
   * debian/upstream/metadata: Update Repository location.
   * New upstream release.
    + Fixes compatibility with newer Breezy. Closes: #1021796
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 23 Oct 2022 10:26:04 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 23 Oct 2022 10:26:54 +0100
 
 silver-platter (0.4.5-1) unstable; urgency=low
 
