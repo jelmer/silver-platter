@@ -732,6 +732,8 @@ def publish_changes(
         title = get_proposal_title(
             existing_proposal if resume_branch else None
         )
+    else:
+        title = None
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
