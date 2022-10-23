@@ -26,30 +26,17 @@ from breezy.branch import Branch
 from breezy.errors import (
     PermissionDenied,
 )
-try:
-    from breezy.forge import (
-        ForgeLoginRequired,
-        UnsupportedForge,
-        get_forge,
-        forges,
-        Forge,
-        MergeProposal,
-        NoSuchProject,
-        iter_forge_instances,
-        SourceNotDerivedFromTarget,
-        )
-except ModuleNotFoundError:
-    from breezy.propose import (
-        HosterLoginRequired as ForgeLoginRequired,
-        UnsupportedHoster as UnsupportedForge,
-        get_hoster as get_forge,
-        hosters as forges,
-        Hoster as Forge,
-        MergeProposal,
-        NoSuchProject,
-        iter_hoster_instances as iter_forge_instances,
-        SourceNotDerivedFromTarget,
-        )
+from breezy.forge import (
+    ForgeLoginRequired,
+    UnsupportedForge,
+    get_forge,
+    forges,
+    Forge,
+    MergeProposal,
+    NoSuchProject,
+    iter_forge_instances,
+    SourceNotDerivedFromTarget,
+    )
 
 from breezy.merge_directive import (
     MergeDirective,

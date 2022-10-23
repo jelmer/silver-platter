@@ -26,26 +26,16 @@ from breezy import (
 )
 from breezy.errors import PermissionDenied
 from breezy.memorybranch import MemoryBranch
-try:
-    from breezy.forge import (
-        get_forge,
-        Forge,
-        MergeProposal,
-        MergeProposalExists,
-        NoSuchProject,
-        UnsupportedForge,
-        SourceNotDerivedFromTarget,
-        )
-except ModuleNotFoundError:
-    from breezy.propose import (
-        get_hoster as get_forge,
-        Hoster as Forge,
-        MergeProposal,
-        MergeProposalExists,
-        NoSuchProject,
-        UnsupportedHoster as UnsupportedForge,
-        SourceNotDerivedFromTarget,
+from breezy.forge import (
+    get_forge,
+    Forge,
+    MergeProposal,
+    MergeProposalExists,
+    NoSuchProject,
+    UnsupportedForge,
+    SourceNotDerivedFromTarget,
     )
+
 from breezy.transport import Transport
 
 from .utils import (
