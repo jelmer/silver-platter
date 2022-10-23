@@ -87,6 +87,7 @@ class Recipe(object):
         else:
             merge_request_description_template = {}
             merge_request_commit_message_template = None
+            merge_request_title_template = None
             propose_threshold = None
         return cls(
             name=d.get('name'),
