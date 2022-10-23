@@ -181,7 +181,7 @@ def apply_and_publish(  # noqa: C901
                     existing_proposals[0] if existing_proposals else None),
             )
         except UnsupportedForge as e:
-            logging.exception(
+            logging.error(
                 "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
@@ -190,7 +190,7 @@ def apply_and_publish(  # noqa: C901
             logging.info('Insufficient changes for a new merge proposal')
             return 0
         except ForgeLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. "
                 "Run 'svp login'?",
                 e.forge.base_url,
@@ -337,8 +337,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
-        return 1
+        parser.error('No command specified.')
 
     if args.name is not None:
         name = args.name
