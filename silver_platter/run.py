@@ -208,7 +208,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--mode",
         help="Mode for pushing",
         choices=SUPPORTED_MODES,
-        default="propose",
+        default=None,
         type=str,
     )
     parser.add_argument(
@@ -275,6 +275,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     else:
         name = derived_branch_name(command)
 
+    if args.mode:
+        mode = args.mode
+    elif recipe and recipe.mode:
+        mode = recipe.mode
+    else:
+        mode = "recipe"
+
     refresh = args.refresh
 
     if recipe and not recipe.resume:
@@ -310,7 +317,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     for url in urls:
         result = apply_and_publish(
-                url, name=name, command=command, mode=args.mode,
+                url, name=name, command=command, mode=mode,
                 commit_pending=commit_pending, dry_run=args.dry_run,
                 labels=args.label, diff=args.diff,
                 derived_owner=args.derived_owner, refresh=refresh,
