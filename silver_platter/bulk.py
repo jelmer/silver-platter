@@ -36,6 +36,7 @@ from .utils import (
 from .publish import (
     InsufficientChangesForNewProposal,
     publish_changes,
+    EmptyMergeProposal,
 )
 from .proposal import (
     ForgeLoginRequired,
@@ -258,31 +259,39 @@ def publish(directory, *, dry_run: bool = False):
     done = []
     for i, entry in enumerate(work):
         name = entry['name']
-        publish_result = publish_one(
-            entry['url'], os.path.join(directory, name), bulk_name,
-            entry['mode'], entry['patch'], subpath=entry.get('subpath', ''),
-            labels=entry.get('labels', []),
-            dry_run=dry_run, derived_owner=entry.get('derived-owner'),
-            commit_message=entry.get('commit-message'),
-            description=entry.get('description'))
-        if publish_result.mode == 'push':
-            if not dry_run:
-                try:
-                    os.unlink(os.path.join(directory, name + '.patch'))
-                except FileNotFoundError:
-                    pass
-                try:
-                    shutil.rmtree(os.path.join(directory, name))
-                except FileNotFoundError:
-                    pass
+        try:
+            publish_result = publish_one(
+                entry['url'], os.path.join(directory, name), bulk_name,
+                entry['mode'], entry['patch'], subpath=entry.get('subpath', ''),
+                labels=entry.get('labels', []),
+                dry_run=dry_run, derived_owner=entry.get('derived-owner'),
+                commit_message=entry.get('commit-message'),
+                description=entry.get('description'))
+        except EmptyMergeProposal:
+            logging.info('No changes left')
             done.append(i)
-        elif publish_result.proposal:
-            entry['proposal-url'] = publish_result.proposal.url
+        else:
+            if publish_result.mode == 'push':
+                if not dry_run:
+                    try:
+                        os.unlink(os.path.join(directory, name + '.patch'))
+                    except FileNotFoundError:
+                        pass
+                    try:
+                        shutil.rmtree(os.path.join(directory, name))
+                    except FileNotFoundError:
+                        pass
+                done.append(i)
+            elif publish_result.proposal:
+                entry['proposal-url'] = publish_result.proposal.url
     for i in reversed(done):
         del work[i]
     if not dry_run:
         with open(os.path.join(directory, 'bulk.yaml'), 'w') as f:
             ruamel.yaml.round_trip_dump(bulk, f)
+    if not work:
+        logging.info('No work left in bulk.yaml; you can now remove %s',
+                     directory)
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
