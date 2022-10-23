@@ -3,7 +3,7 @@ Silver-Platter
 
 Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system
-(`"codemods" <https://github.com/jelmer/awesome-codemods>`_`).
+(`codemods <https://github.com/jelmer/awesome-codemods>`_).
 
 It automatically creates a local checkout of a remote repository,
 makes user-specified changes, publishes those changes on the remote hosting
