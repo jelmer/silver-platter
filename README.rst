@@ -35,7 +35,7 @@ commit message and body for the pull request to standard out. For example::
 
     #!/bin/sh
     sed -i 's/framwork/framework/' README.rst
-    echo "Fix common typo: framwork => framework"
+    echo "Fix common typo: framwork ⇒ framework"
 
 If you leave pending changes, silver-platter will automatically create a commit
 and use the output from the script as the commit message. Scripts also
@@ -51,7 +51,9 @@ contents::
 
     ---
     name: framwork
-    command: ./framwork.sh
+    command: |-
+     sed -i 's/framwork/framework/' README.rst
+     echo "Fix common typo: framwork ⇒ framework"
     mode: propose
     merge-request:
       commit-message: Fix a typo
@@ -76,6 +78,57 @@ For example, if *candidates.yaml* looked like this::
 then the following command would process each repository in turn::
 
     svp run --recipe=framwork.yaml --candidates=candidates.yaml
+
+Bulk Mode
+~~~~~~~~~
+
+Use bulk mode you're going to make a large number of changes and would like to
+review the diffs before sending them out::
+
+    svp bulk generate --recipe=framwork.yaml --candidates=candidate.syml framwork
+
+This will then create a directory called "framwork", with a file called
+``bulk.yaml`` with all the pending changes::
+
+    name: framwork
+    work:
+    - url: https://github.com/dulwich/dulwich
+      name: dulwich
+      description: I spotted that we often mistype *framework* as *framwork*.
+      commit-message: Fix a typo
+      mode: propose
+    - url: https://github.com/jelmer/xandikos
+      name: dulwich
+      description: I spotted that we often mistype *framework* as *framwork*.
+      commit-message: Fix a typo
+      mode: propose
+    recipe: ../framwork.yaml
+
+The directory also contains ``.patch`` files that can be used to easily review
+the generated changes and directories with clones with the changes.
+
+You can now review the changes, and edit bulk.yaml as you see fit - remove
+entries that don't appear to be correct, edit the details for the merge
+requests, etc. It's also possible to make changes to the clones.
+
+Once you're happy, you can publish the results in bulk::
+
+    svp bulk publish framwork
+
+This will publish all the changes, using the mode and parameters specified in
+``bulk.yaml``.
+
+``bulk.yaml`` is automatically stripped of any changes that have fully landed,
+i.e. where the merge request has been merged or where the changes were pushed.
+
+To check up on the status of your changes, run ``svp bulk status``::
+
+    svp bulk status framwork
+
+And to refresh any merge proposals that may have become out of date,
+run publish again::
+
+    svp bulk publish framwork
 
 Supported hosters
 ~~~~~~~~~~~~~~~~~

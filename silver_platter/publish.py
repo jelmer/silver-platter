@@ -172,6 +172,7 @@ def propose_changes(  # noqa: C901
     forge: Forge,
     name: str,
     mp_description: str,
+    *,
     resume_branch: Optional[Branch] = None,
     resume_proposal: Optional[MergeProposal] = None,
     overwrite_existing: Optional[bool] = True,
@@ -592,6 +593,7 @@ def publish_changes(
     resume_branch: Optional[Branch],
     mode: str,
     name: str,
+    *,
     get_proposal_description: Callable[[str, Optional[MergeProposal]], str],
     get_proposal_commit_message: Callable[
         [Optional[MergeProposal]], Optional[str]
