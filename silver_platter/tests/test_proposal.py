@@ -29,7 +29,7 @@ class WorkspaceTests(TestCaseWithTransport):
     def test_simple(self):
         b = self.make_branch("target")
         with Workspace(b, dir=self.test_dir) as ws:
-            self.assertIs(ws.resume_branch, None)
+            self.assertIsNone(ws.resume_branch)
             self.assertFalse(ws.changes_since_main())
             self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("foo")
