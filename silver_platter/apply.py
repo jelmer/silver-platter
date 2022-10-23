@@ -209,8 +209,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
-        return 1
+        parser.error('No command specified.')
 
     local_tree, subpath = WorkingTree.open_containing('.')
 
@@ -231,8 +230,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                     cwd=local_tree.abspath(subpath)
                 )
             except subprocess.CalledProcessError:
-                logging.exception("Verify command failed.")
-                return 1
+                parser.error("Verify command failed.")
     except Exception:
         reset_tree(local_tree, subpath)
         raise

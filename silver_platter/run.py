@@ -148,7 +148,7 @@ def apply_and_publish(  # noqa: C901
                 existing_proposal=existing_proposal,
             )
         except UnsupportedForge as e:
-            logging.exception(
+            logging.error(
                 "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
@@ -157,7 +157,7 @@ def apply_and_publish(  # noqa: C901
             logging.info('Insufficient changes for a new merge proposal')
             return 1
         except ForgeLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. "
                 "Run 'svp login'?",
                 e.forge.base_url,

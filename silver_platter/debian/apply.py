@@ -335,8 +335,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command or recipe specified.')
-        return 1
+        parser.error('No command or recipe specified.')
 
     local_tree, subpath = WorkingTree.open_containing('.')
 

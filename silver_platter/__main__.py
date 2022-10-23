@@ -85,7 +85,7 @@ def login_main(argv: List[str]) -> Optional[int]:
         lp_api.connect_launchpad(lp_service_root, version="devel")
         return None
     else:
-        logging.exception("Unknown forge %r.", forge)
+        logging.fatal("Unknown forge %r.", forge)
         return 1
 
 
