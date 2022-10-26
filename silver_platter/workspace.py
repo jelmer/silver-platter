@@ -407,6 +407,7 @@ class Workspace(object):
         self,
         name: str,
         *,
+        target_branch: Optional[Branch] = None,
         forge: Optional[Forge] = None,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
@@ -424,6 +425,8 @@ class Workspace(object):
         Returns:
           tuple with remote_branch and public_branch_url
         """
+        if target_branch is None:
+            target_branch = self.main_branch
         if not self.main_branch:
             raise RuntimeError('no main branch known')
         if forge is None:
@@ -439,15 +442,18 @@ class Workspace(object):
             stop_revision=stop_revision,
         )
 
-    def publish_changes(self, *args, **kwargs) -> PublishResult:
+    def publish_changes(self, *,
+                        target_branch: Optional[Branch] = None,
+                        **kwargs) -> PublishResult:
         """Publish a set of changes."""
-        if not self.main_branch:
+        if target_branch is None:
+            target_branch = self.main_branch
+        if not target_branch:
             raise RuntimeError('no main branch known')
         return _publish_changes(
             self.local_tree.branch,
-            self.main_branch,
+            target_branch,
             self.resume_branch,
-            *args,
             **kwargs
         )
 
