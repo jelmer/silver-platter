@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
+import shutil
 from typing import (
     Optional,
     Callable,
@@ -26,10 +27,13 @@ from typing import (
     Any,
     Tuple,
 )
+import os
+import tempfile
 
 from breezy.branch import Branch
 from breezy.controldir import ControlDir
 from breezy.controldir import NoColocatedBranchSupport
+from breezy.revision import NULL_REVISION
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 from breezy.diff import show_diff_trees
@@ -112,7 +116,8 @@ class Workspace(object):
 
     def __init__(
         self,
-        main_branch: Branch,
+        main_branch: Optional[Branch],
+        *,
         resume_branch: Optional[Branch] = None,
         cached_branch: Optional[Branch] = None,
         additional_colocated_branches:
@@ -121,6 +126,7 @@ class Workspace(object):
             Optional[Union[List[str], Dict[str, str]]] = None,
         dir: Optional[str] = None,
         path: Optional[str] = None,
+        format=None
     ) -> None:
         self.main_branch = main_branch
         self.main_branch_revid = None
@@ -141,6 +147,7 @@ class Workspace(object):
         self._destroy = None
         self._dir = dir
         self._path = path
+        self._format = format
 
     @property
     def path(self):
@@ -148,12 +155,17 @@ class Workspace(object):
 
     def __str__(self):
         if self._path is None:
-            return "Workspace for %s" % full_branch_url(self.main_branch)
+            if self.main_branch:
+                return "Worspace"
+            else:
+                return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
-            return "Workspace for %s at %s" % (
-                full_branch_url(self.main_branch),
-                self._path,
-            )
+            if self.main_branch:
+                return "Workspace for %s at %s" % (
+                    full_branch_url(self.main_branch),
+                    self._path)
+            else:
+                return "Workspace at %s" % self._path
 
     def __repr__(self):
         return (
@@ -179,6 +191,7 @@ class Workspace(object):
             self.additional_colocated_branches.items()}
 
     def __enter__(self) -> Any:
+        sprout_base = None
         for (sprout_base, sprout_coloc) in [
                 (self.cached_branch, self.additional_colocated_branches),
                 (self.resume_branch,
@@ -186,70 +199,86 @@ class Workspace(object):
                 (self.main_branch, self.additional_colocated_branches)]:
             if sprout_base:
                 break
-        else:
-            raise ValueError('main branch needs to be specified')
-        logger.debug("Creating sprout from %r", sprout_base)
-        self.local_tree, self._destroy = create_temp_sprout(
-            sprout_base,
-            sprout_coloc,
-            dir=self._dir,
-            path=self._path,
-        )
-        self.main_branch_revid = self.main_branch.last_revision()
-        self.main_colo_revid = {}
-        for from_name, to_name in self.additional_colocated_branches.items():
-            try:
-                branch = self.main_branch.controldir.open_branch(
-                    name=from_name)  # type: ignore
-            except (NotBranchError, NoColocatedBranchSupport):
-                continue
-            self.main_colo_revid[to_name] = branch.last_revision()
 
+        if sprout_base is None:
+            logger.debug('Creating new emty tree')
+            if self._path is not None:
+                os.mkdir(self._path)
+                td = self._path
+            else:
+                td = tempfile.mkdtemp(dir=self._dir)
+                self._destroy = lambda: shutil.rmtree(td)
+            self.local_tree = ControlDir.create_standalone_workingtree(
+                td, format=self._format)
+        else:
+            logger.debug("Creating sprout from %r", sprout_base)
+            self.local_tree, self._destroy = create_temp_sprout(
+                sprout_base,
+                sprout_coloc,
+                dir=self._dir,
+                path=self._path,
+            )
+        if self.main_branch:
+            self.main_branch_revid = self.main_branch.last_revision()
+        else:
+            self.main_branch_revid = NULL_REVISION
+        self.main_colo_revid = {}
         self.refreshed = False
-        if self.cached_branch:
-            logger.debug(
-                "Pulling in missing revisions from resume/main branch %r",
-                self.resume_branch or self.main_branch,
-            )
-            self.local_tree.pull(
-                self.resume_branch or self.main_branch, overwrite=True
-            )
-        # At this point, we're either on the tip of the main branch or the tip
-        # of the resume branch
-        if self.resume_branch:
-            # If there's a resume branch at play, make sure it's derived from
-            # the main branch *or* reset back to the main branch.
-            logger.debug(
-                "Pulling in missing revisions from main branch %r",
-                self.main_branch
-            )
-            try:
-                self.local_tree.pull(self.main_branch, overwrite=False)
-            except DivergedBranches:
-                logger.info("restarting branch")
-                self.refreshed = True
-                self.local_tree.pull(self.main_branch, overwrite=True)
-                fetch_colocated(
-                    self.local_tree.branch.controldir,
-                    self.main_branch.controldir,
-                    self.additional_colocated_branches)
+        if self.main_branch:
+            for from_name, to_name in (
+                    self.additional_colocated_branches.items()):
+                try:
+                    branch = self.main_branch.controldir.open_branch(
+                        name=from_name)  # type: ignore
+                except (NotBranchError, NoColocatedBranchSupport):
+                    continue
+                self.main_colo_revid[to_name] = branch.last_revision()
+
+            if self.cached_branch:
+                logger.debug(
+                    "Pulling in missing revisions from resume/main branch %r",
+                    self.resume_branch or self.main_branch,
+                )
+                self.local_tree.pull(
+                    self.resume_branch or self.main_branch, overwrite=True
+                )
+            # At this point, we're either on the tip of the main branch or the
+            # tip of the resume branch
+            if self.resume_branch:
+                # If there's a resume branch at play, make sure it's derived
+                # from the main branch *or* reset back to the main branch.
+                logger.debug(
+                    "Pulling in missing revisions from main branch %r",
+                    self.main_branch
+                )
+                try:
+                    self.local_tree.pull(self.main_branch, overwrite=False)
+                except DivergedBranches:
+                    logger.info("restarting branch")
+                    self.refreshed = True
+                    self.local_tree.pull(self.main_branch, overwrite=True)
+                    fetch_colocated(
+                        self.local_tree.branch.controldir,
+                        self.main_branch.controldir,
+                        self.additional_colocated_branches)
+                else:
+                    fetch_colocated(
+                        self.local_tree.branch.controldir,
+                        self.main_branch.controldir,
+                        self.additional_colocated_branches)
+                    if self.resume_branch_additional_colocated_branches:
+                        fetch_colocated(
+                            self.local_tree.branch.controldir,
+                            self.resume_branch.controldir,
+                            self.resume_branch_additional_colocated_branches)
+                        self.additional_colocated_branches.update(
+                            self.resume_branch_additional_colocated_branches)
             else:
                 fetch_colocated(
                     self.local_tree.branch.controldir,
                     self.main_branch.controldir,
                     self.additional_colocated_branches)
-                if self.resume_branch_additional_colocated_branches:
-                    fetch_colocated(
-                        self.local_tree.branch.controldir,
-                        self.resume_branch.controldir,
-                        self.resume_branch_additional_colocated_branches)
-                    self.additional_colocated_branches.update(
-                        self.resume_branch_additional_colocated_branches)
-        else:
-            fetch_colocated(
-                self.local_tree.branch.controldir,
-                self.main_branch.controldir,
-                self.additional_colocated_branches)
+
         self.base_revid = self.local_tree.last_revision()
         return self
 
@@ -277,7 +306,8 @@ class Workspace(object):
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
         branches = [
-            (self.main_branch.name, self.main_branch_revid,  # type: ignore
+            (self.main_branch.name if self.main_branch else '',
+             self.main_branch_revid,  # type: ignore
              self.local_tree.last_revision())]
         for from_name, to_name in self.additional_colocated_branches.items():
             to_revision: Optional[bytes]
@@ -303,6 +333,8 @@ class Workspace(object):
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
         stop_revision: Optional[bytes] = None,
     ) -> None:
+        if not self.main_branch:
+            raise RuntimeError('no main branch known')
         if forge is None:
             try:
                 forge = get_forge(self.main_branch)
@@ -328,6 +360,8 @@ class Workspace(object):
         self,
         name: str,
         description: str,
+        *,
+        target_branch: Optional[Branch] = None,
         forge: Optional[Forge] = None,
         existing_proposal: Optional[MergeProposal] = None,
         overwrite_existing: Optional[bool] = None,
@@ -341,11 +375,15 @@ class Workspace(object):
         allow_collaboration: bool = False,
         stop_revision: Optional[bytes] = None,
     ) -> Tuple[MergeProposal, bool]:
+        if target_branch is None:
+            target_branch = self.main_branch
+        if not target_branch:
+            raise RuntimeError('no main branch known')
         if forge is None:
-            forge = get_forge(self.main_branch)
+            forge = get_forge(target_branch)
         return propose_changes(
             self.local_tree.branch,
-            self.main_branch,
+            target_branch,
             forge=forge,
             name=name,
             mp_description=description,
@@ -368,6 +406,7 @@ class Workspace(object):
     def push_derived(
         self,
         name: str,
+        *,
         forge: Optional[Forge] = None,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
@@ -385,6 +424,8 @@ class Workspace(object):
         Returns:
           tuple with remote_branch and public_branch_url
         """
+        if not self.main_branch:
+            raise RuntimeError('no main branch known')
         if forge is None:
             forge = get_forge(self.main_branch)
         return push_derived_changes(
@@ -400,6 +441,8 @@ class Workspace(object):
 
     def publish_changes(self, *args, **kwargs) -> PublishResult:
         """Publish a set of changes."""
+        if not self.main_branch:
+            raise RuntimeError('no main branch known')
         return _publish_changes(
             self.local_tree.branch,
             self.main_branch,
