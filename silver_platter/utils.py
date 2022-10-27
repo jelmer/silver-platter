@@ -220,9 +220,10 @@ class BranchMissing(Exception):
 class BranchUnsupported(Exception):
     """The branch uses a VCS or protocol that is unsupported."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str, vcs: Optional[str] = None):
         self.url = url
         self.description = description
+        self.vcs = vcs
 
     def __str__(self) -> str:
         return self.description
@@ -260,6 +261,9 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if UnusableRedirect is not None and isinstance(e, UnusableRedirect):
         return BranchUnavailable(url, str(e))
+    if (hasattr(errors, 'UnsupportedVcs')
+            and isinstance(e, errors.UnsupportedVcs)):
+        return BranchUnsupported(url, str(e), vcs=e.vcs)
     if isinstance(e, errors.UnsupportedFormatError):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.UnknownFormatError):
