@@ -76,8 +76,10 @@ SUPPORTED_MODES: List[str] = [
 
 
 def _tag_selector_from_tags(tags):
-    # TODO(jelmer): Select dict
-    return tags.__contains__
+    def select(tag):
+        assert isinstance(tag, str)
+        return tags.__contains__(tag)
+    return select
 
 
 def push_result(
