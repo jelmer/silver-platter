@@ -326,8 +326,23 @@ class Workspace(object):
             branches.append((from_name, from_revision, to_revision))
         return branches
 
+    def push_tags(
+            self,
+            tags: Union[Dict[str, bytes], List[str]],
+            *,
+            forge: Optional[Forge] = None,
+            dry_run: bool = False):
+        if not self.main_branch:
+            raise RuntimeError('no main branch known')
+        return self.push(
+            forge=forge,
+            dry_run=dry_run,
+            tags=tags,
+            stop_revision=self.main_branch.last_revision())
+
     def push(
         self,
+        *,
         forge: Optional[Forge] = None,
         dry_run: bool = False,
         tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
