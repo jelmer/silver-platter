@@ -38,7 +38,9 @@ from breezy.forge import (
 try:
     from breezy.forge import TitleUnsupported
 except ImportError:  # breezy < 3.3.1
-    from breezy.errors import UnsupportedOperation as TitleUnsupported
+    from breezy.errors import (  # type: ignore
+        UnsupportedOperation as TitleUnsupported
+    )
 
 from breezy.transport import Transport
 
