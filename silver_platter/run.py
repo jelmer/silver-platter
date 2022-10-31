@@ -28,7 +28,12 @@ from breezy import osutils
 
 import silver_platter  # noqa: F401
 
-from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
+from .apply import (
+    script_runner,
+    ScriptMadeNoChanges,
+    ScriptFailed,
+    ScriptNotFound,
+)
 from .proposal import (
     ForgeLoginRequired,
     MergeProposal,
@@ -117,6 +122,9 @@ def apply_and_publish(  # noqa: C901
             return 0
         except ScriptFailed:
             logging.error("Script failed to run.")
+            return 2
+        except ScriptNotFound:
+            logging.error("Script could not be found.")
             return 2
 
         if verify_command:

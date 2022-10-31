@@ -25,7 +25,12 @@ import ruamel.yaml
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
 
-from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
+from .apply import (
+    script_runner,
+    ScriptMadeNoChanges,
+    ScriptFailed,
+    ScriptNotFound,
+)
 from .utils import (
     open_branch,
     BranchMissing,
@@ -75,6 +80,8 @@ def generate_for_candidate(recipe, basepath, url, name: str,
             logging.error("Script did not make any changes.")
         except ScriptFailed:
             logging.error("Script failed to run.")
+        except ScriptNotFound:
+            logging.error("Script not found.")
         else:
             patchpath = basepath + '.patch'
             with open(patchpath, 'wb') as f:
