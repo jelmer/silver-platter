@@ -36,6 +36,10 @@ class ScriptFailed(Exception):
     """Script failed to run."""
 
 
+class ScriptNotFound(Exception):
+    """Script to run was not found."""
+
+
 class DetailedFailure(Exception):
     """Detailed failure"""
 
@@ -119,10 +123,14 @@ def script_runner(  # noqa: C901
             env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
             with open(env['SVP_RESUME'], 'w') as f:
                 json.dump(resume_metadata, f)
-        p = subprocess.Popen(
-            script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE,
-            shell=isinstance(script, str),
-            env=env)
+        try:
+            p = subprocess.Popen(
+                script, cwd=local_tree.abspath(subpath),
+                stdout=subprocess.PIPE,
+                shell=isinstance(script, str),
+                env=env)
+        except FileNotFoundError as e:
+            raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
         try:
             with open(env['SVP_RESULT'], 'r') as f:

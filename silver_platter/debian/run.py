@@ -39,6 +39,7 @@ from .apply import (
     MissingChangelog,
     ScriptMadeNoChanges,
     ScriptFailed,
+    ScriptNotFound,
     install_built_package,
     )
 from ..candidates import CandidateList, Candidate
@@ -143,6 +144,9 @@ def apply_and_publish(  # noqa: C901
             return 1
         except ScriptFailed:
             logging.error("Script failed to run.")
+            return 1
+        except ScriptNotFound:
+            logging.error("Script could not be found.")
             return 1
 
         if build_verify or install:
