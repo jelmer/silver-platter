@@ -25,6 +25,7 @@ class Candidate(object):
     """Candidate."""
 
     url: str
+    name: Optional[str] = None
     branch: Optional[str] = None
     subpath: str = ''
 
@@ -33,6 +34,7 @@ class Candidate(object):
         if isinstance(d, dict):
             return cls(
                 url=d.get('url'),
+                name=d.get('name'),
                 branch=d.get('branch'),
                 subpath=d.get('path'),
                 )

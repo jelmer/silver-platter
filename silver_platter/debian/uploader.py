@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from debian.changelog import Version
 
@@ -70,7 +70,6 @@ from . import (
     split_vcs_url,
     Workspace,
     DEFAULT_BUILDER,
-    select_probers,
     NoSuchPackage,
 )
 from ..utils import (
@@ -79,6 +78,9 @@ from ..utils import (
     BranchMissing,
     BranchUnsupported,
     BranchRateLimited,
+)
+from ..probers import (
+    select_probers,
 )
 
 
@@ -207,9 +209,9 @@ def prepare_upload_package(  # noqa: C901
     last_uploaded_version: Optional[Version],
     builder: str,
     gpg_strategy: Optional[gpg.GPGStrategy] = None,
-    min_commit_age=None,
-    allowed_committers=None,
-):
+    min_commit_age: Optional[int] = None,
+    allowed_committers: Optional[List[str]] = None,
+) -> Tuple[str, str]:
     debian_path = os.path.join(subpath, "debian")
     try:
         from lintian_brush.detect_gbp_dch import guess_update_changelog
@@ -264,7 +266,7 @@ def prepare_upload_package(  # noqa: C901
         )
         if not revids:
             logging.info("No pending changes")
-            return
+            raise NoUnuploadedChanges(cl.version)
         if gpg_strategy:
             logging.info("Verifying GPG signatures...")
             count, result, all_verifiables = gpg.bulk_verify_signatures(
@@ -320,36 +322,36 @@ def prepare_upload_package(  # noqa: C901
     return target_changes['source'], tag_name
 
 
-def select_apt_packages(package_names, maintainer):
+def select_apt_packages(apt_repo, package_names, maintainer):
     packages = []
-    import apt_pkg
 
-    apt_pkg.init()
-    sources = apt_pkg.SourceRecords()
-    while sources.step():
-        if maintainer:
-            fullname, email = parseaddr(sources.maintainer)
-            if email not in maintainer:
+    with apt_repo:
+        for source in apt_repo.iter_sources():
+            if maintainer:
+                fullname, email = parseaddr(source['Maintainer'])
+                if email not in maintainer:
+                    continue
+
+            if package_names and source['Package'] not in package_names:
                 continue
 
-        if package_names and sources.package not in package_names:
-            continue
+            packages.append(source['Package'])
 
-        packages.append(sources.package)
-
-    return packages
+        return packages
 
 
 class PackageProcessingFailure(Exception):
 
-    def __init__(self, reason):
+    def __init__(self, reason, description=None):
         self.reason = reason
+        self.description = description
 
 
 class PackageIgnored(Exception):
 
-    def __init__(self, reason):
+    def __init__(self, reason, description=None):
         self.reason = reason
+        self.description = description
 
 
 def check_git_commits(vcslog, min_commit_age, allowed_committers):
@@ -409,13 +411,13 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 
 def process_package(
-        package,
+        apt_repo, package,
         builder: str, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
         vcs_type=None, vcs_url=None, source_name=None,
-        archive_version=None):
+        archive_version=None, verify_command: Optional[str] = None):
     if exclude is None:
         exclude = set()
     logging.info("Processing %s", package)
@@ -423,7 +425,7 @@ def process_package(
     # later on.
     if "/" not in package:
         try:
-            pkg_source = apt_get_source_package(package)
+            pkg_source = apt_get_source_package(apt_repo, package)
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
             raise PackageProcessingFailure('not-in-apt')
@@ -469,7 +471,7 @@ def process_package(
             ) as ce:
                 source_name = ce.source["Source"]
                 try:
-                    pkg_source = apt_get_source_package(source_name)
+                    pkg_source = apt_get_source_package(apt_repo, source_name)
                 except NoSuchPackage:
                     logging.info("%s: package not found in apt", package)
                     raise PackageProcessingFailure('not-in-apt')
@@ -569,6 +571,22 @@ def process_package(
             logging.info(
                 "%s: No unreleased changes, skipping.", source_name)
             raise PackageIgnored('no-unreleased-changes')
+
+        if verify_command:
+            try:
+                subprocess.check_call([verify_command, target_changes])
+            except subprocess.CalledProcessError as e:
+                if e.returncode == 1:
+                    raise PackageIgnored(
+                        'verify-command-declined',
+                        "%s: Verify command %r declined upload" % (
+                            source_name, verify_command))
+                else:
+                    raise PackageProcessingFailure(
+                        'verify-command-error',
+                        f"{source_name}: "
+                        f"Error running verify command {verify_command}: "
+                        f"returncode {e.returncode}")
 
         tags = []
         if tag_name is not None:
@@ -741,6 +759,10 @@ def main(argv):  # noqa: C901
         "--shuffle",
         action="store_true",
         help="Randomize order packages are processed in.")
+    parser.add_argument(
+        "--verify-command", type=str, default=None,
+        help=("Command to verify whether upload is necessary. "
+              "Should return 1 to decline, 0 to upload."))
 
     args = parser.parse_args(argv)
 
@@ -760,8 +782,13 @@ def main(argv):  # noqa: C901
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
+
+    from breezy.plugins.debian.apt_repo import LocalApt
+    apt_repo = LocalApt()
+
     if args.maintainer:
-        packages = select_apt_packages(args.packages, args.maintainer)
+        packages = select_apt_packages(
+            apt_repo, args.packages, args.maintainer)
     else:
         packages = args.packages
 
@@ -791,7 +818,8 @@ def main(argv):  # noqa: C901
         extra_data = {}
 
     if len(packages) > 1:
-        logging.info("Uploading packages: %s", ", ".join(packages))
+        logging.info(
+            "Uploading %d packages: %s", len(packages), ", ".join(packages))
 
     for package in packages:
         vcs_type = extra_data.get(package, {}).get('vcs_type')
@@ -801,7 +829,8 @@ def main(argv):  # noqa: C901
 
         try:
             process_package(
-                package, builder=args.builder, exclude=args.exclude,
+                apt_repo, package,
+                builder=args.builder, exclude=args.exclude,
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
                 acceptable_keys=args.acceptable_keys,
@@ -810,7 +839,8 @@ def main(argv):  # noqa: C901
                 allowed_committers=args.allowed_committer,
                 vcs_type=vcs_type, vcs_url=vcs_url,
                 archive_version=archive_version,
-                source_name=source_name)
+                source_name=source_name,
+                verify_command=args.verify_command)
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             ret = 1

@@ -1,0 +1,6 @@
+---
+name: modernize
+command: python -m modernize -w .
+mode: propose
+merge-request:
+  commit-message: Modernize Python code for eventual Python 3 migration

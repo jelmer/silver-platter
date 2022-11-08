@@ -28,7 +28,12 @@ from breezy import osutils
 
 import silver_platter  # noqa: F401
 
-from .apply import script_runner, ScriptMadeNoChanges, ScriptFailed
+from .apply import (
+    script_runner,
+    ScriptMadeNoChanges,
+    ScriptFailed,
+    ScriptNotFound,
+)
 from .proposal import (
     ForgeLoginRequired,
     MergeProposal,
@@ -64,7 +69,7 @@ def apply_and_publish(  # noqa: C901
         verify_command: Optional[str] = None,
         derived_owner: Optional[str] = None,
         refresh: bool = False, allow_create_proposal=None,
-        get_commit_message=None, get_description=None):
+        get_commit_message=None, get_title=None, get_description=None):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -118,6 +123,9 @@ def apply_and_publish(  # noqa: C901
         except ScriptFailed:
             logging.error("Script failed to run.")
             return 2
+        except ScriptNotFound:
+            logging.error("Script could not be found.")
+            return 2
 
         if verify_command:
             try:
@@ -138,6 +146,8 @@ def apply_and_publish(  # noqa: C901
                     lambda df, ep: get_description(result, df, ep)),
                 get_proposal_commit_message=(
                     lambda ep: get_commit_message(result, ep)),
+                get_proposal_title=(
+                    lambda ep: get_title(result, ep)),
                 allow_create_proposal=(
                     lambda: allow_create_proposal(result)),
                 dry_run=dry_run,
@@ -148,7 +158,7 @@ def apply_and_publish(  # noqa: C901
                 existing_proposal=existing_proposal,
             )
         except UnsupportedForge as e:
-            logging.exception(
+            logging.error(
                 "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
@@ -157,7 +167,7 @@ def apply_and_publish(  # noqa: C901
             logging.info('Insufficient changes for a new merge proposal')
             return 1
         except ForgeLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. "
                 "Run 'svp login'?",
                 e.forge.base_url,
@@ -208,7 +218,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--mode",
         help="Mode for pushing",
         choices=SUPPORTED_MODES,
-        default="propose",
+        default=None,
         type=str,
     )
     parser.add_argument(
@@ -275,6 +285,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     else:
         name = derived_branch_name(command)
 
+    if args.mode:
+        mode = args.mode
+    elif recipe and recipe.mode:
+        mode = recipe.mode
+    else:
+        mode = "recipe"
+
     refresh = args.refresh
 
     if recipe and not recipe.resume:
@@ -294,6 +311,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             return existing_proposal.get_commit_message()
         return None
 
+    def get_title(result, existing_proposal):
+        if recipe:
+            return recipe.render_merge_request_title(result.context)
+        if existing_proposal is not None:
+            return existing_proposal.get_title()
+        return None
+
     def get_description(result, description_format, existing_proposal):
         if recipe:
             description = recipe.render_merge_request_description(
@@ -310,12 +334,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     for url in urls:
         result = apply_and_publish(
-                url, name=name, command=command, mode=args.mode,
+                url, name=name, command=command, mode=mode,
                 commit_pending=commit_pending, dry_run=args.dry_run,
                 labels=args.label, diff=args.diff,
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,
                 get_commit_message=get_commit_message,
+                get_title=get_title,
                 get_description=get_description)
         retcode = max(retcode, result)
 

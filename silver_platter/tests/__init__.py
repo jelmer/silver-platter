@@ -23,6 +23,7 @@ def test_suite():
         "apply",
         "candidates",
         "debian",
+        "probers",
         "proposal",
         "publish",
         "recipe",

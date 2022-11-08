@@ -15,14 +15,29 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-# TODO(jelmer): Imports with side-effects are bad...
+from breezy.tests import (
+    TestCase,
+)
 
-import breezy  # noqa: F401
-import breezy.git  # For git support   # noqa: F401
-import breezy.bzr  # For bzr support   # noqa: F401
-import breezy.plugins.launchpad  # For lp: URL support  # noqa: F401
-import breezy.plugins.gitlab  # For gitlab support  # noqa: F401
-import breezy.plugins.github  # For github support  # noqa: F401
+from breezy.bzr import RemoteBzrProber
+from breezy.git import RemoteGitProber
 
-__version__ = (0, 5, 3)
-version_string = ".".join(map(str, __version__))
+from ..probers import (
+    select_probers,
+    UnsupportedVCSProber,
+)
+
+
+class SelectProbersTests(TestCase):
+    def test_none(self):
+        self.assertIs(None, select_probers())
+        self.assertIs(None, select_probers(None))
+
+    def test_bzr(self):
+        self.assertEqual([RemoteBzrProber], select_probers("bzr"))
+
+    def test_git(self):
+        self.assertEqual([RemoteGitProber], select_probers("git"))
+
+    def test_unsupported(self):
+        self.assertEqual([UnsupportedVCSProber("foo")], select_probers("foo"))

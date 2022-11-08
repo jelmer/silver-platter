@@ -17,11 +17,13 @@
 
 import argparse
 import logging
-import silver_platter  # noqa: F401
 import sys
 from typing import Optional, List, Callable, Dict
+
+import silver_platter  # noqa: F401
 from . import (
     apply,
+    bulk,
     run,
     version_string,
 )
@@ -85,7 +87,7 @@ def login_main(argv: List[str]) -> Optional[int]:
         lp_api.connect_launchpad(lp_service_root, version="devel")
         return None
     else:
-        logging.exception("Unknown forge %r.", forge)
+        logging.fatal("Unknown forge %r.", forge)
         return 1
 
 
@@ -112,6 +114,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
     "proposals": proposals_main,
     "run": run.main,
     "apply": apply.main,
+    "bulk": bulk.main,
 }
 
 

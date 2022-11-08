@@ -25,7 +25,7 @@ Flags can be specified on the command-line or in a recipe:
 * whether to autocommit (defaults to true?)
 * optional URL to target (if different from base URL)
 
-The command should exit with code 0 when successful, and 1 otherwise. In
+The command should exit with code 0 when successful (or no-op), and 1 otherwise. In
 the case of failure, the branch is discarded.
 
 If it is known that the command supports resuming, then a previous branch
@@ -45,6 +45,11 @@ Environment variables that will be set:
 
 The output JSON should include the following fields:
 
+* *code*: In case of an error, category of error that occurred. Special values are
+  + *success*: Changes were successfully made
+  + *nothing-to-do*: There were no relevant changes that could be made
+* *transient*: Optional boolean indicating whether the error was transient
+* *stage*: Optional list with the name of the stage the codemod was in when it failed
 * *description*: Optional one-line text description of the error or changes made
 * *value*: Optional integer with an indicator of the value of the changes made
 * *tags*: Optional list of names of tags that should be included with the change (autodetected if not specified)
