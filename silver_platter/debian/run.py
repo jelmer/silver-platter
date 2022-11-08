@@ -39,6 +39,7 @@ from .apply import (
     MissingChangelog,
     ScriptMadeNoChanges,
     ScriptFailed,
+    ScriptNotFound,
     install_built_package,
     )
 from ..candidates import CandidateList, Candidate
@@ -78,7 +79,7 @@ def apply_and_publish(  # noqa: C901
         verify_command: Optional[str] = None,
         derived_owner: Optional[str] = None,
         refresh: bool = False, allow_create_proposal=None,
-        get_commit_message=None, get_description=None,
+        get_commit_message=None, get_title=None, get_description=None,
         build_verify=False, builder=DEFAULT_BUILDER, install=False,
         build_target_dir=None, update_changelog: Optional[bool] = None,
         preserve_repositories: bool = False):
@@ -144,6 +145,9 @@ def apply_and_publish(  # noqa: C901
         except ScriptFailed:
             logging.error("Script failed to run.")
             return 1
+        except ScriptNotFound:
+            logging.error("Script could not be found.")
+            return 1
 
         if build_verify or install:
             try:
@@ -170,6 +174,8 @@ def apply_and_publish(  # noqa: C901
                     lambda df, ep: get_description(result, df, ep)),
                 get_proposal_commit_message=(
                     lambda ep: get_commit_message(result, ep)),
+                get_proposal_title=(
+                    lambda ep: get_title(result, ep)),
                 allow_create_proposal=(
                     lambda: allow_create_proposal(result)),
                 dry_run=dry_run,
@@ -181,7 +187,7 @@ def apply_and_publish(  # noqa: C901
                     existing_proposals[0] if existing_proposals else None),
             )
         except UnsupportedForge as e:
-            logging.exception(
+            logging.error(
                 "No known supported forge for %s. Run 'svp login'?",
                 full_branch_url(e.branch),
             )
@@ -190,7 +196,7 @@ def apply_and_publish(  # noqa: C901
             logging.info('Insufficient changes for a new merge proposal')
             return 0
         except ForgeLoginRequired as e:
-            logging.exception(
+            logging.error(
                 "Credentials for hosting site at %r missing. "
                 "Run 'svp login'?",
                 e.forge.base_url,
@@ -337,8 +343,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
-        return 1
+        parser.error('No command specified.')
 
     if args.name is not None:
         name = args.name
@@ -366,6 +371,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             return existing_proposal.get_commit_message()
         return None
 
+    def get_title(result, existing_proposal):
+        if recipe:
+            return recipe.render_merge_request_title(result.context)
+        if existing_proposal is not None:
+            return existing_proposal.get_title()
+        return None
+
     def get_description(result, description_format, existing_proposal):
         if recipe:
             description = recipe.render_merge_request_description(
@@ -389,6 +401,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,
                 get_commit_message=get_commit_message,
+                get_title=get_title,
                 get_description=get_description,
                 build_verify=args.build_verify, builder=args.builder,
                 install=args.install, build_target_dir=args.build_target_dir,

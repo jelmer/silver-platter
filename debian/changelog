@@ -1,3 +1,9 @@
+silver-platter (0.5.3-1) UNRELEASED; urgency=low
+
+  * New upstream release.
+
+ -- Debian Janitor <janitor@jelmer.uk>  Tue, 08 Nov 2022 02:38:40 -0000
+
 silver-platter (0.5.0-1) unstable; urgency=medium
 
   * debian/upstream/metadata: Update Repository location.

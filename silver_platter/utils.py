@@ -33,18 +33,12 @@ from breezy.bzr import LineEndingError
 
 from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
-try:
-    from breezy.controldir import NoColocatedBranchSupport
-except ImportError:  # breezy < 3.3
-    from breezy.errors import NoColocatedBranchSupport
+from breezy.controldir import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
 from breezy.transport import Transport, get_transport, UnusableRedirect
 from breezy.workingtree import WorkingTree
 
-try:
-    from breezy.transport import UnsupportedProtocol
-except ImportError:
-    from breezy.errors import UnsupportedProtocol
+from breezy.transport import UnsupportedProtocol
 
 
 def create_temp_sprout(
@@ -226,9 +220,10 @@ class BranchMissing(Exception):
 class BranchUnsupported(Exception):
     """The branch uses a VCS or protocol that is unsupported."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str, vcs: Optional[str] = None):
         self.url = url
         self.description = description
+        self.vcs = vcs
 
     def __str__(self) -> str:
         return self.description
@@ -266,6 +261,9 @@ def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
         return BranchUnavailable(url, str(e))
     if UnusableRedirect is not None and isinstance(e, UnusableRedirect):
         return BranchUnavailable(url, str(e))
+    if (hasattr(errors, 'UnsupportedVcs')
+            and isinstance(e, errors.UnsupportedVcs)):
+        return BranchUnsupported(url, str(e), vcs=e.vcs)
     if isinstance(e, errors.UnsupportedFormatError):
         return BranchUnsupported(url, str(e))
     if isinstance(e, errors.UnknownFormatError):
@@ -334,3 +332,11 @@ def full_branch_url(branch: Branch) -> str:
     if branch.name != "":
         params["branch"] = urlutils.quote(branch.name, "")
     return urlutils.join_segment_parameters(url, params)
+
+
+def get_branch_vcs_type(branch):
+    vcs = getattr(branch.repository, "vcs", None)
+    if vcs:
+        return vcs.abbreviation
+    else:
+        return "bzr"

@@ -36,12 +36,17 @@ class ScriptFailed(Exception):
     """Script failed to run."""
 
 
+class ScriptNotFound(Exception):
+    """Script to run was not found."""
+
+
 class DetailedFailure(Exception):
     """Detailed failure"""
 
-    def __init__(self, result_code, description, details=None):
+    def __init__(self, result_code, description, stage=None, details=None):
         self.result_code = result_code
         self.description = description
+        self.stage = stage
         self.details = details
 
     @classmethod
@@ -49,6 +54,7 @@ class DetailedFailure(Exception):
         return cls(
             result_code=json.get('result_code'),
             description=json.get('description'),
+            stage=tuple(json['stage']) if json.get('stage') else None,
             details=json.get('details'))
 
 
@@ -117,10 +123,14 @@ def script_runner(  # noqa: C901
             env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
             with open(env['SVP_RESUME'], 'w') as f:
                 json.dump(resume_metadata, f)
-        p = subprocess.Popen(
-            script, cwd=local_tree.abspath(subpath), stdout=subprocess.PIPE,
-            shell=isinstance(script, str),
-            env=env)
+        try:
+            p = subprocess.Popen(
+                script, cwd=local_tree.abspath(subpath),
+                stdout=subprocess.PIPE,
+                shell=isinstance(script, str),
+                env=env)
+        except FileNotFoundError as e:
+            raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
         try:
             with open(env['SVP_RESULT'], 'r') as f:
@@ -207,8 +217,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
-        return 1
+        parser.error('No command specified.')
 
     local_tree, subpath = WorkingTree.open_containing('.')
 
@@ -229,8 +238,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                     cwd=local_tree.abspath(subpath)
                 )
             except subprocess.CalledProcessError:
-                logging.exception("Verify command failed.")
-                return 1
+                parser.error("Verify command failed.")
     except Exception:
         reset_tree(local_tree, subpath)
         raise

@@ -1,0 +1,6 @@
+---
+name: teyit
+command: 'teyit $(find -name "test_*.py")'
+mode: propose
+merge-request:
+  commit-message: Improve unittest calls

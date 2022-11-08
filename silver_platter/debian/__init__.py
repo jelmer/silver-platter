@@ -29,10 +29,6 @@ from debmutate.changelog import (
 
 from breezy import urlutils
 from breezy.branch import Branch
-from breezy.errors import UnsupportedFormatError
-from breezy.controldir import Prober, ControlDirFormat
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
 import breezy.plugins.debian  # For apt: URL support  # noqa: F401
@@ -56,11 +52,11 @@ from .. import workspace as _mod_workspace
 from ..utils import (
     open_branch,
 )
+from ..probers import select_probers
 
 
 __all__ = [
     "add_changelog_entry",
-    "apt_get_source_package",
     "guess_update_changelog",
     "source_package_vcs",
     "build",
@@ -181,11 +177,7 @@ def build(
         [tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
-class NoAptSources(Exception):
-    """No apt sources were configured."""
-
-
-def apt_get_source_package(name: str) -> Deb822:
+def apt_get_source_package(apt_repo, name: str) -> Deb822:
     """Get source package metadata.
 
     Args:
@@ -193,21 +185,11 @@ def apt_get_source_package(name: str) -> Deb822:
     Returns:
       A `Deb822` object
     """
-    import apt_pkg
+    by_version: Dict[Version, Deb822] = {}
 
-    apt_pkg.init()
-
-    try:
-        sources = apt_pkg.SourceRecords()
-    except apt_pkg.Error as e:
-        if e.args[0] == (
-                "E:You must put some 'deb-src' URIs in your sources.list"):
-            raise NoAptSources()
-        raise
-
-    by_version: Dict[str, Deb822] = {}
-    while sources.lookup(name):
-        by_version[sources.version] = sources.record  # type: ignore
+    with apt_repo:
+        for source in apt_repo.iter_source_by_name(name):
+            by_version[source['Version']] = source
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -215,7 +197,7 @@ def apt_get_source_package(name: str) -> Deb822:
     # Try the latest version
     version = sorted(by_version, key=Version)[-1]
 
-    return Deb822(by_version[version])
+    return by_version[version]
 
 
 def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
@@ -228,13 +210,17 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
         raise ValueError("invalid URL: %s" % e)
 
 
-def open_packaging_branch(location, possible_transports=None, vcs_type=None):
+def open_packaging_branch(
+        location, possible_transports=None, vcs_type=None, apt_repo=None):
     """Open a packaging branch from a location string.
 
     location can either be a package name or a full URL
     """
+    if apt_repo is None:
+        from breezy.plugins.debian.apt_repo import LocalApt
+        apt_repo = LocalApt()
     if "/" not in location and ":" not in location:
-        pkg_source = apt_get_source_package(location)
+        pkg_source = apt_get_source_package(apt_repo, location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
@@ -303,91 +289,6 @@ class Workspace(_mod_workspace.Workspace):
         return debcommit(
             self.local_tree, committer=committer, subpath=subpath,
             paths=paths, reporter=reporter, message=message)
-
-
-class UnsupportedVCSProber(Prober):
-    def __init__(self, vcs_type):
-        self.vcs_type = vcs_type
-
-    def __eq__(self, other):
-        return (isinstance(other, type(self))
-                and other.vcs_type == self.vcs_type)
-
-    def __call__(self):
-        # The prober expects to be registered as a class.
-        return self
-
-    def priority(self, transport):
-        return 200
-
-    def probe_transport(self, transport):
-        raise UnsupportedFormatError(
-            "This VCS %s is not currently supported." % self.vcs_type
-        )
-
-    @classmethod
-    def known_formats(klass):
-        return []
-
-
-prober_registry = {
-    "bzr": RemoteBzrProber,
-    "git": RemoteGitProber,
-}
-
-try:
-    from breezy.plugins.fossil import RemoteFossilProber
-except ImportError:
-    pass
-else:
-    prober_registry["fossil"] = RemoteFossilProber
-
-try:
-    from breezy.plugins.svn import SvnRepositoryProber
-except ImportError:
-    pass
-else:
-    prober_registry["svn"] = SvnRepositoryProber
-
-try:
-    from breezy.plugins.hg import SmartHgProber
-except ImportError:
-    pass
-else:
-    prober_registry["hg"] = SmartHgProber
-
-try:
-    from breezy.plugins.darcs import DarcsProber
-except ImportError:
-    pass
-else:
-    prober_registry["darcs"] = DarcsProber
-
-try:
-    from breezy.plugins.cvs import CVSProber
-except ImportError:
-    pass
-else:
-    prober_registry["cvs"] = CVSProber
-
-
-def select_probers(vcs_type=None):
-    if vcs_type is None:
-        return None
-    try:
-        return [prober_registry[vcs_type.lower()]]
-    except KeyError:
-        return [UnsupportedVCSProber(vcs_type)]
-
-
-def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
-    probers = list(ControlDirFormat.all_probers())
-    if vcs_type:
-        try:
-            probers.insert(0, prober_registry[vcs_type.lower()])
-        except KeyError:
-            pass
-    return probers
 
 
 def is_debcargo_package(tree: Tree, subpath: str) -> bool:

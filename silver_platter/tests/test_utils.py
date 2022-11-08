@@ -74,7 +74,7 @@ class TemporarySproutTests(TestCaseWithTransport):
 class RunPreCheckTests(TestCaseWithTransport):
     def test_none(self):
         tree = self.make_branch_and_tree("tree")
-        self.assertIs(run_pre_check(tree, None), None)
+        self.assertIsNone(run_pre_check(tree, None))
 
     def test_false(self):
         tree = self.make_branch_and_tree("tree")
@@ -82,13 +82,13 @@ class RunPreCheckTests(TestCaseWithTransport):
 
     def test_true(self):
         tree = self.make_branch_and_tree("tree")
-        self.assertIs(run_pre_check(tree, "/bin/true"), None)
+        self.assertIsNone(run_pre_check(tree, "/bin/true"))
 
 
 class RunPostCheckTests(TestCaseWithTransport):
     def test_none(self):
         tree = self.make_branch_and_tree("tree")
-        self.assertIs(run_post_check(tree, None, None), None)
+        self.assertIsNone(run_post_check(tree, None, None))
 
     def test_false(self):
         tree = self.make_branch_and_tree("tree")
@@ -101,4 +101,4 @@ class RunPostCheckTests(TestCaseWithTransport):
     def test_true(self):
         tree = self.make_branch_and_tree("tree")
         cid = tree.commit("a")
-        self.assertIs(run_post_check(tree, "/bin/true", since_revid=cid), None)
+        self.assertIsNone(run_post_check(tree, "/bin/true", since_revid=cid))

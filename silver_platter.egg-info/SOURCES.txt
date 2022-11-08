@@ -10,12 +10,14 @@ README.rst
 TODO
 codemod-protocol.rst
 debian-svp
-example.yaml
-releaser.conf
+disperse.conf
+pyproject.toml
+recipe.example.yaml
 setup.cfg
 setup.py
 svp
 .github/FUNDING.yml
+.github/workflows/disperse.yml
 .github/workflows/pythonpackage.yml
 devnotes/codemods.rst
 devnotes/command-line.rst
@@ -23,6 +25,8 @@ devnotes/design.rst
 devnotes/mp-status.rst
 examples/framwork.yaml
 examples/patch.yaml
+examples/python-modernize.yaml
+examples/teyit.yaml
 examples/debian/base.md
 examples/debian/cme.yaml
 examples/debian/debianize.yaml
@@ -40,7 +44,9 @@ man/svp.1
 silver_platter/__init__.py
 silver_platter/__main__.py
 silver_platter/apply.py
+silver_platter/bulk.py
 silver_platter/candidates.py
+silver_platter/probers.py
 silver_platter/proposal.py
 silver_platter/publish.py
 silver_platter/recipe.py
@@ -62,6 +68,7 @@ silver_platter/tests/__init__.py
 silver_platter/tests/test_apply.py
 silver_platter/tests/test_candidates.py
 silver_platter/tests/test_debian.py
+silver_platter/tests/test_probers.py
 silver_platter/tests/test_proposal.py
 silver_platter/tests/test_publish.py
 silver_platter/tests/test_recipe.py

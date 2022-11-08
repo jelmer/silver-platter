@@ -1,12 +1,12 @@
-breezy@ git+https://github.com/breezy-team/breezy
+breezy>=3.3.0.dev.0
 dulwich>=0.20.23
 jinja2
 pyyaml
 
 [debian]
-brz-debian@ git+https://github.com/breezy-team/breezy-debian
 debmutate>=0.3
-python_debian
+python_debian>=0.1.48
+brz-debian
 
 [detect-gbp-dch]
 lintian-brush

@@ -5,3 +5,4 @@ __pycache__
 silver_platter.dist-info
 *_pb2.py
 .mypy_cache
+dist
