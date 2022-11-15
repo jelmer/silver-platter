@@ -621,11 +621,11 @@ def publish_changes(
     name: str,
     *,
     get_proposal_description: Callable[[str, Optional[MergeProposal]], str],
-    get_proposal_commit_message: Callable[
+    get_proposal_commit_message: Optional[Callable[
         [Optional[MergeProposal]], Optional[str]
-    ] = None,
+    ]] = None,
     get_proposal_title:
-        Callable[[Optional[MergeProposal]], Optional[str]] = None,
+        Optional[Callable[[Optional[MergeProposal]], Optional[str]]] = None,
     dry_run: bool = False,
     forge: Optional[Forge] = None,
     allow_create_proposal: bool = True,
