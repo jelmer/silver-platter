@@ -281,7 +281,7 @@ def open_branch(
     url: str,
     possible_transports: Optional[List[Transport]] = None,
     probers: Optional[List[Prober]] = None,
-    name: str = None,
+    name: Optional[str] = None,
 ) -> Branch:
     """Open a branch by URL."""
     url, params = urlutils.split_segment_parameters(url)
