@@ -23,6 +23,7 @@ import datetime
 from email.utils import parseaddr
 import logging
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -574,7 +575,9 @@ def process_package(
 
         if verify_command:
             try:
-                subprocess.check_call([verify_command, target_changes])
+                subprocess.check_call(
+                    verify_command + " " + shlex.quote(target_changes),
+                    shell=True)
             except subprocess.CalledProcessError as e:
                 if e.returncode == 1:
                     raise PackageIgnored(
