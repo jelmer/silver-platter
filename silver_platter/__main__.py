@@ -23,7 +23,7 @@ from typing import Optional, List, Callable, Dict
 import silver_platter  # noqa: F401
 from . import (
     apply,
-    bulk,
+    batch,
     run,
     version_string,
 )
@@ -114,7 +114,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
     "proposals": proposals_main,
     "run": run.main,
     "apply": apply.main,
-    "bulk": bulk.main,
+    "batch": batch.main,
 }
 
 
