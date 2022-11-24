@@ -26,6 +26,7 @@ import sys
 from . import (
     apply as debian_apply,
     run as debian_run,
+    batch as debian_batch,
     uploader as debian_uploader,
     )
 
@@ -41,6 +42,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "upload-pending": debian_uploader.main,
         "apply": debian_apply.main,
         "run": debian_run.main,
+        "batch": debian_batch.main,
     }
 
     parser = argparse.ArgumentParser(prog="debian-svp", add_help=False)
