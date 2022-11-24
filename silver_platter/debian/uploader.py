@@ -18,6 +18,7 @@
 """Support for uploading packages."""
 
 import silver_platter  # noqa: F401
+import time
 
 import datetime
 from email.utils import parseaddr
@@ -26,7 +27,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Callable
 
 from debian.changelog import Version
 
@@ -652,7 +653,8 @@ def vcswatch_prescan_package(
 
 
 def vcswatch_prescan_packages(
-        packages, inc_stats, exclude=None, min_commit_age=None,
+        packages, inc_stats: Callable[[str], None],
+        exclude=None, min_commit_age=None,
         allowed_committers=None):
     logging.info('Using vcswatch to prescan %d packages', len(packages))
     from .. import version_string
@@ -688,6 +690,21 @@ def vcswatch_prescan_packages(
              sorted(by_ts.items(), key=lambda k: k[1] or 0, reverse=True)],
             failures,
             vcswatch)
+
+
+def open_last_attempt_db():
+    try:
+        import tdb
+        from xdg.BaseDirectory import xdg_data_home
+    except ModuleNotFoundError:
+        return None
+    else:
+        last_attempt_path = os.path.join(
+            xdg_data_home, 'silver-platter', 'last-upload-attempt.tdb')
+        os.makedirs(os.path.dirname(last_attempt_path), exist_ok=True)
+        return tdb.open(
+            last_attempt_path, tdb_flags=tdb.DEFAULT,
+            flags=os.O_RDWR | os.O_CREAT, mode=0o600)
 
 
 def main(argv):  # noqa: C901
@@ -821,6 +838,19 @@ def main(argv):  # noqa: C901
         logging.info(
             "Uploading %d packages: %s", len(packages), ", ".join(packages))
 
+    last_attempt = open_last_attempt_db()
+
+    if last_attempt:
+        orig_packages = list(packages)
+
+        def last_attempt_key(p):
+            try:
+                t = int(last_attempt[p.encode('utf-8')])
+            except KeyError:
+                t = 0
+            return (t, orig_packages.index(p))
+        packages.sort(key=last_attempt_key)
+
     for package in packages:
         vcs_type = extra_data.get(package, {}).get('vcs_type')
         vcs_url = extra_data.get(package, {}).get('vcs_url')
@@ -846,6 +876,9 @@ def main(argv):  # noqa: C901
             ret = 1
         except PackageIgnored as e:
             inc_stats(e.reason)
+
+        if last_attempt:
+            last_attempt[package.encode('utf-8')] = b'%d' % (time.time())
 
     if len(packages) > 1:
         logging.info('Results:')
