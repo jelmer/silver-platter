@@ -42,7 +42,7 @@ from debmutate.control import ControlEditor
 from breezy import gpg
 from breezy.config import extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
-from breezy.commit import NullCommitReporter
+from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
@@ -305,12 +305,15 @@ def prepare_upload_package(  # noqa: C901
             else:
                 message = None
         if message is not None:
-            local_tree.commit(
-                specific_files=[os.path.join(debian_path, "changelog")],
-                message=message,
-                allow_pointless=False,
-                reporter=NullCommitReporter(),
-            )
+            try:
+                local_tree.commit(
+                    specific_files=[os.path.join(debian_path, "changelog")],
+                    message=message,
+                    allow_pointless=False,
+                    reporter=NullCommitReporter(),
+                )
+            except PointlessCommit:
+                pass
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
