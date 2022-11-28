@@ -256,6 +256,8 @@ class Workspace(object):
                 except DivergedBranches:
                     logger.info("restarting branch")
                     self.refreshed = True
+                    self.resume_branch = None
+                    self.resume_branch_additional_colocated_branches = None
                     self.local_tree.pull(self.main_branch, overwrite=True)
                     fetch_colocated(
                         self.local_tree.branch.controldir,
