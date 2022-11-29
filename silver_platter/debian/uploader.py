@@ -783,6 +783,17 @@ def main(argv):  # noqa: C901
         "--verify-command", type=str, default=None,
         help=("Command to verify whether upload is necessary. "
               "Should return 1 to decline, 0 to upload."))
+    parser.add_argument(
+        '--apt-repository', type=str,
+        help='APT repository to use. Defaults to locally configured.',
+        default=(
+            os.environ.get('APT_REPOSITORY')
+            or os.environ.get('REPOSITORIES')))
+    parser.add_argument(
+        '--apt-repository-key', type=str,
+        help=('APT repository key to use for validation, '
+              'if --apt-repository is set.'),
+        default=os.environ.get('APT_REPOSITORY_KEY'))
 
     args = parser.parse_args(argv)
 
@@ -803,8 +814,12 @@ def main(argv):  # noqa: C901
             "vcswatch found pending commits."
         )
 
-    from breezy.plugins.debian.apt_repo import LocalApt
-    apt_repo = LocalApt()
+    from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt
+    if args.apt_repository:
+        apt_repo = RemoteApt.from_string(
+            args.apt_repository, args.apt_repository_key)
+    else:
+        apt_repo = LocalApt()
 
     if args.maintainer:
         packages = select_apt_packages(
