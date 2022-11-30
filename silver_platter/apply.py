@@ -240,7 +240,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             except subprocess.CalledProcessError:
                 parser.error("Verify command failed.")
     except Exception:
-        reset_tree(local_tree, subpath)
+        reset_tree(local_tree, subpath=subpath)
         raise
 
     if args.diff:

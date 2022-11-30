@@ -64,7 +64,7 @@ def create_temp_sprout(
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
         branch._format.supports_stacking() and  # type: ignore
-        branch.repository._format.supports_chks
+        branch.repository._format.supports_chks  # type: ignore
     )
     try:
         # preserve whatever source format we have.
