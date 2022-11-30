@@ -373,7 +373,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                     "%s: unable to find upstream source", result.source)
                 return False
     except Exception:
-        reset_tree(local_tree, subpath)
+        reset_tree(local_tree, subpath=subpath)
         raise
 
     if args.install:
