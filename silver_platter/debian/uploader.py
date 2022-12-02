@@ -44,6 +44,7 @@ from breezy.config import extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
+from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt, Apt
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -60,6 +61,7 @@ from breezy.plugins.debian.util import (
     NoPreviousUpload,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
+from breezy.tree import MissingNestedTree
 
 from breezy.workingtree import WorkingTree
 
@@ -209,9 +211,11 @@ def prepare_upload_package(  # noqa: C901
     pkg: str,
     last_uploaded_version: Optional[Version],
     builder: str,
+    *,
     gpg_strategy: Optional[gpg.GPGStrategy] = None,
     min_commit_age: Optional[int] = None,
     allowed_committers: Optional[List[str]] = None,
+    apt: Optional[Apt] = None,
 ) -> Tuple[str, str]:
     debian_path = os.path.join(subpath, "debian")
     try:
@@ -320,7 +324,8 @@ def prepare_upload_package(  # noqa: C901
         builder = builder.replace(
             "${LAST_VERSION}", str(last_uploaded_version))
     target_changes = _build_helper(
-        local_tree, subpath, local_tree.branch, target_dir, builder=builder
+        local_tree, subpath, local_tree.branch, target_dir, builder=builder,
+        apt=apt
     )
     debsign(target_changes['source'])
     return target_changes['source'], tag_name
@@ -416,7 +421,7 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 def process_package(
         apt_repo, package,
-        builder: str, exclude=None, autopkgtest_only: bool = False,
+        builder: str, *, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
@@ -515,6 +520,7 @@ def process_package(
                 gpg_strategy=gpg_strategy,
                 min_commit_age=min_commit_age,
                 allowed_committers=allowed_committers,
+                apt=apt_repo,
             )
         except GbpDchFailed as e:
             logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
@@ -575,6 +581,9 @@ def process_package(
             logging.info(
                 "%s: No unreleased changes, skipping.", source_name)
             raise PackageIgnored('no-unreleased-changes')
+        except MissingNestedTree:
+            logging.exception('missing nested tree')
+            raise PackageIgnored('unsuported-nested-tree')
 
         if verify_command:
             try:
@@ -814,7 +823,6 @@ def main(argv):  # noqa: C901
             "vcswatch found pending commits."
         )
 
-    from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt
     if args.apt_repository:
         apt_repo = RemoteApt.from_string(
             args.apt_repository, args.apt_repository_key)
