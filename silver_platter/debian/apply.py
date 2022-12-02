@@ -21,7 +21,7 @@ import json
 import os
 import sys
 import tempfile
-from typing import List, Optional, Tuple, Dict, Union, Any
+from typing import List, Optional, Tuple, Dict, Union, Any, BinaryIO
 import subprocess
 from debian.changelog import Changelog
 from debian.deb822 import Deb822
@@ -132,7 +132,8 @@ def script_runner(   # noqa: C901
     resume_metadata: Optional[Any] = None,
     subpath: str = '', update_changelog: Optional[bool] = None,
     extra_env: Optional[Dict[str, str]] = None,
-    committer: Optional[str] = None
+    committer: Optional[str] = None,
+    stderr: Optional[BinaryIO] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -195,7 +196,8 @@ def script_runner(   # noqa: C901
             p = subprocess.Popen(
                 script, cwd=local_tree.abspath(subpath),
                 stdout=subprocess.PIPE,
-                shell=isinstance(script, str), env=env)
+                shell=isinstance(script, str), env=env,
+                stderr=stderr)
         except FileNotFoundError as e:
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")

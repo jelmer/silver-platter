@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, BinaryIO
 from breezy.commit import PointlessCommit
 from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
@@ -99,6 +99,7 @@ def script_runner(  # noqa: C901
     commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
     extra_env: Optional[Dict[str, str]] = None,
+    stderr: Optional[BinaryIO] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -128,7 +129,7 @@ def script_runner(  # noqa: C901
                 script, cwd=local_tree.abspath(subpath),
                 stdout=subprocess.PIPE,
                 shell=isinstance(script, str),
-                env=env)
+                stderr=stderr, env=env)
         except FileNotFoundError as e:
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
