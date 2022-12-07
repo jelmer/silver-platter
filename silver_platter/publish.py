@@ -33,14 +33,10 @@ from breezy.forge import (
     MergeProposalExists,
     NoSuchProject,
     UnsupportedForge,
+    ReopenFailed,
     SourceNotDerivedFromTarget,
     )
-try:
-    from breezy.forge import TitleUnsupported
-except ImportError:  # breezy < 3.3.1
-    from breezy.errors import (  # type: ignore
-        UnsupportedOperation as TitleUnsupported
-    )
+from breezy.forge import TitleUnsupported
 
 from breezy.transport import Transport
 
@@ -272,10 +268,6 @@ def propose_changes(  # noqa: C901
         resume_proposal is not None
         and resume_proposal.is_closed()
     ):
-        from breezy.propose import (
-            ReopenFailed,
-        )
-
         try:
             resume_proposal.reopen()  # type: ignore
         except ReopenFailed:
@@ -288,7 +280,7 @@ def propose_changes(  # noqa: C901
             kwargs: Dict[str, Any] = {}
             if forge.supports_merge_proposal_commit_message:
                 kwargs["commit_message"] = commit_message
-            if getattr(forge, "supports_merge_proposal_title", False):
+            if forge.supports_merge_proposal_title:
                 kwargs["title"] = title
             kwargs["allow_collaboration"] = allow_collaboration
             try:
