@@ -324,6 +324,11 @@ def propose_changes(  # noqa: C901
             resume_proposal.set_commit_message(commit_message)
         except errors.UnsupportedOperation:
             pass
+    if resume_proposal.get_title() != title:
+        try:
+            resume_proposal.set_title(title)
+        except errors.UnsupportedOperation:
+            pass
     return (resume_proposal, False)
 
 
