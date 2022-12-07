@@ -46,6 +46,7 @@ from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
 from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt, Apt
 from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.changelog import UnreleasedChanges 
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
     DistributionBranch,
@@ -567,6 +568,8 @@ def process_package(
         except MissingChangelogError:
             logging.info("%s: No changelog found, skipping.", source_name)
             raise PackageProcessingFailure('missing-changelog')
+        except UnreleasedChanges as e:
+            raise PackageIgnored('no-unreleased-changes')
         except RecentCommits as e:
             logging.info(
                 "%s: Recent commits (%d days), skipping.",
