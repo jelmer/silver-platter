@@ -110,6 +110,12 @@ class Recipe(object):
             return Template(template).render(context)
         return None
 
+    def render_merge_request_title(self, context):
+        template = self.merge_request_title_template
+        if template:
+            return Template(template).render(context)
+        return None
+
     def render_merge_request_description(self, description_format, context):
         template = self.merge_request_description_template.get(
                 description_format)
