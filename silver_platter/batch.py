@@ -146,7 +146,7 @@ def status(directory):
         logging.error('no work found in %s', directory)
         return 0
     for i, entry in enumerate(work):
-        if entry['proposal-url']:
+        if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
                 logging.info('%s: %s was merged', entry['name'],
