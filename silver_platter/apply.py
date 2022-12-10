@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import json
 import logging
@@ -66,7 +67,7 @@ class ResultFileFormatError(Exception):
 
 
 @dataclass
-class CommandResult(object):
+class CommandResult:
 
     description: Optional[str] = None
     value: Optional[int] = None
@@ -163,12 +164,10 @@ def script_runner(  # noqa: C901
         commit_pending = True
     if commit_pending:
         local_tree.smart_add([local_tree.abspath(subpath)])
-        try:
+        with suppress(PointlessCommit):
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
                 committer=committer)
-        except PointlessCommit:
-            pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision

@@ -90,7 +90,7 @@ def fetch_colocated(controldir: ControlDir, from_controldir: ControlDir,
         )
 
 
-class Workspace(object):
+class Workspace:
     """Workspace for creating changes to a branch.
 
     Args:
@@ -192,7 +192,7 @@ class Workspace(object):
 
     def __enter__(self) -> Any:
         sprout_base = None
-        for (sprout_base, sprout_coloc) in [
+        for (sprout_base, sprout_coloc) in [  # noqa: B007
                 (self.cached_branch, self.additional_colocated_branches),
                 (self.resume_branch,
                     self.resume_branch_additional_colocated_branches),
@@ -300,10 +300,7 @@ class Workspace(object):
 
         Includes changes that already existed in the resume branch.
         """
-        for name, br, r in self.result_branches():
-            if br != r:
-                return True
-        return False
+        return any(br != r for name, br, r in self.result_branches())
 
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:

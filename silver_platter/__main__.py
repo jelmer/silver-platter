@@ -104,7 +104,7 @@ def proposals_main(argv: List[str]) -> None:
     )
     args = parser.parse_args(argv)
 
-    for forge, proposal, status in iter_all_mps([args.status]):
+    for _forge, proposal, _status in iter_all_mps([args.status]):
         print(proposal.url)
 
 

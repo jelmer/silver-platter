@@ -98,7 +98,7 @@ def create_temp_sprout(
         raise e
 
 
-class TemporarySprout(object):
+class TemporarySprout:
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.

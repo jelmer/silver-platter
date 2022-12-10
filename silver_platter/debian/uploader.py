@@ -20,6 +20,7 @@
 import silver_platter  # noqa: F401
 import time
 
+from contextlib import suppress
 import datetime
 from email.utils import parseaddr
 import logging
@@ -277,11 +278,11 @@ def prepare_upload_package(  # noqa: C901
             count, result, all_verifiables = gpg.bulk_verify_signatures(
                 local_tree.branch.repository, revids, gpg_strategy
             )
-            for revid, code, key in result:
+            for revid, code, _key in result:
                 if code != gpg.SIGNATURE_VALID:
                     raise Exception(
                         "No valid GPG signature on %r: %d" % (revid, code))
-        for revid, rev in local_tree.branch.repository.iter_revisions(revids):
+        for _revid, rev in local_tree.branch.repository.iter_revisions(revids):
             if rev is not None:
                 check_revision(rev, min_commit_age, allowed_committers)
 
@@ -309,15 +310,13 @@ def prepare_upload_package(  # noqa: C901
             else:
                 message = None
         if message is not None:
-            try:
+            with suppress(PointlessCommit):
                 local_tree.commit(
                     specific_files=[os.path.join(debian_path, "changelog")],
                     message=message,
                     allow_pointless=False,
                     reporter=NullCommitReporter(),
                 )
-            except PointlessCommit:
-                pass
     tag_name = release(local_tree, subpath)
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
@@ -501,9 +500,7 @@ def process_package(
         branch_config = ws.local_tree.branch.get_config_stack()
         if gpg_verification:
             gpg_strategy = gpg.GPGStrategy(branch_config)
-            if acceptable_keys:
-                acceptable_keys = acceptable_keys
-            else:
+            if not acceptable_keys:
                 acceptable_keys = list(
                     get_maintainer_keys(gpg_strategy.context))
             gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))

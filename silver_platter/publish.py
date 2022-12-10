@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 import logging
 from typing import List, Union, Dict, Optional, Tuple, Any, Callable
 
@@ -320,15 +321,11 @@ def propose_changes(  # noqa: C901
     if resume_proposal.get_description() != mp_description:
         resume_proposal.set_description(mp_description)
     if resume_proposal.get_commit_message() != commit_message:
-        try:
+        with suppress(errors.UnsupportedOperation):
             resume_proposal.set_commit_message(commit_message)
-        except errors.UnsupportedOperation:
-            pass
     if resume_proposal.get_title() != title:
-        try:
+        with suppress(errors.UnsupportedOperation):
             resume_proposal.set_title(title)
-        except errors.UnsupportedOperation:
-            pass
     return (resume_proposal, False)
 
 
@@ -590,7 +587,7 @@ def merge_conflicts(
             old_file_content_mergers)
 
 
-class PublishResult(object):
+class PublishResult:
     """A object describing the result of a publish action."""
 
     def __init__(

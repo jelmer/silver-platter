@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import logging
 import json
@@ -74,7 +75,7 @@ class DetailedFailure(Exception):
 
 
 @dataclass
-class CommandResult(object):
+class CommandResult:
 
     source: Optional[str]
     description: Optional[str] = None
@@ -248,12 +249,10 @@ def script_runner(   # noqa: C901
                 [result.description],
                 maintainer=_get_maintainer_from_env(extra_env))
         local_tree.smart_add([local_tree.abspath(subpath)])
-        try:
+        with suppress(PointlessCommit):
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
                 committer=committer)
-        except PointlessCommit:
-            pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision

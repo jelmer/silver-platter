@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from typing import (
     List,
     Optional,
@@ -109,7 +110,7 @@ def merge_directive_changes(
         local_branch, main_branch, name=name, overwrite=overwrite_existing
     )
     public_branch = open_branch(public_branch_url)
-    directive = MergeDirective2.from_objects(
+    return MergeDirective2.from_objects(
         local_branch.repository,
         local_branch.last_revision(),
         time.time(),
@@ -121,7 +122,6 @@ def merge_directive_changes(
         message=message,
         base_revision_id=main_branch.last_revision(),
     )
-    return directive
 
 
 def iter_all_mps(
@@ -132,11 +132,9 @@ def iter_all_mps(
         statuses = ["open", "merged", "closed"]
     for instance in iter_forge_instances():
         for status in statuses:
-            try:
+            with suppress(ForgeLoginRequired):
                 for mp in instance.iter_my_proposals(status=status):
                     yield instance, mp, status
-            except ForgeLoginRequired:
-                pass
 
 
 def iter_conflicted(
@@ -148,7 +146,7 @@ def iter_conflicted(
       branch_name: Branch name to search for
     """
     possible_transports: List[Transport] = []
-    for forge, mp, status in iter_all_mps(["open"]):
+    for forge, mp, _status in iter_all_mps(["open"]):
         try:
             if mp.can_be_merged():
                 continue

@@ -23,7 +23,7 @@ import yaml
 
 
 @dataclass
-class Recipe(object):
+class Recipe:
     """Recipe to use."""
 
     name: str

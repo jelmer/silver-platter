@@ -13,6 +13,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from typing import Optional, List, Type
 
 
@@ -101,8 +102,6 @@ def select_preferred_probers(
         vcs_type: Optional[str] = None) -> List[Type[Prober]]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
-        try:
+        with suppress(KeyError):
             probers.insert(0, prober_registry[vcs_type.lower()])
-        except KeyError:
-            pass
     return probers

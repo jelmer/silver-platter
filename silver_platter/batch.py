@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 import logging
 import os
 import shutil
@@ -67,8 +68,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
     with Workspace(main_branch, path=basepath) as ws:
         logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url}
-        entry['name'] = name
+        entry = {'url': url, 'name': name}
         if subpath:
             entry['subpath'] = subpath
 
@@ -114,10 +114,8 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
 
 def generate(recipe, candidates, directory, recipe_path):
-    try:
+    with suppress(FileExistsError):
         os.mkdir(directory)
-    except FileExistsError:
-        pass
     entries = []
     for candidate in candidates:
         name = candidate.name
@@ -145,7 +143,7 @@ def status(directory):
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    for i, entry in enumerate(work):
+    for entry in work:
         if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
@@ -289,14 +287,9 @@ def publish(directory, *, dry_run: bool = False):
         else:
             if publish_result.mode == 'push':
                 if not dry_run:
-                    try:
+                    with suppress(FileNotFoundError):
                         os.unlink(os.path.join(directory, name + '.patch'))
-                    except FileNotFoundError:
-                        pass
-                    try:
                         shutil.rmtree(os.path.join(directory, name))
-                    except FileNotFoundError:
-                        pass
                 done.append(i)
             elif publish_result.proposal:
                 entry['proposal-url'] = publish_result.proposal.url
