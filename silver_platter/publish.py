@@ -488,17 +488,10 @@ def find_existing_proposed(
       means there is an existing branch in place that should be overwritten.
     """
     try:
-        if preferred_schemes is not None:
-            existing_branch = forge.get_derived_branch(
-                main_branch, name=name, owner=owner,
-                preferred_schemes=preferred_schemes
-            )
-        else:
-            # TODO: Support older versions of breezy without
-            # preferred_schemes
-            existing_branch = forge.get_derived_branch(
-                main_branch, name=name, owner=owner
-            )
+        existing_branch = forge.get_derived_branch(
+            main_branch, name=name, owner=owner,
+            preferred_schemes=preferred_schemes
+        )
     except errors.NotBranchError:
         return (None, None, None)
     else:
