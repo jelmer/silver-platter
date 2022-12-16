@@ -38,10 +38,11 @@ from debmutate.changelog import (
     changeblock_ensure_first_line,
     gbp_dch,
 )
+from debmutate.reformatting import GeneratedFile
 from debmutate.control import ControlEditor
 
 from breezy import gpg
-from breezy.config import extract_email_address
+from breezy.config import extract_email_address, NoEmailInUsername
 from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
@@ -184,7 +185,12 @@ def check_revision(rev, min_commit_age, allowed_committers):
         if time_delta.days < min_commit_age:
             raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
-    committer_email = extract_email_address(rev.committer)
+    try:
+        committer_email = extract_email_address(rev.committer)
+    except NoEmailInUsername as e:
+        logging.warning(
+            'Unable to extract email from %r', rev.committer)
+        raise CommitterNotAllowed(rev.committer, allowed_committers) from e
     if allowed_committers and committer_email not in allowed_committers:
         raise CommitterNotAllowed(committer_email, allowed_committers)
 
@@ -204,6 +210,10 @@ def get_maintainer_keys(context):
 
 class GbpDchFailed(Exception):
     """gbp dch failed to run"""
+
+
+class GeneratedChangelogFile(Exception):
+    """unable to update changelog since it is generated."""
 
 
 def prepare_upload_package(  # noqa: C901
@@ -317,7 +327,10 @@ def prepare_upload_package(  # noqa: C901
                     allow_pointless=False,
                     reporter=NullCommitReporter(),
                 )
-    tag_name = release(local_tree, subpath)
+    try:
+        tag_name = release(local_tree, subpath)
+    except GeneratedFile:
+        raise GeneratedChangelogFile()
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
         builder = builder.replace(
@@ -564,6 +577,11 @@ def process_package(
         except MissingChangelogError:
             logging.info("%s: No changelog found, skipping.", source_name)
             raise PackageProcessingFailure('missing-changelog')
+        except GeneratedChangelogFile:
+            logging.info(
+                "%s: Changelog is generated and unable to update, skipping.",
+                source_name)
+            raise PackageProcessingFailure('generated-changelog')
         except RecentCommits as e:
             logging.info(
                 "%s: Recent commits (%d days), skipping.",
