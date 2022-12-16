@@ -1,8 +1,9 @@
-silver-platter (0.5.3-1) UNRELEASED; urgency=low
+silver-platter (0.5.3-1) UNRELEASED; urgency=medium
 
+  [ Debian Janitor ]
   * New upstream release.
 
- -- Debian Janitor <janitor@jelmer.uk>  Tue, 08 Nov 2022 02:38:40 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Fri, 16 Dec 2022 16:27:18 +0000
 
 silver-platter (0.5.0-1) unstable; urgency=medium
 
