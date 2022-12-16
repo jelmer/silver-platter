@@ -42,7 +42,7 @@ from debmutate.reformatting import GeneratedFile
 from debmutate.control import ControlEditor
 
 from breezy import gpg
-from breezy.config import extract_email_address
+from breezy.config import extract_email_address, NoEmailInUsername
 from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
@@ -185,7 +185,12 @@ def check_revision(rev, min_commit_age, allowed_committers):
         if time_delta.days < min_commit_age:
             raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
-    committer_email = extract_email_address(rev.committer)
+    try:
+        committer_email = extract_email_address(rev.committer)
+    except NoEmailInUsername as e:
+        logging.warning(
+            'Unable to extract email from %r', rev.committer)
+        raise CommitterNotAllowed(rev.committer, allowed_committers) from e
     if allowed_committers and committer_email not in allowed_committers:
         raise CommitterNotAllowed(committer_email, allowed_committers)
 
