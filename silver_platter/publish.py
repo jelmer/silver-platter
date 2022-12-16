@@ -28,6 +28,7 @@ from breezy import (
 from breezy.errors import PermissionDenied
 from breezy.memorybranch import MemoryBranch
 from breezy.forge import (
+    determine_title,
     get_forge,
     Forge,
     MergeProposal,
@@ -441,11 +442,11 @@ class DryRunProposal(MergeProposal):
     def set_title(self, title: str) -> None:
         self.title = title
 
-    def get_source_branch_url(self) -> str:
+    def get_source_branch_url(self, *, preferred_schemes=None) -> str:
         """Return the source branch."""
         return full_branch_url(self.source_branch)
 
-    def get_target_branch_url(self) -> str:
+    def get_target_branch_url(self, preferred_schemes=None) -> str:
         """Return the target branch."""
         return full_branch_url(self.target_branch)
 
@@ -725,6 +726,8 @@ def publish_changes(
         )
     else:
         title = None
+    if title is None:
+        title = determine_title(mp_description)
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
