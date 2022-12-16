@@ -28,6 +28,7 @@ from breezy import (
 from breezy.errors import PermissionDenied
 from breezy.memorybranch import MemoryBranch
 from breezy.forge import (
+    determine_title,
     get_forge,
     Forge,
     MergeProposal,
@@ -725,6 +726,8 @@ def publish_changes(
         )
     else:
         title = None
+    if title is None:
+        title = determine_title(mp_description)
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
