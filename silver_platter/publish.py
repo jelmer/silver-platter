@@ -442,11 +442,11 @@ class DryRunProposal(MergeProposal):
     def set_title(self, title: str) -> None:
         self.title = title
 
-    def get_source_branch_url(self) -> str:
+    def get_source_branch_url(self, *, preferred_schemes=None) -> str:
         """Return the source branch."""
         return full_branch_url(self.source_branch)
 
-    def get_target_branch_url(self) -> str:
+    def get_target_branch_url(self, preferred_schemes=None) -> str:
         """Return the target branch."""
         return full_branch_url(self.target_branch)
 
