@@ -446,7 +446,8 @@ def process_package(
     # later on.
     if "/" not in package:
         try:
-            pkg_source = apt_get_source_package(apt_repo, package)
+            with apt_repo:
+                pkg_source = apt_get_source_package(apt_repo, package)
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
             raise PackageProcessingFailure('not-in-apt')
@@ -492,7 +493,9 @@ def process_package(
             ) as ce:
                 source_name = ce.source["Source"]
                 try:
-                    pkg_source = apt_get_source_package(apt_repo, source_name)
+                    with apt_repo:
+                        pkg_source = apt_get_source_package(
+                            apt_repo, source_name)
                 except NoSuchPackage:
                     logging.info("%s: package not found in apt", package)
                     raise PackageProcessingFailure('not-in-apt')

@@ -187,9 +187,8 @@ def apt_get_source_package(apt_repo, name: str) -> Deb822:
     """
     by_version: Dict[Version, Deb822] = {}
 
-    with apt_repo:
-        for source in apt_repo.iter_source_by_name(name):
-            by_version[source['Version']] = source
+    for source in apt_repo.iter_source_by_name(name):
+        by_version[source['Version']] = source
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -220,7 +219,8 @@ def open_packaging_branch(
         from breezy.plugins.debian.apt_repo import LocalApt
         apt_repo = LocalApt()
     if "/" not in location and ":" not in location:
-        pkg_source = apt_get_source_package(apt_repo, location)
+        with apt_repo:
+            pkg_source = apt_get_source_package(apt_repo, location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
