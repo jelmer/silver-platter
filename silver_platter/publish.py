@@ -592,10 +592,6 @@ class PublishResult:
         self.proposal = proposal
         self.is_new = is_new
 
-    def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
-        # Backwards compatibility
-        return (self.proposal, self.is_new)
-
 
 class InsufficientChangesForNewProposal(Exception):
     """There were not enough changes for a new merge proposal."""
