@@ -585,7 +585,7 @@ class PublishResult:
     """A object describing the result of a publish action."""
 
     def __init__(
-        self, mode: str, proposal: Optional[MergeProposal] = None,
+        self, *, mode: str, proposal: Optional[MergeProposal] = None,
         is_new: bool = False
     ) -> None:
         self.mode = mode
@@ -653,7 +653,7 @@ def publish_changes(
         if existing_proposal is not None:
             logging.info("closing existing merge proposal - no new revisions")
             existing_proposal.close()
-        return PublishResult(mode)
+        return PublishResult(mode=mode)
 
     if resume_branch and resume_branch.last_revision() == stop_revision:
         # No new revisions added on this iteration, but changes since main
@@ -676,7 +676,7 @@ def publish_changes(
             owner=derived_owner,
             stop_revision=stop_revision,
         )
-        return PublishResult(mode)
+        return PublishResult(mode=mode)
 
     if mode in (MODE_PUSH, MODE_ATTEMPT_PUSH):
         try:
@@ -709,7 +709,7 @@ def publish_changes(
         raise InsufficientChangesForNewProposal()
 
     mp_description = get_proposal_description(
-        getattr(forge, "merge_proposal_description_format", "plain"),
+        forge.merge_proposal_description_format,
         existing_proposal if resume_branch else None,
     )
     if get_proposal_commit_message is not None:
@@ -743,4 +743,4 @@ def publish_changes(
         allow_collaboration=allow_collaboration,
         stop_revision=stop_revision,
     )
-    return PublishResult(mode, proposal, is_new)
+    return PublishResult(mode=mode, proposal=proposal, is_new=is_new)
