@@ -585,10 +585,15 @@ class PublishResult:
     """A object describing the result of a publish action."""
 
     def __init__(
-        self, *, mode: str, proposal: Optional[MergeProposal] = None,
+        self, *, mode: str,
+        target_branch: Branch,
+        forge: Optional[Forge] = None,
+        proposal: Optional[MergeProposal] = None,
         is_new: bool = False
     ) -> None:
         self.mode = mode
+        self.target_branch = target_branch
+        self.forge = forge
         self.proposal = proposal
         self.is_new = is_new
 
@@ -649,11 +654,14 @@ def publish_changes(
     if stop_revision is None:
         stop_revision = local_branch.last_revision()
 
+    if forge is None:
+        forge = get_forge(main_branch)
+
     if stop_revision == main_branch.last_revision():
         if existing_proposal is not None:
             logging.info("closing existing merge proposal - no new revisions")
             existing_proposal.close()
-        return PublishResult(mode=mode)
+        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
 
     if resume_branch and resume_branch.last_revision() == stop_revision:
         # No new revisions added on this iteration, but changes since main
@@ -661,9 +669,6 @@ def publish_changes(
         # merge proposal last time.
         logging.info(
             "No changes added; making sure merge proposal is up to date.")
-
-    if forge is None:
-        forge = get_forge(main_branch)
 
     if mode == MODE_PUSH_DERIVED:
         (remote_branch, public_url) = push_derived_changes(
@@ -676,7 +681,7 @@ def publish_changes(
             owner=derived_owner,
             stop_revision=stop_revision,
         )
-        return PublishResult(mode=mode)
+        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
 
     if mode in (MODE_PUSH, MODE_ATTEMPT_PUSH):
         try:
@@ -702,7 +707,8 @@ def publish_changes(
                 logging.info("permission denied during push")
                 raise
         else:
-            return PublishResult(mode=mode)
+            return PublishResult(
+                mode=mode, target_branch=main_branch, forge=forge)
 
     assert mode == "propose"
     if not resume_branch and not allow_create_proposal:
@@ -743,4 +749,6 @@ def publish_changes(
         allow_collaboration=allow_collaboration,
         stop_revision=stop_revision,
     )
-    return PublishResult(mode=mode, proposal=proposal, is_new=is_new)
+    return PublishResult(
+        mode=mode, proposal=proposal, is_new=is_new,
+        target_branch=main_branch, forge=forge)
