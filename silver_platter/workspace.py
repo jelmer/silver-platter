@@ -323,6 +323,9 @@ class Workspace:
             if from_revision is None and to_revision is None:
                 continue
             branches.append((from_name, from_revision, to_revision))
+        names = [name for (name, from_rev, to_rev) in branches]
+        assert len(names) == len(set(names)), \
+            "Duplicate result branches: %r" % branches
         return branches
 
     def push_tags(
