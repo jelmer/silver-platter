@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij
+# Copyright (C) 2022 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,14 +15,13 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-# TODO(jelmer): Imports with side-effects are bad...
+from typing import List, Optional
+import sys
 
-import breezy  # noqa: F401
-import breezy.git  # For git support   # noqa: F401
-import breezy.bzr  # For bzr support   # noqa: F401
-import breezy.plugins.launchpad  # For lp: URL support  # noqa: F401
-import breezy.plugins.gitlab  # For gitlab support  # noqa: F401
-import breezy.plugins.github  # For github support  # noqa: F401
 
-__version__ = (0, 5, 5)
-version_string = ".".join(map(str, __version__))
+def main(argv: List[str]) -> Optional[int]:  # noqa: C901
+    pass
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

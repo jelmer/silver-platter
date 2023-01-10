@@ -23,7 +23,7 @@ from typing import Optional, List, Callable, Dict
 import silver_platter  # noqa: F401
 from . import (
     apply,
-    bulk,
+    batch,
     run,
     version_string,
 )
@@ -104,7 +104,7 @@ def proposals_main(argv: List[str]) -> None:
     )
     args = parser.parse_args(argv)
 
-    for forge, proposal, status in iter_all_mps([args.status]):
+    for _forge, proposal, _status in iter_all_mps([args.status]):
         print(proposal.url)
 
 
@@ -114,7 +114,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
     "proposals": proposals_main,
     "run": run.main,
     "apply": apply.main,
-    "bulk": bulk.main,
+    "batch": batch.main,
 }
 
 

@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import json
 import logging
@@ -22,7 +23,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, BinaryIO
 from breezy.commit import PointlessCommit
 from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
@@ -66,7 +67,7 @@ class ResultFileFormatError(Exception):
 
 
 @dataclass
-class CommandResult(object):
+class CommandResult:
 
     description: Optional[str] = None
     value: Optional[int] = None
@@ -99,6 +100,7 @@ def script_runner(  # noqa: C901
     commit_pending: Optional[bool] = None,
     resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
     extra_env: Optional[Dict[str, str]] = None,
+    stderr: Optional[BinaryIO] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -128,7 +130,7 @@ def script_runner(  # noqa: C901
                 script, cwd=local_tree.abspath(subpath),
                 stdout=subprocess.PIPE,
                 shell=isinstance(script, str),
-                env=env)
+                stderr=stderr, env=env)
         except FileNotFoundError as e:
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
@@ -162,12 +164,10 @@ def script_runner(  # noqa: C901
         commit_pending = True
     if commit_pending:
         local_tree.smart_add([local_tree.abspath(subpath)])
-        try:
+        with suppress(PointlessCommit):
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
                 committer=committer)
-        except PointlessCommit:
-            pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision
@@ -240,7 +240,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             except subprocess.CalledProcessError:
                 parser.error("Verify command failed.")
     except Exception:
-        reset_tree(local_tree, subpath)
+        reset_tree(local_tree, subpath=subpath)
         raise
 
     if args.diff:

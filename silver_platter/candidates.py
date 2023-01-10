@@ -21,7 +21,7 @@ import yaml
 
 
 @dataclass
-class Candidate(object):
+class Candidate:
     """Candidate."""
 
     url: str
@@ -45,7 +45,7 @@ class Candidate(object):
 
 
 @dataclass
-class CandidateList(object):
+class CandidateList:
     """Candidate list."""
 
     candidates: List[Candidate]

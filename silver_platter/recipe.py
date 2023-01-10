@@ -23,7 +23,7 @@ import yaml
 
 
 @dataclass
-class Recipe(object):
+class Recipe:
     """Recipe to use."""
 
     name: str
@@ -106,6 +106,12 @@ class Recipe(object):
 
     def render_merge_request_commit_message(self, context):
         template = self.merge_request_commit_message_template
+        if template:
+            return Template(template).render(context)
+        return None
+
+    def render_merge_request_title(self, context):
+        template = self.merge_request_title_template
         if template:
             return Template(template).render(context)
         return None

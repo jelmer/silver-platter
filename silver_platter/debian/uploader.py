@@ -18,7 +18,9 @@
 """Support for uploading packages."""
 
 import silver_platter  # noqa: F401
+import time
 
+from contextlib import suppress
 import datetime
 from email.utils import parseaddr
 import logging
@@ -26,7 +28,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Callable
 
 from debian.changelog import Version
 
@@ -36,13 +38,15 @@ from debmutate.changelog import (
     changeblock_ensure_first_line,
     gbp_dch,
 )
+from debmutate.reformatting import GeneratedFile
 from debmutate.control import ControlEditor
 
 from breezy import gpg
-from breezy.config import extract_email_address
+from breezy.config import extract_email_address, NoEmailInUsername
 from breezy.errors import NoSuchTag, PermissionDenied
-from breezy.commit import NullCommitReporter
+from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.revision import NULL_REVISION
+from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt, Apt
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import (
@@ -59,6 +63,7 @@ from breezy.plugins.debian.util import (
     NoPreviousUpload,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
+from breezy.tree import MissingNestedTree
 
 from breezy.workingtree import WorkingTree
 
@@ -180,7 +185,12 @@ def check_revision(rev, min_commit_age, allowed_committers):
         if time_delta.days < min_commit_age:
             raise RecentCommits(time_delta.days, min_commit_age)
     # TODO(jelmer): Allow tag to prevent automatic uploads
-    committer_email = extract_email_address(rev.committer)
+    try:
+        committer_email = extract_email_address(rev.committer)
+    except NoEmailInUsername as e:
+        logging.warning(
+            'Unable to extract email from %r', rev.committer)
+        raise CommitterNotAllowed(rev.committer, allowed_committers) from e
     if allowed_committers and committer_email not in allowed_committers:
         raise CommitterNotAllowed(committer_email, allowed_committers)
 
@@ -202,15 +212,21 @@ class GbpDchFailed(Exception):
     """gbp dch failed to run"""
 
 
+class GeneratedChangelogFile(Exception):
+    """unable to update changelog since it is generated."""
+
+
 def prepare_upload_package(  # noqa: C901
     local_tree: WorkingTree,
     subpath: str,
     pkg: str,
     last_uploaded_version: Optional[Version],
     builder: str,
+    *,
     gpg_strategy: Optional[gpg.GPGStrategy] = None,
     min_commit_age: Optional[int] = None,
     allowed_committers: Optional[List[str]] = None,
+    apt: Optional[Apt] = None,
 ) -> Tuple[str, str]:
     debian_path = os.path.join(subpath, "debian")
     try:
@@ -272,11 +288,11 @@ def prepare_upload_package(  # noqa: C901
             count, result, all_verifiables = gpg.bulk_verify_signatures(
                 local_tree.branch.repository, revids, gpg_strategy
             )
-            for revid, code, key in result:
+            for revid, code, _key in result:
                 if code != gpg.SIGNATURE_VALID:
                     raise Exception(
                         "No valid GPG signature on %r: %d" % (revid, code))
-        for revid, rev in local_tree.branch.repository.iter_revisions(revids):
+        for _revid, rev in local_tree.branch.repository.iter_revisions(revids):
             if rev is not None:
                 check_revision(rev, min_commit_age, allowed_committers)
 
@@ -304,19 +320,24 @@ def prepare_upload_package(  # noqa: C901
             else:
                 message = None
         if message is not None:
-            local_tree.commit(
-                specific_files=[os.path.join(debian_path, "changelog")],
-                message=message,
-                allow_pointless=False,
-                reporter=NullCommitReporter(),
-            )
-    tag_name = release(local_tree, subpath)
+            with suppress(PointlessCommit):
+                local_tree.commit(
+                    specific_files=[os.path.join(debian_path, "changelog")],
+                    message=message,
+                    allow_pointless=False,
+                    reporter=NullCommitReporter(),
+                )
+    try:
+        tag_name = release(local_tree, subpath)
+    except GeneratedFile:
+        raise GeneratedChangelogFile()
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
         builder = builder.replace(
             "${LAST_VERSION}", str(last_uploaded_version))
     target_changes = _build_helper(
-        local_tree, subpath, local_tree.branch, target_dir, builder=builder
+        local_tree, subpath, local_tree.branch, target_dir, builder=builder,
+        apt=apt
     )
     debsign(target_changes['source'])
     return target_changes['source'], tag_name
@@ -412,7 +433,7 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 def process_package(
         apt_repo, package,
-        builder: str, exclude=None, autopkgtest_only: bool = False,
+        builder: str, *, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
         acceptable_keys=None, debug: bool = False, dry_run: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
@@ -425,7 +446,8 @@ def process_package(
     # later on.
     if "/" not in package:
         try:
-            pkg_source = apt_get_source_package(apt_repo, package)
+            with apt_repo:
+                pkg_source = apt_get_source_package(apt_repo, package)
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
             raise PackageProcessingFailure('not-in-apt')
@@ -471,7 +493,9 @@ def process_package(
             ) as ce:
                 source_name = ce.source["Source"]
                 try:
-                    pkg_source = apt_get_source_package(apt_repo, source_name)
+                    with apt_repo:
+                        pkg_source = apt_get_source_package(
+                            apt_repo, source_name)
                 except NoSuchPackage:
                     logging.info("%s: package not found in apt", package)
                     raise PackageProcessingFailure('not-in-apt')
@@ -492,9 +516,7 @@ def process_package(
         branch_config = ws.local_tree.branch.get_config_stack()
         if gpg_verification:
             gpg_strategy = gpg.GPGStrategy(branch_config)
-            if acceptable_keys:
-                acceptable_keys = acceptable_keys
-            else:
+            if not acceptable_keys:
                 acceptable_keys = list(
                     get_maintainer_keys(gpg_strategy.context))
             gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
@@ -511,6 +533,7 @@ def process_package(
                 gpg_strategy=gpg_strategy,
                 min_commit_age=min_commit_age,
                 allowed_committers=allowed_committers,
+                apt=apt_repo,
             )
         except GbpDchFailed as e:
             logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
@@ -557,6 +580,11 @@ def process_package(
         except MissingChangelogError:
             logging.info("%s: No changelog found, skipping.", source_name)
             raise PackageProcessingFailure('missing-changelog')
+        except GeneratedChangelogFile:
+            logging.info(
+                "%s: Changelog is generated and unable to update, skipping.",
+                source_name)
+            raise PackageProcessingFailure('generated-changelog')
         except RecentCommits as e:
             logging.info(
                 "%s: Recent commits (%d days), skipping.",
@@ -571,6 +599,9 @@ def process_package(
             logging.info(
                 "%s: No unreleased changes, skipping.", source_name)
             raise PackageIgnored('no-unreleased-changes')
+        except MissingNestedTree:
+            logging.exception('missing nested tree')
+            raise PackageIgnored('unsuported-nested-tree')
 
         if verify_command:
             try:
@@ -652,7 +683,8 @@ def vcswatch_prescan_package(
 
 
 def vcswatch_prescan_packages(
-        packages, inc_stats, exclude=None, min_commit_age=None,
+        packages, inc_stats: Callable[[str], None],
+        exclude=None, min_commit_age=None,
         allowed_committers=None):
     logging.info('Using vcswatch to prescan %d packages', len(packages))
     from .. import version_string
@@ -688,6 +720,21 @@ def vcswatch_prescan_packages(
              sorted(by_ts.items(), key=lambda k: k[1] or 0, reverse=True)],
             failures,
             vcswatch)
+
+
+def open_last_attempt_db():
+    try:
+        import tdb
+        from xdg.BaseDirectory import xdg_data_home
+    except ModuleNotFoundError:
+        return None
+    else:
+        last_attempt_path = os.path.join(
+            xdg_data_home, 'silver-platter', 'last-upload-attempt.tdb')
+        os.makedirs(os.path.dirname(last_attempt_path), exist_ok=True)
+        return tdb.open(
+            last_attempt_path, tdb_flags=tdb.DEFAULT,
+            flags=os.O_RDWR | os.O_CREAT, mode=0o600)
 
 
 def main(argv):  # noqa: C901
@@ -763,6 +810,17 @@ def main(argv):  # noqa: C901
         "--verify-command", type=str, default=None,
         help=("Command to verify whether upload is necessary. "
               "Should return 1 to decline, 0 to upload."))
+    parser.add_argument(
+        '--apt-repository', type=str,
+        help='APT repository to use. Defaults to locally configured.',
+        default=(
+            os.environ.get('APT_REPOSITORY')
+            or os.environ.get('REPOSITORIES')))
+    parser.add_argument(
+        '--apt-repository-key', type=str,
+        help=('APT repository key to use for validation, '
+              'if --apt-repository is set.'),
+        default=os.environ.get('APT_REPOSITORY_KEY'))
 
     args = parser.parse_args(argv)
 
@@ -783,8 +841,11 @@ def main(argv):  # noqa: C901
             "vcswatch found pending commits."
         )
 
-    from breezy.plugins.debian.apt_repo import LocalApt
-    apt_repo = LocalApt()
+    if args.apt_repository:
+        apt_repo = RemoteApt.from_string(
+            args.apt_repository, args.apt_repository_key)
+    else:
+        apt_repo = LocalApt()
 
     if args.maintainer:
         packages = select_apt_packages(
@@ -821,6 +882,19 @@ def main(argv):  # noqa: C901
         logging.info(
             "Uploading %d packages: %s", len(packages), ", ".join(packages))
 
+    last_attempt = open_last_attempt_db()
+
+    if last_attempt:
+        orig_packages = list(packages)
+
+        def last_attempt_key(p):
+            try:
+                t = int(last_attempt[p.encode('utf-8')])
+            except KeyError:
+                t = 0
+            return (t, orig_packages.index(p))
+        packages.sort(key=last_attempt_key)
+
     for package in packages:
         vcs_type = extra_data.get(package, {}).get('vcs_type')
         vcs_url = extra_data.get(package, {}).get('vcs_url')
@@ -846,6 +920,9 @@ def main(argv):  # noqa: C901
             ret = 1
         except PackageIgnored as e:
             inc_stats(e.reason)
+
+        if last_attempt:
+            last_attempt[package.encode('utf-8')] = b'%d' % (time.time())
 
     if len(packages) > 1:
         logging.info('Results:')

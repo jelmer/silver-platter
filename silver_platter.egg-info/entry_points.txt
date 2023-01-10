@@ -1,0 +1,3 @@
+[console_scripts]
+debian-svp = silver_platter.debian.__main__:main
+svp = silver_platter.__main__:main

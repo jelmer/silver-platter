@@ -90,7 +90,7 @@ def fetch_colocated(controldir: ControlDir, from_controldir: ControlDir,
         )
 
 
-class Workspace(object):
+class Workspace:
     """Workspace for creating changes to a branch.
 
     Args:
@@ -192,7 +192,7 @@ class Workspace(object):
 
     def __enter__(self) -> Any:
         sprout_base = None
-        for (sprout_base, sprout_coloc) in [
+        for (sprout_base, sprout_coloc) in [  # noqa: B007
                 (self.cached_branch, self.additional_colocated_branches),
                 (self.resume_branch,
                     self.resume_branch_additional_colocated_branches),
@@ -256,6 +256,8 @@ class Workspace(object):
                 except DivergedBranches:
                     logger.info("restarting branch")
                     self.refreshed = True
+                    self.resume_branch = None
+                    self.resume_branch_additional_colocated_branches = None
                     self.local_tree.pull(self.main_branch, overwrite=True)
                     fetch_colocated(
                         self.local_tree.branch.controldir,
@@ -298,10 +300,7 @@ class Workspace(object):
 
         Includes changes that already existed in the resume branch.
         """
-        for name, br, r in self.result_branches():
-            if br != r:
-                return True
-        return False
+        return any(br != r for name, br, r in self.result_branches())
 
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
@@ -324,6 +323,9 @@ class Workspace(object):
             if from_revision is None and to_revision is None:
                 continue
             branches.append((from_name, from_revision, to_revision))
+        names = [name for (name, from_rev, to_rev) in branches]
+        assert len(names) == len(set(names)), \
+            "Duplicate result branches: %r" % branches
         return branches
 
     def push_tags(

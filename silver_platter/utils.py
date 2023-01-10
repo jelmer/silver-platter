@@ -64,7 +64,7 @@ def create_temp_sprout(
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
         branch._format.supports_stacking() and  # type: ignore
-        branch.repository._format.supports_chks
+        branch.repository._format.supports_chks  # type: ignore
     )
     try:
         # preserve whatever source format we have.
@@ -98,7 +98,7 @@ def create_temp_sprout(
         raise e
 
 
-class TemporarySprout(object):
+class TemporarySprout:
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.
@@ -281,7 +281,7 @@ def open_branch(
     url: str,
     possible_transports: Optional[List[Transport]] = None,
     probers: Optional[List[Prober]] = None,
-    name: str = None,
+    name: Optional[str] = None,
 ) -> Branch:
     """Open a branch by URL."""
     url, params = urlutils.split_segment_parameters(url)

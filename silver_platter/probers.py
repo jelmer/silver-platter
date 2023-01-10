@@ -13,7 +13,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from typing import Optional, List
+from contextlib import suppress
+from typing import Optional, List, Type
 
 
 from breezy.controldir import Prober, ControlDirFormat
@@ -97,11 +98,10 @@ def select_probers(vcs_type=None):
         return [UnsupportedVCSProber(vcs_type)]
 
 
-def select_preferred_probers(vcs_type: Optional[str] = None) -> List[Prober]:
+def select_preferred_probers(
+        vcs_type: Optional[str] = None) -> List[Type[Prober]]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
-        try:
+        with suppress(KeyError):
             probers.insert(0, prober_registry[vcs_type.lower()])
-        except KeyError:
-            pass
     return probers

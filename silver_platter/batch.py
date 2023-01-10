@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 import logging
 import os
 import shutil
@@ -67,8 +68,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
     with Workspace(main_branch, path=basepath) as ws:
         logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url}
-        entry['name'] = name
+        entry = {'url': url, 'name': name}
         if subpath:
             entry['subpath'] = subpath
 
@@ -114,10 +114,8 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
 
 def generate(recipe, candidates, directory, recipe_path):
-    try:
+    with suppress(FileExistsError):
         os.mkdir(directory)
-    except FileExistsError:
-        pass
     entries = []
     for candidate in candidates:
         name = candidate.name
@@ -128,25 +126,25 @@ def generate(recipe, candidates, directory, recipe_path):
             recipe, basename, candidate.url, name,
             subpath=candidate.subpath or '')
         entries.append(entry)
-    bulk = {'work': entries, 'recipe': recipe_path,
-            name: recipe.name}
-    with open(os.path.join(directory, 'bulk.yaml'), 'w') as f:
-        ruamel.yaml.round_trip_dump(bulk, f)
+    batch = {'work': entries, 'recipe': recipe_path,
+             name: recipe.name}
+    with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
+        ruamel.yaml.round_trip_dump(batch, f)
 
 
-def load_bulk(directory):
-    with open(os.path.join(directory, 'bulk.yaml'), 'r') as f:
+def load_batch(directory):
+    with open(os.path.join(directory, 'batch.yaml'), 'r') as f:
         return ruamel.yaml.round_trip_load(f)
 
 
 def status(directory):
-    bulk = load_bulk(directory)
-    work = bulk.get('work', [])
+    batch = load_batch(directory)
+    work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    for i, entry in enumerate(work):
-        if entry['proposal-url']:
+    for entry in work:
+        if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
                 logging.info('%s: %s was merged', entry['name'],
@@ -161,7 +159,7 @@ def status(directory):
             logging.info('%s: not published yet', entry['name'])
 
 
-def publish_one(url: str, path: str, bulk_name: str, mode: str,
+def publish_one(url: str, path: str, batch_name: str, mode: str,
                 patchpath: str, *,
                 subpath: str = '',
                 labels: Optional[List[str]] = None, dry_run: bool = False,
@@ -192,7 +190,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
     else:
         (resume_branch, resume_overwrite,
          existing_proposals) = find_existing_proposed(
-            main_branch, forge, bulk_name, owner=derived_owner
+            main_branch, forge, batch_name, owner=derived_owner
         )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
@@ -221,7 +219,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
             main_branch,
             resume_branch,
             mode,
-            bulk_name,
+            batch_name,
             get_proposal_description=(
                 lambda df, ep: description),  # type: ignore
             get_proposal_commit_message=lambda ep: commit_message,
@@ -264,9 +262,9 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
 
 
 def publish(directory, *, dry_run: bool = False):
-    bulk = load_bulk(directory)
-    bulk_name = bulk['name']
-    work = bulk.get('work', [])
+    batch = load_batch(directory)
+    batch_name = batch['name']
+    work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
         return 0
@@ -275,7 +273,7 @@ def publish(directory, *, dry_run: bool = False):
         name = entry['name']
         try:
             publish_result = publish_one(
-                entry['url'], os.path.join(directory, name), bulk_name,
+                entry['url'], os.path.join(directory, name), batch_name,
                 entry['mode'], entry['patch'],
                 subpath=entry.get('subpath', ''),
                 labels=entry.get('labels', []),
@@ -289,30 +287,25 @@ def publish(directory, *, dry_run: bool = False):
         else:
             if publish_result.mode == 'push':
                 if not dry_run:
-                    try:
+                    with suppress(FileNotFoundError):
                         os.unlink(os.path.join(directory, name + '.patch'))
-                    except FileNotFoundError:
-                        pass
-                    try:
                         shutil.rmtree(os.path.join(directory, name))
-                    except FileNotFoundError:
-                        pass
                 done.append(i)
             elif publish_result.proposal:
                 entry['proposal-url'] = publish_result.proposal.url
     for i in reversed(done):
         del work[i]
     if not dry_run:
-        with open(os.path.join(directory, 'bulk.yaml'), 'w') as f:
-            ruamel.yaml.round_trip_dump(bulk, f)
+        with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
+            ruamel.yaml.round_trip_dump(batch, f)
     if not work:
-        logging.info('No work left in bulk.yaml; you can now remove %s',
+        logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
-    parser = argparse.ArgumentParser("svp bulk")
+    parser = argparse.ArgumentParser("svp batch")
     subparsers = parser.add_subparsers(dest="command")
     generate_parser = subparsers.add_parser("generate")
     generate_parser.add_argument(

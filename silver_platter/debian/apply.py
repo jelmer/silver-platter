@@ -15,13 +15,14 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import logging
 import json
 import os
 import sys
 import tempfile
-from typing import List, Optional, Tuple, Dict, Union
+from typing import List, Optional, Tuple, Dict, Union, Any, BinaryIO
 import subprocess
 from debian.changelog import Changelog
 from debian.deb822 import Deb822
@@ -74,7 +75,7 @@ class DetailedFailure(Exception):
 
 
 @dataclass
-class CommandResult(object):
+class CommandResult:
 
     source: Optional[str]
     description: Optional[str] = None
@@ -129,10 +130,11 @@ def install_built_package(local_tree, subpath, build_target_dir):
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: Union[str, List[str]],
     commit_pending: Optional[bool] = None,
-    resume_metadata=None,
+    resume_metadata: Optional[Any] = None,
     subpath: str = '', update_changelog: Optional[bool] = None,
     extra_env: Optional[Dict[str, str]] = None,
-    committer: Optional[str] = None
+    committer: Optional[str] = None,
+    stderr: Optional[BinaryIO] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -195,7 +197,8 @@ def script_runner(   # noqa: C901
             p = subprocess.Popen(
                 script, cwd=local_tree.abspath(subpath),
                 stdout=subprocess.PIPE,
-                shell=isinstance(script, str), env=env)
+                shell=isinstance(script, str), env=env,
+                stderr=stderr)
         except FileNotFoundError as e:
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
@@ -246,12 +249,10 @@ def script_runner(   # noqa: C901
                 [result.description],
                 maintainer=_get_maintainer_from_env(extra_env))
         local_tree.smart_add([local_tree.abspath(subpath)])
-        try:
+        with suppress(PointlessCommit):
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
                 committer=committer)
-        except PointlessCommit:
-            pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision
@@ -373,7 +374,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                     "%s: unable to find upstream source", result.source)
                 return False
     except Exception:
-        reset_tree(local_tree, subpath)
+        reset_tree(local_tree, subpath=subpath)
         raise
 
     if args.install:
