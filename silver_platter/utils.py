@@ -201,7 +201,8 @@ class BranchRateLimited(Exception):
 
     def __str__(self) -> str:
         if self.retry_after is not None:
-            return "%s (retry after %s)" % (self.description, self.retry_after)
+            return "{} (retry after {})".format(
+                self.description, self.retry_after)
         else:
             return self.description
 

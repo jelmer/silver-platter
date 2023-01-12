@@ -133,7 +133,7 @@ def generate(recipe, candidates, directory, recipe_path):
 
 
 def load_batch(directory):
-    with open(os.path.join(directory, 'batch.yaml'), 'r') as f:
+    with open(os.path.join(directory, 'batch.yaml')) as f:
         return ruamel.yaml.round_trip_load(f)
 
 
