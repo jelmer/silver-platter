@@ -135,7 +135,7 @@ def script_runner(  # noqa: C901
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
         try:
-            with open(env['SVP_RESULT'], 'r') as f:
+            with open(env['SVP_RESULT']) as f:
                 try:
                     result_json = json.load(f)
                 except json.decoder.JSONDecodeError as e:

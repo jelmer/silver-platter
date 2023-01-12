@@ -417,7 +417,7 @@ class DryRunProposal(MergeProposal):
         )
 
     def __repr__(self) -> str:
-        return "%s(%r, %r)" % (
+        return "{}({!r}, {!r})".format(
             self.__class__.__name__,
             self.source_branch,
             self.target_branch,

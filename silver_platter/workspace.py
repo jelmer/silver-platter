@@ -161,7 +161,7 @@ class Workspace:
                 return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
             if self.main_branch:
-                return "Workspace for %s at %s" % (
+                return "Workspace for {} at {}".format(
                     full_branch_url(self.main_branch),
                     self._path)
             else:

@@ -104,7 +104,7 @@ class LastUploadMoreRecent(Exception):
     def __init__(self, archive_version, vcs_version):
         self.archive_version = archive_version
         self.vcs_version = vcs_version
-        super(LastUploadMoreRecent, self).__init__(
+        super().__init__(
             "last upload (%s) is more recent than vcs (%s)"
             % (archive_version, vcs_version)
         )
@@ -115,7 +115,7 @@ class NoUnuploadedChanges(Exception):
 
     def __init__(self, archive_version):
         self.archive_version = archive_version
-        super(NoUnuploadedChanges, self).__init__(
+        super().__init__(
             "nothing to upload, latest version is in archive: %s" %
             archive_version
         )
@@ -126,7 +126,7 @@ class NoUnreleasedChanges(Exception):
 
     def __init__(self, version):
         self.version = version
-        super(NoUnreleasedChanges, self).__init__(
+        super().__init__(
             "nothing to upload, latest version in vcs is not unreleased: %s" %
             version
         )
@@ -138,7 +138,7 @@ class RecentCommits(Exception):
     def __init__(self, commit_age, min_commit_age):
         self.commit_age = commit_age
         self.min_commit_age = min_commit_age
-        super(RecentCommits, self).__init__(
+        super().__init__(
             "Last commit is only %d days old (< %d)"
             % (self.commit_age, self.min_commit_age)
         )
@@ -150,7 +150,7 @@ class CommitterNotAllowed(Exception):
     def __init__(self, committer, allowed_committers):
         self.committer = committer
         self.allowed_committers = allowed_committers
-        super(CommitterNotAllowed, self).__init__(
+        super().__init__(
             "Committer %s not in allowed committers: %r"
             % (self.committer, self.allowed_committers)
         )
@@ -162,7 +162,7 @@ class LastReleaseRevisionNotFound(Exception):
     def __init__(self, package, version):
         self.package = package
         self.version = version
-        super(LastReleaseRevisionNotFound, self).__init__(
+        super().__init__(
             "Unable to find revision matching version %r for %s" %
             (version, package)
         )
@@ -610,7 +610,7 @@ def process_package(
                 if e.returncode == 1:
                     raise PackageIgnored(
                         'verify-command-declined',
-                        "%s: Verify command %r declined upload" % (
+                        "{}: Verify command {!r} declined upload".format(
                             source_name, verify_command))
                 else:
                     raise PackageProcessingFailure(

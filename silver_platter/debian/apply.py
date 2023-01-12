@@ -109,13 +109,13 @@ def install_built_package(local_tree, subpath, build_target_dir):
     import re
     import subprocess
     abspath = local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
-    with open(abspath, 'r') as f:
+    with open(abspath) as f:
         cl = Changelog(f)
     non_epoch_version = cl[0].version.upstream_version
     if cl[0].version.debian_version is not None:
         non_epoch_version += "-%s" % cl[0].version.debian_version
     c = re.compile(
-        '%s_%s_(.*).changes' % (
+        '{}_{}_(.*).changes'.format(
             re.escape(cl[0].package),
             re.escape(non_epoch_version)))  # type: ignore
     for entry in os.scandir(build_target_dir):
@@ -166,7 +166,7 @@ def script_runner(   # noqa: C901
 
     cl_path = os.path.join(debian_path, 'changelog')
     try:
-        with open(local_tree.abspath(cl_path), 'r') as f:
+        with open(local_tree.abspath(cl_path)) as f:
             cl = Changelog(f)
             source_name = cl[0].package
     except FileNotFoundError:
@@ -203,7 +203,7 @@ def script_runner(   # noqa: C901
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
         try:
-            with open(env['SVP_RESULT'], 'r') as f:
+            with open(env['SVP_RESULT']) as f:
                 try:
                     result_json = json.load(f)
                 except json.decoder.JSONDecodeError as e:
@@ -218,7 +218,7 @@ def script_runner(   # noqa: C901
         # now.
         if source_name is None:
             try:
-                with open(local_tree.abspath(cl_path), 'r') as f:
+                with open(local_tree.abspath(cl_path)) as f:
                     cl = Changelog(f)
                     source_name = cl[0].package
             except FileNotFoundError:

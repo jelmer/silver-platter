@@ -92,7 +92,7 @@ except ModuleNotFoundError:
             return self.explanation
 
         def __repr__(self):
-            return "%s(update_changelog=%r, explanation=%r)" % (
+            return "{}(update_changelog={!r}, explanation={!r})".format(
                 type(self).__name__, self.update_changelog,
                 self.explanation)
 
@@ -264,7 +264,7 @@ class Workspace(_mod_workspace.Workspace):
                 kwargs["additional_colocated_branches"] = {}
             kwargs["additional_colocated_branches"].update(
                 pick_additional_colocated_branches(main_branch))
-        super(Workspace, self).__init__(main_branch, *args, **kwargs)
+        super().__init__(main_branch, *args, **kwargs)
 
     @classmethod
     def from_apt_package(cls, package, dir=None):

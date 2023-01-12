@@ -36,7 +36,7 @@ def forges_main(argv: List[str]) -> Optional[int]:
 
     for name, forge_cls in forges.items():
         for instance in forge_cls.iter_instances():
-            print("%s (%s)" % (instance.base_url, name))
+            print("{} ({})".format(instance.base_url, name))
 
     return None
 

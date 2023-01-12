@@ -128,7 +128,7 @@ class Recipe:
 
     @classmethod
     def from_path(cls, path):
-        with open(path, 'r') as f:
+        with open(path) as f:
             ret = cls.from_yaml(yaml.full_load(f))
             if not ret.name:
                 ret.name = os.path.splitext(os.path.basename(path))[0]

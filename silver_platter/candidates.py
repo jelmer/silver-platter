@@ -62,5 +62,5 @@ class CandidateList:
 
     @classmethod
     def from_path(cls, path):
-        with open(path, 'r') as f:
+        with open(path) as f:
             return cls.from_yaml(yaml.full_load(f))
