@@ -37,18 +37,19 @@ from breezy.revision import NULL_REVISION
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 from breezy.diff import show_diff_trees
+from breezy.revision import RevisionID
 from breezy.errors import (
     DivergedBranches,
     NotBranchError,
 )
+from breezy.transport.local import LocalTransport
+
 from .proposal import (
     get_forge,
     Forge,
     MergeProposal,
     UnsupportedForge,
 )
-
-from breezy.transport.local import LocalTransport
 
 from .publish import (
     propose_changes,
@@ -105,8 +106,8 @@ class Workspace:
 
     _destroy: Optional[Callable[[], None]]
     local_tree: WorkingTree
-    main_branch_revid: Optional[bytes]
-    main_colo_revid: Dict[Optional[str], bytes]
+    main_branch_revid: Optional[RevisionID]
+    main_colo_revid: Dict[Optional[str], RevisionID]
     additional_colocated_branches: Dict[str, str]
     resume_branch_additional_colocated_branches: Optional[Dict[str, str]]
 
@@ -303,13 +304,13 @@ class Workspace:
         return any(br != r for name, br, r in self.result_branches())
 
     def result_branches(self) -> List[
-            Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
+            Tuple[Optional[str], Optional[RevisionID], Optional[RevisionID]]]:
         branches = [
             (self.main_branch.name if self.main_branch else '',
              self.main_branch_revid,  # type: ignore
              self.local_tree.last_revision())]
         for from_name, to_name in self.additional_colocated_branches.items():
-            to_revision: Optional[bytes]
+            to_revision: Optional[RevisionID]
             try:
                 to_branch = self.local_tree.controldir.open_branch(
                     name=to_name)
@@ -330,7 +331,7 @@ class Workspace:
 
     def push_tags(
             self,
-            tags: Union[Dict[str, bytes], List[str]],
+            tags: Union[Dict[str, RevisionID], List[str]],
             *,
             forge: Optional[Forge] = None,
             dry_run: bool = False):
@@ -347,8 +348,8 @@ class Workspace:
         *,
         forge: Optional[Forge] = None,
         dry_run: bool = False,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-        stop_revision: Optional[bytes] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> None:
         if not self.main_branch:
             raise RuntimeError('no main branch known')
@@ -387,10 +388,10 @@ class Workspace:
         commit_message: Optional[str] = None,
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
         owner: Optional[str] = None,
         allow_collaboration: bool = False,
-        stop_revision: Optional[bytes] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> Tuple[MergeProposal, bool]:
         if target_branch is None:
             target_branch = self.main_branch
@@ -428,8 +429,8 @@ class Workspace:
         forge: Optional[Forge] = None,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-        stop_revision: Optional[bytes] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> Tuple[Branch, str]:
         """Push a derived branch.
 

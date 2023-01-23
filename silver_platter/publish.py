@@ -40,6 +40,7 @@ from breezy.forge import (
     )
 from breezy.forge import TitleUnsupported
 
+from breezy.revision import RevisionID
 from breezy.transport import Transport
 
 from .utils import (
@@ -87,8 +88,8 @@ def push_result(
     remote_branch: Branch,
     additional_colocated_branches:
         Optional[Union[List[str], Dict[str, str]]] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> None:
     kwargs = {}
     if tags is not None:
@@ -126,8 +127,8 @@ def push_changes(
     additional_colocated_branches:
         Optional[Union[List[str], Dict[str, str]]] = None,
     dry_run: bool = False,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> None:
     """Push changes to a branch."""
     if forge is None:
@@ -154,8 +155,8 @@ def push_derived_changes(
     name: str,
     overwrite_existing: Optional[bool] = False,
     owner: Optional[str] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
@@ -190,9 +191,9 @@ def propose_changes(  # noqa: C901
         Optional[Union[List[str], Dict[str, str]]] = None,
     allow_empty: bool = False,
     reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
     owner: Optional[str] = None,
-    stop_revision: Optional[bytes] = None,
+    stop_revision: Optional[RevisionID] = None,
     allow_collaboration: bool = False,
 ) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
@@ -224,6 +225,8 @@ def propose_changes(  # noqa: C901
     push_kwargs = {}
     if tags is not None:
         push_kwargs["tag_selector"] = _tag_selector_from_tags(tags)
+    if overwrite_existing is None:
+        overwrite_existing = True
     if not dry_run:
         if resume_branch is not None:
             local_branch.push(
@@ -340,7 +343,7 @@ class EmptyMergeProposal(Exception):
 
 def check_proposal_diff(
     other_branch: Branch, main_branch: Branch,
-    stop_revision: Optional[bytes] = None
+    stop_revision: Optional[RevisionID] = None
 ) -> None:
     if stop_revision is None:
         stop_revision = other_branch.last_revision()
@@ -383,7 +386,7 @@ class DryRunProposal(MergeProposal):
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
         owner: Optional[str] = None,
-        stop_revision: Optional[bytes] = None,
+        stop_revision: Optional[RevisionID] = None,
     ):
         self.description = description
         self.closed = False
@@ -531,7 +534,7 @@ def find_existing_proposed(
 
 def merge_conflicts(
     main_branch: Branch, other_branch: Branch,
-    other_revision: Optional[bytes] = None
+    other_revision: Optional[RevisionID] = None
 ) -> bool:
     """Check whether two branches are conflicted when merged.
 
@@ -622,10 +625,10 @@ def publish_changes(
     overwrite_existing: Optional[bool] = True,
     existing_proposal: Optional[MergeProposal] = None,
     reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
+    tags: Optional[Union[List[str], Dict[str, RevisionID]]] = None,
     derived_owner: Optional[str] = None,
     allow_collaboration: bool = False,
-    stop_revision: Optional[bytes] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> PublishResult:
     """Publish a set of changes.
 

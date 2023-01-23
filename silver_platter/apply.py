@@ -25,6 +25,7 @@ import sys
 import tempfile
 from typing import Optional, Dict, List, Tuple, Union, BinaryIO
 from breezy.commit import PointlessCommit
+from breezy.revision import RevisionID
 from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
 
@@ -73,9 +74,9 @@ class CommandResult:
     value: Optional[int] = None
     serialized_context: Optional[str] = None
     context: Dict[str, str] = field(default_factory=dict)
-    tags: List[Tuple[str, bytes]] = field(default_factory=list)
-    old_revision: Optional[bytes] = None
-    new_revision: Optional[bytes] = None
+    tags: List[Tuple[str, RevisionID]] = field(default_factory=list)
+    old_revision: Optional[RevisionID] = None
+    new_revision: Optional[RevisionID] = None
     target_branch_url: Optional[str] = None
 
     @classmethod
