@@ -35,6 +35,7 @@ from breezy.branch import Branch
 from breezy.controldir import ControlDir, Prober
 from breezy.controldir import NoColocatedBranchSupport
 from breezy.git.remote import RemoteGitError
+from breezy.revision import RevisionID
 from breezy.transport import Transport, get_transport, UnusableRedirect
 from breezy.workingtree import WorkingTree
 
@@ -153,7 +154,7 @@ class PostCheckFailed(Exception):
 
 
 def run_post_check(
-    tree: WorkingTree, script: Optional[str], since_revid: bytes
+    tree: WorkingTree, script: Optional[str], since_revid: RevisionID
 ) -> None:
     """Run a script after making any changes to a tree.
 
