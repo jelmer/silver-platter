@@ -202,7 +202,8 @@ class Workspace:
                 break
 
         if sprout_base is None:
-            logger.debug('Creating new emty tree')
+            logger.debug(
+                'Creating new empty tree with format %r', self._format)
             if self._path is not None:
                 os.mkdir(self._path)
                 td = self._path
