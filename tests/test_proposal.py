@@ -20,7 +20,7 @@ import os
 
 from breezy.tests import TestCaseWithTransport
 
-from ..workspace import (
+from silver_platter.workspace import (
     Workspace,
 )
 

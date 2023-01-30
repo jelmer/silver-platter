@@ -19,7 +19,7 @@ from breezy.tests import (
     TestCaseWithTransport,
 )
 
-from ..utils import (
+from silver_platter.utils import (
     TemporarySprout,
     run_pre_check,
     run_post_check,

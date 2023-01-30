@@ -17,7 +17,7 @@
 
 from breezy.tests import TestCaseWithTransport
 
-from ..publish import (
+from silver_platter.publish import (
     EmptyMergeProposal,
     check_proposal_diff,
     push_result,

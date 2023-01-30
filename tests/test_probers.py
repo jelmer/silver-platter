@@ -22,7 +22,7 @@ from breezy.tests import (
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
 
-from ..probers import (
+from silver_platter.probers import (
     select_probers,
     UnsupportedVCSProber,
 )

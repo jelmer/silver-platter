@@ -40,6 +40,6 @@ jobs:
       - name: Test suite run
         if: always()
         run: |
-          python -m unittest silver_platter.tests.test_suite
+          python -m unittest tests.test_suite
         env:
           PYTHONHASHSEED: random
