@@ -21,7 +21,7 @@ from breezy.tests import (
     TestCaseWithTransport,
 )
 
-from ..run import (
+from silver_platter.run import (
     ScriptMadeNoChanges,
     script_runner,
 )

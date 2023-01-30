@@ -25,7 +25,7 @@ from breezy.tests import (
 )
 
 
-from ..debian import (
+from silver_platter.debian import (
     convert_debian_vcs_url,
     add_changelog_entry,
     _get_maintainer_from_env,

@@ -305,6 +305,11 @@ class Workspace:
 
     def result_branches(self) -> List[
             Tuple[Optional[str], Optional[RevisionID], Optional[RevisionID]]]:
+        """Return a list of branches that has changed.
+
+        Returns:
+           List of tuples with (branch name, old revid, new revid)
+        """
         branches = [
             (self.main_branch.name if self.main_branch else '',
              self.main_branch_revid,  # type: ignore
