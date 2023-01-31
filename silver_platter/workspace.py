@@ -16,53 +16,25 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-import shutil
-from typing import (
-    Optional,
-    Callable,
-    List,
-    Union,
-    Dict,
-    BinaryIO,
-    Any,
-    Tuple,
-)
 import os
+import shutil
 import tempfile
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple, Union
 
 from breezy.branch import Branch
-from breezy.controldir import ControlDir
-from breezy.controldir import NoColocatedBranchSupport
-from breezy.revision import NULL_REVISION
+from breezy.controldir import ControlDir, NoColocatedBranchSupport
+from breezy.diff import show_diff_trees
+from breezy.errors import DivergedBranches, NotBranchError
+from breezy.revision import NULL_REVISION, RevisionID
+from breezy.transport.local import LocalTransport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
-from breezy.diff import show_diff_trees
-from breezy.revision import RevisionID
-from breezy.errors import (
-    DivergedBranches,
-    NotBranchError,
-)
-from breezy.transport.local import LocalTransport
 
-from .proposal import (
-    get_forge,
-    Forge,
-    MergeProposal,
-    UnsupportedForge,
-)
-
-from .publish import (
-    propose_changes,
-    push_changes,
-    push_derived_changes,
-    publish_changes as _publish_changes,
-    PublishResult,
-)
-from .utils import (
-    create_temp_sprout,
-    full_branch_url,
-)
-
+from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
+from .publish import PublishResult, propose_changes
+from .publish import publish_changes as _publish_changes
+from .publish import push_changes, push_derived_changes
+from .utils import create_temp_sprout, full_branch_url
 
 __all__ = [
     "Workspace",

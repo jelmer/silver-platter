@@ -15,39 +15,28 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from contextlib import suppress
-from dataclasses import dataclass, field
-import logging
 import json
+import logging
 import os
+import subprocess
 import sys
 import tempfile
-from typing import List, Optional, Tuple, Dict, Union, Any, BinaryIO
-import subprocess
-from debian.changelog import Changelog
-from debian.deb822 import Deb822
+from contextlib import suppress
+from dataclasses import dataclass, field
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
+
 from breezy.commit import PointlessCommit
 from breezy.revision import RevisionID
 from breezy.workingtree import WorkingTree
-from breezy.workspace import reset_tree, check_clean_tree
+from breezy.workspace import check_clean_tree, reset_tree
+from debian.changelog import Changelog
+from debian.deb822 import Deb822
 
-from ..apply import (
-    ResultFileFormatError,
-    ScriptFailed,
-    ScriptNotFound,
-    ScriptMadeNoChanges,
-    )
-
-from . import (
-    _get_maintainer_from_env,
-    add_changelog_entry,
-    build,
-    control_files_in_root,
-    guess_update_changelog,
-    BuildFailedError,
-    MissingUpstreamTarball,
-    DEFAULT_BUILDER,
-    )
+from ..apply import (ResultFileFormatError, ScriptFailed, ScriptMadeNoChanges,
+                     ScriptNotFound)
+from . import (DEFAULT_BUILDER, BuildFailedError, MissingUpstreamTarball,
+               _get_maintainer_from_env, add_changelog_entry, build,
+               control_files_in_root, guess_update_changelog)
 
 
 class MissingChangelog(Exception):

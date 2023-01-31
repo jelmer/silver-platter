@@ -15,14 +15,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import silver_platter   # noqa: F401
-from silver_platter.debian import (
-    _changelog_stats,
-    )
+import argparse
 
 from breezy.branch import Branch
 
-import argparse
+import silver_platter  # noqa: F401
+from silver_platter.debian import _changelog_stats
 
 parser = argparse.ArgumentParser()
 parser.add_argument('location', help='Branch location to check.', type=str,

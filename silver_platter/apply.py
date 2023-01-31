@@ -15,19 +15,20 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from contextlib import suppress
-from dataclasses import dataclass, field
 import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Dict, List, Tuple, Union, BinaryIO
+from contextlib import suppress
+from dataclasses import dataclass, field
+from typing import BinaryIO, Dict, List, Optional, Tuple, Union
+
 from breezy.commit import PointlessCommit
 from breezy.revision import RevisionID
-from breezy.workspace import reset_tree, check_clean_tree
 from breezy.workingtree import WorkingTree
+from breezy.workspace import check_clean_tree, reset_tree
 
 
 class ScriptMadeNoChanges(Exception):

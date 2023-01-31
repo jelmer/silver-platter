@@ -15,31 +15,24 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from http.client import IncompleteRead
 import logging
 import os
 import shutil
 import socket
 import subprocess
 import tempfile
-from typing import Callable, Tuple, Optional, List, Dict
+from http.client import IncompleteRead
+from typing import Callable, Dict, List, Optional, Tuple
 
-from breezy import (
-    errors,
-    urlutils,
-)
-
-from breezy.bzr import LineEndingError
-
+from breezy import errors, urlutils
 from breezy.branch import Branch
-from breezy.controldir import ControlDir, Prober
-from breezy.controldir import NoColocatedBranchSupport
+from breezy.bzr import LineEndingError
+from breezy.controldir import ControlDir, NoColocatedBranchSupport, Prober
 from breezy.git.remote import RemoteGitError
 from breezy.revision import RevisionID
-from breezy.transport import Transport, get_transport, UnusableRedirect
+from breezy.transport import (Transport, UnsupportedProtocol, UnusableRedirect,
+                              get_transport)
 from breezy.workingtree import WorkingTree
-
-from breezy.transport import UnsupportedProtocol
 
 
 def create_temp_sprout(

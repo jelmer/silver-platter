@@ -15,39 +15,24 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from contextlib import suppress
 import logging
-from typing import List, Union, Dict, Optional, Tuple, Any, Callable
+from contextlib import suppress
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from breezy import errors
+from breezy import merge as _mod_merge
+from breezy import revision as _mod_revision
 from breezy.branch import Branch
-from breezy import (
-    errors,
-    merge as _mod_merge,
-    revision as _mod_revision,
-)
 from breezy.errors import PermissionDenied
+from breezy.forge import (Forge, MergeProposal, MergeProposalExists,
+                          NoSuchProject, ReopenFailed,
+                          SourceNotDerivedFromTarget, TitleUnsupported,
+                          UnsupportedForge, determine_title, get_forge)
 from breezy.memorybranch import MemoryBranch
-from breezy.forge import (
-    determine_title,
-    get_forge,
-    Forge,
-    MergeProposal,
-    MergeProposalExists,
-    NoSuchProject,
-    UnsupportedForge,
-    ReopenFailed,
-    SourceNotDerivedFromTarget,
-    )
-from breezy.forge import TitleUnsupported
-
 from breezy.revision import RevisionID
 from breezy.transport import Transport
 
-from .utils import (
-    open_branch,
-    full_branch_url,
-)
-
+from .utils import full_branch_url, open_branch
 
 __all__ = [
     "push_changes",

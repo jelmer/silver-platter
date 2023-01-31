@@ -16,55 +16,24 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from contextlib import suppress
-from typing import (
-    List,
-    Optional,
-    Tuple,
-    Iterator,
-)
+from typing import Iterator, List, Optional, Tuple
 
+import breezy.plugins.github  # noqa: F401
+import breezy.plugins.gitlab  # noqa: F401
+import breezy.plugins.launchpad  # noqa: F401
 from breezy.branch import Branch
-from breezy.errors import (
-    PermissionDenied,
-)
-from breezy.forge import (
-    ForgeLoginRequired,
-    UnsupportedForge,
-    get_forge,
-    forges,
-    Forge,
-    MergeProposal,
-    NoSuchProject,
-    iter_forge_instances,
-    SourceNotDerivedFromTarget,
-    )
-
-from breezy.merge_directive import (
-    MergeDirective,
-    MergeDirective2,
-)
+from breezy.errors import PermissionDenied
+from breezy.forge import (Forge, ForgeLoginRequired, MergeProposal,
+                          NoSuchProject, SourceNotDerivedFromTarget,
+                          UnsupportedForge, forges, get_forge,
+                          iter_forge_instances)
+from breezy.merge_directive import MergeDirective, MergeDirective2
 from breezy.transport import Transport
 
-import breezy.plugins.gitlab  # noqa: F401
-import breezy.plugins.github  # noqa: F401
-import breezy.plugins.launchpad  # noqa: F401
-
-
-from .utils import (
-    open_branch,
-    full_branch_url,
-)
-from .publish import (
-    push_changes,
-    push_derived_changes,
-    propose_changes,
-    EmptyMergeProposal,
-    check_proposal_diff,
-    DryRunProposal,
-    find_existing_proposed,
-    SUPPORTED_MODES,
-)
-
+from .publish import (SUPPORTED_MODES, DryRunProposal, EmptyMergeProposal,
+                      check_proposal_diff, find_existing_proposed,
+                      propose_changes, push_changes, push_derived_changes)
+from .utils import full_branch_url, open_branch
 
 __all__ = [
     "ForgeLoginRequired",
@@ -103,8 +72,9 @@ def merge_directive_changes(
     include_bundle: bool = False,
     overwrite_existing: bool = False,
 ) -> MergeDirective:
-    from breezy import osutils
     import time
+
+    from breezy import osutils
 
     remote_branch, public_branch_url = forge.publish_derived(
         local_branch, main_branch, name=name, overwrite=overwrite_existing

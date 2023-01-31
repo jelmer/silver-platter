@@ -18,15 +18,11 @@
 import argparse
 import logging
 import sys
-from typing import Optional, List, Callable, Dict
+from typing import Callable, Dict, List, Optional
 
 import silver_platter  # noqa: F401
-from . import (
-    apply,
-    batch,
-    run,
-    version_string,
-)
+
+from . import apply, batch, run, version_string
 
 
 def forges_main(argv: List[str]) -> Optional[int]:

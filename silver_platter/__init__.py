@@ -18,11 +18,11 @@
 # TODO(jelmer): Imports with side-effects are bad...
 
 import breezy  # noqa: F401
-import breezy.git  # For git support   # noqa: F401
 import breezy.bzr  # For bzr support   # noqa: F401
-import breezy.plugins.launchpad  # For lp: URL support  # noqa: F401
-import breezy.plugins.gitlab  # For gitlab support  # noqa: F401
+import breezy.git  # For git support   # noqa: F401
 import breezy.plugins.github  # For github support  # noqa: F401
+import breezy.plugins.gitlab  # For gitlab support  # noqa: F401
+import breezy.plugins.launchpad  # For lp: URL support  # noqa: F401
 
 __version__ = (0, 5, 5)
 version_string = ".".join(map(str, __version__))
