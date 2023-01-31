@@ -56,10 +56,13 @@ def generate_for_candidate(recipe, basepath, url, name: str,
                 subpath=subpath)
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
+            return None
         except ScriptFailed:
             logging.error("Script failed to run.")
+            return None
         except ScriptNotFound:
             logging.error("Script not found.")
+            return None
         else:
             patchpath = basepath + '.patch'
             with open(patchpath, 'wb') as f:
@@ -270,6 +273,9 @@ def publish(directory, *, dry_run: bool = False):
         done = []
         for i, entry in enumerate(work):
             name = entry['name']
+            if 'mode' not in entry:
+                logging.error('No mode set for %s, skipping', name)
+                continue
             try:
                 publish_result = publish_one(
                     entry['url'], os.path.join(directory, name), batch_name,
