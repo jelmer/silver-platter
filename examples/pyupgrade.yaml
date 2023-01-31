@@ -1,0 +1,6 @@
+---
+name: pyupgrade
+command: 'pyupgrade --exit-zero-even-if-changed $(find -name "test_*.py")'
+mode: propose
+merge-request:
+  commit-message: Upgrade Python code to a modern version
