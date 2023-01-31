@@ -1,0 +1,7 @@
+---
+name: isort
+command: 'isort --om -q .; echo "Sort Python import definitions with isort"'
+mode: propose
+merge-request:
+  commit-message: Sort Python import definitions
+  description: Sort Python import definitions
