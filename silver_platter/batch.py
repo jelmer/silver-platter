@@ -126,7 +126,7 @@ def generate(recipe, candidates, directory, recipe_path):
             recipe, basename, candidate.url, name,
             subpath=candidate.subpath or '')
         entries.append(entry)
-    batch = {'work': entries, 'recipe': recipe_path,
+    batch = {'work': entries, 'recipe': recipe_path, 'name': recipe.name,
              name: recipe.name}
     with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
         ruamel.yaml.round_trip_dump(batch, f)
@@ -263,7 +263,11 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
 
 def publish(directory, *, dry_run: bool = False):
     batch = load_batch(directory)
-    batch_name = batch['name']
+    try:
+        batch_name = batch['name']
+    except KeyError:
+        logging.error('no name found in %s', directory)
+        return 1
     work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
