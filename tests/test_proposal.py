@@ -15,14 +15,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from io import BytesIO
 import os
+from io import BytesIO
 
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter.workspace import (
-    Workspace,
-)
+from silver_platter.workspace import Workspace
 
 
 class WorkspaceTests(TestCaseWithTransport):

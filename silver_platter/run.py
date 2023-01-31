@@ -22,40 +22,20 @@ import logging
 import os
 import subprocess
 import sys
-from typing import Optional, List
+from typing import List, Optional
 
 from breezy import osutils
 
 import silver_platter  # noqa: F401
 
-from .apply import (
-    script_runner,
-    ScriptMadeNoChanges,
-    ScriptFailed,
-    ScriptNotFound,
-)
-from .proposal import (
-    ForgeLoginRequired,
-    MergeProposal,
-    UnsupportedForge,
-    enable_tag_pushing,
-    find_existing_proposed,
-    get_forge,
-)
-from .workspace import (
-    Workspace,
-)
-from .publish import (
-    SUPPORTED_MODES,
-    InsufficientChangesForNewProposal,
-)
-from .utils import (
-    open_branch,
-    BranchMissing,
-    BranchUnsupported,
-    BranchUnavailable,
-    full_branch_url,
-)
+from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
+                    script_runner)
+from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
+                       enable_tag_pushing, find_existing_proposed, get_forge)
+from .publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
+from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
+                    full_branch_url, open_branch)
+from .workspace import Workspace
 
 
 def derived_branch_name(script: str) -> str:

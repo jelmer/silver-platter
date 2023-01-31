@@ -15,47 +15,25 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from contextlib import suppress
 import logging
 import os
 import shutil
+from contextlib import suppress
 from typing import List, Optional
 
 import ruamel.yaml
-
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
 
-from .apply import (
-    script_runner,
-    ScriptMadeNoChanges,
-    ScriptFailed,
-    ScriptNotFound,
-)
-from .utils import (
-    open_branch,
-    BranchMissing,
-    BranchUnsupported,
-    BranchUnavailable,
-    full_branch_url,
-)
-from .publish import (
-    InsufficientChangesForNewProposal,
-    publish_changes,
-    EmptyMergeProposal,
-)
-from .proposal import (
-    ForgeLoginRequired,
-    MergeProposal,
-    UnsupportedForge,
-    enable_tag_pushing,
-    find_existing_proposed,
-    get_forge,
-)
-
-from .workspace import (
-    Workspace,
-)
+from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
+                    script_runner)
+from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
+                       enable_tag_pushing, find_existing_proposed, get_forge)
+from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
+                      publish_changes)
+from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
+                    full_branch_url, open_branch)
+from .workspace import Workspace
 
 
 def generate_for_candidate(recipe, basepath, url, name: str,

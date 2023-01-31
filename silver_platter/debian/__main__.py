@@ -15,20 +15,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import argparse
 import logging
-from typing import Optional, Dict, List, Callable
+import sys
+from typing import Callable, Dict, List, Optional
 
 import silver_platter  # noqa: F401
 
-import argparse
-import sys
-
-from . import (
-    apply as debian_apply,
-    run as debian_run,
-    batch as debian_batch,
-    uploader as debian_uploader,
-    )
+from . import apply as debian_apply
+from . import batch as debian_batch
+from . import run as debian_run
+from . import uploader as debian_uploader
 
 
 def main(argv: Optional[List[str]] = None) -> Optional[int]:

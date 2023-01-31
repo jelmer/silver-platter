@@ -13,47 +13,34 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from datetime import datetime
 import logging
 import os
-from typing import Optional, Dict, List, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
-from debian.deb822 import Deb822
-from debian.changelog import Version, get_maintainer
-from debmutate.vcs import split_vcs_url
-from debmutate.changelog import (
-    Changelog,
-    changelog_add_entry as _changelog_add_entry,
-)
-
-
+import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 from breezy import urlutils
 from breezy.branch import Branch
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
-import breezy.plugins.debian  # For apt: URL support  # noqa: F401
+from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.cmds import cmd_builddeb
-from breezy.plugins.debian.directory import (
-    source_package_vcs,
-    vcs_field_to_bzr_url_converters,
-)
-
+from breezy.plugins.debian.directory import (source_package_vcs,
+                                             vcs_field_to_bzr_url_converters)
+from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
-
-from breezy.plugins.debian.builder import BuildFailedError
-from breezy.plugins.debian.changelog import debcommit
-from breezy.plugins.debian.upstream import (
-    MissingUpstreamTarball,
-)
+from debian.changelog import Version, get_maintainer
+from debian.deb822 import Deb822
+from debmutate.changelog import Changelog
+from debmutate.changelog import changelog_add_entry as _changelog_add_entry
+from debmutate.vcs import split_vcs_url
 
 from .. import workspace as _mod_workspace
-from ..utils import (
-    open_branch,
-)
 from ..probers import select_probers
-
+from ..utils import open_branch
 
 __all__ = [
     "add_changelog_entry",

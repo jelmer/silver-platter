@@ -14,13 +14,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from contextlib import suppress
-from typing import Optional, List, Type
+from typing import List, Optional, Type
 
-
-from breezy.controldir import Prober, ControlDirFormat
 from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
+from breezy.controldir import ControlDirFormat, Prober
 from breezy.errors import UnsupportedFormatError
+from breezy.git import RemoteGitProber
 
 
 class UnsupportedVCSProber(Prober):

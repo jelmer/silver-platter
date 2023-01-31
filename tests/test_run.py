@@ -17,14 +17,9 @@
 
 import os
 
-from breezy.tests import (
-    TestCaseWithTransport,
-)
+from breezy.tests import TestCaseWithTransport
 
-from silver_platter.run import (
-    ScriptMadeNoChanges,
-    script_runner,
-)
+from silver_platter.run import ScriptMadeNoChanges, script_runner
 
 
 class ScriptRunnerTests(TestCaseWithTransport):

@@ -17,19 +17,11 @@
 
 from datetime import datetime
 
+from breezy.tests import TestCase, TestCaseWithTransport
 from debian.changelog import ChangelogCreateError
 
-from breezy.tests import (
-    TestCase,
-    TestCaseWithTransport,
-)
-
-
-from silver_platter.debian import (
-    convert_debian_vcs_url,
-    add_changelog_entry,
-    _get_maintainer_from_env,
-)
+from silver_platter.debian import (_get_maintainer_from_env,
+                                   add_changelog_entry, convert_debian_vcs_url)
 
 
 class ConvertDebianVcsUrlTests(TestCase):

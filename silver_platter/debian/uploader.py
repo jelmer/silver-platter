@@ -17,76 +17,47 @@
 
 """Support for uploading packages."""
 
-import silver_platter  # noqa: F401
-import time
-
-from contextlib import suppress
 import datetime
-from email.utils import parseaddr
 import logging
 import os
 import subprocess
 import sys
 import tempfile
-from typing import Optional, List, Tuple, Callable
-
-from debian.changelog import Version
-
-from debmutate.changelog import (
-    ChangelogEditor,
-    ChangelogParseError,
-    changeblock_ensure_first_line,
-    gbp_dch,
-)
-from debmutate.reformatting import GeneratedFile
-from debmutate.control import ControlEditor
+import time
+from contextlib import suppress
+from email.utils import parseaddr
+from typing import Callable, List, Optional, Tuple
 
 from breezy import gpg
-from breezy.config import extract_email_address, NoEmailInUsername
-from breezy.errors import NoSuchTag, PermissionDenied
 from breezy.commit import NullCommitReporter, PointlessCommit
-from breezy.revision import NULL_REVISION
-from breezy.plugins.debian.apt_repo import LocalApt, RemoteApt, Apt
+from breezy.config import NoEmailInUsername, extract_email_address
+from breezy.errors import NoSuchTag, PermissionDenied
+from breezy.plugins.debian.apt_repo import Apt, LocalApt, RemoteApt
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
-from breezy.plugins.debian.import_dsc import (
-    DistributionBranch,
-)
-from breezy.plugins.debian.release import (
-    release,
-)
-from breezy.plugins.debian.util import (
-    changelog_find_previous_upload,
-    dput_changes,
-    find_changelog,
-    MissingChangelogError,
-    NoPreviousUpload,
-)
+from breezy.plugins.debian.import_dsc import DistributionBranch
+from breezy.plugins.debian.release import release
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
+from breezy.plugins.debian.util import (MissingChangelogError,
+                                        NoPreviousUpload,
+                                        changelog_find_previous_upload,
+                                        dput_changes, find_changelog)
+from breezy.revision import NULL_REVISION
 from breezy.tree import MissingNestedTree
-
 from breezy.workingtree import WorkingTree
+from debian.changelog import Version, get_maintainer
+from debmutate.changelog import (ChangelogEditor, ChangelogParseError,
+                                 changeblock_ensure_first_line, gbp_dch)
+from debmutate.control import ControlEditor
+from debmutate.reformatting import GeneratedFile
 
-from debian.changelog import get_maintainer
+import silver_platter  # noqa: F401
 
-from . import (
-    apt_get_source_package,
-    source_package_vcs,
-    split_vcs_url,
-    Workspace,
-    DEFAULT_BUILDER,
-    NoSuchPackage,
-)
-from ..utils import (
-    open_branch,
-    BranchUnavailable,
-    BranchMissing,
-    BranchUnsupported,
-    BranchRateLimited,
-)
-from ..probers import (
-    select_probers,
-)
+from ..probers import select_probers
+from ..utils import (BranchMissing, BranchRateLimited, BranchUnavailable,
+                     BranchUnsupported, open_branch)
+from . import (DEFAULT_BUILDER, NoSuchPackage, Workspace,
+               apt_get_source_package, source_package_vcs, split_vcs_url)
 
 
 def debsign(path, keyid=None):
@@ -687,10 +658,11 @@ def vcswatch_prescan_packages(
         exclude=None, min_commit_age=None,
         allowed_committers=None):
     logging.info('Using vcswatch to prescan %d packages', len(packages))
-    from .. import version_string
-    from urllib.request import Request, urlopen
-    import json
     import gzip
+    import json
+    from urllib.request import Request, urlopen
+
+    from .. import version_string
     url = "https://qa.debian.org/data/vcswatch/vcswatch.json.gz"
     request = Request(url, headers={
         'User-Agent': "silver-platter/%s" % version_string})

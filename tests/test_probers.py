@@ -15,17 +15,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.tests import (
-    TestCase,
-)
-
 from breezy.bzr import RemoteBzrProber
 from breezy.git import RemoteGitProber
+from breezy.tests import TestCase
 
-from silver_platter.probers import (
-    select_probers,
-    UnsupportedVCSProber,
-)
+from silver_platter.probers import UnsupportedVCSProber, select_probers
 
 
 class SelectProbersTests(TestCase):
