@@ -140,8 +140,8 @@ def apply_and_publish(  # noqa: C901
 
         try:
             publish_result = ws.publish_changes(
-                mode,
-                name,
+                mode=mode,
+                name=name,
                 get_proposal_description=(
                     lambda df, ep: get_description(result, df, ep)),
                 get_proposal_commit_message=(
