@@ -22,6 +22,7 @@ from contextlib import suppress
 from typing import List, Optional
 
 import ruamel.yaml
+from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
 
@@ -108,7 +109,8 @@ def generate(recipe, candidates, directory, recipe_path):
                 recipe, basename, candidate.url, name,
                 subpath=candidate.subpath or '',
                 default_mode=candidate.default_mode)
-            entries.append(entry)
+            if entry:
+                entries.append(entry)
     finally:
         batch = {
             'work': entries,
@@ -157,7 +159,7 @@ def status(directory):
 
 
 def publish_one(url: str, path: str, batch_name: str, mode: str,
-                *, patchpath: str,
+                *, patchpath: Optional[str] = None,
                 subpath: str = '',
                 labels: Optional[List[str]] = None, dry_run: bool = False,
                 derived_owner: Optional[str] = None, refresh: bool = False,
@@ -237,6 +239,9 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         raise
     except InsufficientChangesForNewProposal:
         logging.info('Insufficient changes for a new merge proposal')
+        raise
+    except DivergedBranches:
+        logging.warning('Branch exists that has diverged')
         raise
     except ForgeLoginRequired as e:
         logging.exception(
