@@ -361,6 +361,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         generate(
             recipe, candidates, args.directory,
             recipe_path=os.path.relpath(args.recipe, args.directory))
+        logging.info(
+            'Now, review the patches under %s, edit %s/batch.yaml as '
+            'appropriate and then run "svp batch publish %s"',
+            args.directory, args.directory, args.directory)
     elif args.command == 'publish':
         selector: Optional[Callable]
         if args.name:
@@ -369,6 +373,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         else:
             selector = None
         publish(args.directory, dry_run=args.dry_run, selector=selector)
+        logging.info(
+            'To see the status of open merge requests, run: '
+            '"svp batch status %s"', args.directory)
     elif args.command == 'status':
         status(args.directory)
     else:
