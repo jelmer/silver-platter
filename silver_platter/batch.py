@@ -19,9 +19,10 @@ import logging
 import os
 import shutil
 from contextlib import suppress
-from typing import List, Optional
+from typing import List, Optional, Any, Dict, Callable
 
 import ruamel.yaml
+from ruamel.yaml.scalarstring import LiteralScalarString
 from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
@@ -71,15 +72,16 @@ def generate_for_candidate(recipe, basepath, url, name: str,
             patchpath = basepath + '.patch'
             with open(patchpath, 'wb') as f:
                 ws.show_diff(f)
+            entry['patch'] = os.path.basename(patchpath)
             if result.target_branch_url:
                 entry['target_branch_url'] = result.target_branch_url
             if result.description:
-                entry['description'] = result.description
+                entry['description'] = LiteralScalarString(result.description)
             else:
                 description = recipe.render_merge_request_description(
                     'markdown', result.context)
                 if description:
-                    entry['description'] = description
+                    entry['description'] = LiteralScalarString(description)
             commit_message = recipe.render_merge_request_commit_message(
                 result.context)
             if commit_message:
@@ -103,8 +105,13 @@ def generate(
         recipe_path: str):
     with suppress(FileExistsError):
         os.mkdir(directory)
+    batch: Dict[str, Any] = {
+        'recipe': recipe_path,
+        'name': recipe.name,
+    }
+
     try:
-        entries = []
+        batch['work'] = entries = []
         for candidate in candidates:
             basename = candidate.name
             if basename is None:
@@ -114,20 +121,21 @@ def generate(
             while os.path.exists(os.path.join(directory, name)):
                 i += 1
                 name = basename + '.%d' % i
-            entry = generate_for_candidate(
-                recipe, os.path.join(directory, name),
-                candidate.url, name,
-                subpath=candidate.subpath or '',
-                default_mode=candidate.default_mode)
+            work_path = os.path.join(directory, name)
+            try:
+                entry = generate_for_candidate(
+                    recipe, work_path,
+                    candidate.url, name,
+                    subpath=candidate.subpath or '',
+                    default_mode=candidate.default_mode)
+            except Exception:
+                if os.path.exists(work_path):
+                    shutil.rmtree(work_path)
             if entry:
                 entries.append(entry)
+                save_batch_metadata(directory, batch)
     finally:
-        batch = {
-            'work': entries,
-            'recipe': recipe_path,
-            'name': recipe.name,
-        }
-        save_batch(directory, batch)
+        save_batch_metadata(directory, batch)
 
 
 def drop_batch_entry(directory, name):
@@ -136,18 +144,18 @@ def drop_batch_entry(directory, name):
         shutil.rmtree(os.path.join(directory, name))
 
 
-def save_batch(directory: str, batch) -> None:
+def save_batch_metadata(directory: str, batch) -> None:
     with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
         ruamel.yaml.round_trip_dump(batch, f)
 
 
-def load_batch(directory):
+def load_batch_metadata(directory):
     with open(os.path.join(directory, 'batch.yaml')) as f:
         return ruamel.yaml.round_trip_load(f)
 
 
 def status(directory):
-    batch = load_batch(directory)
+    batch = load_batch_metadata(directory)
     work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
@@ -273,8 +281,8 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
     return publish_result
 
 
-def publish(directory, *, dry_run: bool = False):
-    batch = load_batch(directory)
+def publish(directory, *, dry_run: bool = False, selector=None):
+    batch = load_batch_metadata(directory)
     try:
         batch_name = batch['name']
     except KeyError:
@@ -290,6 +298,8 @@ def publish(directory, *, dry_run: bool = False):
             name = entry['name']
             if 'mode' not in entry:
                 logging.error('No mode set for %s, skipping', name)
+                continue
+            if selector and not selector(entry):
                 continue
             try:
                 publish_result = publish_one(
@@ -311,11 +321,12 @@ def publish(directory, *, dry_run: bool = False):
                     done.append(i)
                 elif publish_result.proposal:
                     entry['proposal-url'] = publish_result.proposal.url
+            save_batch_metadata(directory, batch)
         for i in reversed(done):
             del work[i]
     finally:
         if not dry_run:
-            save_batch(directory, batch)
+            save_batch_metadata(directory, batch)
     if not work:
         logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
@@ -333,6 +344,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     generate_parser.add_argument('directory')
     publish_parser = subparsers.add_parser("publish")
     publish_parser.add_argument('directory')
+    publish_parser.add_argument('name', nargs='?')
     publish_parser.add_argument('--dry-run', action='store_true')
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument('directory')
@@ -350,7 +362,13 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             recipe, candidates, args.directory,
             recipe_path=os.path.relpath(args.recipe, args.directory))
     elif args.command == 'publish':
-        publish(args.directory, dry_run=args.dry_run)
+        selector: Optional[Callable]
+        if args.name:
+            def selector(e):
+                return e['name'] == args.name
+        else:
+            selector = None
+        publish(args.directory, dry_run=args.dry_run, selector=selector)
     elif args.command == 'status':
         status(args.directory)
     else:
