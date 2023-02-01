@@ -820,6 +820,9 @@ def main(argv):  # noqa: C901
         apt_repo = LocalApt()
 
     if args.maintainer:
+        if args.packages:
+            parser.print_error(
+                '--maintainer is incompatible with specifying package names')
         packages = select_apt_packages(
             apt_repo, args.packages, args.maintainer)
     else:
