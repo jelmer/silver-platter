@@ -341,7 +341,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         "--recipe", type=str, help="Recipe to use.")
     generate_parser.add_argument(
         "--candidates", type=str, help="File with candidate list.")
-    generate_parser.add_argument('directory')
+    generate_parser.add_argument('directory', nargs='?')
     publish_parser = subparsers.add_parser("publish")
     publish_parser.add_argument('directory')
     publish_parser.add_argument('name', nargs='?')
@@ -358,6 +358,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             candidates = CandidateList.from_path(args.candidates)
         else:
             parser.error('no candidate list specified')
+        if args.directory is None:
+            args.directory = recipe.name
+            logging.info('Using output directory: %s', args.directory)
         generate(
             recipe, candidates, args.directory,
             recipe_path=os.path.relpath(args.recipe, args.directory))
