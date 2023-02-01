@@ -106,12 +106,17 @@ def generate(
     try:
         entries = []
         for candidate in candidates:
-            name = candidate.name
-            if name is None:
-                name = candidate.url.rstrip('/').rsplit('/', 1)[-1]
-            basename = os.path.join(directory, name)
+            basename = candidate.name
+            if basename is None:
+                basename = candidate.url.rstrip('/').rsplit('/', 1)[-1]
+            name = basename
+            i = 0
+            while os.path.exists(os.path.join(directory, name)):
+                i += 1
+                name = basename + '.%d' % i
             entry = generate_for_candidate(
-                recipe, basename, candidate.url, name,
+                recipe, os.path.join(directory, name),
+                candidate.url, name,
                 subpath=candidate.subpath or '',
                 default_mode=candidate.default_mode)
             if entry:
@@ -341,8 +346,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             candidates = CandidateList.from_path(args.candidates)
         else:
             parser.error('no candidate list specified')
-        generate(recipe, candidates, args.directory,
-                 recipe_path=os.path.relpath(args.recipe, args.directory))
+        generate(
+            recipe, candidates, args.directory,
+            recipe_path=os.path.relpath(args.recipe, args.directory))
     elif args.command == 'publish':
         publish(args.directory, dry_run=args.dry_run)
     elif args.command == 'status':
