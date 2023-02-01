@@ -94,18 +94,34 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 def generate(recipe, candidates, directory, recipe_path):
     with suppress(FileExistsError):
         os.mkdir(directory)
-    entries = []
-    for candidate in candidates:
-        name = candidate.name
-        if name is None:
-            name = candidate.url.rstrip('/').rsplit('/', 1)[-1]
-        basename = os.path.join(directory, name)
-        entry = generate_for_candidate(
-            recipe, basename, candidate.url, name,
-            subpath=candidate.subpath or '')
-        entries.append(entry)
-    batch = {'work': entries, 'recipe': recipe_path, 'name': recipe.name,
-             name: recipe.name}
+    try:
+        entries = []
+        for candidate in candidates:
+            name = candidate.name
+            if name is None:
+                name = candidate.url.rstrip('/').rsplit('/', 1)[-1]
+            basename = os.path.join(directory, name)
+            entry = generate_for_candidate(
+                recipe, basename, candidate.url, name,
+                subpath=candidate.subpath or '',
+                default_mode=candidate.default_mode)
+            entries.append(entry)
+    finally:
+        batch = {
+            'work': entries,
+            'recipe': recipe_path,
+            'name': recipe.name,
+        }
+        save_batch(directory, batch)
+
+
+def drop_batch_entry(directory, name):
+    with suppress(FileNotFoundError):
+        os.unlink(os.path.join(directory, name + '.patch'))
+        shutil.rmtree(os.path.join(directory, name))
+
+
+def save_batch(directory: str, batch) -> None:
     with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
         ruamel.yaml.round_trip_dump(batch, f)
 
@@ -138,7 +154,7 @@ def status(directory):
 
 
 def publish_one(url: str, path: str, batch_name: str, mode: str,
-                patchpath: str, *,
+                *, patchpath: str,
                 subpath: str = '',
                 labels: Optional[List[str]] = None, dry_run: bool = False,
                 derived_owner: Optional[str] = None, refresh: bool = False,
@@ -250,36 +266,35 @@ def publish(directory, *, dry_run: bool = False):
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    done = []
-    for i, entry in enumerate(work):
-        name = entry['name']
-        try:
-            publish_result = publish_one(
-                entry['url'], os.path.join(directory, name), batch_name,
-                entry['mode'], entry['patch'],
-                subpath=entry.get('subpath', ''),
-                labels=entry.get('labels', []),
-                dry_run=dry_run, derived_owner=entry.get('derived-owner'),
-                commit_message=entry.get('commit-message'),
-                title=entry.get('title'),
-                description=entry.get('description'))
-        except EmptyMergeProposal:
-            logging.info('No changes left')
-            done.append(i)
-        else:
-            if publish_result.mode == 'push':
-                if not dry_run:
-                    with suppress(FileNotFoundError):
-                        os.unlink(os.path.join(directory, name + '.patch'))
-                        shutil.rmtree(os.path.join(directory, name))
+    try:
+        done = []
+        for i, entry in enumerate(work):
+            name = entry['name']
+            try:
+                publish_result = publish_one(
+                    entry['url'], os.path.join(directory, name), batch_name,
+                    entry['mode'], patchpath=entry.get('patch'),
+                    subpath=entry.get('subpath', ''),
+                    labels=entry.get('labels', []),
+                    dry_run=dry_run, derived_owner=entry.get('derived-owner'),
+                    commit_message=entry.get('commit-message'),
+                    title=entry.get('title'),
+                    description=entry.get('description'))   # type: ignore
+            except EmptyMergeProposal:
+                logging.info('No changes left')
                 done.append(i)
-            elif publish_result.proposal:
-                entry['proposal-url'] = publish_result.proposal.url
-    for i in reversed(done):
-        del work[i]
-    if not dry_run:
-        with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
-            ruamel.yaml.round_trip_dump(batch, f)
+            else:
+                if publish_result.mode == 'push':
+                    if not dry_run:
+                        drop_batch_entry(directory, name)
+                    done.append(i)
+                elif publish_result.proposal:
+                    entry['proposal-url'] = publish_result.proposal.url
+        for i in reversed(done):
+            del work[i]
+    finally:
+        if not dry_run:
+            save_batch(directory, batch)
     if not work:
         logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
