@@ -28,17 +28,20 @@ from breezy.workingtree import WorkingTree
 
 from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
                     script_runner)
+from .candidates import (Candidate, CandidateList)
 from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
                        enable_tag_pushing, find_existing_proposed, get_forge)
 from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
                       publish_changes)
+from .recipe import Recipe
 from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
                     full_branch_url, open_branch)
 from .workspace import Workspace
 
 
 def generate_for_candidate(recipe, basepath, url, name: str,
-                           *, subpath: str = ''):
+                           *, subpath: str = '',
+                           default_mode: Optional[str] = None):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -86,7 +89,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
             if title:
                 entry['title'] = title
             if recipe.mode:
-                entry['mode'] = recipe.mode
+                entry['mode'] = recipe.mode or default_mode
             if recipe.labels:
                 entry['labels'] = recipe.labels
             if result.context:
@@ -95,7 +98,9 @@ def generate_for_candidate(recipe, basepath, url, name: str,
         return entry
 
 
-def generate(recipe, candidates, directory, recipe_path):
+def generate(
+        recipe: Recipe, candidates: List[Candidate], directory: str,
+        recipe_path: str):
     with suppress(FileExistsError):
         os.mkdir(directory)
     try:
@@ -329,12 +334,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     args = parser.parse_args(argv)
     if args.command == "generate":
         if args.recipe:
-            from .recipe import Recipe
             recipe = Recipe.from_path(args.recipe)
         else:
             parser.error('no recipe specified')
         if args.candidates:
-            from .candidates import CandidateList
             candidates = CandidateList.from_path(args.candidates)
         else:
             parser.error('no candidate list specified')

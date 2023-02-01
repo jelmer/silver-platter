@@ -29,6 +29,7 @@ class Candidate:
     name: Optional[str] = None
     branch: Optional[str] = None
     subpath: str = ''
+    default_mode: Optional[str] = None
 
     @classmethod
     def from_yaml(cls, d):
@@ -38,6 +39,7 @@ class Candidate:
                 name=d.get('name'),
                 branch=d.get('branch'),
                 subpath=d.get('path'),
+                default_mode=d.get('default-mode'),
                 )
         elif isinstance(d, str):
             return cls(url=d)
