@@ -32,7 +32,7 @@ from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
                     script_runner)
 from .candidates import (Candidate, CandidateList)
 from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                       enable_tag_pushing, find_existing_proposed, get_forge)
+                       enable_tag_pushing, get_forge)
 from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
                       publish_changes)
 from .recipe import Recipe
@@ -106,10 +106,11 @@ def generate(
     with suppress(FileExistsError):
         os.mkdir(directory)
 
+    batch: Dict[str, Any]
     try:
         batch = load_batch_metadata(directory)
     except FileNotFoundError:
-        batch: Dict[str, Any] = {
+        batch = {
             'recipe': recipe_path,
             'name': recipe.name,
         }
@@ -226,7 +227,9 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         )
     else:
         if existing_proposal_url is not None:
-            existing_proposal = get_proposal_by_url(existing_proposal_url)
+            existing_proposal = forge.get_proposal_by_url(
+                existing_proposal_url)
+            assert existing_proposal
             resume_branch_url = existing_proposal.get_source_branch_url()
             assert resume_branch_url is not None
             resume_branch = Branch.open(resume_branch_url)
