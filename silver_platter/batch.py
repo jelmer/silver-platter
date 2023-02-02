@@ -40,8 +40,7 @@ from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
 from .workspace import Workspace
 
 
-def generate_for_candidate(recipe, basepath, url, name: str,
-                           *, subpath: str = '',
+def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
                            default_mode: Optional[str] = None):
     try:
         main_branch = open_branch(url)
@@ -51,7 +50,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
     with Workspace(main_branch, path=basepath) as ws:
         logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url, 'name': name}
+        entry = {'url': url}
         if subpath:
             entry['subpath'] = subpath
 
@@ -105,18 +104,31 @@ def generate(
         recipe_path: str):
     with suppress(FileExistsError):
         os.mkdir(directory)
-    batch: Dict[str, Any] = {
-        'recipe': recipe_path,
-        'name': recipe.name,
-    }
 
     try:
-        batch['work'] = entries = []
+        batch = load_batch_metadata(directory)
+    except FileNotFoundError:
+        batch: Dict[str, Any] = {
+            'recipe': recipe_path,
+            'name': recipe.name,
+        }
+        batch['work'] = entries = {}
+    else:
+        entries = batch['work']
+
+    try:
         for candidate in candidates:
             basename = candidate.name
             if basename is None:
+                # TODO(jelmer): Move this logic to Candidate?
                 basename = candidate.url.rstrip('/').rsplit('/', 1)[-1]
             name = basename
+            # TODO(jelmer): Search by URL rather than by name?
+            if name in entries and entries[name]['url'] == candidate.url:
+                logging.info(
+                    'An entry %s for %s exists, skipping',
+                    name, entries[name]['url'])
+                continue
             i = 0
             while os.path.exists(os.path.join(directory, name)):
                 i += 1
@@ -125,15 +137,17 @@ def generate(
             try:
                 entry = generate_for_candidate(
                     recipe, work_path,
-                    candidate.url, name,
+                    candidate.url,
                     subpath=candidate.subpath or '',
                     default_mode=candidate.default_mode)
             except Exception:
                 if os.path.exists(work_path):
                     shutil.rmtree(work_path)
-            if entry:
-                entries.append(entry)
-                save_batch_metadata(directory, batch)
+                raise
+            else:
+                if entry:
+                    entries[name] = entry
+                    save_batch_metadata(directory, batch)
     finally:
         save_batch_metadata(directory, batch)
 

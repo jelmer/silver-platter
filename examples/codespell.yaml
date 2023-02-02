@@ -1,6 +1,9 @@
 ---
 name: codespell
-command: 'codespell -ws -i0 -q15 -S "*.po,*.pot"; exit 0'
+command: |-
+  echo Fix spelling errors
+  codespell -ws -i0 -q15 -S "*.po,*.pot,AUTHORS,THANKS"
+  exit 0
 mode: propose
 merge-request:
   commit-message: Fix spelling errors in code
