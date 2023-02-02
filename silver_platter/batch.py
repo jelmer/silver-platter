@@ -23,6 +23,7 @@ from typing import List, Optional, Any, Dict, Callable
 
 import ruamel.yaml
 from ruamel.yaml.scalarstring import LiteralScalarString
+from breezy.branch import Branch
 from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
@@ -31,7 +32,7 @@ from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
                     script_runner)
 from .candidates import (Candidate, CandidateList)
 from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                       enable_tag_pushing, find_existing_proposed, get_forge)
+                       enable_tag_pushing, get_forge)
 from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
                       publish_changes)
 from .recipe import Recipe
@@ -40,8 +41,7 @@ from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
 from .workspace import Workspace
 
 
-def generate_for_candidate(recipe, basepath, url, name: str,
-                           *, subpath: str = '',
+def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
                            default_mode: Optional[str] = None):
     try:
         main_branch = open_branch(url)
@@ -51,7 +51,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
     with Workspace(main_branch, path=basepath) as ws:
         logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url, 'name': name}
+        entry = {'url': url}
         if subpath:
             entry['subpath'] = subpath
 
@@ -105,18 +105,32 @@ def generate(
         recipe_path: str):
     with suppress(FileExistsError):
         os.mkdir(directory)
-    batch: Dict[str, Any] = {
-        'recipe': recipe_path,
-        'name': recipe.name,
-    }
+
+    batch: Dict[str, Any]
+    try:
+        batch = load_batch_metadata(directory)
+    except FileNotFoundError:
+        batch = {
+            'recipe': recipe_path,
+            'name': recipe.name,
+        }
+        batch['work'] = entries = {}
+    else:
+        entries = batch['work']
 
     try:
-        batch['work'] = entries = []
         for candidate in candidates:
             basename = candidate.name
             if basename is None:
+                # TODO(jelmer): Move this logic to Candidate?
                 basename = candidate.url.rstrip('/').rsplit('/', 1)[-1]
             name = basename
+            # TODO(jelmer): Search by URL rather than by name?
+            if name in entries and entries[name]['url'] == candidate.url:
+                logging.info(
+                    'An entry %s for %s exists, skipping',
+                    name, entries[name]['url'])
+                continue
             i = 0
             while os.path.exists(os.path.join(directory, name)):
                 i += 1
@@ -125,15 +139,17 @@ def generate(
             try:
                 entry = generate_for_candidate(
                     recipe, work_path,
-                    candidate.url, name,
+                    candidate.url,
                     subpath=candidate.subpath or '',
                     default_mode=candidate.default_mode)
             except Exception:
                 if os.path.exists(work_path):
                     shutil.rmtree(work_path)
-            if entry:
-                entries.append(entry)
-                save_batch_metadata(directory, batch)
+                raise
+            else:
+                if entry:
+                    entries[name] = entry
+                    save_batch_metadata(directory, batch)
     finally:
         save_batch_metadata(directory, batch)
 
@@ -160,25 +176,30 @@ def status(directory):
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    for entry in work:
+    for name, entry in work.items():
         if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
-                logging.info('%s: %s was merged', entry['name'],
+                logging.info('%s: %s was merged', name,
                              entry['proposal-url'])
             elif proposal.is_closed():
                 logging.info('%s: %s was closed without being merged',
-                             entry['name'], entry['proposal-url'])
+                             name, entry['proposal-url'])
             else:
                 logging.info('%s: %s is still open',
-                             entry['name'], entry['proposal-url'])
+                             name, entry['proposal-url'])
         else:
-            logging.info('%s: not published yet', entry['name'])
+            logging.info('%s: not published yet', name)
+
+
+class UnrelatedBranchExists(Exception):
+    """An unrelated branch exists."""
 
 
 def publish_one(url: str, path: str, batch_name: str, mode: str,
                 *, patchpath: Optional[str] = None,
                 subpath: str = '',
+                existing_proposal_url: Optional[str] = None,
                 labels: Optional[List[str]] = None, dry_run: bool = False,
                 derived_owner: Optional[str] = None, refresh: bool = False,
                 commit_message: Optional[str] = None,
@@ -198,30 +219,29 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         # We can't figure out what branch to resume from when there's no forge
         # that can tell us.
         resume_branch = None
-        existing_proposals: Optional[List[MergeProposal]] = []
+        existing_proposal: Optional[MergeProposal] = None
         logging.warn(
             "Unsupported forge (%s), will attempt to push to %s",
             e,
             full_branch_url(main_branch),
         )
     else:
-        (resume_branch, resume_overwrite,
-         existing_proposals) = find_existing_proposed(
-            main_branch, forge, batch_name, owner=derived_owner
-        )
-        if resume_overwrite is not None:
-            overwrite = resume_overwrite
+        if existing_proposal_url is not None:
+            existing_proposal = forge.get_proposal_by_url(
+                existing_proposal_url)
+            assert existing_proposal
+            resume_branch_url = existing_proposal.get_source_branch_url()
+            assert resume_branch_url is not None
+            resume_branch = Branch.open(resume_branch_url)
+        else:
+            existing_proposal = None
+            resume_branch = None
     if refresh:
         if resume_branch:
             overwrite = True
         resume_branch = None
 
-    if existing_proposals and len(existing_proposals) > 1:
-        logging.warning(
-            'Multiple open merge proposals for branch at %s: %r',
-            resume_branch.user_url,  # type: ignore
-            [mp.url for mp in existing_proposals])
-        existing_proposal = existing_proposals[0]
+    if existing_proposal:
         logging.info('Updating %s', existing_proposal.url)
     else:
         existing_proposal = None
@@ -259,6 +279,8 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         logging.info('Insufficient changes for a new merge proposal')
         raise
     except DivergedBranches:
+        if not resume_branch:
+            raise UnrelatedBranchExists()
         logging.warning('Branch exists that has diverged')
         raise
     except ForgeLoginRequired as e:
@@ -292,14 +314,11 @@ def publish(directory, *, dry_run: bool = False, selector=None):
     if not work:
         logging.error('no work found in %s', directory)
         return 0
+    errors = 0
     try:
         done = []
-        for i, entry in enumerate(work):
-            name = entry['name']
-            if 'mode' not in entry:
-                logging.error('No mode set for %s, skipping', name)
-                continue
-            if selector and not selector(entry):
+        for i, (name, entry) in enumerate(work.items()):
+            if selector and not selector(name, entry):
                 continue
             try:
                 publish_result = publish_one(
@@ -310,10 +329,13 @@ def publish(directory, *, dry_run: bool = False, selector=None):
                     dry_run=dry_run, derived_owner=entry.get('derived-owner'),
                     commit_message=entry.get('commit-message'),
                     title=entry.get('title'),
+                    existing_proposal_url=entry.get('proposal-url'),
                     description=entry.get('description'))   # type: ignore
             except EmptyMergeProposal:
                 logging.info('No changes left')
                 done.append(i)
+            except UnrelatedBranchExists:
+                errors += 1
             else:
                 if publish_result.mode == 'push':
                     if not dry_run:
@@ -330,6 +352,9 @@ def publish(directory, *, dry_run: bool = False, selector=None):
     if not work:
         logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
+    if errors:
+        return 1
+    return 0
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
@@ -371,8 +396,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif args.command == 'publish':
         selector: Optional[Callable]
         if args.name:
-            def selector(e):
-                return e['name'] == args.name
+            def selector(n, e):
+                return n == args.name
         else:
             selector = None
         publish(args.directory, dry_run=args.dry_run, selector=selector)
