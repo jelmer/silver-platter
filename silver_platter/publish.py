@@ -107,6 +107,7 @@ def push_result(
 def push_changes(
     local_branch: Branch,
     main_branch: Branch,
+    *,
     forge: Optional[Forge],
     possible_transports: Optional[List[Transport]] = None,
     additional_colocated_branches:
@@ -138,6 +139,7 @@ def push_derived_changes(
     main_branch: Branch,
     forge: Forge,
     name: str,
+    *,
     overwrite_existing: Optional[bool] = False,
     owner: Optional[str] = None,
     tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
