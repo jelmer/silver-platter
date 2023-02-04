@@ -180,6 +180,7 @@ def propose_changes(  # noqa: C901
     owner: Optional[str] = None,
     stop_revision: Optional[RevisionID] = None,
     allow_collaboration: bool = False,
+    auto_merge: bool = False,
 ) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
 
@@ -202,6 +203,7 @@ def propose_changes(  # noqa: C901
       owner: Derived branch owner
       stop_revision: Revision to stop pushing at
       allow_collaboration: Allow target branch owners to modify source branch
+      auto_merge: Enable merging once CI passes
     Returns:
       Tuple with (proposal, is_new)
     """
@@ -289,8 +291,6 @@ def propose_changes(  # noqa: C901
                 logging.info(
                     "Permission denied while trying to create " "proposal.")
                 raise
-            else:
-                return (mp, True)
         else:
             mp = DryRunProposal(
                 local_branch,
@@ -303,7 +303,9 @@ def propose_changes(  # noqa: C901
                 owner=owner,
                 stop_revision=stop_revision,
             )
-            return (mp, True)
+        if auto_merge:
+            mp.merge(auto=True)
+        return (mp, True)
     # Check that the proposal doesn't already has this description.
     # Setting the description (regardless of whether it changes)
     # causes Launchpad to send emails.
