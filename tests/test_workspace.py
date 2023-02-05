@@ -19,9 +19,7 @@ import os
 import shutil
 
 from breezy.revision import NULL_REVISION
-from breezy.tests import (
-    TestCaseWithTransport,
-)
+from breezy.tests import TestCaseWithTransport
 
 from silver_platter.workspace import Workspace
 

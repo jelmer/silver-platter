@@ -16,18 +16,20 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
+
 import yaml
 
 
 @dataclass
-class Candidate(object):
+class Candidate:
     """Candidate."""
 
     url: str
     name: Optional[str] = None
     branch: Optional[str] = None
     subpath: str = ''
+    default_mode: Optional[str] = None
 
     @classmethod
     def from_yaml(cls, d):
@@ -37,6 +39,7 @@ class Candidate(object):
                 name=d.get('name'),
                 branch=d.get('branch'),
                 subpath=d.get('path'),
+                default_mode=d.get('default-mode'),
                 )
         elif isinstance(d, str):
             return cls(url=d)
@@ -45,7 +48,7 @@ class Candidate(object):
 
 
 @dataclass
-class CandidateList(object):
+class CandidateList:
     """Candidate list."""
 
     candidates: List[Candidate]
@@ -62,5 +65,5 @@ class CandidateList(object):
 
     @classmethod
     def from_path(cls, path):
-        with open(path, 'r') as f:
+        with open(path) as f:
             return cls.from_yaml(yaml.full_load(f))

@@ -16,52 +16,25 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-import shutil
-from typing import (
-    Optional,
-    Callable,
-    List,
-    Union,
-    Dict,
-    BinaryIO,
-    Any,
-    Tuple,
-)
 import os
+import shutil
 import tempfile
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple, Union
 
 from breezy.branch import Branch
-from breezy.controldir import ControlDir
-from breezy.controldir import NoColocatedBranchSupport
-from breezy.revision import NULL_REVISION
+from breezy.controldir import ControlDir, NoColocatedBranchSupport
+from breezy.diff import show_diff_trees
+from breezy.errors import DivergedBranches, NotBranchError
+from breezy.revision import NULL_REVISION, RevisionID
+from breezy.transport.local import LocalTransport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
-from breezy.diff import show_diff_trees
-from breezy.errors import (
-    DivergedBranches,
-    NotBranchError,
-)
-from .proposal import (
-    get_forge,
-    Forge,
-    MergeProposal,
-    UnsupportedForge,
-)
 
-from breezy.transport.local import LocalTransport
-
-from .publish import (
-    propose_changes,
-    push_changes,
-    push_derived_changes,
-    publish_changes as _publish_changes,
-    PublishResult,
-)
-from .utils import (
-    create_temp_sprout,
-    full_branch_url,
-)
-
+from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
+from .publish import PublishResult, propose_changes
+from .publish import publish_changes as _publish_changes
+from .publish import push_changes, push_derived_changes
+from .utils import create_temp_sprout, full_branch_url
 
 __all__ = [
     "Workspace",
@@ -90,7 +63,7 @@ def fetch_colocated(controldir: ControlDir, from_controldir: ControlDir,
         )
 
 
-class Workspace(object):
+class Workspace:
     """Workspace for creating changes to a branch.
 
     Args:
@@ -105,8 +78,8 @@ class Workspace(object):
 
     _destroy: Optional[Callable[[], None]]
     local_tree: WorkingTree
-    main_branch_revid: Optional[bytes]
-    main_colo_revid: Dict[Optional[str], bytes]
+    main_branch_revid: Optional[RevisionID]
+    main_colo_revid: Dict[Optional[str], RevisionID]
     additional_colocated_branches: Dict[str, str]
     resume_branch_additional_colocated_branches: Optional[Dict[str, str]]
 
@@ -161,7 +134,7 @@ class Workspace(object):
                 return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
             if self.main_branch:
-                return "Workspace for %s at %s" % (
+                return "Workspace for {} at {}".format(
                     full_branch_url(self.main_branch),
                     self._path)
             else:
@@ -192,7 +165,7 @@ class Workspace(object):
 
     def __enter__(self) -> Any:
         sprout_base = None
-        for (sprout_base, sprout_coloc) in [
+        for (sprout_base, sprout_coloc) in [  # noqa: B007
                 (self.cached_branch, self.additional_colocated_branches),
                 (self.resume_branch,
                     self.resume_branch_additional_colocated_branches),
@@ -201,7 +174,8 @@ class Workspace(object):
                 break
 
         if sprout_base is None:
-            logger.debug('Creating new emty tree')
+            logger.debug(
+                'Creating new empty tree with format %r', self._format)
             if self._path is not None:
                 os.mkdir(self._path)
                 td = self._path
@@ -256,6 +230,8 @@ class Workspace(object):
                 except DivergedBranches:
                     logger.info("restarting branch")
                     self.refreshed = True
+                    self.resume_branch = None
+                    self.resume_branch_additional_colocated_branches = None
                     self.local_tree.pull(self.main_branch, overwrite=True)
                     fetch_colocated(
                         self.local_tree.branch.controldir,
@@ -298,19 +274,21 @@ class Workspace(object):
 
         Includes changes that already existed in the resume branch.
         """
-        for name, br, r in self.result_branches():
-            if br != r:
-                return True
-        return False
+        return any(br != r for name, br, r in self.result_branches())
 
     def result_branches(self) -> List[
-            Tuple[Optional[str], Optional[bytes], Optional[bytes]]]:
+            Tuple[Optional[str], Optional[RevisionID], Optional[RevisionID]]]:
+        """Return a list of branches that has changed.
+
+        Returns:
+           List of tuples with (branch name, old revid, new revid)
+        """
         branches = [
             (self.main_branch.name if self.main_branch else '',
              self.main_branch_revid,  # type: ignore
              self.local_tree.last_revision())]
         for from_name, to_name in self.additional_colocated_branches.items():
-            to_revision: Optional[bytes]
+            to_revision: Optional[RevisionID]
             try:
                 to_branch = self.local_tree.controldir.open_branch(
                     name=to_name)
@@ -324,11 +302,14 @@ class Workspace(object):
             if from_revision is None and to_revision is None:
                 continue
             branches.append((from_name, from_revision, to_revision))
+        names = [name for (name, from_rev, to_rev) in branches]
+        assert len(names) == len(set(names)), \
+            "Duplicate result branches: %r" % branches
         return branches
 
     def push_tags(
             self,
-            tags: Union[Dict[str, bytes], List[str]],
+            tags: Union[Dict[str, RevisionID], List[str]],
             *,
             forge: Optional[Forge] = None,
             dry_run: bool = False):
@@ -345,8 +326,8 @@ class Workspace(object):
         *,
         forge: Optional[Forge] = None,
         dry_run: bool = False,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-        stop_revision: Optional[bytes] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> None:
         if not self.main_branch:
             raise RuntimeError('no main branch known')
@@ -385,10 +366,10 @@ class Workspace(object):
         commit_message: Optional[str] = None,
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
         owner: Optional[str] = None,
         allow_collaboration: bool = False,
-        stop_revision: Optional[bytes] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> Tuple[MergeProposal, bool]:
         if target_branch is None:
             target_branch = self.main_branch
@@ -426,8 +407,8 @@ class Workspace(object):
         forge: Optional[Forge] = None,
         overwrite_existing: Optional[bool] = False,
         owner: Optional[str] = None,
-        tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-        stop_revision: Optional[bytes] = None,
+        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        stop_revision: Optional[RevisionID] = None,
     ) -> Tuple[Branch, str]:
         """Push a derived branch.
 

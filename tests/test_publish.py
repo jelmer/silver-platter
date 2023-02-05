@@ -17,11 +17,8 @@
 
 from breezy.tests import TestCaseWithTransport
 
-from ..publish import (
-    EmptyMergeProposal,
-    check_proposal_diff,
-    push_result,
-)
+from silver_platter.publish import (EmptyMergeProposal, check_proposal_diff,
+                                    push_result)
 
 
 class PushResultTests(TestCaseWithTransport):
@@ -33,7 +30,7 @@ class PushResultTests(TestCaseWithTransport):
         self.assertEqual(target.last_revision(), revid)
 
 
-class CheckProposalDiffBase(object):
+class CheckProposalDiffBase:
     def test_no_new_commits(self):
         orig = self.make_branch_and_tree("orig", format=self.format)
         self.build_tree(["orig/a"])

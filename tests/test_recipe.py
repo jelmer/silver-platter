@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij
+# Copyright (C) 2021 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,29 +15,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.tests import (
-    TestCase,
-)
+from breezy.tests import TestCaseWithTransport
 
-from breezy.bzr import RemoteBzrProber
-from breezy.git import RemoteGitProber
-
-from ..probers import (
-    select_probers,
-    UnsupportedVCSProber,
-)
+from silver_platter.recipe import Recipe
 
 
-class SelectProbersTests(TestCase):
-    def test_none(self):
-        self.assertIs(None, select_probers())
-        self.assertIs(None, select_probers(None))
+class TestReadRecipe(TestCaseWithTransport):
 
-    def test_bzr(self):
-        self.assertEqual([RemoteBzrProber], select_probers("bzr"))
-
-    def test_git(self):
-        self.assertEqual([RemoteGitProber], select_probers("git"))
-
-    def test_unsupported(self):
-        self.assertEqual([UnsupportedVCSProber("foo")], select_probers("foo"))
+    def test_read(self):
+        self.build_tree_contents([('recipe.yaml', """\
+---
+name: foo
+resume: true
+""")])
+        recipe = Recipe.from_path('recipe.yaml')
+        self.assertEqual(recipe.name, 'foo')

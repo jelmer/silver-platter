@@ -1,0 +1,7 @@
+---
+name: codespell
+command: 'codespell -ws -i0 -q15 -S "*.po,*.pot"; exit 0'
+mode: propose
+merge-request:
+  commit-message: Fix spelling errors in code
+  description: Fix spelling errors in code

@@ -15,37 +15,28 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from dataclasses import dataclass, field
-import logging
 import json
+import logging
 import os
+import subprocess
 import sys
 import tempfile
-from typing import List, Optional, Tuple, Dict, Union
-import subprocess
+from contextlib import suppress
+from dataclasses import dataclass, field
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
+
+from breezy.commit import PointlessCommit
+from breezy.revision import RevisionID
+from breezy.workingtree import WorkingTree
+from breezy.workspace import check_clean_tree, reset_tree
 from debian.changelog import Changelog
 from debian.deb822 import Deb822
-from breezy.commit import PointlessCommit
-from breezy.workingtree import WorkingTree
-from breezy.workspace import reset_tree, check_clean_tree
 
-from ..apply import (
-    ResultFileFormatError,
-    ScriptFailed,
-    ScriptNotFound,
-    ScriptMadeNoChanges,
-    )
-
-from . import (
-    _get_maintainer_from_env,
-    add_changelog_entry,
-    build,
-    control_files_in_root,
-    guess_update_changelog,
-    BuildFailedError,
-    MissingUpstreamTarball,
-    DEFAULT_BUILDER,
-    )
+from ..apply import (ResultFileFormatError, ScriptFailed, ScriptMadeNoChanges,
+                     ScriptNotFound)
+from . import (DEFAULT_BUILDER, BuildFailedError, MissingUpstreamTarball,
+               _get_maintainer_from_env, add_changelog_entry, build,
+               control_files_in_root, guess_update_changelog)
 
 
 class MissingChangelog(Exception):
@@ -74,16 +65,16 @@ class DetailedFailure(Exception):
 
 
 @dataclass
-class CommandResult(object):
+class CommandResult:
 
     source: Optional[str]
     description: Optional[str] = None
     value: Optional[int] = None
     serialized_context: Optional[str] = None
     context: Dict[str, str] = field(default_factory=dict)
-    tags: List[Tuple[str, bytes]] = field(default_factory=list)
-    old_revision: Optional[bytes] = None
-    new_revision: Optional[bytes] = None
+    tags: List[Tuple[str, RevisionID]] = field(default_factory=list)
+    old_revision: Optional[RevisionID] = None
+    new_revision: Optional[RevisionID] = None
     target_branch_url: Optional[str] = None
 
     @classmethod
@@ -108,13 +99,13 @@ def install_built_package(local_tree, subpath, build_target_dir):
     import re
     import subprocess
     abspath = local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
-    with open(abspath, 'r') as f:
+    with open(abspath) as f:
         cl = Changelog(f)
     non_epoch_version = cl[0].version.upstream_version
     if cl[0].version.debian_version is not None:
         non_epoch_version += "-%s" % cl[0].version.debian_version
     c = re.compile(
-        '%s_%s_(.*).changes' % (
+        '{}_{}_(.*).changes'.format(
             re.escape(cl[0].package),
             re.escape(non_epoch_version)))  # type: ignore
     for entry in os.scandir(build_target_dir):
@@ -129,10 +120,11 @@ def install_built_package(local_tree, subpath, build_target_dir):
 def script_runner(   # noqa: C901
     local_tree: WorkingTree, script: Union[str, List[str]],
     commit_pending: Optional[bool] = None,
-    resume_metadata=None,
+    resume_metadata: Optional[Any] = None,
     subpath: str = '', update_changelog: Optional[bool] = None,
     extra_env: Optional[Dict[str, str]] = None,
-    committer: Optional[str] = None
+    committer: Optional[str] = None,
+    stderr: Optional[BinaryIO] = None
 ) -> CommandResult:  # noqa: C901
     """Run a script in a tree and commit the result.
 
@@ -164,7 +156,7 @@ def script_runner(   # noqa: C901
 
     cl_path = os.path.join(debian_path, 'changelog')
     try:
-        with open(local_tree.abspath(cl_path), 'r') as f:
+        with open(local_tree.abspath(cl_path)) as f:
             cl = Changelog(f)
             source_name = cl[0].package
     except FileNotFoundError:
@@ -195,12 +187,13 @@ def script_runner(   # noqa: C901
             p = subprocess.Popen(
                 script, cwd=local_tree.abspath(subpath),
                 stdout=subprocess.PIPE,
-                shell=isinstance(script, str), env=env)
+                shell=isinstance(script, str), env=env,
+                stderr=stderr)
         except FileNotFoundError as e:
             raise ScriptNotFound(script) from e
         (description_encoded, err) = p.communicate(b"")
         try:
-            with open(env['SVP_RESULT'], 'r') as f:
+            with open(env['SVP_RESULT']) as f:
                 try:
                     result_json = json.load(f)
                 except json.decoder.JSONDecodeError as e:
@@ -215,7 +208,7 @@ def script_runner(   # noqa: C901
         # now.
         if source_name is None:
             try:
-                with open(local_tree.abspath(cl_path), 'r') as f:
+                with open(local_tree.abspath(cl_path)) as f:
                     cl = Changelog(f)
                     source_name = cl[0].package
             except FileNotFoundError:
@@ -246,12 +239,10 @@ def script_runner(   # noqa: C901
                 [result.description],
                 maintainer=_get_maintainer_from_env(extra_env))
         local_tree.smart_add([local_tree.abspath(subpath)])
-        try:
+        with suppress(PointlessCommit):
             new_revision = local_tree.commit(
                 result.description, allow_pointless=False,
                 committer=committer)
-        except PointlessCommit:
-            pass
     if new_revision == last_revision:
         raise ScriptMadeNoChanges()
     result.old_revision = last_revision
@@ -373,7 +364,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                     "%s: unable to find upstream source", result.source)
                 return False
     except Exception:
-        reset_tree(local_tree, subpath)
+        reset_tree(local_tree, subpath=subpath)
         raise
 
     if args.install:

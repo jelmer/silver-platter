@@ -16,39 +16,23 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-from typing import List, Union, Dict, Optional, Tuple, Any, Callable
+from contextlib import suppress
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from breezy import errors
+from breezy import merge as _mod_merge
+from breezy import revision as _mod_revision
 from breezy.branch import Branch
-from breezy import (
-    errors,
-    merge as _mod_merge,
-    revision as _mod_revision,
-)
 from breezy.errors import PermissionDenied
+from breezy.forge import (Forge, MergeProposal, MergeProposalExists,
+                          NoSuchProject, ReopenFailed,
+                          SourceNotDerivedFromTarget, TitleUnsupported,
+                          UnsupportedForge, determine_title, get_forge)
 from breezy.memorybranch import MemoryBranch
-from breezy.forge import (
-    get_forge,
-    Forge,
-    MergeProposal,
-    MergeProposalExists,
-    NoSuchProject,
-    UnsupportedForge,
-    SourceNotDerivedFromTarget,
-    )
-try:
-    from breezy.forge import TitleUnsupported
-except ImportError:  # breezy < 3.3.1
-    from breezy.errors import (  # type: ignore
-        UnsupportedOperation as TitleUnsupported
-    )
-
+from breezy.revision import RevisionID
 from breezy.transport import Transport
 
-from .utils import (
-    open_branch,
-    full_branch_url,
-)
-
+from .utils import full_branch_url, open_branch
 
 __all__ = [
     "push_changes",
@@ -89,8 +73,8 @@ def push_result(
     remote_branch: Branch,
     additional_colocated_branches:
         Optional[Union[List[str], Dict[str, str]]] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> None:
     kwargs = {}
     if tags is not None:
@@ -128,8 +112,8 @@ def push_changes(
     additional_colocated_branches:
         Optional[Union[List[str], Dict[str, str]]] = None,
     dry_run: bool = False,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> None:
     """Push changes to a branch."""
     if forge is None:
@@ -156,8 +140,8 @@ def push_derived_changes(
     name: str,
     overwrite_existing: Optional[bool] = False,
     owner: Optional[str] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
-    stop_revision: Optional[bytes] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> Tuple[Branch, str]:
     kwargs = {}
     if tags is not None:
@@ -192,9 +176,9 @@ def propose_changes(  # noqa: C901
         Optional[Union[List[str], Dict[str, str]]] = None,
     allow_empty: bool = False,
     reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[Dict[str, bytes], List[str]]] = None,
+    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
     owner: Optional[str] = None,
-    stop_revision: Optional[bytes] = None,
+    stop_revision: Optional[RevisionID] = None,
     allow_collaboration: bool = False,
 ) -> Tuple[MergeProposal, bool]:
     """Create or update a merge proposal.
@@ -226,6 +210,8 @@ def propose_changes(  # noqa: C901
     push_kwargs = {}
     if tags is not None:
         push_kwargs["tag_selector"] = _tag_selector_from_tags(tags)
+    if overwrite_existing is None:
+        overwrite_existing = True
     if not dry_run:
         if resume_branch is not None:
             local_branch.push(
@@ -272,10 +258,6 @@ def propose_changes(  # noqa: C901
         resume_proposal is not None
         and resume_proposal.is_closed()
     ):
-        from breezy.propose import (
-            ReopenFailed,
-        )
-
         try:
             resume_proposal.reopen()  # type: ignore
         except ReopenFailed:
@@ -288,7 +270,7 @@ def propose_changes(  # noqa: C901
             kwargs: Dict[str, Any] = {}
             if forge.supports_merge_proposal_commit_message:
                 kwargs["commit_message"] = commit_message
-            if getattr(forge, "supports_merge_proposal_title", False):
+            if forge.supports_merge_proposal_title:
                 kwargs["title"] = title
             kwargs["allow_collaboration"] = allow_collaboration
             try:
@@ -328,10 +310,11 @@ def propose_changes(  # noqa: C901
     if resume_proposal.get_description() != mp_description:
         resume_proposal.set_description(mp_description)
     if resume_proposal.get_commit_message() != commit_message:
-        try:
+        with suppress(errors.UnsupportedOperation):
             resume_proposal.set_commit_message(commit_message)
-        except errors.UnsupportedOperation:
-            pass
+    if resume_proposal.get_title() != title:
+        with suppress(errors.UnsupportedOperation):
+            resume_proposal.set_title(title)
     return (resume_proposal, False)
 
 
@@ -345,7 +328,7 @@ class EmptyMergeProposal(Exception):
 
 def check_proposal_diff(
     other_branch: Branch, main_branch: Branch,
-    stop_revision: Optional[bytes] = None
+    stop_revision: Optional[RevisionID] = None
 ) -> None:
     if stop_revision is None:
         stop_revision = other_branch.last_revision()
@@ -388,7 +371,7 @@ class DryRunProposal(MergeProposal):
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
         owner: Optional[str] = None,
-        stop_revision: Optional[bytes] = None,
+        stop_revision: Optional[RevisionID] = None,
     ):
         self.description = description
         self.closed = False
@@ -422,7 +405,7 @@ class DryRunProposal(MergeProposal):
         )
 
     def __repr__(self) -> str:
-        return "%s(%r, %r)" % (
+        return "{}({!r}, {!r})".format(
             self.__class__.__name__,
             self.source_branch,
             self.target_branch,
@@ -447,11 +430,11 @@ class DryRunProposal(MergeProposal):
     def set_title(self, title: str) -> None:
         self.title = title
 
-    def get_source_branch_url(self) -> str:
+    def get_source_branch_url(self, *, preferred_schemes=None) -> str:
         """Return the source branch."""
         return full_branch_url(self.source_branch)
 
-    def get_target_branch_url(self) -> str:
+    def get_target_branch_url(self, preferred_schemes=None) -> str:
         """Return the target branch."""
         return full_branch_url(self.target_branch)
 
@@ -494,17 +477,10 @@ def find_existing_proposed(
       means there is an existing branch in place that should be overwritten.
     """
     try:
-        if preferred_schemes is not None:
-            existing_branch = forge.get_derived_branch(
-                main_branch, name=name, owner=owner,
-                preferred_schemes=preferred_schemes
-            )
-        else:
-            # TODO: Support older versions of breezy without
-            # preferred_schemes
-            existing_branch = forge.get_derived_branch(
-                main_branch, name=name, owner=owner
-            )
+        existing_branch = forge.get_derived_branch(
+            main_branch, name=name, owner=owner,
+            preferred_schemes=preferred_schemes
+        )
     except errors.NotBranchError:
         return (None, None, None)
     else:
@@ -543,7 +519,7 @@ def find_existing_proposed(
 
 def merge_conflicts(
     main_branch: Branch, other_branch: Branch,
-    other_revision: Optional[bytes] = None
+    other_revision: Optional[RevisionID] = None
 ) -> bool:
     """Check whether two branches are conflicted when merged.
 
@@ -593,20 +569,21 @@ def merge_conflicts(
             old_file_content_mergers)
 
 
-class PublishResult(object):
+class PublishResult:
     """A object describing the result of a publish action."""
 
     def __init__(
-        self, mode: str, proposal: Optional[MergeProposal] = None,
+        self, *, mode: str,
+        target_branch: Branch,
+        forge: Optional[Forge] = None,
+        proposal: Optional[MergeProposal] = None,
         is_new: bool = False
     ) -> None:
         self.mode = mode
+        self.target_branch = target_branch
+        self.forge = forge
         self.proposal = proposal
         self.is_new = is_new
-
-    def __tuple__(self) -> Tuple[Optional[MergeProposal], bool]:
-        # Backwards compatibility
-        return (self.proposal, self.is_new)
 
 
 class InsufficientChangesForNewProposal(Exception):
@@ -621,11 +598,11 @@ def publish_changes(
     name: str,
     *,
     get_proposal_description: Callable[[str, Optional[MergeProposal]], str],
-    get_proposal_commit_message: Callable[
+    get_proposal_commit_message: Optional[Callable[
         [Optional[MergeProposal]], Optional[str]
-    ] = None,
+    ]] = None,
     get_proposal_title:
-        Callable[[Optional[MergeProposal]], Optional[str]] = None,
+        Optional[Callable[[Optional[MergeProposal]], Optional[str]]] = None,
     dry_run: bool = False,
     forge: Optional[Forge] = None,
     allow_create_proposal: bool = True,
@@ -633,10 +610,10 @@ def publish_changes(
     overwrite_existing: Optional[bool] = True,
     existing_proposal: Optional[MergeProposal] = None,
     reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[List[str], Dict[str, bytes]]] = None,
+    tags: Optional[Union[List[str], Dict[str, RevisionID]]] = None,
     derived_owner: Optional[str] = None,
     allow_collaboration: bool = False,
-    stop_revision: Optional[bytes] = None,
+    stop_revision: Optional[RevisionID] = None,
 ) -> PublishResult:
     """Publish a set of changes.
 
@@ -665,11 +642,14 @@ def publish_changes(
     if stop_revision is None:
         stop_revision = local_branch.last_revision()
 
+    if forge is None:
+        forge = get_forge(main_branch)
+
     if stop_revision == main_branch.last_revision():
         if existing_proposal is not None:
             logging.info("closing existing merge proposal - no new revisions")
             existing_proposal.close()
-        return PublishResult(mode)
+        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
 
     if resume_branch and resume_branch.last_revision() == stop_revision:
         # No new revisions added on this iteration, but changes since main
@@ -677,9 +657,6 @@ def publish_changes(
         # merge proposal last time.
         logging.info(
             "No changes added; making sure merge proposal is up to date.")
-
-    if forge is None:
-        forge = get_forge(main_branch)
 
     if mode == MODE_PUSH_DERIVED:
         (remote_branch, public_url) = push_derived_changes(
@@ -692,7 +669,7 @@ def publish_changes(
             owner=derived_owner,
             stop_revision=stop_revision,
         )
-        return PublishResult(mode)
+        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
 
     if mode in (MODE_PUSH, MODE_ATTEMPT_PUSH):
         try:
@@ -718,14 +695,15 @@ def publish_changes(
                 logging.info("permission denied during push")
                 raise
         else:
-            return PublishResult(mode=mode)
+            return PublishResult(
+                mode=mode, target_branch=main_branch, forge=forge)
 
     assert mode == "propose"
     if not resume_branch and not allow_create_proposal:
         raise InsufficientChangesForNewProposal()
 
     mp_description = get_proposal_description(
-        getattr(forge, "merge_proposal_description_format", "plain"),
+        forge.merge_proposal_description_format,
         existing_proposal if resume_branch else None,
     )
     if get_proposal_commit_message is not None:
@@ -738,6 +716,8 @@ def publish_changes(
         )
     else:
         title = None
+    if title is None:
+        title = determine_title(mp_description)
     (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
@@ -757,4 +737,6 @@ def publish_changes(
         allow_collaboration=allow_collaboration,
         stop_revision=stop_revision,
     )
-    return PublishResult(mode, proposal, is_new)
+    return PublishResult(
+        mode=mode, proposal=proposal, is_new=is_new,
+        target_branch=main_branch, forge=forge)

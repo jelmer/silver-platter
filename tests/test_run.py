@@ -17,19 +17,14 @@
 
 import os
 
-from breezy.tests import (
-    TestCaseWithTransport,
-)
+from breezy.tests import TestCaseWithTransport
 
-from ..run import (
-    ScriptMadeNoChanges,
-    script_runner,
-)
+from silver_platter.run import ScriptMadeNoChanges, script_runner
 
 
 class ScriptRunnerTests(TestCaseWithTransport):
     def setUp(self):
-        super(ScriptRunnerTests, self).setUp()
+        super().setUp()
         self.tree = self.make_branch_and_tree("tree")
 
         with open("foo.sh", "w") as f:

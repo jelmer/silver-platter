@@ -15,30 +15,24 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from http.client import IncompleteRead
 import logging
 import os
 import shutil
 import socket
 import subprocess
 import tempfile
-from typing import Callable, Tuple, Optional, List, Dict
+from http.client import IncompleteRead
+from typing import Callable, Dict, List, Optional, Tuple
 
-from breezy import (
-    errors,
-    urlutils,
-)
-
-from breezy.bzr import LineEndingError
-
+from breezy import errors, urlutils
 from breezy.branch import Branch
-from breezy.controldir import ControlDir, Prober
-from breezy.controldir import NoColocatedBranchSupport
+from breezy.bzr import LineEndingError
+from breezy.controldir import ControlDir, NoColocatedBranchSupport, Prober
 from breezy.git.remote import RemoteGitError
-from breezy.transport import Transport, get_transport, UnusableRedirect
+from breezy.revision import RevisionID
+from breezy.transport import (Transport, UnsupportedProtocol, UnusableRedirect,
+                              get_transport)
 from breezy.workingtree import WorkingTree
-
-from breezy.transport import UnsupportedProtocol
 
 
 def create_temp_sprout(
@@ -64,7 +58,7 @@ def create_temp_sprout(
     # https://bugs.launchpad.net/bzr/+bug/375013
     use_stacking = (
         branch._format.supports_stacking() and  # type: ignore
-        branch.repository._format.supports_chks
+        branch.repository._format.supports_chks  # type: ignore
     )
     try:
         # preserve whatever source format we have.
@@ -98,7 +92,7 @@ def create_temp_sprout(
         raise e
 
 
-class TemporarySprout(object):
+class TemporarySprout:
     """Create a temporary sprout of a branch.
 
     This attempts to fetch the least amount of history as possible.
@@ -153,7 +147,7 @@ class PostCheckFailed(Exception):
 
 
 def run_post_check(
-    tree: WorkingTree, script: Optional[str], since_revid: bytes
+    tree: WorkingTree, script: Optional[str], since_revid: RevisionID
 ) -> None:
     """Run a script after making any changes to a tree.
 
@@ -201,7 +195,8 @@ class BranchRateLimited(Exception):
 
     def __str__(self) -> str:
         if self.retry_after is not None:
-            return "%s (retry after %s)" % (self.description, self.retry_after)
+            return "{} (retry after {})".format(
+                self.description, self.retry_after)
         else:
             return self.description
 
@@ -281,7 +276,7 @@ def open_branch(
     url: str,
     possible_transports: Optional[List[Transport]] = None,
     probers: Optional[List[Prober]] = None,
-    name: str = None,
+    name: Optional[str] = None,
 ) -> Branch:
     """Open a branch by URL."""
     url, params = urlutils.split_segment_parameters(url)
