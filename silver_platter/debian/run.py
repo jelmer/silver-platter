@@ -21,50 +21,23 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, List
+from typing import List, Optional
 
 from breezy import osutils
 from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
 
-from . import (
-    DEFAULT_BUILDER,
-    BuildFailedError,
-    MissingUpstreamTarball,
-    build,
-    )
-from .apply import (
-    script_runner,
-    MissingChangelog,
-    ScriptMadeNoChanges,
-    ScriptFailed,
-    ScriptNotFound,
-    install_built_package,
-    )
-from ..candidates import CandidateList, Candidate
-from ..proposal import (
-    UnsupportedForge,
-    MergeProposal,
-    enable_tag_pushing,
-    find_existing_proposed,
-    get_forge,
-    ForgeLoginRequired,
-)
-from . import (
-    Workspace,
-)
-from ..publish import (
-    SUPPORTED_MODES,
-    InsufficientChangesForNewProposal,
-)
-from ..utils import (
-    open_branch,
-    BranchMissing,
-    BranchUnsupported,
-    BranchUnavailable,
-    full_branch_url,
-)
+from ..candidates import Candidate, CandidateList
+from ..proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
+                        enable_tag_pushing, find_existing_proposed, get_forge)
+from ..publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
+from ..utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
+                     full_branch_url, open_branch)
+from . import (DEFAULT_BUILDER, BuildFailedError, MissingUpstreamTarball,
+               Workspace, build)
+from .apply import (MissingChangelog, ScriptFailed, ScriptMadeNoChanges,
+                    ScriptNotFound, install_built_package, script_runner)
 
 
 def derived_branch_name(script: str) -> str:

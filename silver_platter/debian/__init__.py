@@ -13,47 +13,34 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from datetime import datetime
 import logging
 import os
-from typing import Optional, Dict, List, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
-from debian.deb822 import Deb822
-from debian.changelog import Version, get_maintainer
-from debmutate.vcs import split_vcs_url
-from debmutate.changelog import (
-    Changelog,
-    changelog_add_entry as _changelog_add_entry,
-)
-
-
+import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 from breezy import urlutils
 from breezy.branch import Branch
 from breezy.git.repository import GitRepository
 from breezy.mutabletree import MutableTree
-import breezy.plugins.debian  # For apt: URL support  # noqa: F401
+from breezy.plugins.debian.builder import BuildFailedError
+from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.cmds import cmd_builddeb
-from breezy.plugins.debian.directory import (
-    source_package_vcs,
-    vcs_field_to_bzr_url_converters,
-)
-
+from breezy.plugins.debian.directory import (source_package_vcs,
+                                             vcs_field_to_bzr_url_converters)
+from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
-
-from breezy.plugins.debian.builder import BuildFailedError
-from breezy.plugins.debian.changelog import debcommit
-from breezy.plugins.debian.upstream import (
-    MissingUpstreamTarball,
-)
+from debian.changelog import Version, get_maintainer
+from debian.deb822 import Deb822
+from debmutate.changelog import Changelog
+from debmutate.changelog import changelog_add_entry as _changelog_add_entry
+from debmutate.vcs import split_vcs_url
 
 from .. import workspace as _mod_workspace
-from ..utils import (
-    open_branch,
-)
 from ..probers import select_probers
-
+from ..utils import open_branch
 
 __all__ = [
     "add_changelog_entry",
@@ -82,7 +69,7 @@ try:
     from lintian_brush.detect_gbp_dch import guess_update_changelog
 except ModuleNotFoundError:
 
-    class ChangelogBehaviour(object):
+    class ChangelogBehaviour:
 
         def __init__(self, update_changelog, explanation):
             self.update_changelog = update_changelog
@@ -92,7 +79,7 @@ except ModuleNotFoundError:
             return self.explanation
 
         def __repr__(self):
-            return "%s(update_changelog=%r, explanation=%r)" % (
+            return "{}(update_changelog={!r}, explanation={!r})".format(
                 type(self).__name__, self.update_changelog,
                 self.explanation)
 
@@ -187,9 +174,8 @@ def apt_get_source_package(apt_repo, name: str) -> Deb822:
     """
     by_version: Dict[Version, Deb822] = {}
 
-    with apt_repo:
-        for source in apt_repo.iter_source_by_name(name):
-            by_version[source['Version']] = source
+    for source in apt_repo.iter_source_by_name(name):
+        by_version[source['Version']] = source
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -220,7 +206,8 @@ def open_packaging_branch(
         from breezy.plugins.debian.apt_repo import LocalApt
         apt_repo = LocalApt()
     if "/" not in location and ":" not in location:
-        pkg_source = apt_get_source_package(apt_repo, location)
+        with apt_repo:
+            pkg_source = apt_get_source_package(apt_repo, location)
         try:
             (vcs_type, vcs_url) = source_package_vcs(pkg_source)
         except KeyError:
@@ -247,8 +234,8 @@ def pick_additional_colocated_branches(
         "pristine-tar": "pristine-tar",
         "pristine-lfs": "pristine-lfs",
         "upstream": "upstream",
-        }
-    ret["patch-queue/" + main_branch.name] = "patch-queue"  # type: ignore
+        "patch-queue/" + main_branch.name: "patch-queue",  # type: ignore
+    }
     if main_branch.name.startswith("debian/"):  # type: ignore
         parts = main_branch.name.split("/")  # type: ignore
         parts[0] = "upstream"
@@ -264,7 +251,7 @@ class Workspace(_mod_workspace.Workspace):
                 kwargs["additional_colocated_branches"] = {}
             kwargs["additional_colocated_branches"].update(
                 pick_additional_colocated_branches(main_branch))
-        super(Workspace, self).__init__(main_branch, *args, **kwargs)
+        super().__init__(main_branch, *args, **kwargs)
 
     @classmethod
     def from_apt_package(cls, package, dir=None):
@@ -303,16 +290,14 @@ def control_files_in_root(tree: Tree, subpath: str) -> bool:
     control_path = os.path.join(subpath, "control")
     if tree.has_filename(control_path):
         return True
-    if tree.has_filename(control_path + ".in"):
-        return True
-    return False
+    return tree.has_filename(control_path + ".in")
 
 
 def _get_maintainer_from_env(env):
-    old_env = os.environ
+    old_env = dict(os.environ.items())
     try:
-        os.environ = dict(os.environ.items())
         os.environ.update(env)
         return get_maintainer()
     finally:
-        os.environ = old_env
+        os.environ.clear()
+        os.environ.update(old_env)

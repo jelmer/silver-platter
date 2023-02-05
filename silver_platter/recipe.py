@@ -15,15 +15,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from dataclasses import dataclass
-from jinja2 import Template
 import os
-from typing import Optional, Dict, Union, List
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Union
+
 import yaml
+from jinja2 import Template
 
 
 @dataclass
-class Recipe(object):
+class Recipe:
     """Recipe to use."""
 
     name: str
@@ -110,6 +111,12 @@ class Recipe(object):
             return Template(template).render(context)
         return None
 
+    def render_merge_request_title(self, context):
+        template = self.merge_request_title_template
+        if template:
+            return Template(template).render(context)
+        return None
+
     def render_merge_request_description(self, description_format, context):
         template = self.merge_request_description_template.get(
                 description_format)
@@ -122,7 +129,7 @@ class Recipe(object):
 
     @classmethod
     def from_path(cls, path):
-        with open(path, 'r') as f:
+        with open(path) as f:
             ret = cls.from_yaml(yaml.full_load(f))
             if not ret.name:
                 ret.name = os.path.splitext(os.path.basename(path))[0]

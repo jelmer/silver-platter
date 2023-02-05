@@ -15,17 +15,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from breezy.tests import (
-    TestCaseWithTransport,
-)
+from breezy.tests import TestCaseWithTransport
 
-from ..utils import (
-    TemporarySprout,
-    run_pre_check,
-    run_post_check,
-    PreCheckFailed,
-    PostCheckFailed,
-)
+from silver_platter.utils import (PostCheckFailed, PreCheckFailed,
+                                  TemporarySprout, run_post_check,
+                                  run_pre_check)
 
 
 class TemporarySproutTests(TestCaseWithTransport):

@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: [3.7, 3.8, 3.9, "3.10"]
+        python-version: [3.7, 3.8, 3.9, "3.10", "3.11"]
       fail-fast: false
 
     steps:
@@ -28,8 +28,7 @@ jobs:
           sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev
           pip install --upgrade pip
           pip install -U pip setuptools flake8 mypy testtools
-          pip install -e ".[debian,launchpad]"
-          python setup.py develop
+          pip install ".[debian,launchpad]" git+https://github.com/breezy-team/breezy
       - name: Style checks
         run: |
           python -m flake8
@@ -41,6 +40,6 @@ jobs:
       - name: Test suite run
         if: always()
         run: |
-          python -m unittest silver_platter.tests.test_suite
+          python -m unittest tests.test_suite
         env:
           PYTHONHASHSEED: random

@@ -1,5 +1,5 @@
-#!/usr/bin/python3
-# Copyright (C) 2018 Jelmer Vernooij
+#!/usr/bin/python
+# Copyright (C) 2022 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,11 +15,13 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import os
 import sys
+from typing import List, Optional
 
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from silver_platter.debian.__main__ import main  # noqa: E402
+def main(argv: List[str]) -> Optional[int]:  # noqa: C901
+    pass
 
-sys.exit(main())
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

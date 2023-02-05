@@ -18,15 +18,11 @@
 import argparse
 import logging
 import sys
-from typing import Optional, List, Callable, Dict
+from typing import Callable, Dict, List, Optional
 
 import silver_platter  # noqa: F401
-from . import (
-    apply,
-    bulk,
-    run,
-    version_string,
-)
+
+from . import apply, batch, run, version_string
 
 
 def forges_main(argv: List[str]) -> Optional[int]:
@@ -36,7 +32,7 @@ def forges_main(argv: List[str]) -> Optional[int]:
 
     for name, forge_cls in forges.items():
         for instance in forge_cls.iter_instances():
-            print("%s (%s)" % (instance.base_url, name))
+            print("{} ({})".format(instance.base_url, name))
 
     return None
 
@@ -104,7 +100,7 @@ def proposals_main(argv: List[str]) -> None:
     )
     args = parser.parse_args(argv)
 
-    for forge, proposal, status in iter_all_mps([args.status]):
+    for _forge, proposal, _status in iter_all_mps([args.status]):
         print(proposal.url)
 
 
@@ -114,7 +110,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
     "proposals": proposals_main,
     "run": run.main,
     "apply": apply.main,
-    "bulk": bulk.main,
+    "batch": batch.main,
 }
 
 

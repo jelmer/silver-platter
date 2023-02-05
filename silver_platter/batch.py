@@ -18,47 +18,31 @@
 import logging
 import os
 import shutil
-from typing import List, Optional
+from contextlib import suppress
+from typing import List, Optional, Any, Dict, Callable
 
 import ruamel.yaml
-
+from ruamel.yaml.scalarstring import LiteralScalarString
+from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
 
-from .apply import (
-    script_runner,
-    ScriptMadeNoChanges,
-    ScriptFailed,
-    ScriptNotFound,
-)
-from .utils import (
-    open_branch,
-    BranchMissing,
-    BranchUnsupported,
-    BranchUnavailable,
-    full_branch_url,
-)
-from .publish import (
-    InsufficientChangesForNewProposal,
-    publish_changes,
-    EmptyMergeProposal,
-)
-from .proposal import (
-    ForgeLoginRequired,
-    MergeProposal,
-    UnsupportedForge,
-    enable_tag_pushing,
-    find_existing_proposed,
-    get_forge,
-)
-
-from .workspace import (
-    Workspace,
-)
+from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
+                    script_runner)
+from .candidates import (Candidate, CandidateList)
+from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
+                       enable_tag_pushing, find_existing_proposed, get_forge)
+from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
+                      publish_changes)
+from .recipe import Recipe
+from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
+                    full_branch_url, open_branch)
+from .workspace import Workspace
 
 
 def generate_for_candidate(recipe, basepath, url, name: str,
-                           *, subpath: str = ''):
+                           *, subpath: str = '',
+                           default_mode: Optional[str] = None):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -67,8 +51,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
 
     with Workspace(main_branch, path=basepath) as ws:
         logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url}
-        entry['name'] = name
+        entry = {'url': url, 'name': name}
         if subpath:
             entry['subpath'] = subpath
 
@@ -78,23 +61,27 @@ def generate_for_candidate(recipe, basepath, url, name: str,
                 subpath=subpath)
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
+            return None
         except ScriptFailed:
             logging.error("Script failed to run.")
+            return None
         except ScriptNotFound:
             logging.error("Script not found.")
+            return None
         else:
             patchpath = basepath + '.patch'
             with open(patchpath, 'wb') as f:
                 ws.show_diff(f)
+            entry['patch'] = os.path.basename(patchpath)
             if result.target_branch_url:
                 entry['target_branch_url'] = result.target_branch_url
             if result.description:
-                entry['description'] = result.description
+                entry['description'] = LiteralScalarString(result.description)
             else:
                 description = recipe.render_merge_request_description(
                     'markdown', result.context)
                 if description:
-                    entry['description'] = description
+                    entry['description'] = LiteralScalarString(description)
             commit_message = recipe.render_merge_request_commit_message(
                 result.context)
             if commit_message:
@@ -104,7 +91,7 @@ def generate_for_candidate(recipe, basepath, url, name: str,
             if title:
                 entry['title'] = title
             if recipe.mode:
-                entry['mode'] = recipe.mode
+                entry['mode'] = recipe.mode or default_mode
             if recipe.labels:
                 entry['labels'] = recipe.labels
             if result.context:
@@ -113,40 +100,68 @@ def generate_for_candidate(recipe, basepath, url, name: str,
         return entry
 
 
-def generate(recipe, candidates, directory, recipe_path):
-    try:
+def generate(
+        recipe: Recipe, candidates: List[Candidate], directory: str,
+        recipe_path: str):
+    with suppress(FileExistsError):
         os.mkdir(directory)
-    except FileExistsError:
-        pass
-    entries = []
-    for candidate in candidates:
-        name = candidate.name
-        if name is None:
-            name = candidate.url.rstrip('/').rsplit('/', 1)[-1]
-        basename = os.path.join(directory, name)
-        entry = generate_for_candidate(
-            recipe, basename, candidate.url, name,
-            subpath=candidate.subpath or '')
-        entries.append(entry)
-    bulk = {'work': entries, 'recipe': recipe_path,
-            name: recipe.name}
-    with open(os.path.join(directory, 'bulk.yaml'), 'w') as f:
-        ruamel.yaml.round_trip_dump(bulk, f)
+    batch: Dict[str, Any] = {
+        'recipe': recipe_path,
+        'name': recipe.name,
+    }
+
+    try:
+        batch['work'] = entries = []
+        for candidate in candidates:
+            basename = candidate.name
+            if basename is None:
+                basename = candidate.url.rstrip('/').rsplit('/', 1)[-1]
+            name = basename
+            i = 0
+            while os.path.exists(os.path.join(directory, name)):
+                i += 1
+                name = basename + '.%d' % i
+            work_path = os.path.join(directory, name)
+            try:
+                entry = generate_for_candidate(
+                    recipe, work_path,
+                    candidate.url, name,
+                    subpath=candidate.subpath or '',
+                    default_mode=candidate.default_mode)
+            except Exception:
+                if os.path.exists(work_path):
+                    shutil.rmtree(work_path)
+            if entry:
+                entries.append(entry)
+                save_batch_metadata(directory, batch)
+    finally:
+        save_batch_metadata(directory, batch)
 
 
-def load_bulk(directory):
-    with open(os.path.join(directory, 'bulk.yaml'), 'r') as f:
+def drop_batch_entry(directory, name):
+    with suppress(FileNotFoundError):
+        os.unlink(os.path.join(directory, name + '.patch'))
+        shutil.rmtree(os.path.join(directory, name))
+
+
+def save_batch_metadata(directory: str, batch) -> None:
+    with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
+        ruamel.yaml.round_trip_dump(batch, f)
+
+
+def load_batch_metadata(directory):
+    with open(os.path.join(directory, 'batch.yaml')) as f:
         return ruamel.yaml.round_trip_load(f)
 
 
 def status(directory):
-    bulk = load_bulk(directory)
-    work = bulk.get('work', [])
+    batch = load_batch_metadata(directory)
+    work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    for i, entry in enumerate(work):
-        if entry['proposal-url']:
+    for entry in work:
+        if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
                 logging.info('%s: %s was merged', entry['name'],
@@ -161,8 +176,8 @@ def status(directory):
             logging.info('%s: not published yet', entry['name'])
 
 
-def publish_one(url: str, path: str, bulk_name: str, mode: str,
-                patchpath: str, *,
+def publish_one(url: str, path: str, batch_name: str, mode: str,
+                *, patchpath: Optional[str] = None,
                 subpath: str = '',
                 labels: Optional[List[str]] = None, dry_run: bool = False,
                 derived_owner: Optional[str] = None, refresh: bool = False,
@@ -192,7 +207,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
     else:
         (resume_branch, resume_overwrite,
          existing_proposals) = find_existing_proposed(
-            main_branch, forge, bulk_name, owner=derived_owner
+            main_branch, forge, batch_name, owner=derived_owner
         )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
@@ -221,7 +236,7 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
             main_branch,
             resume_branch,
             mode,
-            bulk_name,
+            batch_name,
             get_proposal_description=(
                 lambda df, ep: description),  # type: ignore
             get_proposal_commit_message=lambda ep: commit_message,
@@ -243,6 +258,9 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
     except InsufficientChangesForNewProposal:
         logging.info('Insufficient changes for a new merge proposal')
         raise
+    except DivergedBranches:
+        logging.warning('Branch exists that has diverged')
+        raise
     except ForgeLoginRequired as e:
         logging.exception(
             "Credentials for hosting site at %r missing. "
@@ -263,56 +281,60 @@ def publish_one(url: str, path: str, bulk_name: str, mode: str,
     return publish_result
 
 
-def publish(directory, *, dry_run: bool = False):
-    bulk = load_bulk(directory)
-    bulk_name = bulk['name']
-    work = bulk.get('work', [])
+def publish(directory, *, dry_run: bool = False, selector=None):
+    batch = load_batch_metadata(directory)
+    try:
+        batch_name = batch['name']
+    except KeyError:
+        logging.error('no name found in %s', directory)
+        return 1
+    work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
         return 0
-    done = []
-    for i, entry in enumerate(work):
-        name = entry['name']
-        try:
-            publish_result = publish_one(
-                entry['url'], os.path.join(directory, name), bulk_name,
-                entry['mode'], entry['patch'],
-                subpath=entry.get('subpath', ''),
-                labels=entry.get('labels', []),
-                dry_run=dry_run, derived_owner=entry.get('derived-owner'),
-                commit_message=entry.get('commit-message'),
-                title=entry.get('title'),
-                description=entry.get('description'))
-        except EmptyMergeProposal:
-            logging.info('No changes left')
-            done.append(i)
-        else:
-            if publish_result.mode == 'push':
-                if not dry_run:
-                    try:
-                        os.unlink(os.path.join(directory, name + '.patch'))
-                    except FileNotFoundError:
-                        pass
-                    try:
-                        shutil.rmtree(os.path.join(directory, name))
-                    except FileNotFoundError:
-                        pass
+    try:
+        done = []
+        for i, entry in enumerate(work):
+            name = entry['name']
+            if 'mode' not in entry:
+                logging.error('No mode set for %s, skipping', name)
+                continue
+            if selector and not selector(entry):
+                continue
+            try:
+                publish_result = publish_one(
+                    entry['url'], os.path.join(directory, name), batch_name,
+                    entry['mode'], patchpath=entry.get('patch'),
+                    subpath=entry.get('subpath', ''),
+                    labels=entry.get('labels', []),
+                    dry_run=dry_run, derived_owner=entry.get('derived-owner'),
+                    commit_message=entry.get('commit-message'),
+                    title=entry.get('title'),
+                    description=entry.get('description'))   # type: ignore
+            except EmptyMergeProposal:
+                logging.info('No changes left')
                 done.append(i)
-            elif publish_result.proposal:
-                entry['proposal-url'] = publish_result.proposal.url
-    for i in reversed(done):
-        del work[i]
-    if not dry_run:
-        with open(os.path.join(directory, 'bulk.yaml'), 'w') as f:
-            ruamel.yaml.round_trip_dump(bulk, f)
+            else:
+                if publish_result.mode == 'push':
+                    if not dry_run:
+                        drop_batch_entry(directory, name)
+                    done.append(i)
+                elif publish_result.proposal:
+                    entry['proposal-url'] = publish_result.proposal.url
+            save_batch_metadata(directory, batch)
+        for i in reversed(done):
+            del work[i]
+    finally:
+        if not dry_run:
+            save_batch_metadata(directory, batch)
     if not work:
-        logging.info('No work left in bulk.yaml; you can now remove %s',
+        logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
-    parser = argparse.ArgumentParser("svp bulk")
+    parser = argparse.ArgumentParser("svp batch")
     subparsers = parser.add_subparsers(dest="command")
     generate_parser = subparsers.add_parser("generate")
     generate_parser.add_argument(
@@ -322,25 +344,38 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     generate_parser.add_argument('directory')
     publish_parser = subparsers.add_parser("publish")
     publish_parser.add_argument('directory')
+    publish_parser.add_argument('name', nargs='?')
     publish_parser.add_argument('--dry-run', action='store_true')
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument('directory')
     args = parser.parse_args(argv)
     if args.command == "generate":
         if args.recipe:
-            from .recipe import Recipe
             recipe = Recipe.from_path(args.recipe)
         else:
             parser.error('no recipe specified')
         if args.candidates:
-            from .candidates import CandidateList
             candidates = CandidateList.from_path(args.candidates)
         else:
             parser.error('no candidate list specified')
-        generate(recipe, candidates, args.directory,
-                 recipe_path=os.path.relpath(args.recipe, args.directory))
+        generate(
+            recipe, candidates, args.directory,
+            recipe_path=os.path.relpath(args.recipe, args.directory))
+        logging.info(
+            'Now, review the patches under %s, edit %s/batch.yaml as '
+            'appropriate and then run "svp batch publish %s"',
+            args.directory, args.directory, args.directory)
     elif args.command == 'publish':
-        publish(args.directory, dry_run=args.dry_run)
+        selector: Optional[Callable]
+        if args.name:
+            def selector(e):
+                return e['name'] == args.name
+        else:
+            selector = None
+        publish(args.directory, dry_run=args.dry_run, selector=selector)
+        logging.info(
+            'To see the status of open merge requests, run: '
+            '"svp batch status %s"', args.directory)
     elif args.command == 'status':
         status(args.directory)
     else:

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: silver-platter
-Version: 0.5.3
+Version: 0.5.6
 Summary: Large scale VCS change management
 Home-page: https://jelmer.uk/code/silver-platter
 Author: Jelmer Vernooij
@@ -12,18 +12,19 @@ Project-URL: GitHub, https://github.com/jelmer/silver-platter
 Keywords: git bzr vcs github gitlab launchpad
 Classifier: Development Status :: 3 - Alpha
 Classifier: License :: OSI Approved :: GNU General Public License (GPL)
-Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Operating System :: POSIX
 Classifier: Topic :: Software Development :: Version Control
+Requires-Python: >=3.7
 Provides-Extra: debian
-Provides-Extra: launchpad
 Provides-Extra: detect-gbp-dch
+Provides-Extra: launchpad
 License-File: LICENSE
 License-File: AUTHORS
 
