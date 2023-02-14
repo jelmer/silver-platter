@@ -1,3 +1,9 @@
+silver-platter (0.5.6-2) UNRELEASED; urgency=medium
+
+  * Fix test suite invocation in debian/tests/control. Closes: #1031303
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Tue, 14 Feb 2023 19:42:20 +0000
+
 silver-platter (0.5.6-1) unstable; urgency=low
 
   * New upstream release.

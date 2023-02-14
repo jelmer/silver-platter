@@ -1,2 +1,2 @@
 #!/bin/sh
-python3 -m unittest silver_platter.tests.test_suite
+python3 -m unittest tests.test_suite
