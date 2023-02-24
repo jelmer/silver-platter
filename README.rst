@@ -79,16 +79,16 @@ then the following command would process each repository in turn::
 
     svp run --recipe=framwork.yaml --candidates=candidates.yaml
 
-Bulk Mode
+Batch Mode
 ~~~~~~~~~
 
-Use bulk mode when you're going to make a large number of changes and would
+Use batch mode when you're going to make a large number of changes and would
 like to review or modify the diffs before sending them out::
 
-    svp bulk generate --recipe=framwork.yaml --candidates=candidate.syml framwork
+    svp batch generate --recipe=framwork.yaml --candidates=candidate.syml framwork
 
 This will then create a directory called "framwork", with a file called
-``bulk.yaml`` with all the pending changes::
+``batch.yaml`` with all the pending changes::
 
     name: framwork
     work:
@@ -109,29 +109,29 @@ the generated changes and directories with clones with the changes.
 The patch files are just for your convenience and are otherwise ignored by
 silver-platter.
 
-You can now review the changes, and edit bulk.yaml as you see fit - remove
+You can now review the changes, and edit batch.yaml as you see fit - remove
 entries that don't appear to be correct, edit the details for the merge
 requests, etc. It's also possible to make changes to the clones.
 
-Once you're happy, you can publish the results in bulk::
+Once you're happy, you can publish the results in batch::
 
-    svp bulk publish framwork
+    svp batch publish framwork
 
 This will publish all the changes, using the mode and parameters specified in
-``bulk.yaml``.
+``batch.yaml``.
 
-``bulk.yaml`` is automatically stripped of any entries in work that have fully
+``batch.yaml`` is automatically stripped of any entries in work that have fully
 landed, i.e. where the pull request has been merged or where the changes were
 pushed to the origin.
 
-To check up on the status of your changes, run ``svp bulk status``::
+To check up on the status of your changes, run ``svp batch status``::
 
-    svp bulk status framwork
+    svp batch status framwork
 
 And to refresh any merge proposals that may have become out of date,
 run publish again::
 
-    svp bulk publish framwork
+    svp batch publish framwork
 
 Supported hosters
 ~~~~~~~~~~~~~~~~~
