@@ -104,16 +104,14 @@ This will then create a directory called "framwork", with a file called
       mode: propose
     recipe: ../framwork.yaml
 
-The directory also contains ``.patch`` files that can be used to easily review
-the generated changes and directories with clones with the changes.
-The patch files are just for your convenience and are otherwise ignored by
-silver-platter.
+For each of the candidates, a clone with the changes is created. You can introspect
+and modify the clones as appropriate.
 
-You can now review the changes, and edit batch.yaml as you see fit - remove
+After you review the changes, edit batch.yaml as you see fit - remove
 entries that don't appear to be correct, edit the details for the merge
-requests, etc. It's also possible to make changes to the clones.
+requests, etc.
 
-Once you're happy, you can publish the results in batch::
+Once you're happy, you can publish the results::
 
     svp batch publish framwork
 
