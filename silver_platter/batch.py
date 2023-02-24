@@ -18,6 +18,7 @@
 import logging
 import os
 import shutil
+import sys
 from contextlib import suppress
 from typing import List, Optional, Any, Dict, Callable
 
@@ -69,10 +70,6 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
             logging.error("Script not found.")
             return None
         else:
-            patchpath = basepath + '.patch'
-            with open(patchpath, 'wb') as f:
-                ws.show_diff(f)
-            entry['patch'] = os.path.basename(patchpath)
             if result.target_branch_url:
                 entry['target_branch_url'] = result.target_branch_url
             if result.description:
@@ -156,7 +153,6 @@ def generate(
 
 def drop_batch_entry(directory, name):
     with suppress(FileNotFoundError):
-        os.unlink(os.path.join(directory, name + '.patch'))
         shutil.rmtree(os.path.join(directory, name))
 
 
@@ -170,13 +166,15 @@ def load_batch_metadata(directory):
         return ruamel.yaml.round_trip_load(f)
 
 
-def status(directory):
+def status(directory, codebase=None):
     batch = load_batch_metadata(directory)
     work = batch.get('work', [])
     if not work:
         logging.error('no work found in %s', directory)
         return 0
     for name, entry in work.items():
+        if codebase is not None and name != codebase:
+            continue
         if entry.get('proposal-url'):
             proposal = get_proposal_by_url(entry['proposal-url'])
             if proposal.is_merged():
@@ -192,12 +190,30 @@ def status(directory):
             logging.info('%s: not published yet', name)
 
 
+def diff(directory, codebase):
+    batch = load_batch_metadata(directory)
+    work = batch.get('work', [])
+    if not work:
+        logging.error('no work found in %s', directory)
+        return 0
+    entry = work[codebase]
+    try:
+        main_branch = open_branch(entry['url'])
+    except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
+        logging.error("%s: %s", entry['url'], e)
+        raise
+
+    basepath = os.path.join(directory, codebase)
+    with Workspace(main_branch, path=basepath) as ws:
+        ws.show_diff(sys.stdout.buffer)
+
+
 class UnrelatedBranchExists(Exception):
     """An unrelated branch exists."""
 
 
 def publish_one(url: str, path: str, batch_name: str, mode: str,
-                *, patchpath: Optional[str] = None,
+                *,
                 subpath: str = '',
                 existing_proposal_url: Optional[str] = None,
                 labels: Optional[List[str]] = None, dry_run: bool = False,
@@ -323,7 +339,7 @@ def publish(directory, *, dry_run: bool = False, selector=None):
             try:
                 publish_result = publish_one(
                     entry['url'], os.path.join(directory, name), batch_name,
-                    entry['mode'], patchpath=entry.get('patch'),
+                    entry['mode'],
                     subpath=entry.get('subpath', ''),
                     labels=entry.get('labels', []),
                     dry_run=dry_run, derived_owner=entry.get('derived-owner'),
@@ -373,6 +389,10 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     publish_parser.add_argument('--dry-run', action='store_true')
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument('directory')
+    status_parser.add_argument('codebase', nargs='?', default=None)
+    diff_parser = subparsers.add_parser("diff")
+    diff_parser.add_argument('directory')
+    diff_parser.add_argument('codebase')
     args = parser.parse_args(argv)
     if args.command == "generate":
         if args.recipe:
@@ -405,7 +425,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
             'To see the status of open merge requests, run: '
             '"svp batch status %s"', args.directory)
     elif args.command == 'status':
-        status(args.directory)
+        status(args.directory, args.codebase)
+    elif args.command == 'diff':
+        diff(args.directory, args.codebase)
     else:
         parser.print_usage()
     return 0
