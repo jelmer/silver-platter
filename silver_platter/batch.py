@@ -25,6 +25,7 @@ from typing import List, Optional, Any, Dict, Callable
 import ruamel.yaml
 from ruamel.yaml.scalarstring import LiteralScalarString
 from breezy.branch import Branch
+from breezy.diff import show_diff_trees
 from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
@@ -204,8 +205,14 @@ def diff(directory, codebase):
         raise
 
     basepath = os.path.join(directory, codebase)
-    with Workspace(main_branch, path=basepath) as ws:
-        ws.show_diff(sys.stdout.buffer)
+    local_branch = Branch.open(basepath)
+    show_diff_trees(
+        local_branch.basis_tree(),
+        local_branch.repository.revision_tree(main_branch.last_revision()),
+        sys.stdout.buffer,
+        old_label='old/',
+        new_label='new/',
+    )
 
 
 class UnrelatedBranchExists(Exception):
@@ -332,8 +339,8 @@ def publish(directory, *, dry_run: bool = False, selector=None):
         return 0
     errors = 0
     try:
-        done = []
-        for i, (name, entry) in enumerate(work.items()):
+        for name in list(work):
+            entry = work[name]
             if selector and not selector(name, entry):
                 continue
             try:
@@ -349,19 +356,17 @@ def publish(directory, *, dry_run: bool = False, selector=None):
                     description=entry.get('description'))   # type: ignore
             except EmptyMergeProposal:
                 logging.info('No changes left')
-                done.append(i)
+                del work[name]
             except UnrelatedBranchExists:
                 errors += 1
             else:
                 if publish_result.mode == 'push':
                     if not dry_run:
                         drop_batch_entry(directory, name)
-                    done.append(i)
+                    del work[name]
                 elif publish_result.proposal:
                     entry['proposal-url'] = publish_result.proposal.url
             save_batch_metadata(directory, batch)
-        for i in reversed(done):
-            del work[i]
     finally:
         if not dry_run:
             save_batch_metadata(directory, batch)
