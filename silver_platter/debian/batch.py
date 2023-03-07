@@ -31,7 +31,7 @@ from breezy.workingtree import WorkingTree
 
 from . import Workspace
 from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
-                    script_runner)
+                    script_runner, CommandResult)
 
 from ..batch import (
     load_batch_metadata, save_batch_metadata, drop_batch_entry,
@@ -61,7 +61,7 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
             entry['subpath'] = subpath
 
         try:
-            result = script_runner(
+            result: CommandResult = script_runner(
                 ws.local_tree, recipe.command, recipe.commit_pending,
                 subpath=subpath)
         except ScriptMadeNoChanges:
@@ -97,6 +97,8 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
                 entry['labels'] = recipe.labels
             if result.context:
                 entry['context'] = recipe.context
+            if result.source:
+                entry['source'] = recipe.source
             ws.defer_destroy()
         return entry
 
