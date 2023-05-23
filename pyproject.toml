@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.7"
 dependencies = [
-    "breezy>=3.3.1",
+    "breezy>=3.3.3",
     "dulwich>=0.20.23",
     "jinja2",
     "pyyaml",
