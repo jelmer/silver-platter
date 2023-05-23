@@ -1,0 +1,12 @@
+[package]
+name = "silver-platter"
+version = "0.5.7"
+authors = [ "Jelmer Vernooij <jelmer@jelmer.uk>"]
+edition = "2021"
+license = "GPL-2.0+"
+description = "Large scale VCS change management"
+repository = "https://github.com/jelmer/silver-platter.git"
+homepage = "https://github.com/jelmer/silver-platter"
+
+[dependencies]
+pyo3 = { version = "0.18", features=["auto-initialize"]}
