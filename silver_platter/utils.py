@@ -219,7 +219,8 @@ class BranchMissing(Exception):
 class BranchUnsupported(Exception):
     """The branch uses a VCS or protocol that is unsupported."""
 
-    def __init__(self, url: str, description: str, vcs: Optional[str] = None) -> None:
+    def __init__(self, url: str, description: str,
+                 vcs: Optional[str] = None) -> None:
         self.url = url
         self.description = description
         self.vcs = vcs

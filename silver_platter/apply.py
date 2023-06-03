@@ -46,7 +46,8 @@ class ScriptNotFound(Exception):
 class DetailedFailure(Exception):
     """Detailed failure."""
 
-    def __init__(self, result_code, description, stage=None, details=None) -> None:
+    def __init__(self, result_code, description,
+                 stage=None, details=None) -> None:
         self.result_code = result_code
         self.description = description
         self.stage = stage

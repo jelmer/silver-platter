@@ -94,7 +94,8 @@ class LastUploadMoreRecent(Exception):
         self.archive_version = archive_version
         self.vcs_version = vcs_version
         super().__init__(
-            f"last upload ({archive_version}) is more recent than vcs ({vcs_version})"
+            f"last upload ({archive_version}) is more recent "
+            f"than vcs ({vcs_version})"
         )
 
 
@@ -139,7 +140,8 @@ class CommitterNotAllowed(Exception):
         self.committer = committer
         self.allowed_committers = allowed_committers
         super().__init__(
-            f"Committer {self.committer} not in allowed committers: {self.allowed_committers!r}"
+            f"Committer {self.committer} not in allowed committers: "
+            f"{self.allowed_committers!r}"
         )
 
 
@@ -150,7 +152,8 @@ class LastReleaseRevisionNotFound(Exception):
         self.package = package
         self.version = version
         super().__init__(
-            f"Unable to find revision matching version {version!r} for {package}"
+            f"Unable to find revision matching version {version!r} "
+            f"for {package}"
         )
 
 

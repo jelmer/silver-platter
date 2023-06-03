@@ -148,7 +148,8 @@ class Workspace:
         return (
             "{}({!r}, resume_branch={!r}, cached_branch={!r}, "
             "additional_colocated_branches={!r}, "
-            "resume_branch_additional_colocated_branches={!r}, dir={!r}, path={!r})".format(
+            "resume_branch_additional_colocated_branches={!r}, "
+            "dir={!r}, path={!r})".format(
                 type(self).__name__,
                 self.main_branch,
                 self.resume_branch,
