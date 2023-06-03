@@ -71,3 +71,40 @@ version = {attr = "silver_platter.__version__"}
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.ruff]
+select = [
+    "ANN",
+    "D",
+    "E",
+    "F",
+    "I",
+    "UP",
+]
+target-version = "py37"
+line-length = 79
+ignore = [
+    "ANN001",
+    "ANN002",
+    "ANN003",
+    "ANN101",
+    "ANN102",
+    "ANN201",
+    "ANN202",
+    "ANN204",
+    "ANN206",
+    "ANN401",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "D300",
+    "D417",
+    "E501",
+]
+
+[tool.ruff.pydocstyle]
+convention = "google"

@@ -26,8 +26,10 @@ from breezy.mutabletree import MutableTree
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.cmds import cmd_builddeb
-from breezy.plugins.debian.directory import (source_package_vcs,
-                                             vcs_field_to_bzr_url_converters)
+from breezy.plugins.debian.directory import (
+    source_package_vcs,
+    vcs_field_to_bzr_url_converters,
+)
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
@@ -71,14 +73,14 @@ except ModuleNotFoundError:
 
     class ChangelogBehaviour:
 
-        def __init__(self, update_changelog, explanation):
+        def __init__(self, update_changelog, explanation) -> None:
             self.update_changelog = update_changelog
             self.explanation = explanation
 
-        def __str__(self):
+        def __str__(self) -> str:
             return self.explanation
 
-        def __repr__(self):
+        def __repr__(self) -> str:
             return "{}(update_changelog={!r}, explanation={!r})".format(
                 type(self).__name__, self.update_changelog,
                 self.explanation)

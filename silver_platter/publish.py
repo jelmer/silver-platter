@@ -24,10 +24,18 @@ from breezy import merge as _mod_merge
 from breezy import revision as _mod_revision
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
-from breezy.forge import (Forge, MergeProposal, MergeProposalExists,
-                          NoSuchProject, ReopenFailed,
-                          SourceNotDerivedFromTarget, TitleUnsupported,
-                          UnsupportedForge, determine_title, get_forge)
+from breezy.forge import (
+    Forge,
+    MergeProposal,
+    MergeProposalExists,
+    NoSuchProject,
+    ReopenFailed,
+    SourceNotDerivedFromTarget,
+    TitleUnsupported,
+    UnsupportedForge,
+    determine_title,
+    get_forge,
+)
 from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
 from breezy.transport import Transport
@@ -325,7 +333,7 @@ def propose_changes(  # noqa: C901
 class EmptyMergeProposal(Exception):
     """Merge proposal does not have any changes."""
 
-    def __init__(self, local_branch: Branch, main_branch: Branch):
+    def __init__(self, local_branch: Branch, main_branch: Branch) -> None:
         self.local_branch = local_branch
         self.main_branch = main_branch
 
@@ -376,7 +384,7 @@ class DryRunProposal(MergeProposal):
         reviewers: Optional[List[str]] = None,
         owner: Optional[str] = None,
         stop_revision: Optional[RevisionID] = None,
-    ):
+    ) -> None:
         self.description = description
         self.closed = False
         self.labels = labels or []

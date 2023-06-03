@@ -28,13 +28,28 @@ from breezy import osutils
 
 import silver_platter  # noqa: F401
 
-from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
-                    script_runner)
-from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                       enable_tag_pushing, find_existing_proposed, get_forge)
+from .apply import (
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+    script_runner,
+)
+from .proposal import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    enable_tag_pushing,
+    find_existing_proposed,
+    get_forge,
+)
 from .publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
-from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
-                    full_branch_url, open_branch)
+from .utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    full_branch_url,
+    open_branch,
+)
 from .workspace import Workspace
 
 

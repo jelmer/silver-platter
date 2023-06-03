@@ -31,9 +31,13 @@ from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 
 from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
-from .publish import PublishResult, propose_changes
+from .publish import (
+    PublishResult,
+    propose_changes,
+    push_changes,
+    push_derived_changes,
+)
 from .publish import publish_changes as _publish_changes
-from .publish import push_changes, push_derived_changes
 from .utils import create_temp_sprout, full_branch_url
 
 __all__ = [
@@ -126,7 +130,7 @@ class Workspace:
     def path(self):
         return self.local_tree.abspath('.')
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self._path is None:
             if self.main_branch:
                 return "Worspace"
@@ -140,12 +144,11 @@ class Workspace:
             else:
                 return "Workspace at %s" % self._path
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
-            "%s(%r, resume_branch=%r, cached_branch=%r, "
-            "additional_colocated_branches=%r, "
-            "resume_branch_additional_colocated_branches=%r, dir=%r, path=%r)"
-            % (
+            "{}({!r}, resume_branch={!r}, cached_branch={!r}, "
+            "additional_colocated_branches={!r}, "
+            "resume_branch_additional_colocated_branches={!r}, dir={!r}, path={!r})".format(
                 type(self).__name__,
                 self.main_branch,
                 self.resume_branch,
