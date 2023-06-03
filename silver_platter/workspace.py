@@ -132,8 +132,8 @@ class Workspace:
 
     def __str__(self) -> str:
         if self._path is None:
-            if self.main_branch:
-                return "Worspace"
+            if self.main_branch is None:
+                return "Workspace"
             else:
                 return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
