@@ -17,9 +17,13 @@
 
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter.utils import (PostCheckFailed, PreCheckFailed,
-                                  TemporarySprout, run_post_check,
-                                  run_pre_check)
+from silver_platter.utils import (
+    PostCheckFailed,
+    PreCheckFailed,
+    TemporarySprout,
+    run_post_check,
+    run_pre_check,
+)
 
 
 class TemporarySproutTests(TestCaseWithTransport):

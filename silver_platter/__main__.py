@@ -32,7 +32,7 @@ def forges_main(argv: List[str]) -> Optional[int]:
 
     for name, forge_cls in forges.items():
         for instance in forge_cls.iter_instances():
-            print("{} ({})".format(instance.base_url, name))
+            print(f"{instance.base_url} ({name})")
 
     return None
 

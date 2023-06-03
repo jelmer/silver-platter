@@ -30,8 +30,12 @@ from breezy.bzr import LineEndingError
 from breezy.controldir import ControlDir, NoColocatedBranchSupport, Prober
 from breezy.git.remote import RemoteGitError
 from breezy.revision import RevisionID
-from breezy.transport import (Transport, UnsupportedProtocol, UnusableRedirect,
-                              get_transport)
+from breezy.transport import (
+    Transport,
+    UnsupportedProtocol,
+    UnusableRedirect,
+    get_transport,
+)
 from breezy.workingtree import WorkingTree
 
 
@@ -103,7 +107,7 @@ class TemporarySprout:
         branch: Branch,
         additional_colocated_branches: Optional[Dict[str, str]] = None,
         dir: Optional[str] = None,
-    ):
+    ) -> None:
         self.branch = branch
         self.additional_colocated_branches = additional_colocated_branches
         self.dir = dir
@@ -172,7 +176,7 @@ def run_post_check(
 class BranchUnavailable(Exception):
     """Opening branch failed."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str) -> None:
         self.url = url
         self.description = description
 
@@ -188,7 +192,7 @@ class BranchRateLimited(Exception):
     """Opening branch was rate-limited."""
 
     def __init__(self, url: str, description: str,
-                 retry_after: Optional[int] = None):
+                 retry_after: Optional[int] = None) -> None:
         self.url = url
         self.description = description
         self.retry_after = retry_after
@@ -204,7 +208,7 @@ class BranchRateLimited(Exception):
 class BranchMissing(Exception):
     """Branch did not exist."""
 
-    def __init__(self, url: str, description: str):
+    def __init__(self, url: str, description: str) -> None:
         self.url = url
         self.description = description
 
@@ -215,7 +219,8 @@ class BranchMissing(Exception):
 class BranchUnsupported(Exception):
     """The branch uses a VCS or protocol that is unsupported."""
 
-    def __init__(self, url: str, description: str, vcs: Optional[str] = None):
+    def __init__(self, url: str, description: str,
+                 vcs: Optional[str] = None) -> None:
         self.url = url
         self.description = description
         self.vcs = vcs

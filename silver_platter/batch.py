@@ -20,26 +20,43 @@ import os
 import shutil
 import sys
 from contextlib import suppress
-from typing import List, Optional, Any, Dict, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 import ruamel.yaml
-from ruamel.yaml.scalarstring import LiteralScalarString
 from breezy.branch import Branch
 from breezy.diff import show_diff_trees
 from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
+from ruamel.yaml.scalarstring import LiteralScalarString
 
-from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
-                    script_runner)
-from .candidates import (Candidate, CandidateList)
-from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                       enable_tag_pushing, get_forge)
-from .publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
-                      publish_changes)
+from .apply import (
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+    script_runner,
+)
+from .candidates import Candidate, CandidateList
+from .proposal import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    enable_tag_pushing,
+    get_forge,
+)
+from .publish import (
+    EmptyMergeProposal,
+    InsufficientChangesForNewProposal,
+    publish_changes,
+)
 from .recipe import Recipe
-from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
-                    full_branch_url, open_branch)
+from .utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    full_branch_url,
+    open_branch,
+)
 from .workspace import Workspace
 
 

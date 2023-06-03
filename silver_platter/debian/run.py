@@ -29,15 +29,37 @@ from breezy.urlutils import InvalidURL
 import silver_platter  # noqa: F401
 
 from ..candidates import Candidate, CandidateList
-from ..proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                        enable_tag_pushing, find_existing_proposed, get_forge)
+from ..proposal import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    enable_tag_pushing,
+    find_existing_proposed,
+    get_forge,
+)
 from ..publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
-from ..utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
-                     full_branch_url, open_branch)
-from . import (DEFAULT_BUILDER, BuildFailedError, MissingUpstreamTarball,
-               Workspace, build)
-from .apply import (MissingChangelog, ScriptFailed, ScriptMadeNoChanges,
-                    ScriptNotFound, install_built_package, script_runner)
+from ..utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    full_branch_url,
+    open_branch,
+)
+from . import (
+    DEFAULT_BUILDER,
+    BuildFailedError,
+    MissingUpstreamTarball,
+    Workspace,
+    build,
+)
+from .apply import (
+    MissingChangelog,
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+    install_built_package,
+    script_runner,
+)
 
 
 def derived_branch_name(script: str) -> str:

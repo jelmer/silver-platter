@@ -15,35 +15,54 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from contextlib import suppress
 import logging
 import os
 import shutil
 import sys
-from typing import List, Optional, Dict, Callable, Any
-
-from ruamel.yaml.scalarstring import LiteralScalarString
+from contextlib import suppress
+from typing import Any, Callable, Dict, List, Optional
 
 from breezy.branch import Branch
 from breezy.errors import DivergedBranches
 from breezy.forge import get_proposal_by_url
 from breezy.workingtree import WorkingTree
-
-from . import Workspace
-from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
-                    script_runner, CommandResult)
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 from ..batch import (
-    load_batch_metadata, save_batch_metadata, drop_batch_entry,
-    UnrelatedBranchExists)
-from ..candidates import (Candidate, CandidateList)
-from ..proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                        enable_tag_pushing, get_forge)
-from ..publish import (EmptyMergeProposal, InsufficientChangesForNewProposal,
-                       publish_changes)
+    UnrelatedBranchExists,
+    drop_batch_entry,
+    load_batch_metadata,
+    save_batch_metadata,
+)
+from ..candidates import Candidate, CandidateList
+from ..proposal import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    enable_tag_pushing,
+    get_forge,
+)
+from ..publish import (
+    EmptyMergeProposal,
+    InsufficientChangesForNewProposal,
+    publish_changes,
+)
 from ..recipe import Recipe
-from ..utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
-                     full_branch_url, open_branch)
+from ..utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    full_branch_url,
+    open_branch,
+)
+from . import Workspace
+from .apply import (
+    CommandResult,
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+    script_runner,
+)
 
 
 def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',

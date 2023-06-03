@@ -44,9 +44,10 @@ class ScriptNotFound(Exception):
 
 
 class DetailedFailure(Exception):
-    """Detailed failure"""
+    """Detailed failure."""
 
-    def __init__(self, result_code, description, stage=None, details=None):
+    def __init__(self, result_code, description,
+                 stage=None, details=None) -> None:
         self.result_code = result_code
         self.description = description
         self.stage = stage
@@ -64,7 +65,7 @@ class DetailedFailure(Exception):
 class ResultFileFormatError(Exception):
     """The result file was invalid."""
 
-    def __init__(self, inner_error):
+    def __init__(self, inner_error) -> None:
         self.inner_error = inner_error
 
 

@@ -23,16 +23,30 @@ import breezy.plugins.gitlab  # noqa: F401
 import breezy.plugins.launchpad  # noqa: F401
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
-from breezy.forge import (Forge, ForgeLoginRequired, MergeProposal,
-                          NoSuchProject, SourceNotDerivedFromTarget,
-                          UnsupportedForge, forges, get_forge,
-                          iter_forge_instances)
+from breezy.forge import (
+    Forge,
+    ForgeLoginRequired,
+    MergeProposal,
+    NoSuchProject,
+    SourceNotDerivedFromTarget,
+    UnsupportedForge,
+    forges,
+    get_forge,
+    iter_forge_instances,
+)
 from breezy.merge_directive import MergeDirective, MergeDirective2
 from breezy.transport import Transport
 
-from .publish import (SUPPORTED_MODES, DryRunProposal, EmptyMergeProposal,
-                      check_proposal_diff, find_existing_proposed,
-                      propose_changes, push_changes, push_derived_changes)
+from .publish import (
+    SUPPORTED_MODES,
+    DryRunProposal,
+    EmptyMergeProposal,
+    check_proposal_diff,
+    find_existing_proposed,
+    propose_changes,
+    push_changes,
+    push_derived_changes,
+)
 from .utils import full_branch_url, open_branch
 
 __all__ = [
@@ -97,7 +111,7 @@ def merge_directive_changes(
 def iter_all_mps(
     statuses: Optional[List[str]] = None,
 ) -> Iterator[Tuple[Forge, MergeProposal, str]]:
-    """iterate over all existing merge proposals."""
+    """Iterate over all existing merge proposals."""
     if statuses is None:
         statuses = ["open", "merged", "closed"]
     for instance in iter_forge_instances():
