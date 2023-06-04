@@ -27,7 +27,7 @@ jobs:
           sudo apt -y update
           sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev
           pip install --upgrade pip
-          pip install -U pip setuptools flake8 mypy testtools
+          pip install -U pip setuptools setuptools-rust flake8 mypy testtools
           pip install ".[debian,launchpad]" breezy
       - name: Build
         run: |
