@@ -8,3 +8,4 @@ silver_platter.dist-info
 dist
 .coverage
 target
+silver_platter/_*.so

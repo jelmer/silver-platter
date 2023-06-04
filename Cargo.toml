@@ -10,3 +10,6 @@ homepage = "https://github.com/jelmer/silver-platter"
 
 [dependencies]
 pyo3 = { version = "0.18", features=["auto-initialize"]}
+
+[workspace]
+members = [ "crates/*" ]

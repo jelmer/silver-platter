@@ -19,12 +19,9 @@
 
 import argparse
 import logging
-import os
 import subprocess
 import sys
 from typing import List, Optional
-
-from breezy import osutils
 
 import silver_platter  # noqa: F401
 
@@ -52,9 +49,7 @@ from .utils import (
 )
 from .workspace import Workspace
 
-
-def derived_branch_name(script: str) -> str:
-    return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
+from ._svp_rs import derived_branch_name
 
 
 def apply_and_publish(  # noqa: C901
