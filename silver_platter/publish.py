@@ -296,7 +296,7 @@ def propose_changes(  # noqa: C901
                 if e.existing_proposal is None:
                     # Forge didn't tell us where the actual proposal is.
                     raise
-                resume_proposal = e.existing_proposal
+                mp = e.existing_proposal
             except errors.PermissionDenied:
                 logging.info(
                     "Permission denied while trying to create " "proposal.")
