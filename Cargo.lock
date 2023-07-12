@@ -903,6 +903,7 @@ dependencies = [
  "serde_json",
  "silver-platter",
  "tera",
+ "url",
 ]
 
 [[package]]

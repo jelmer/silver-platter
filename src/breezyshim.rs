@@ -134,6 +134,60 @@ impl Forge {
     pub fn new(obj: PyObject) -> Self {
         Forge(obj)
     }
+
+    pub fn publish_derived(
+        &self,
+        local_branch: &Branch,
+        main_branch: &Branch,
+        name: &str,
+        overwrite_existing: Option<bool>,
+        owner: Option<&str>,
+        stop_revision: Option<&RevisionId>,
+        tag_selector: Box<dyn Fn(String) -> bool>,
+    ) -> PyResult<(Branch, url::Url)> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("local_branch", &local_branch.0)?;
+            kwargs.set_item("main_branch", &main_branch.0)?;
+            kwargs.set_item("name", name)?;
+            if let Some(overwrite_existing) = overwrite_existing {
+                kwargs.set_item("overwrite_existing", overwrite_existing)?;
+            }
+            if let Some(owner) = owner {
+                kwargs.set_item("owner", owner)?;
+            }
+            if let Some(stop_revision) = stop_revision {
+                kwargs.set_item("stop_revision", stop_revision)?;
+            }
+            #[pyclass(unsendable)]
+            struct PyTagSelector(Box<dyn Fn(String) -> bool>);
+
+            #[pymethods]
+            impl PyTagSelector {
+                fn __call__(&self, tag: String) -> bool {
+                    (self.0)(tag)
+                }
+            }
+            kwargs.set_item("tag_selector", PyTagSelector(tag_selector).into_py(py))?;
+            let (b, u): (PyObject, String) = self
+                .0
+                .call_method(py, "publish_derived", (), Some(kwargs))?
+                .extract(py)?;
+            Ok((Branch(b), u.parse::<url::Url>().unwrap()))
+        })
+    }
+}
+
+impl FromPyObject<'_> for Forge {
+    fn extract(ob: &PyAny) -> PyResult<Self> {
+        Ok(Forge(ob.to_object(ob.py())))
+    }
+}
+
+impl ToPyObject for Forge {
+    fn to_object(&self, py: Python) -> PyObject {
+        self.0.to_object(py)
+    }
 }
 
 pub struct Branch(PyObject);
@@ -141,6 +195,18 @@ pub struct Branch(PyObject);
 impl Branch {
     pub fn new(obj: PyObject) -> Self {
         Branch(obj)
+    }
+}
+
+impl FromPyObject<'_> for Branch {
+    fn extract(ob: &PyAny) -> PyResult<Self> {
+        Ok(Branch(ob.to_object(ob.py())))
+    }
+}
+
+impl ToPyObject for Branch {
+    fn to_object(&self, py: Python) -> PyObject {
+        self.0.to_object(py)
     }
 }
 
@@ -156,6 +222,7 @@ pub fn determine_title(description: &str) -> String {
     Python::with_gil(|py| {
         let m = py.import("breezy.forge").unwrap();
         let title = m.call_method1("determine_title", (description,)).unwrap();
-        title.extract().unwrap()
+        title.extract::<String>()
     })
+    .unwrap()
 }

@@ -277,6 +277,36 @@ fn script_runner(
     })
 }
 
+#[pyclass]
+struct Branch(silver_platter::Branch);
+
+#[pyclass]
+struct Forge(silver_platter::Forge);
+
+#[pyfunction]
+fn push_derived_changes(
+    local_branch: &Branch,
+    main_branch: &Branch,
+    forge: &Forge,
+    name: &str,
+    overwrite_existing: Option<bool>,
+    owner: Option<&str>,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<(Branch, String)> {
+    let (b, u) = silver_platter::publish::push_derived_changes(
+        &local_branch.0,
+        &main_branch.0,
+        &forge.0,
+        name,
+        overwrite_existing,
+        owner,
+        tags,
+        stop_revision.as_ref(),
+    )?;
+    Ok((Branch(b), u.to_string()))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -292,5 +322,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     )?;
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
+    m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
     Ok(())
 }

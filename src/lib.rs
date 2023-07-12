@@ -1,7 +1,8 @@
 mod breezyshim;
 pub mod codemod;
+pub mod publish;
 pub mod recipe;
-pub use breezyshim::{RevisionId, WorkingTree};
+pub use breezyshim::{Branch, Forge, RevisionId, WorkingTree};
 use std::path::Path;
 
 pub fn derived_branch_name(script: &str) -> &str {
