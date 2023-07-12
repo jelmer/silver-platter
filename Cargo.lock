@@ -865,6 +865,7 @@ version = "0.5.7"
 dependencies = [
  "debversion",
  "log",
+ "percent-encoding",
  "pyo3",
  "serde",
  "serde_json",

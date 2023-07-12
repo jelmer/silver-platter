@@ -1,5 +1,6 @@
 use pyo3::import_exception;
 use pyo3::prelude::*;
+use pyo3::types::PyIterator;
 use pyo3::types::{PyBytes, PyDict};
 use url::Url;
 
@@ -144,9 +145,79 @@ fn py_tag_selector(py: Python, tag_selector: Box<dyn Fn(String) -> bool>) -> PyR
     Ok(PyTagSelector(tag_selector).into_py(py))
 }
 
+pub enum MergeProposalStatus {
+    All,
+    Open,
+    Merged,
+}
+
+impl ToString for MergeProposalStatus {
+    fn to_string(&self) -> String {
+        match self {
+            MergeProposalStatus::All => "all".to_string(),
+            MergeProposalStatus::Open => "open".to_string(),
+            MergeProposalStatus::Merged => "merged".to_string(),
+        }
+    }
+}
+
+pub struct MergeProposal(PyObject);
+
+impl MergeProposal {
+    pub fn new(obj: PyObject) -> Self {
+        MergeProposal(obj)
+    }
+}
+
 impl Forge {
     pub fn new(obj: PyObject) -> Self {
         Forge(obj)
+    }
+
+    pub fn get_derived_branch(
+        &self,
+        main_branch: &Branch,
+        name: &str,
+        owner: Option<&str>,
+        preferred_schemes: Option<&[&str]>,
+    ) -> PyResult<Branch> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("main_branch", &main_branch.0)?;
+            kwargs.set_item("name", name)?;
+            if let Some(owner) = owner {
+                kwargs.set_item("owner", owner)?;
+            }
+            if let Some(preferred_schemes) = preferred_schemes {
+                kwargs.set_item("preferred_schemes", preferred_schemes)?;
+            }
+            let branch = self
+                .0
+                .call_method(py, "get_derived_branch", (), Some(kwargs))?;
+            Ok(Branch(branch))
+        })
+    }
+
+    pub fn iter_proposals(
+        &self,
+        source_branch: &Branch,
+        target_branch: &Branch,
+        status: MergeProposalStatus,
+    ) -> PyResult<impl Iterator<Item = MergeProposal>> {
+        Python::with_gil(move |py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("status", status.to_string())?;
+            let proposals: Vec<PyObject> = self
+                .0
+                .call_method(
+                    py,
+                    "iter_proposals",
+                    (&source_branch.0, &target_branch.0),
+                    Some(kwargs),
+                )?
+                .extract(py)?;
+            Ok(proposals.into_iter().map(MergeProposal::new))
+        })
     }
 
     pub fn publish_derived(
@@ -182,7 +253,7 @@ impl Forge {
         })
     }
 
-    pub fn get_push_url(&self, branch: &Branch) -> String {
+    pub fn get_push_url(&self, branch: &Branch) -> url::Url {
         Python::with_gil(|py| {
             let url = self
                 .0
@@ -190,7 +261,7 @@ impl Forge {
                 .unwrap()
                 .extract::<String>(py)
                 .unwrap();
-            url
+            url.parse::<url::Url>().unwrap()
         })
     }
 }
@@ -214,7 +285,19 @@ impl Branch {
         Branch(obj)
     }
 
-    pub fn get_user_url(&self) -> String {
+    pub fn name(&self) -> Option<String> {
+        Python::with_gil(|py| {
+            let name = self
+                .0
+                .getattr(py, "name")
+                .unwrap()
+                .extract::<Option<String>>(py)
+                .unwrap();
+            name
+        })
+    }
+
+    pub fn get_user_url(&self) -> url::Url {
         Python::with_gil(|py| {
             let url = self
                 .0
@@ -222,7 +305,7 @@ impl Branch {
                 .unwrap()
                 .extract::<String>(py)
                 .unwrap();
-            url
+            url.parse::<url::Url>().unwrap()
         })
     }
 
@@ -348,6 +431,21 @@ impl Transport {
     pub fn new(obj: PyObject) -> Self {
         Transport(obj)
     }
+}
+
+pub fn join_segment_parameters(
+    url: &url::Url,
+    parameters: std::collections::HashMap<String, String>,
+) -> url::Url {
+    pyo3::Python::with_gil(|py| {
+        let urlutils = py.import("breezy.urlutils").unwrap();
+        urlutils
+            .call_method1("join_segment_parameters", (url.to_string(), parameters))
+            .unwrap()
+            .extract::<String>()
+            .map(|s| url::Url::parse(s.as_str()).unwrap())
+            .unwrap()
+    })
 }
 
 pub fn split_segment_parameters(

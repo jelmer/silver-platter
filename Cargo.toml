@@ -18,6 +18,7 @@ tera = "1.19.0"
 serde_yaml = "0.9.22"
 url = { version = "2.4.0", features = ["serde"] }
 log = "0.4.19"
+percent-encoding = "2.3.0"
 
 [features]
 default = []

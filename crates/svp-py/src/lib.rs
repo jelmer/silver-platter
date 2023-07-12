@@ -405,6 +405,11 @@ fn push_result(
     Ok(())
 }
 
+#[pyfunction]
+fn full_branch_url(branch: PyObject) -> PyResult<String> {
+    Ok(silver_platter::vcs::full_branch_url(&silver_platter::Branch::new(branch)).to_string())
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -427,5 +432,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Candidate>()?;
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
     m.add_function(wrap_pyfunction!(push_changes, m)?)?;
+    m.add_function(wrap_pyfunction!(full_branch_url, m)?)?;
     Ok(())
 }

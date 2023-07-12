@@ -84,7 +84,7 @@ pub fn push_changes(
         main_branch.get_user_url()
     };
     log::info!("pushing to {}", push_url);
-    let target_branch = open_branch(push_url.parse().unwrap(), possible_transports, None, None)?;
+    let target_branch = open_branch(push_url, possible_transports, None, None)?;
     if !dry_run {
         push_result(
             local_branch,

@@ -37,6 +37,7 @@ from breezy.transport import (
     get_transport,
 )
 from breezy.workingtree import WorkingTree
+from . import _svp_rs
 
 
 def create_temp_sprout(
@@ -319,19 +320,7 @@ def open_branch_containing(
         raise e
 
 
-def full_branch_url(branch: Branch) -> str:
-    """Get the full URL for a branch.
-
-    Ideally this should just return Branch.user_url,
-    but that currently exclude the branch name
-    in some situations.
-    """
-    if branch.name is None:
-        return branch.user_url
-    url, params = urlutils.split_segment_parameters(branch.user_url)
-    if branch.name != "":
-        params["branch"] = urlutils.quote(branch.name, "")
-    return urlutils.join_segment_parameters(url, params)
+full_branch_url = _svp_rs.full_branch_url
 
 
 def get_branch_vcs_type(branch):
