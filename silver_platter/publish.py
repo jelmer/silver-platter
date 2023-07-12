@@ -38,7 +38,6 @@ from breezy.forge import (
 )
 from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
-from breezy.transport import Transport
 
 from . import _svp_rs
 from .utils import full_branch_url, open_branch

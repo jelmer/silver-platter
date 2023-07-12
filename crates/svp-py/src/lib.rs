@@ -278,6 +278,56 @@ fn script_runner(
 }
 
 #[pyclass]
+struct Transport(silver_platter::Transport);
+
+#[pyclass]
+struct Prober(silver_platter::Prober);
+
+#[pyclass]
+struct ControlDir(silver_platter::ControlDir);
+
+#[pymethods]
+impl ControlDir {
+    #[classmethod]
+    fn open_from_transport(
+        _cls: &PyType,
+        transport: PyObject,
+        probers: Option<Vec<PyObject>>,
+    ) -> PyResult<Self> {
+        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
+            probers
+                .into_iter()
+                .map(silver_platter::Prober::new)
+                .collect()
+        });
+        let control_dir = silver_platter::ControlDir::open_from_transport(
+            &silver_platter::Transport::new(transport),
+            probers.as_deref(),
+        )?;
+        Ok(ControlDir(control_dir))
+    }
+
+    #[classmethod]
+    fn open_containing_from_transport(
+        _cls: &PyType,
+        transport: PyObject,
+        probers: Option<Vec<PyObject>>,
+    ) -> PyResult<(Self, String)> {
+        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
+            probers
+                .into_iter()
+                .map(silver_platter::Prober::new)
+                .collect()
+        });
+        let (control_dir, subpath) = silver_platter::ControlDir::open_containing_from_transport(
+            &silver_platter::Transport::new(transport),
+            probers.as_deref(),
+        )?;
+        Ok((ControlDir(control_dir), subpath))
+    }
+}
+
+#[pyclass]
 struct Branch(silver_platter::Branch);
 
 #[pyclass]
@@ -410,6 +460,45 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
     Ok(silver_platter::vcs::full_branch_url(&silver_platter::Branch::new(branch)).to_string())
 }
 
+#[pyfunction]
+fn open_branch(
+    url: &str,
+    possible_transports: Option<Vec<PyObject>>,
+    probers: Option<Vec<PyObject>>,
+    name: Option<&str>,
+) -> PyResult<Branch> {
+    let possible_transports: Option<Vec<silver_platter::Transport>> =
+        possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
+    let probers: Option<Vec<silver_platter::Prober>> =
+        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
+    Ok(Branch(silver_platter::vcs::open_branch(
+        url.parse().unwrap(),
+        possible_transports,
+        probers.as_deref(),
+        name,
+    )?))
+}
+
+#[pyfunction]
+fn open_branch_containing(
+    url: &str,
+    possible_transports: Option<Vec<PyObject>>,
+    probers: Option<Vec<PyObject>>,
+    name: Option<&str>,
+) -> PyResult<(Branch, String)> {
+    let possible_transports: Option<Vec<silver_platter::Transport>> =
+        possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
+    let probers: Option<Vec<silver_platter::Prober>> =
+        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
+    let (b, u) = silver_platter::vcs::open_branch_containing(
+        url.parse().unwrap(),
+        possible_transports,
+        probers.as_deref(),
+        name,
+    )?;
+    Ok((Branch(b), u))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -433,5 +522,28 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
     m.add_function(wrap_pyfunction!(push_changes, m)?)?;
     m.add_function(wrap_pyfunction!(full_branch_url, m)?)?;
+    m.add(
+        "BranchTemporarilyUnavailable",
+        py.get_type::<silver_platter::vcs::BranchTemporarilyUnavailable>(),
+    )?;
+    m.add(
+        "BranchMissing",
+        py.get_type::<silver_platter::vcs::BranchMissing>(),
+    )?;
+    m.add(
+        "BranchUnavailable",
+        py.get_type::<silver_platter::vcs::BranchUnavailable>(),
+    )?;
+    m.add(
+        "BranchRateLimited",
+        py.get_type::<silver_platter::vcs::BranchRateLimited>(),
+    )?;
+    m.add(
+        "BranchUnsupported",
+        py.get_type::<silver_platter::vcs::BranchUnsupported>(),
+    )?;
+    m.add_function(wrap_pyfunction!(open_branch, m)?)?;
+    m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
+
     Ok(())
 }

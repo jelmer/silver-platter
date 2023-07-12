@@ -15,27 +15,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import logging
 import os
 import shutil
-import socket
 import subprocess
 import tempfile
-from http.client import IncompleteRead
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
-from breezy import errors, urlutils
+from breezy import errors
 from breezy.branch import Branch
-from breezy.bzr import LineEndingError
-from breezy.controldir import ControlDir, NoColocatedBranchSupport, Prober
-from breezy.git.remote import RemoteGitError
+from breezy.controldir import NoColocatedBranchSupport
 from breezy.revision import RevisionID
-from breezy.transport import (
-    Transport,
-    UnsupportedProtocol,
-    UnusableRedirect,
-    get_transport,
-)
 from breezy.workingtree import WorkingTree
 from . import _svp_rs
 
@@ -174,152 +163,13 @@ def run_post_check(
         raise PostCheckFailed()
 
 
-class BranchUnavailable(Exception):
-    """Opening branch failed."""
-
-    def __init__(self, url: str, description: str) -> None:
-        self.url = url
-        self.description = description
-
-    def __str__(self) -> str:
-        return self.description
-
-
-class BranchTemporarilyUnavailable(BranchUnavailable):
-    """Branch unavailable for temporary reasons, e.g. DNS failed."""
-
-
-class BranchRateLimited(Exception):
-    """Opening branch was rate-limited."""
-
-    def __init__(self, url: str, description: str,
-                 retry_after: Optional[int] = None) -> None:
-        self.url = url
-        self.description = description
-        self.retry_after = retry_after
-
-    def __str__(self) -> str:
-        if self.retry_after is not None:
-            return "{} (retry after {})".format(
-                self.description, self.retry_after)
-        else:
-            return self.description
-
-
-class BranchMissing(Exception):
-    """Branch did not exist."""
-
-    def __init__(self, url: str, description: str) -> None:
-        self.url = url
-        self.description = description
-
-    def __str__(self) -> str:
-        return self.description
-
-
-class BranchUnsupported(Exception):
-    """The branch uses a VCS or protocol that is unsupported."""
-
-    def __init__(self, url: str, description: str,
-                 vcs: Optional[str] = None) -> None:
-        self.url = url
-        self.description = description
-        self.vcs = vcs
-
-    def __str__(self) -> str:
-        return self.description
-
-
-def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
-    if isinstance(e, socket.error):
-        return BranchUnavailable(url, "Socket error: %s" % e)
-    if isinstance(e, errors.NotBranchError):
-        return BranchMissing(url, "Branch does not exist: %s" % e)
-    if isinstance(e, UnsupportedProtocol):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, errors.ConnectionError):
-        if "Temporary failure in name resolution" in str(e):
-            return BranchTemporarilyUnavailable(url, str(e))
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.PermissionDenied):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, urlutils.InvalidURL):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.InvalidHttpResponse):
-        if "Unexpected HTTP status 429" in str(e):
-            try:
-                retry_after = int(e.headers['Retry-After'])  # type: ignore
-            except TypeError:
-                logging.warning(
-                    'Unable to parse retry-after header: %s',
-                    e.headers['Retry-After'])  # type: ignore
-                retry_after = None
-            else:
-                retry_after = None
-            raise BranchRateLimited(url, str(e), retry_after=retry_after)
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.TransportError):
-        return BranchUnavailable(url, str(e))
-    if UnusableRedirect is not None and isinstance(e, UnusableRedirect):
-        return BranchUnavailable(url, str(e))
-    if (hasattr(errors, 'UnsupportedVcs')
-            and isinstance(e, errors.UnsupportedVcs)):
-        return BranchUnsupported(url, str(e), vcs=e.vcs)
-    if isinstance(e, errors.UnsupportedFormatError):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, errors.UnknownFormatError):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, RemoteGitError):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, LineEndingError):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, IncompleteRead):
-        return BranchUnavailable(url, str(e))
-    return None
-
-
-def open_branch(
-    url: str,
-    possible_transports: Optional[List[Transport]] = None,
-    probers: Optional[List[Prober]] = None,
-    name: Optional[str] = None,
-) -> Branch:
-    """Open a branch by URL."""
-    url, params = urlutils.split_segment_parameters(url)
-    if name is None:
-        try:
-            name = urlutils.unquote(params["branch"])
-        except KeyError:
-            name = None
-    try:
-        transport = get_transport(url, possible_transports=possible_transports)
-        dir = ControlDir.open_from_transport(transport, probers)
-        return dir.open_branch(name=name)
-    except Exception as e:
-        converted = _convert_exception(url, e)
-        if converted is not None:
-            raise converted
-        raise e
-
-
-def open_branch_containing(
-    url: str,
-    possible_transports: Optional[List[Transport]] = None,
-    probers: Optional[List[Prober]] = None,
-) -> Tuple[Branch, str]:
-    """Open a branch by URL."""
-    try:
-        transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(
-            transport, probers)  # type: ignore
-        return dir.open_branch(), subpath
-    except Exception as e:
-        converted = _convert_exception(url, e)
-        if converted is not None:
-            raise converted
-        raise e
-
-
+BranchTemporarilyUnavailable = _svp_rs.BranchTemporarilyUnavailable
+BranchRateLimited = _svp_rs.BranchRateLimited
+BranchUnavailable = _svp_rs.BranchUnavailable
+BranchMissing = _svp_rs.BranchMissing
+BranchUnsupported = _svp_rs.BranchUnsupported
+open_branch = _svp_rs.open_branch
+open_branch_containing = _svp_rs.open_branch_containing
 full_branch_url = _svp_rs.full_branch_url
 
 

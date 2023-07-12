@@ -361,6 +361,28 @@ impl ControlDir {
         Ok(Self(obj))
     }
 
+    pub fn open_containing_from_transport(
+        transport: &Transport,
+        probers: Option<&[Prober]>,
+    ) -> PyResult<(ControlDir, String)> {
+        Python::with_gil(|py| {
+            let m = py.import("breezy.controldir")?;
+            let cd = m.getattr("ControlDir")?;
+            let kwargs = PyDict::new(py);
+            if let Some(probers) = probers {
+                kwargs.set_item("probers", probers.iter().map(|p| &p.0).collect::<Vec<_>>())?;
+            }
+            let (controldir, subpath): (PyObject, String) = cd
+                .call_method(
+                    "open_containing_from_transport",
+                    (&transport.0,),
+                    Some(kwargs),
+                )?
+                .extract()?;
+            Ok((ControlDir(controldir.to_object(py)), subpath))
+        })
+    }
+
     pub fn open_from_transport(
         transport: &Transport,
         probers: Option<&[Prober]>,
