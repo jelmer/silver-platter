@@ -285,9 +285,9 @@ struct Forge(silver_platter::Forge);
 
 #[pyfunction]
 fn push_derived_changes(
-    local_branch: &Branch,
-    main_branch: &Branch,
-    forge: &Forge,
+    local_branch: PyObject,
+    main_branch: PyObject,
+    forge: PyObject,
     name: &str,
     overwrite_existing: Option<bool>,
     owner: Option<&str>,
@@ -295,9 +295,9 @@ fn push_derived_changes(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<(Branch, String)> {
     let (b, u) = silver_platter::publish::push_derived_changes(
-        &local_branch.0,
-        &main_branch.0,
-        &forge.0,
+        &silver_platter::Branch::new(local_branch),
+        &silver_platter::Branch::new(main_branch),
+        &silver_platter::Forge::new(forge),
         name,
         overwrite_existing,
         owner,
@@ -360,6 +360,24 @@ impl Candidate {
     }
 }
 
+#[pyfunction]
+fn push_result(
+    local_branch: PyObject,
+    remote_branch: PyObject,
+    additional_colocated_branches: Option<Vec<(String, String)>>,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<()> {
+    silver_platter::publish::push_result(
+        &silver_platter::Branch::new(local_branch),
+        &silver_platter::Branch::new(remote_branch),
+        additional_colocated_branches,
+        tags,
+        stop_revision.as_ref(),
+    )?;
+    Ok(())
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -380,5 +398,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Forge>()?;
     m.add_class::<CandidateList>()?;
     m.add_class::<Candidate>()?;
+    m.add_function(wrap_pyfunction!(push_result, m)?)?;
     Ok(())
 }

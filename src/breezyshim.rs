@@ -130,6 +130,19 @@ impl std::error::Error for CommitError {}
 
 pub struct Forge(PyObject);
 
+fn py_tag_selector(py: Python, tag_selector: Box<dyn Fn(String) -> bool>) -> PyResult<PyObject> {
+    #[pyclass(unsendable)]
+    struct PyTagSelector(Box<dyn Fn(String) -> bool>);
+
+    #[pymethods]
+    impl PyTagSelector {
+        fn __call__(&self, tag: String) -> bool {
+            (self.0)(tag)
+        }
+    }
+    Ok(PyTagSelector(tag_selector).into_py(py))
+}
+
 impl Forge {
     pub fn new(obj: PyObject) -> Self {
         Forge(obj)
@@ -159,16 +172,7 @@ impl Forge {
             if let Some(stop_revision) = stop_revision {
                 kwargs.set_item("stop_revision", stop_revision)?;
             }
-            #[pyclass(unsendable)]
-            struct PyTagSelector(Box<dyn Fn(String) -> bool>);
-
-            #[pymethods]
-            impl PyTagSelector {
-                fn __call__(&self, tag: String) -> bool {
-                    (self.0)(tag)
-                }
-            }
-            kwargs.set_item("tag_selector", PyTagSelector(tag_selector).into_py(py))?;
+            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
             let (b, u): (PyObject, String) = self
                 .0
                 .call_method(py, "publish_derived", (), Some(kwargs))?
@@ -196,6 +200,30 @@ impl Branch {
     pub fn new(obj: PyObject) -> Self {
         Branch(obj)
     }
+
+    pub fn get_controldir(&self) -> ControlDir {
+        Python::with_gil(|py| ControlDir::new(self.0.getattr(py, "controldir").unwrap()).unwrap())
+    }
+
+    pub fn push(
+        &self,
+        remote_branch: &Branch,
+        overwrite: bool,
+        stop_revision: Option<&RevisionId>,
+        tag_selector: Box<dyn Fn(String) -> bool>,
+    ) -> PyResult<()> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("overwrite", overwrite)?;
+            if let Some(stop_revision) = stop_revision {
+                kwargs.set_item("stop_revision", stop_revision)?;
+            }
+            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            self.0
+                .call_method(py, "push", (&remote_branch.0,), Some(kwargs))?;
+            Ok(())
+        })
+    }
 }
 
 impl FromPyObject<'_> for Branch {
@@ -207,6 +235,43 @@ impl FromPyObject<'_> for Branch {
 impl ToPyObject for Branch {
     fn to_object(&self, py: Python) -> PyObject {
         self.0.to_object(py)
+    }
+}
+
+pub struct ControlDir(PyObject);
+
+impl ControlDir {
+    pub fn new(obj: PyObject) -> PyResult<Self> {
+        Ok(Self(obj))
+    }
+
+    pub fn open_branch(&self, branch_name: Option<&str>) -> PyResult<Branch> {
+        Python::with_gil(|py| {
+            let branch = self
+                .0
+                .call_method(py, "open_branch", (branch_name,), None)?
+                .extract(py)?;
+            Ok(Branch(branch))
+        })
+    }
+
+    pub fn push_branch(
+        &self,
+        source_branch: &Branch,
+        to_branch_name: Option<&str>,
+        tag_selector: Box<dyn Fn(String) -> bool>,
+    ) -> PyResult<Branch> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            if let Some(to_branch_name) = to_branch_name {
+                kwargs.set_item("name", to_branch_name)?;
+            }
+            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            let result =
+                self.0
+                    .call_method(py, "push_branch", (&source_branch.0,), Some(kwargs))?;
+            Ok(Branch(result.getattr(py, "target_branch")?))
+        })
     }
 }
 

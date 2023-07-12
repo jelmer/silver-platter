@@ -77,40 +77,7 @@ def _tag_selector_from_tags(tags):
     return select
 
 
-def push_result(
-    local_branch: Branch,
-    remote_branch: Branch,
-    additional_colocated_branches:
-        Optional[Union[List[str], Dict[str, str]]] = None,
-    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
-    stop_revision: Optional[RevisionID] = None,
-) -> None:
-    kwargs = {}
-    if tags is not None:
-        kwargs["tag_selector"] = _tag_selector_from_tags(tags)
-    try:
-        local_branch.push(
-            remote_branch, overwrite=False, stop_revision=stop_revision,
-            **kwargs
-        )
-    except errors.LockFailed as e:
-        # Almost certainly actually a PermissionDenied error..
-        raise errors.PermissionDenied(
-            path=full_branch_url(remote_branch), extra=e)
-    for from_branch_name in additional_colocated_branches or []:
-        try:
-            add_branch = local_branch.controldir.open_branch(
-                name=from_branch_name)  # type: ignore
-        except errors.NotBranchError:
-            pass
-        else:
-            if isinstance(additional_colocated_branches, dict):
-                to_branch_name = additional_colocated_branches[
-                    from_branch_name]
-            else:
-                to_branch_name = from_branch_name
-            remote_branch.controldir.push_branch(
-                add_branch, name=to_branch_name, **kwargs)  # type: ignore
+push_result = _svp_rs.push_result
 
 
 def push_changes(
