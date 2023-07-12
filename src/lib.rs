@@ -5,7 +5,9 @@ pub mod probers;
 pub mod publish;
 pub mod recipe;
 pub mod vcs;
-pub use breezyshim::{Branch, ControlDir, Forge, Prober, RevisionId, Transport, WorkingTree};
+pub use breezyshim::{
+    Branch, ControlDir, Forge, MergeProposal, Prober, RevisionId, Transport, WorkingTree,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

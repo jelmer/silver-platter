@@ -499,6 +499,38 @@ fn open_branch_containing(
     Ok((Branch(b), u))
 }
 
+#[pyclass]
+struct MergeProposal(silver_platter::MergeProposal);
+
+#[pyfunction]
+fn find_existing_proposed(
+    main_branch: PyObject,
+    forge: PyObject,
+    name: &str,
+    overwrite_unrelated: bool,
+    owner: Option<&str>,
+    preferred_schemes: Option<Vec<String>>,
+) -> PyResult<(Option<Branch>, Option<bool>, Option<Vec<MergeProposal>>)> {
+    let main_branch = silver_platter::Branch::new(main_branch);
+    let forge = silver_platter::Forge::new(forge);
+    let preferred_schemes = preferred_schemes
+        .as_ref()
+        .map(|s| s.iter().map(|s| s.as_ref()).collect::<Vec<_>>());
+    let (b, o, p) = silver_platter::publish::find_existing_proposed(
+        &main_branch,
+        &forge,
+        name,
+        overwrite_unrelated,
+        owner,
+        preferred_schemes.as_deref(),
+    )?;
+    Ok((
+        b.map(Branch),
+        o,
+        p.map(|p| p.into_iter().map(MergeProposal).collect()),
+    ))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -544,6 +576,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     )?;
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
+    m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
 
     Ok(())
 }

@@ -167,6 +167,27 @@ impl MergeProposal {
     pub fn new(obj: PyObject) -> Self {
         MergeProposal(obj)
     }
+
+    pub fn url(&self) -> PyResult<url::Url> {
+        Python::with_gil(|py| {
+            let url = self.0.getattr(py, "url")?;
+            Ok(url.extract::<String>(py)?.parse().unwrap())
+        })
+    }
+
+    pub fn is_merged(&self) -> PyResult<bool> {
+        Python::with_gil(|py| {
+            let is_merged = self.0.call_method0(py, "is_merged")?;
+            is_merged.extract(py)
+        })
+    }
+
+    pub fn is_closed(&self) -> PyResult<bool> {
+        Python::with_gil(|py| {
+            let is_closed = self.0.call_method0(py, "is_closed")?;
+            is_closed.extract(py)
+        })
+    }
 }
 
 impl Forge {

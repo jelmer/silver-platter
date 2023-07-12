@@ -379,67 +379,7 @@ class DryRunProposal(MergeProposal):
         pass
 
 
-def find_existing_proposed(
-    main_branch: Branch,
-    forge: Forge,
-    name: str,
-    overwrite_unrelated: bool = False,
-    owner: Optional[str] = None,
-    preferred_schemes: Optional[List[str]] = None,
-) -> Tuple[Optional[Branch], Optional[bool], Optional[List[MergeProposal]]]:
-    """Find an existing derived branch with the specified name, and proposal.
-
-    Args:
-      main_branch: Main branch
-      forge: The forge
-      name: Name of the derived branch
-      overwrite_unrelated: Whether to overwrite existing (but unrelated)
-        branches
-      preferred_schemes: List of preferred schemes
-    Returns:
-      Tuple with (resume_branch, overwrite_existing, existing_proposal)
-      The resume_branch is the branch to continue from; overwrite_existing
-      means there is an existing branch in place that should be overwritten.
-    """
-    try:
-        existing_branch = forge.get_derived_branch(
-            main_branch, name=name, owner=owner,
-            preferred_schemes=preferred_schemes
-        )
-    except errors.NotBranchError:
-        return (None, None, None)
-    else:
-        logging.info(
-            "Branch %s already exists (branch at %s)",
-            name,
-            full_branch_url(existing_branch),
-        )
-        open_proposals = []
-        # If there is an open or rejected merge proposal, resume that.
-        merged_proposals = []
-        for mp in forge.iter_proposals(
-                existing_branch, main_branch, status="all"):
-            if not mp.is_closed() and not mp.is_merged():
-                open_proposals.append(mp)
-            else:
-                merged_proposals.append(mp)
-        if open_proposals:
-            return (existing_branch, False, open_proposals)
-
-        if merged_proposals:
-            logging.info(
-                "There is a proposal that has already been merged at %s.",
-                merged_proposals[0].url,
-            )
-            return (None, True, None)
-        else:
-            # No related merge proposals found, but there is an existing
-            # branch (perhaps for a different target branch?)
-            if overwrite_unrelated:
-                return (None, True, None)
-            else:
-                # TODO(jelmer): What to do in this case?
-                return (None, False, None)
+find_existing_proposed = _svp_rs.find_existing_proposed
 
 
 def merge_conflicts(
