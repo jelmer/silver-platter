@@ -78,38 +78,7 @@ def _tag_selector_from_tags(tags):
 
 
 push_result = _svp_rs.push_result
-
-
-def push_changes(
-    local_branch: Branch,
-    main_branch: Branch,
-    *,
-    forge: Optional[Forge],
-    possible_transports: Optional[List[Transport]] = None,
-    additional_colocated_branches:
-        Optional[Union[List[str], Dict[str, str]]] = None,
-    dry_run: bool = False,
-    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
-    stop_revision: Optional[RevisionID] = None,
-) -> None:
-    """Push changes to a branch."""
-    if forge is None:
-        push_url = main_branch.user_url
-    else:
-        push_url = forge.get_push_url(main_branch)
-    logging.info("pushing to %s", push_url)
-    target_branch = open_branch(
-        push_url, possible_transports=possible_transports)
-    if not dry_run:
-        push_result(
-            local_branch,
-            target_branch,
-            additional_colocated_branches,
-            tags=tags,
-            stop_revision=stop_revision,
-        )
-
-
+push_changes = _svp_rs.push_changes
 push_derived_changes = _svp_rs.push_derived_changes
 
 

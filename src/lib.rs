@@ -1,9 +1,11 @@
 mod breezyshim;
 pub mod candidates;
 pub mod codemod;
+pub mod probers;
 pub mod publish;
 pub mod recipe;
-pub use breezyshim::{Branch, Forge, RevisionId, WorkingTree};
+pub mod vcs;
+pub use breezyshim::{Branch, Forge, RevisionId, Transport, WorkingTree};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

@@ -1,6 +1,7 @@
 use pyo3::import_exception;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
+use url::Url;
 
 import_exception!(breezy.commit, PointlessCommit);
 
@@ -180,6 +181,18 @@ impl Forge {
             Ok((Branch(b), u.parse::<url::Url>().unwrap()))
         })
     }
+
+    pub fn get_push_url(&self, branch: &Branch) -> String {
+        Python::with_gil(|py| {
+            let url = self
+                .0
+                .call_method1(py, "get_push_url", (&branch.0,))
+                .unwrap()
+                .extract::<String>(py)
+                .unwrap();
+            url
+        })
+    }
 }
 
 impl FromPyObject<'_> for Forge {
@@ -199,6 +212,18 @@ pub struct Branch(PyObject);
 impl Branch {
     pub fn new(obj: PyObject) -> Self {
         Branch(obj)
+    }
+
+    pub fn get_user_url(&self) -> String {
+        Python::with_gil(|py| {
+            let url = self
+                .0
+                .getattr(py, "get_user_url")
+                .unwrap()
+                .extract::<String>(py)
+                .unwrap();
+            url
+        })
     }
 
     pub fn get_controldir(&self) -> ControlDir {
@@ -238,11 +263,36 @@ impl ToPyObject for Branch {
     }
 }
 
+pub struct Prober(PyObject);
+
+impl Prober {
+    pub fn new(obj: PyObject) -> Self {
+        Prober(obj)
+    }
+}
+
 pub struct ControlDir(PyObject);
 
 impl ControlDir {
     pub fn new(obj: PyObject) -> PyResult<Self> {
         Ok(Self(obj))
+    }
+
+    pub fn open_from_transport(
+        transport: &Transport,
+        probers: Option<&[Prober]>,
+    ) -> PyResult<ControlDir> {
+        Python::with_gil(|py| {
+            let m = py.import("breezy.controldir")?;
+            let cd = m.getattr("ControlDir")?;
+            let kwargs = PyDict::new(py);
+            if let Some(probers) = probers {
+                kwargs.set_item("probers", probers.iter().map(|p| &p.0).collect::<Vec<_>>())?;
+            }
+            let controldir =
+                cd.call_method("open_from_transport", (&transport.0,), Some(kwargs))?;
+            Ok(ControlDir(controldir.to_object(py)))
+        })
     }
 
     pub fn open_branch(&self, branch_name: Option<&str>) -> PyResult<Branch> {
@@ -290,4 +340,43 @@ pub fn determine_title(description: &str) -> String {
         title.extract::<String>()
     })
     .unwrap()
+}
+
+pub struct Transport(PyObject);
+
+impl Transport {
+    pub fn new(obj: PyObject) -> Self {
+        Transport(obj)
+    }
+}
+
+pub fn split_segment_parameters(
+    url: &url::Url,
+) -> (url::Url, std::collections::HashMap<String, String>) {
+    pyo3::Python::with_gil(|py| {
+        let urlutils = py.import("breezy.urlutils").unwrap();
+        urlutils
+            .call_method1("split_segment_parameters", (url.to_string(),))
+            .unwrap()
+            .extract::<(String, std::collections::HashMap<String, String>)>()
+            .map(|(s, m)| (url::Url::parse(s.as_str()).unwrap(), m))
+            .unwrap()
+    })
+}
+
+pub fn get_transport(url: &url::Url, possible_transports: Option<Vec<Transport>>) -> Transport {
+    pyo3::Python::with_gil(|py| {
+        let urlutils = py.import("breezy.transport").unwrap();
+        let kwargs = PyDict::new(py);
+        kwargs
+            .set_item(
+                "possible_transports",
+                possible_transports.map(|t| t.into_iter().map(|t| t.0).collect::<Vec<PyObject>>()),
+            )
+            .unwrap();
+        let o = urlutils
+            .call_method("get_transport", (url.to_string(),), Some(kwargs))
+            .unwrap();
+        Transport(o.to_object(py))
+    })
 }

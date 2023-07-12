@@ -1,4 +1,5 @@
-use crate::breezyshim::{Branch, Forge, RevisionId};
+use crate::breezyshim::{Branch, Forge, RevisionId, Transport};
+use crate::vcs::open_branch;
 use pyo3::import_exception;
 use pyo3::prelude::*;
 
@@ -65,4 +66,35 @@ pub fn push_result(
         }
         Ok(())
     })
+}
+
+pub fn push_changes(
+    local_branch: &Branch,
+    main_branch: &Branch,
+    forge: Option<&Forge>,
+    possible_transports: Option<Vec<Transport>>,
+    additional_colocated_branches: Option<Vec<(String, String)>>,
+    dry_run: bool,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    stop_revision: Option<&RevisionId>,
+) -> PyResult<()> {
+    let push_url = if let Some(forge) = forge {
+        forge.get_push_url(main_branch)
+    } else {
+        main_branch.get_user_url()
+    };
+    log::info!("pushing to {}", push_url);
+    let target_branch = open_branch(push_url.parse().unwrap(), possible_transports, None, None)?;
+    if !dry_run {
+        push_result(
+            local_branch,
+            &target_branch,
+            additional_colocated_branches,
+            tags,
+            stop_revision,
+        )
+    } else {
+        log::info!("dry run, not pushing");
+        Ok(())
+    }
 }

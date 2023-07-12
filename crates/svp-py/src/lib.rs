@@ -361,6 +361,33 @@ impl Candidate {
 }
 
 #[pyfunction]
+fn push_changes(
+    local_branch: PyObject,
+    main_branch: PyObject,
+    forge: Option<PyObject>,
+    possible_transports: Option<Vec<PyObject>>,
+    additional_colocated_branches: Option<Vec<(String, String)>>,
+    dry_run: Option<bool>,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<()> {
+    let dry_run = dry_run.unwrap_or(false);
+    let possible_transports: Option<Vec<silver_platter::Transport>> =
+        possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
+    silver_platter::publish::push_changes(
+        &silver_platter::Branch::new(local_branch),
+        &silver_platter::Branch::new(main_branch),
+        forge.map(silver_platter::Forge::new).as_ref(),
+        possible_transports,
+        additional_colocated_branches,
+        dry_run,
+        tags,
+        stop_revision.as_ref(),
+    )?;
+    Ok(())
+}
+
+#[pyfunction]
 fn push_result(
     local_branch: PyObject,
     remote_branch: PyObject,
@@ -399,5 +426,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CandidateList>()?;
     m.add_class::<Candidate>()?;
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
+    m.add_function(wrap_pyfunction!(push_changes, m)?)?;
     Ok(())
 }

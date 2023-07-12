@@ -864,6 +864,7 @@ name = "silver-platter"
 version = "0.5.7"
 dependencies = [
  "debversion",
+ "log",
  "pyo3",
  "serde",
  "serde_json",
