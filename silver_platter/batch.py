@@ -76,7 +76,8 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
 
         try:
             result = script_runner(
-                ws.local_tree, recipe.command, commit_pending=recipe.commit_pending,
+                ws.local_tree, recipe.command,
+                commit_pending=recipe.commit_pending,
                 subpath=subpath)
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")

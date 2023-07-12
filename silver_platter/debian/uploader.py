@@ -28,7 +28,7 @@ from contextlib import suppress
 from email.utils import parseaddr
 from typing import Callable, List, Optional, Tuple
 
-from breezy import gpg
+from breezy import gpg  # type: ignore
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.config import NoEmailInUsername, extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied

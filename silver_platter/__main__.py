@@ -117,7 +117,7 @@ subcommands: Dict[str, Callable[[List[str]], Optional[int]]] = {
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
 
-    breezy.initialize()
+    breezy.initialize()  # type: ignore
     parser = argparse.ArgumentParser(prog="svp", add_help=False)
     parser.add_argument(
         "--version", action="version", version="%(prog)s " + version_string

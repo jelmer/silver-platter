@@ -20,7 +20,7 @@ from contextlib import suppress
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from breezy import errors
-from breezy import merge as _mod_merge
+from breezy import merge as _mod_merge  # type: ignore
 from breezy import revision as _mod_revision
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
