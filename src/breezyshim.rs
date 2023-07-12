@@ -127,3 +127,35 @@ impl std::fmt::Display for CommitError {
 }
 
 impl std::error::Error for CommitError {}
+
+pub struct Forge(PyObject);
+
+impl Forge {
+    pub fn new(obj: PyObject) -> Self {
+        Forge(obj)
+    }
+}
+
+pub struct Branch(PyObject);
+
+impl Branch {
+    pub fn new(obj: PyObject) -> Self {
+        Branch(obj)
+    }
+}
+
+pub fn get_forge(branch: &Branch) -> Forge {
+    Python::with_gil(|py| {
+        let m = py.import("breezy.forge").unwrap();
+        let forge = m.call_method1("get_forge", (&branch.0,)).unwrap();
+        Forge(forge.to_object(py))
+    })
+}
+
+pub fn determine_title(description: &str) -> String {
+    Python::with_gil(|py| {
+        let m = py.import("breezy.forge").unwrap();
+        let title = m.call_method1("determine_title", (description,)).unwrap();
+        title.extract().unwrap()
+    })
+}
