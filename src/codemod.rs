@@ -1,5 +1,6 @@
 use crate::breezyshim::{CommitError, RevisionId, WorkingTree};
 use std::collections::HashMap;
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct CommandResult {
@@ -8,7 +9,7 @@ pub struct CommandResult {
     pub description: String,
     pub serialized_context: Option<String>,
     pub tags: Vec<(String, Option<RevisionId>)>,
-    pub target_branch_url: Option<String>,
+    pub target_branch_url: Option<Url>,
     pub old_revision: RevisionId,
     pub new_revision: RevisionId,
 }
@@ -39,7 +40,7 @@ struct DetailedSuccess {
     serialized_context: Option<String>,
     tags: Option<Vec<(String, Option<String>)>>,
     #[serde(rename = "target-branch-url")]
-    target_branch_url: Option<String>,
+    target_branch_url: Option<Url>,
 }
 
 #[derive(Debug)]

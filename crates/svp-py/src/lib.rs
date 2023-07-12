@@ -1,6 +1,7 @@
 use pyo3::create_exception;
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyType};
 use silver_platter::codemod::Error as CodemodError;
 use silver_platter::{RevisionId, WorkingTree};
 
@@ -29,6 +30,154 @@ create_exception!(
     ResultFileFormatError,
     pyo3::exceptions::PyException
 );
+
+#[pyclass]
+struct Recipe(silver_platter::recipe::Recipe);
+
+fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
+    match value {
+        serde_json::Value::Null => py.None(),
+        serde_json::Value::Bool(b) => pyo3::types::PyBool::new(py, *b).into(),
+        serde_json::Value::Number(n) => {
+            if let Some(n) = n.as_u64() {
+                n.into_py(py)
+            } else if let Some(n) = n.as_i64() {
+                n.into_py(py)
+            } else if let Some(n) = n.as_f64() {
+                n.into_py(py)
+            } else {
+                unreachable!()
+            }
+        }
+        serde_json::Value::String(s) => pyo3::types::PyString::new(py, s.as_str()).into(),
+        serde_json::Value::Array(a) => {
+            let list = pyo3::types::PyList::empty(py);
+            for v in a {
+                list.append(json_to_py(py, v)).unwrap();
+            }
+            list.into_py(py)
+        }
+        serde_json::Value::Object(o) => {
+            let dict = pyo3::types::PyDict::new(py);
+            for (k, v) in o {
+                dict.set_item(k, json_to_py(py, v)).unwrap();
+            }
+            dict.into_py(py)
+        }
+    }
+}
+
+#[pymethods]
+impl Recipe {
+    #[classmethod]
+    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+        let recipe = silver_platter::recipe::Recipe::from_path(path.as_path())?;
+        Ok(Recipe(recipe))
+    }
+
+    #[getter]
+    fn name(&self) -> Option<&str> {
+        self.0.name.as_deref()
+    }
+
+    #[getter]
+    fn resume(&self) -> Option<bool> {
+        self.0.resume
+    }
+
+    #[getter]
+    fn labels(&self) -> Option<Vec<String>> {
+        self.0.labels.clone()
+    }
+
+    #[getter]
+    fn commit_pending(&self) -> Option<bool> {
+        self.0.commit_pending
+    }
+
+    #[getter]
+    fn command(&self) -> Option<Vec<&str>> {
+        self.0
+            .command
+            .as_ref()
+            .map(|v| v.iter().map(|s| s.as_str()).collect())
+    }
+
+    #[getter]
+    fn mode(&self) -> Option<String> {
+        self.0.mode.as_ref().map(|m| m.to_string())
+    }
+
+    fn render_merge_request_title(&self, context: &PyAny) -> PyResult<Option<String>> {
+        let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
+            mp
+        } else {
+            return Ok(None);
+        };
+        let context = py_dict_to_tera_context(context)?;
+        merge_request.render_title(&context).map_err(|e| {
+            PyRuntimeError::new_err(format!("Failed to render merge request title: {}", e))
+        })
+    }
+
+    fn render_merge_request_commit_message(&self, context: &PyAny) -> PyResult<Option<String>> {
+        let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
+            mp
+        } else {
+            return Ok(None);
+        };
+        let context = py_dict_to_tera_context(context)?;
+        merge_request.render_commit_message(&context).map_err(|e| {
+            PyRuntimeError::new_err(format!(
+                "Failed to render merge request commit message: {}",
+                e
+            ))
+        })
+    }
+
+    fn render_merge_request_description(
+        &self,
+        format: &str,
+        context: &PyAny,
+    ) -> PyResult<Option<String>> {
+        let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
+            mp
+        } else {
+            return Ok(None);
+        };
+        let context = py_dict_to_tera_context(context)?;
+        merge_request
+            .render_description(format, &context)
+            .map_err(|e| {
+                PyRuntimeError::new_err(format!(
+                    "Failed to render merge request description: {}",
+                    e
+                ))
+            })
+    }
+}
+
+fn py_dict_to_tera_context(py_dict: &PyAny) -> PyResult<tera::Context> {
+    let mut context = tera::Context::new();
+    if py_dict.is_none() {
+        return Ok(context);
+    }
+    let py_dict = py_dict.extract::<&PyDict>()?;
+    for (key, value) in py_dict.iter() {
+        let key = key.extract::<String>()?;
+        if let Ok(value) = value.extract::<String>() {
+            context.insert(key, &value);
+        } else if let Ok(value) = value.extract::<usize>() {
+            context.insert(key, &value);
+        } else {
+            return Err(PyTypeError::new_err(format!(
+                "Unsupported type for key '{}'",
+                key
+            )));
+        }
+    }
+    Ok(context)
+}
 
 #[pyfunction]
 fn derived_branch_name(url: &str) -> PyResult<&str> {
@@ -63,7 +212,7 @@ impl CommandResult {
 
     #[getter]
     fn target_branch_url(&self) -> Option<&str> {
-        self.0.target_branch_url.as_deref()
+        self.0.target_branch_url.as_ref().map(|u| u.as_str())
     }
 
     #[getter]
@@ -74,6 +223,11 @@ impl CommandResult {
     #[getter]
     fn new_revision(&self) -> RevisionId {
         self.0.new_revision.clone()
+    }
+
+    #[getter]
+    fn context(&self, py: Python) -> Option<PyObject> {
+        self.0.context.as_ref().map(|c| json_to_py(py, c))
     }
 }
 
@@ -137,5 +291,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
         py.get_type::<ResultFileFormatError>(),
     )?;
     m.add_class::<CommandResult>()?;
+    m.add_class::<Recipe>()?;
     Ok(())
 }

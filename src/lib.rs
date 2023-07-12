@@ -1,5 +1,6 @@
 mod breezyshim;
 pub mod codemod;
+pub mod recipe;
 pub use breezyshim::{RevisionId, WorkingTree};
 use std::path::Path;
 
