@@ -40,6 +40,7 @@ from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
 from breezy.transport import Transport
 
+from . import _svp_rs
 from .utils import full_branch_url, open_branch
 
 __all__ = [
@@ -142,30 +143,7 @@ def push_changes(
         )
 
 
-def push_derived_changes(
-    local_branch: Branch,
-    main_branch: Branch,
-    forge: Forge,
-    name: str,
-    *,
-    overwrite_existing: Optional[bool] = False,
-    owner: Optional[str] = None,
-    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
-    stop_revision: Optional[RevisionID] = None,
-) -> Tuple[Branch, str]:
-    kwargs = {}
-    if tags is not None:
-        kwargs["tag_selector"] = _tag_selector_from_tags(tags)
-    remote_branch, public_branch_url = forge.publish_derived(
-        local_branch,
-        main_branch,
-        name=name,
-        overwrite=overwrite_existing,
-        owner=owner,
-        revision_id=stop_revision,
-        **kwargs
-    )
-    return remote_branch, public_branch_url
+push_derived_changes = _svp_rs.push_derived_changes
 
 
 def propose_changes(  # noqa: C901

@@ -1,4 +1,5 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use crate::Mode;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,36 +47,6 @@ impl MergeRequest {
                 return Ok(None);
             };
         Ok(Some(tera.render_str(template.as_str(), context)?))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Mode {
-    #[serde(rename = "push")]
-    Push,
-
-    #[serde(rename = "propose")]
-    Propose,
-
-    #[serde(rename = "attempt-push")]
-    AttemptPush,
-
-    #[serde(rename = "push-derived")]
-    PushDerived,
-
-    #[serde(rename = "bts")]
-    Bts,
-}
-
-impl ToString for Mode {
-    fn to_string(&self) -> String {
-        match self {
-            Mode::Push => "push".to_string(),
-            Mode::Propose => "propose".to_string(),
-            Mode::AttemptPush => "attempt-push".to_string(),
-            Mode::PushDerived => "push-derived".to_string(),
-            Mode::Bts => "bts".to_string(),
-        }
     }
 }
 

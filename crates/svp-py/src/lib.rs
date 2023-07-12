@@ -307,6 +307,59 @@ fn push_derived_changes(
     Ok((Branch(b), u.to_string()))
 }
 
+#[pyclass]
+struct CandidateList(silver_platter::candidates::Candidates);
+
+#[pymethods]
+impl CandidateList {
+    #[classmethod]
+    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+        Ok(Self(silver_platter::candidates::Candidates::from_path(
+            path.as_path(),
+        )?))
+    }
+
+    #[getter]
+    fn candidates(&self) -> Vec<Candidate> {
+        self.0
+            .candidates()
+            .iter()
+            .map(|c| Candidate(c.clone()))
+            .collect()
+    }
+}
+
+#[pyclass]
+struct Candidate(silver_platter::candidates::Candidate);
+
+#[pymethods]
+impl Candidate {
+    #[getter]
+    fn url(&self) -> &str {
+        self.0.url.as_str()
+    }
+
+    #[getter]
+    fn name(&self) -> Option<&str> {
+        self.0.name.as_deref()
+    }
+
+    #[getter]
+    fn branch(&self) -> Option<&str> {
+        self.0.branch.as_deref()
+    }
+
+    #[getter]
+    fn subpath(&self) -> Option<&str> {
+        self.0.subpath.as_deref()
+    }
+
+    #[getter]
+    fn default_mode(&self) -> Option<String> {
+        self.0.default_mode.as_ref().map(|m| m.to_string())
+    }
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -323,5 +376,9 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
+    m.add_class::<Branch>()?;
+    m.add_class::<Forge>()?;
+    m.add_class::<CandidateList>()?;
+    m.add_class::<Candidate>()?;
     Ok(())
 }
