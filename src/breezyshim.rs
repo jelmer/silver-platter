@@ -130,7 +130,7 @@ impl std::fmt::Display for CommitError {
 
 impl std::error::Error for CommitError {}
 
-pub struct Forge(PyObject);
+pub struct Forge(pub PyObject);
 
 fn py_tag_selector(py: Python, tag_selector: Box<dyn Fn(String) -> bool>) -> PyResult<PyObject> {
     #[pyclass(unsendable)]
@@ -161,11 +161,19 @@ impl ToString for MergeProposalStatus {
     }
 }
 
+#[derive(Clone)]
 pub struct MergeProposal(PyObject);
 
 impl MergeProposal {
     pub fn new(obj: PyObject) -> Self {
         MergeProposal(obj)
+    }
+
+    pub fn reopen(&self) -> PyResult<()> {
+        Python::with_gil(|py| {
+            self.0.call_method0(py, "reopen")?;
+            Ok(())
+        })
     }
 
     pub fn url(&self) -> PyResult<url::Url> {
@@ -188,11 +196,157 @@ impl MergeProposal {
             is_closed.extract(py)
         })
     }
+
+    pub fn get_title(&self) -> PyResult<Option<String>> {
+        Python::with_gil(|py| {
+            let title = self.0.call_method0(py, "get_title")?;
+            title.extract(py)
+        })
+    }
+
+    pub fn set_title(&self, title: Option<&str>) -> PyResult<()> {
+        Python::with_gil(|py| {
+            self.0.call_method1(py, "set_title", (title,))?;
+            Ok(())
+        })
+    }
+
+    pub fn get_commit_message(&self) -> PyResult<Option<String>> {
+        Python::with_gil(|py| {
+            let commit_message = self.0.call_method0(py, "get_commit_message")?;
+            commit_message.extract(py)
+        })
+    }
+
+    pub fn set_commit_message(&self, commit_message: Option<&str>) -> PyResult<()> {
+        Python::with_gil(|py| {
+            self.0
+                .call_method1(py, "set_commit_message", (commit_message,))?;
+            Ok(())
+        })
+    }
+
+    pub fn get_description(&self) -> PyResult<Option<String>> {
+        Python::with_gil(|py| {
+            let description = self.0.call_method0(py, "get_description")?;
+            description.extract(py)
+        })
+    }
+
+    pub fn set_description(&self, description: Option<&str>) -> PyResult<()> {
+        Python::with_gil(|py| {
+            self.0.call_method1(py, "set_description", (description,))?;
+            Ok(())
+        })
+    }
+
+    pub fn merge(&self, auto: bool) -> PyResult<()> {
+        Python::with_gil(|py| {
+            self.0.call_method1(py, "merge", (auto,))?;
+            Ok(())
+        })
+    }
+}
+
+#[pyclass]
+pub struct ProposalBuilder(PyObject, PyObject);
+
+impl ProposalBuilder {
+    pub fn description(self, description: &str) -> Self {
+        Python::with_gil(|py| {
+            self.1
+                .as_ref(py)
+                .set_item("description", description)
+                .unwrap();
+        });
+        self
+    }
+
+    pub fn labels(self, labels: &[&str]) -> Self {
+        Python::with_gil(|py| {
+            self.1.as_ref(py).set_item("labels", labels).unwrap();
+        });
+        self
+    }
+
+    pub fn reviewers(self, reviewers: &[&str]) -> Self {
+        Python::with_gil(|py| {
+            self.1.as_ref(py).set_item("reviewers", reviewers).unwrap();
+        });
+        self
+    }
+
+    pub fn allow_collaboration(self, allow_collaboration: bool) -> Self {
+        Python::with_gil(|py| {
+            self.1
+                .as_ref(py)
+                .set_item("allow_collaboration", allow_collaboration)
+                .unwrap();
+        });
+        self
+    }
+
+    pub fn title(self, title: &str) -> Self {
+        Python::with_gil(|py| {
+            self.1.as_ref(py).set_item("title", title).unwrap();
+        });
+        self
+    }
+
+    pub fn commit_message(self, commit_message: &str) -> Self {
+        Python::with_gil(|py| {
+            self.1
+                .as_ref(py)
+                .set_item("commit_message", commit_message)
+                .unwrap();
+        });
+        self
+    }
+
+    pub fn build(self) -> PyResult<MergeProposal> {
+        Python::with_gil(|py| {
+            let kwargs = self.1;
+            let proposal = self.0.call_method1(py, "create_proposal", (kwargs,))?;
+            Ok(MergeProposal::new(proposal))
+        })
+    }
 }
 
 impl Forge {
     pub fn new(obj: PyObject) -> Self {
         Forge(obj)
+    }
+
+    pub fn supports_merge_proposal_commit_message(&self) -> bool {
+        Python::with_gil(|py| {
+            let supports_merge_proposal_commit_message = self
+                .0
+                .getattr(py, "supports_merge_proposal_commit_message")
+                .unwrap();
+            supports_merge_proposal_commit_message.extract(py).unwrap()
+        })
+    }
+
+    pub fn supports_merge_proposal_title(&self) -> bool {
+        Python::with_gil(|py| {
+            let supports_merge_proposal_title =
+                self.0.getattr(py, "supports_merge_proposal_title").unwrap();
+            supports_merge_proposal_title.extract(py).unwrap()
+        })
+    }
+
+    pub fn get_proposer(
+        &self,
+        from_branch: &Branch,
+        to_branch: &Branch,
+    ) -> PyResult<ProposalBuilder> {
+        Python::with_gil(|py| {
+            Ok(ProposalBuilder(
+                self.0
+                    .call_method1(py, "get_proposer", (&from_branch.0, &to_branch.0))?,
+                PyDict::new(py).into(),
+            ))
+        })
     }
 
     pub fn get_derived_branch(
@@ -249,7 +403,7 @@ impl Forge {
         overwrite_existing: Option<bool>,
         owner: Option<&str>,
         stop_revision: Option<&RevisionId>,
-        tag_selector: Box<dyn Fn(String) -> bool>,
+        tag_selector: Option<Box<dyn Fn(String) -> bool>>,
     ) -> PyResult<(Branch, url::Url)> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
@@ -265,7 +419,9 @@ impl Forge {
             if let Some(stop_revision) = stop_revision {
                 kwargs.set_item("stop_revision", stop_revision)?;
             }
-            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            if let Some(tag_selector) = tag_selector {
+                kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            }
             let (b, u): (PyObject, String) = self
                 .0
                 .call_method(py, "publish_derived", (), Some(kwargs))?
@@ -299,7 +455,8 @@ impl ToPyObject for Forge {
     }
 }
 
-pub struct Branch(PyObject);
+#[derive(Clone)]
+pub struct Branch(pub PyObject);
 
 impl Branch {
     pub fn new(obj: PyObject) -> Self {
@@ -339,7 +496,7 @@ impl Branch {
         remote_branch: &Branch,
         overwrite: bool,
         stop_revision: Option<&RevisionId>,
-        tag_selector: Box<dyn Fn(String) -> bool>,
+        tag_selector: Option<Box<dyn Fn(String) -> bool>>,
     ) -> PyResult<()> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
@@ -347,7 +504,9 @@ impl Branch {
             if let Some(stop_revision) = stop_revision {
                 kwargs.set_item("stop_revision", stop_revision)?;
             }
-            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            if let Some(tag_selector) = tag_selector {
+                kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            }
             self.0
                 .call_method(py, "push", (&remote_branch.0,), Some(kwargs))?;
             Ok(())
@@ -435,14 +594,20 @@ impl ControlDir {
         &self,
         source_branch: &Branch,
         to_branch_name: Option<&str>,
-        tag_selector: Box<dyn Fn(String) -> bool>,
+        overwrite: Option<bool>,
+        tag_selector: Option<Box<dyn Fn(String) -> bool>>,
     ) -> PyResult<Branch> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             if let Some(to_branch_name) = to_branch_name {
                 kwargs.set_item("name", to_branch_name)?;
             }
-            kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            if let Some(tag_selector) = tag_selector {
+                kwargs.set_item("tag_selector", py_tag_selector(py, tag_selector)?)?;
+            }
+            if let Some(overwrite) = overwrite {
+                kwargs.set_item("overwrite", overwrite)?;
+            }
             let result =
                 self.0
                     .call_method(py, "push_branch", (&source_branch.0,), Some(kwargs))?;

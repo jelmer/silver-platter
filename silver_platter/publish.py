@@ -16,8 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import logging
-from contextlib import suppress
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from breezy import errors
 from breezy import merge as _mod_merge  # type: ignore
@@ -27,9 +26,7 @@ from breezy.errors import PermissionDenied
 from breezy.forge import (
     Forge,
     MergeProposal,
-    MergeProposalExists,
     NoSuchProject,
-    ReopenFailed,
     SourceNotDerivedFromTarget,
     TitleUnsupported,
     UnsupportedForge,
@@ -79,168 +76,7 @@ def _tag_selector_from_tags(tags):
 push_result = _svp_rs.push_result
 push_changes = _svp_rs.push_changes
 push_derived_changes = _svp_rs.push_derived_changes
-
-
-def propose_changes(  # noqa: C901
-    local_branch: Branch,
-    main_branch: Branch,
-    forge: Forge,
-    name: str,
-    mp_description: str,
-    *,
-    resume_branch: Optional[Branch] = None,
-    resume_proposal: Optional[MergeProposal] = None,
-    overwrite_existing: Optional[bool] = True,
-    labels: Optional[List[str]] = None,
-    dry_run: bool = False,
-    commit_message: Optional[str] = None,
-    title: Optional[str] = None,
-    additional_colocated_branches:
-        Optional[Union[List[str], Dict[str, str]]] = None,
-    allow_empty: bool = False,
-    reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
-    owner: Optional[str] = None,
-    stop_revision: Optional[RevisionID] = None,
-    allow_collaboration: bool = False,
-    auto_merge: bool = False,
-) -> Tuple[MergeProposal, bool]:
-    """Create or update a merge proposal.
-
-    Args:
-      local_branch: Local branch with changes to propose
-      main_branch: Target branch to propose against
-      forge: Associated forge for main branch
-      mp_description: Merge proposal description
-      resume_branch: Existing derived branch
-      resume_proposal: Existing merge proposal to resume
-      overwrite_existing: Whether to overwrite any other existing branch
-      labels: Labels to add
-      dry_run: Whether to just dry-run the change
-      commit_message: Optional commit message
-      title: Optional title
-      additional_colocated_branches: Additional colocated branches to propose
-      allow_empty: Whether to allow empty merge proposals
-      reviewers: List of reviewers
-      tags: Tags to push (None for default behaviour)
-      owner: Derived branch owner
-      stop_revision: Revision to stop pushing at
-      allow_collaboration: Allow target branch owners to modify source branch
-      auto_merge: Enable merging once CI passes
-    Returns:
-      Tuple with (proposal, is_new)
-    """
-    if not allow_empty:
-        check_proposal_diff(local_branch, main_branch, stop_revision)
-    push_kwargs = {}
-    if tags is not None:
-        push_kwargs["tag_selector"] = _tag_selector_from_tags(tags)
-    if overwrite_existing is None:
-        overwrite_existing = True
-    if not dry_run:
-        if resume_branch is not None:
-            local_branch.push(
-                resume_branch,
-                overwrite=overwrite_existing,
-                stop_revision=stop_revision,
-                **push_kwargs
-            )
-            remote_branch = resume_branch
-        else:
-            remote_branch, public_branch_url = forge.publish_derived(
-                local_branch,
-                main_branch,
-                name=name,
-                overwrite=overwrite_existing,
-                revision_id=stop_revision,
-                owner=owner,
-                **push_kwargs
-            )
-        for from_branch_name in additional_colocated_branches or []:
-            try:
-                local_colo_branch = local_branch.controldir.open_branch(
-                    name=from_branch_name
-                )  # type: ignore
-            except errors.NotBranchError:
-                pass
-            else:
-                if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[
-                        from_branch_name]
-                else:
-                    to_branch_name = from_branch_name
-                remote_branch.controldir.push_branch(  # type: ignore
-                    source=local_colo_branch,
-                    overwrite=overwrite_existing,
-                    name=to_branch_name,
-                    **push_kwargs
-                )
-    if resume_proposal is not None and dry_run:
-        resume_proposal = DryRunProposal.from_existing(
-            resume_proposal, source_branch=local_branch
-        )
-    if (
-        resume_proposal is not None
-        and resume_proposal.is_closed()
-    ):
-        try:
-            resume_proposal.reopen()  # type: ignore
-        except ReopenFailed:
-            logging.info(
-                "Reopening existing proposal failed. Creating new proposal.")
-            resume_proposal = None
-    if resume_proposal is None:
-        if not dry_run:
-            proposal_builder = forge.get_proposer(remote_branch, main_branch)
-            kwargs: Dict[str, Any] = {}
-            if forge.supports_merge_proposal_commit_message:
-                kwargs["commit_message"] = commit_message
-            if forge.supports_merge_proposal_title:
-                kwargs["title"] = title
-            kwargs["allow_collaboration"] = allow_collaboration
-            try:
-                mp = proposal_builder.create_proposal(
-                    description=mp_description,
-                    labels=labels,
-                    reviewers=reviewers,
-                    **kwargs
-                )
-            except MergeProposalExists as e:
-                if e.existing_proposal is None:
-                    # Forge didn't tell us where the actual proposal is.
-                    raise
-                mp = e.existing_proposal
-            except errors.PermissionDenied:
-                logging.info(
-                    "Permission denied while trying to create " "proposal.")
-                raise
-        else:
-            mp = DryRunProposal(
-                local_branch,
-                main_branch,
-                labels=labels,
-                description=mp_description,
-                commit_message=commit_message,
-                title=title,
-                reviewers=reviewers,
-                owner=owner,
-                stop_revision=stop_revision,
-            )
-        if auto_merge:
-            mp.merge(auto=True)
-        return (mp, True)
-    # Check that the proposal doesn't already has this description.
-    # Setting the description (regardless of whether it changes)
-    # causes Launchpad to send emails.
-    if resume_proposal.get_description() != mp_description:
-        resume_proposal.set_description(mp_description)
-    if resume_proposal.get_commit_message() != commit_message:
-        with suppress(errors.UnsupportedOperation):
-            resume_proposal.set_commit_message(commit_message)
-    if resume_proposal.get_title() != title:
-        with suppress(errors.UnsupportedOperation):
-            resume_proposal.set_title(title)
-    return (resume_proposal, False)
+propose_changes = _svp_rs.propose_changes
 
 
 class EmptyMergeProposal(Exception):
@@ -468,7 +304,6 @@ def publish_changes(
     ]] = None,
     get_proposal_title:
         Optional[Callable[[Optional[MergeProposal]], Optional[str]]] = None,
-    dry_run: bool = False,
     forge: Optional[Forge] = None,
     allow_create_proposal: bool = True,
     labels: Optional[List[str]] = None,
@@ -489,7 +324,6 @@ def publish_changes(
       get_proposal_description: Function to retrieve proposal description
       get_proposal_commit_message: Function to retrieve proposal commit message
       get_proposal_title: Function to retrieve proposal title
-      dry_run: Whether to dry run
       forge: Forge, if known
       allow_create_proposal: Whether to allow creating proposals
       labels: Labels to set for any merge proposals
@@ -548,7 +382,6 @@ def publish_changes(
                 local_branch,
                 main_branch,
                 forge=forge,
-                dry_run=dry_run,
                 tags=tags,
                 stop_revision=stop_revision,
             )
@@ -593,7 +426,6 @@ def publish_changes(
         resume_proposal=existing_proposal,
         overwrite_existing=overwrite_existing,
         labels=labels,
-        dry_run=dry_run,
         commit_message=commit_message,
         title=title,
         reviewers=reviewers,

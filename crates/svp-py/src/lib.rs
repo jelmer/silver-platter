@@ -417,11 +417,9 @@ fn push_changes(
     forge: Option<PyObject>,
     possible_transports: Option<Vec<PyObject>>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
-    dry_run: Option<bool>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
-    let dry_run = dry_run.unwrap_or(false);
     let possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     silver_platter::publish::push_changes(
@@ -430,7 +428,6 @@ fn push_changes(
         forge.map(silver_platter::Forge::new).as_ref(),
         possible_transports,
         additional_colocated_branches,
-        dry_run,
         tags,
         stop_revision.as_ref(),
     )?;
@@ -531,6 +528,52 @@ fn find_existing_proposed(
     ))
 }
 
+#[pyfunction]
+fn propose_changes(
+    local_branch: &Branch,
+    main_branch: &Branch,
+    forge: &Forge,
+    name: &str,
+    mp_description: &str,
+    resume_branch: Option<&Branch>,
+    resume_proposal: Option<&MergeProposal>,
+    overwrite_existing: Option<bool>,
+    labels: Option<Vec<String>>,
+    commit_message: Option<&str>,
+    title: Option<&str>,
+    additional_colocated_branches: Option<Vec<(String, String)>>,
+    allow_empty: Option<bool>,
+    reviewers: Option<Vec<String>>,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    owner: Option<&str>,
+    stop_revision: Option<RevisionId>,
+    allow_collaboration: Option<bool>,
+    auto_merge: Option<bool>,
+) -> PyResult<(MergeProposal, bool)> {
+    silver_platter::publish::propose_changes(
+        &local_branch.0,
+        &main_branch.0,
+        &forge.0,
+        name,
+        mp_description,
+        resume_branch.as_ref().map(|b| &b.0),
+        resume_proposal.as_ref().map(|p| p.0.clone()),
+        overwrite_existing,
+        labels,
+        commit_message,
+        title,
+        additional_colocated_branches,
+        allow_empty,
+        reviewers,
+        tags,
+        owner,
+        stop_revision.as_ref(),
+        allow_collaboration,
+        auto_merge,
+    )
+    .map(|(p, b)| (MergeProposal(p), b))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -577,6 +620,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
+    m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
 
     Ok(())
 }

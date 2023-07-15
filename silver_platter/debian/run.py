@@ -69,7 +69,7 @@ def derived_branch_name(script: str) -> str:
 def apply_and_publish(  # noqa: C901
         url: str, name: str, command: str, mode: str,
         subpath: str = '',
-        commit_pending: Optional[bool] = None, dry_run: bool = False,
+        commit_pending: Optional[bool] = None,
         labels: Optional[List[str]] = None, diff: bool = False,
         verify_command: Optional[str] = None,
         derived_owner: Optional[str] = None,
@@ -173,7 +173,6 @@ def apply_and_publish(  # noqa: C901
                     lambda ep: get_title(result, ep)),
                 allow_create_proposal=(
                     lambda: allow_create_proposal(result)),
-                dry_run=dry_run,
                 forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
@@ -257,12 +256,6 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         choices=["yes", "no", "auto"],
         default=None,
         type=str,
-    )
-    parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true",
-        default=False,
     )
     parser.add_argument(
         "--build-verify",
@@ -391,7 +384,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         if apply_and_publish(
                 candidate.url, name=name, command=command, mode=args.mode,
                 subpath=candidate.subpath,
-                commit_pending=commit_pending, dry_run=args.dry_run,
+                commit_pending=commit_pending,
                 labels=args.label, diff=args.diff,
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,

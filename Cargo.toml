@@ -19,10 +19,12 @@ serde_yaml = "0.9.22"
 url = { version = "2.4.0", features = ["serde"] }
 log = "0.4.19"
 percent-encoding = "2.3.0"
+breezyshim = {version =  "0.1", optional = true }
 
 [features]
 default = []
 debian = ["dep:debversion"]
+breezyshim = ["dep:breezyshim"]
 
 [workspace]
 members = [ "crates/*" ]

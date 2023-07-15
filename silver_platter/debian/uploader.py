@@ -424,7 +424,7 @@ def process_package(
         apt_repo, package,
         builder: str, *, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
-        acceptable_keys=None, debug: bool = False, dry_run: bool = False,
+        acceptable_keys=None, debug: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
         vcs_type=None, vcs_url=None, source_name=None,
         archive_version=None, verify_command: Optional[str] = None):
@@ -613,15 +613,14 @@ def process_package(
             logging.info("Pushing tag %s", tag_name)
             tags.append(tag_name)
         try:
-            ws.push(dry_run=dry_run, tags=tags)
+            ws.push(tags=tags)
         except PermissionDenied:
             logging.info(
                 "%s: Permission denied pushing to branch, skipping.",
                 source_name
             )
             raise PackageProcessingFailure('vcs-permission-denied')
-        if not dry_run:
-            dput_changes(target_changes)
+        dput_changes(target_changes)
         if diff:
             sys.stdout.flush()
             ws.show_diff(sys.stdout.buffer)
@@ -732,8 +731,6 @@ def main(argv):  # noqa: C901
 
     parser = argparse.ArgumentParser(prog="upload-pending-commits")
     parser.add_argument("packages", nargs="*")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Dry run changes.")
     parser.add_argument(
         "--acceptable-keys",
         help="List of acceptable GPG keys",
@@ -901,7 +898,7 @@ def main(argv):  # noqa: C901
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
                 acceptable_keys=args.acceptable_keys,
-                debug=args.debug, dry_run=args.dry_run,
+                debug=args.debug,
                 diff=args.diff, min_commit_age=args.min_commit_age,
                 allowed_committers=args.allowed_committer,
                 vcs_type=vcs_type, vcs_url=vcs_url,

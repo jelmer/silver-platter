@@ -36,8 +36,8 @@ from .publish import (
     propose_changes,
     push_changes,
     push_derived_changes,
+    publish_changes as _publish_changes,
 )
-from .publish import publish_changes as _publish_changes
 from .utils import create_temp_sprout, full_branch_url
 
 __all__ = [
@@ -315,13 +315,11 @@ class Workspace:
             self,
             tags: Union[Dict[str, RevisionID], List[str]],
             *,
-            forge: Optional[Forge] = None,
-            dry_run: bool = False):
+            forge: Optional[Forge] = None):
         if not self.main_branch:
             raise RuntimeError('no main branch known')
         return self.push(
             forge=forge,
-            dry_run=dry_run,
             tags=tags,
             stop_revision=self.main_branch.last_revision())
 
@@ -329,7 +327,6 @@ class Workspace:
         self,
         *,
         forge: Optional[Forge] = None,
-        dry_run: bool = False,
         tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
         stop_revision: Optional[RevisionID] = None,
     ) -> None:
@@ -351,7 +348,6 @@ class Workspace:
             forge=forge,
             additional_colocated_branches=(
                 self._inverse_additional_colocated_branches()),
-            dry_run=dry_run,
             tags=tags,
             stop_revision=stop_revision,
         )
@@ -366,7 +362,6 @@ class Workspace:
         existing_proposal: Optional[MergeProposal] = None,
         overwrite_existing: Optional[bool] = None,
         labels: Optional[List[str]] = None,
-        dry_run: bool = False,
         commit_message: Optional[str] = None,
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
@@ -391,7 +386,6 @@ class Workspace:
             resume_proposal=existing_proposal,
             overwrite_existing=(overwrite_existing or False),
             labels=labels,
-            dry_run=dry_run,
             commit_message=commit_message,
             title=title,
             reviewers=reviewers,
