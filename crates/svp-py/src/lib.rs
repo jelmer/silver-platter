@@ -236,7 +236,7 @@ fn script_runner(
     py: Python,
     local_tree: PyObject,
     script: PyObject,
-    subpath: Option<&str>,
+    subpath: Option<std::path::PathBuf>,
     commit_pending: Option<bool>,
     resume_metadata: Option<&CommandResult>,
     committer: Option<&str>,
@@ -251,7 +251,9 @@ fn script_runner(
     silver_platter::codemod::script_runner(
         &WorkingTree::new(local_tree).unwrap(),
         script.as_slice(),
-        subpath.unwrap_or(""),
+        subpath
+            .as_ref()
+            .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
         commit_pending,
         resume_metadata.as_ref().map(|obj| &obj.0),
         committer,

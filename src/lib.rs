@@ -1,13 +1,15 @@
-mod breezyshim;
 pub mod candidates;
 pub mod codemod;
 pub mod probers;
 pub mod publish;
 pub mod recipe;
 pub mod vcs;
-pub use breezyshim::{
-    Branch, ControlDir, Forge, MergeProposal, Prober, RevisionId, Transport, WorkingTree,
-};
+pub use breezyshim::branch::Branch;
+pub use breezyshim::controldir::{ControlDir, Prober};
+pub use breezyshim::forge::{Forge, MergeProposal};
+pub use breezyshim::transport::Transport;
+pub use breezyshim::tree::WorkingTree;
+pub use breezyshim::RevisionId;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

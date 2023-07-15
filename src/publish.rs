@@ -1,5 +1,5 @@
-use crate::breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use crate::vcs::open_branch;
+use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use pyo3::exceptions::PyPermissionError;
 use pyo3::import_exception;
 use pyo3::prelude::*;
@@ -144,7 +144,7 @@ pub fn find_existing_proposed(
         for mp in forge.iter_proposals(
             &existing_branch,
             main_branch,
-            crate::breezyshim::MergeProposalStatus::All,
+            breezyshim::MergeProposalStatus::All,
         )? {
             if !mp.is_closed()? && !mp.is_merged()? {
                 open_proposals.push(mp);

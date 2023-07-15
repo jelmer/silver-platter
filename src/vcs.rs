@@ -1,4 +1,4 @@
-use crate::breezyshim::{
+use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, ControlDir, Prober,
     Transport,
 };

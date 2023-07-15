@@ -1,4 +1,4 @@
-use crate::breezyshim::Prober;
+use breezyshim::Prober;
 use pyo3::prelude::*;
 
 fn select_probers(vcs_type: &str) -> Vec<Prober> {

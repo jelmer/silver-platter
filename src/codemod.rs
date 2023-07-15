@@ -1,4 +1,5 @@
-use crate::breezyshim::{CommitError, RevisionId, WorkingTree};
+use breezyshim::tree::{CommitError, WorkingTree};
+use breezyshim::RevisionId;
 use std::collections::HashMap;
 use url::Url;
 
@@ -127,7 +128,7 @@ impl std::fmt::Display for DetailedFailure {
 pub fn script_runner(
     local_tree: &WorkingTree,
     script: &[&str],
-    subpath: &str,
+    subpath: &std::path::Path,
     commit_pending: Option<bool>,
     resume_metadata: Option<&CommandResult>,
     committer: Option<&str>,
@@ -210,7 +211,7 @@ pub fn script_runner(
     let mut new_revision = local_tree.last_revision().unwrap();
     let tags: Vec<(String, Option<RevisionId>)> = if let Some(tags) = result.tags {
         tags.into_iter()
-            .map(|(n, v)| (n, v.map(|v| RevisionId::new(v.as_bytes().to_vec()))))
+            .map(|(n, v)| (n, v.map(|v| RevisionId::from(v.as_bytes().to_vec()))))
             .collect()
     } else {
         let mut tags = local_tree
@@ -239,15 +240,19 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
-        new_revision =
-            match local_tree.commit(result.description.as_ref().unwrap(), committer, false) {
-                Ok(rev) => rev,
-                Err(CommitError::PointlessCommit) => {
-                    // No changes
-                    last_revision.clone()
-                }
-                Err(e) => return Err(Error::Other(format!("Failed to commit changes: {}", e))),
-            };
+        new_revision = match local_tree.commit(
+            result.description.as_ref().unwrap(),
+            Some(false),
+            committer,
+            None,
+        ) {
+            Ok(rev) => rev,
+            Err(CommitError::PointlessCommit) => {
+                // No changes
+                last_revision.clone()
+            }
+            Err(e) => return Err(Error::Other(format!("Failed to commit changes: {}", e))),
+        };
     }
 
     if new_revision == last_revision {
