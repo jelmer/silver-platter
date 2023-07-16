@@ -39,7 +39,6 @@ from breezy.transport import Transport
 
 from .publish import (
     SUPPORTED_MODES,
-    DryRunProposal,
     EmptyMergeProposal,
     check_proposal_diff,
     find_existing_proposed,
@@ -61,7 +60,6 @@ __all__ = [
     "SUPPORTED_MODES",
     "push_derived_changes",
     "propose_changes",
-    "DryRunProposal",
     "check_proposal_diff",
     "EmptyMergeProposal",
     "find_existing_proposed",

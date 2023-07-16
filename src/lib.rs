@@ -13,7 +13,7 @@ pub use breezyshim::RevisionId;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     #[serde(rename = "push")]
     Push,
@@ -40,6 +40,29 @@ impl ToString for Mode {
             Mode::PushDerived => "push-derived".to_string(),
             Mode::Bts => "bts".to_string(),
         }
+    }
+}
+
+impl pyo3::FromPyObject<'_> for Mode {
+    fn extract(ob: &pyo3::PyAny) -> pyo3::PyResult<Self> {
+        let s: &str = ob.extract()?;
+        match s {
+            "push" => Ok(Mode::Push),
+            "propose" => Ok(Mode::Propose),
+            "attempt-push" => Ok(Mode::AttemptPush),
+            "push-derived" => Ok(Mode::PushDerived),
+            "bts" => Ok(Mode::Bts),
+            _ => Err(pyo3::exceptions::PyValueError::new_err((format!(
+                "Unknown mode: {}",
+                s
+            ),))),
+        }
+    }
+}
+
+impl pyo3::ToPyObject for Mode {
+    fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
+        self.to_string().to_object(py)
     }
 }
 

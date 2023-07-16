@@ -1,4 +1,5 @@
 use crate::vcs::open_branch;
+use crate::Mode;
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use pyo3::exceptions::PyPermissionError;
 use pyo3::import_exception;
@@ -388,4 +389,238 @@ pub fn check_proposal_diff(
 
         Ok(())
     })
+}
+
+#[derive(Debug)]
+pub enum Error {
+    DivergedBranches(),
+    Other(PyErr),
+    InsufficientChangesForNewProposal,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::DivergedBranches() => write!(f, "Diverged branches"),
+            Error::Other(e) => write!(f, "{}", e),
+            Error::InsufficientChangesForNewProposal => {
+                write!(f, "Insufficient changes for new proposal")
+            }
+        }
+    }
+}
+
+impl From<PyErr> for Error {
+    fn from(e: PyErr) -> Self {
+        Error::Other(e)
+    }
+}
+
+/// Publish a set of changes.
+///
+/// # Arguments
+/// * `local_branch` - Local branch to publish
+/// * `main_branch` - Main branch to publish to
+/// * `resume_branch` - Branch to resume publishing from
+/// * `mode` - Mode to use ('push', 'push-derived', 'propose')
+/// * `name` - Branch name to push
+/// * `get_proposal_description` - Function to retrieve proposal description
+/// * `get_proposal_commit_message` - Function to retrieve proposal commit message
+/// * `get_proposal_title` - Function to retrieve proposal title
+/// * `forge` - Forge, if known
+/// * `allow_create_proposal` - Whether to allow creating proposals
+/// * `labels` - Labels to set for any merge proposals
+/// * `overwrite_existing` - Whether to overwrite existing (but unrelated) branch
+/// * `existing_proposal` - Existing proposal to update
+/// * `reviewers` - List of reviewers for merge proposal
+/// * `tags` - Tags to push (None for default behaviour)
+/// * `derived_owner` - Name of any derived branch
+/// * `allow_collaboration` - Whether to allow target branch owners to modify source branch.
+pub fn publish_changes(
+    local_branch: &Branch,
+    main_branch: &Branch,
+    resume_branch: Option<&Branch>,
+    mut mode: Mode,
+    name: &str,
+    get_proposal_description: impl Fn(&str, Option<&MergeProposal>) -> String,
+    get_proposal_commit_message: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+    get_proposal_title: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+    forge: Option<&Forge>,
+    allow_create_proposal: Option<bool>,
+    labels: Option<Vec<String>>,
+    overwrite_existing: Option<bool>,
+    existing_proposal: Option<MergeProposal>,
+    reviewers: Option<Vec<String>>,
+    tags: Option<HashMap<String, RevisionId>>,
+    derived_owner: Option<&str>,
+    allow_collaboration: Option<bool>,
+    stop_revision: Option<&RevisionId>,
+) -> Result<PublishResult, Error> {
+    Python::with_gil(|py| {
+        let stop_revision =
+            stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
+        let allow_create_proposal = allow_create_proposal.unwrap_or(true);
+
+        let forge = forge.map_or_else(|| breezyshim::forge::get_forge(main_branch), |f| f.clone());
+
+        if stop_revision == main_branch.last_revision() {
+            if let Some(existing_proposal) = existing_proposal.as_ref() {
+                log::info!("closing existing merge proposal - no new revisions");
+                existing_proposal.close()?;
+            }
+            return Ok(PublishResult {
+                mode,
+                target_branch: main_branch.clone(),
+                forge: forge.clone(),
+                proposal: existing_proposal,
+                is_new: Some(false),
+            });
+        }
+
+        if let Some(resume_branch) = resume_branch {
+            if resume_branch.last_revision() == stop_revision {
+                // No new revisions added on this iteration, but changes since main
+                // branch. We may not have gotten round to updating/creating the
+                // merge proposal last time.
+                log::info!("No changes added; making sure merge proposal is up to date.");
+            }
+        }
+        match mode {
+            Mode::PushDerived => {
+                let (remote_branch, public_url) = push_derived_changes(
+                    local_branch,
+                    main_branch,
+                    &forge,
+                    name,
+                    overwrite_existing,
+                    derived_owner,
+                    tags,
+                    Some(&stop_revision),
+                )?;
+                return Ok(PublishResult {
+                    mode,
+                    target_branch: main_branch.clone(),
+                    forge: forge.clone(),
+                    proposal: None,
+                    is_new: None,
+                });
+            }
+            Mode::Push | Mode::AttemptPush => {
+                let read_lock = local_branch.lock_read()?;
+                // breezy would do this check too, but we want to be *really* sure.
+                let graph = local_branch.repository().get_graph();
+                if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision) {
+                    return Err(Error::DivergedBranches());
+                }
+                std::mem::drop(read_lock);
+                match push_changes(
+                    local_branch,
+                    main_branch,
+                    Some(&forge),
+                    None,
+                    None,
+                    tags.clone(),
+                    Some(&stop_revision),
+                ) {
+                    Err(e) if e.is_instance_of::<PermissionDenied>(py) => {
+                        if mode == Mode::AttemptPush {
+                            log::info!("push access denied, falling back to propose");
+                            mode = Mode::Propose;
+                        } else {
+                            log::info!("permission denied during push");
+                            return Err(e.into());
+                        }
+                    }
+                    Ok(o) => {
+                        return Ok(PublishResult {
+                            proposal: None,
+                            mode,
+                            target_branch: main_branch.clone(),
+                            forge: forge.clone(),
+                            is_new: None,
+                        });
+                    }
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                }
+            }
+            Mode::Bts => {
+                unimplemented!();
+            }
+            Mode::Propose => { // Handled below
+            }
+        }
+
+        assert_eq!(mode, Mode::Propose);
+        if resume_branch.is_none() && !allow_create_proposal {
+            return Err(Error::InsufficientChangesForNewProposal);
+        }
+
+        let mp_description = get_proposal_description(
+            forge.merge_proposal_description_format().as_str(),
+            if resume_branch.is_some() {
+                existing_proposal.as_ref()
+            } else {
+                None
+            },
+        );
+        let commit_message = if let Some(get_proposal_commit_message) = get_proposal_commit_message
+        {
+            get_proposal_commit_message(if resume_branch.is_some() {
+                existing_proposal.as_ref()
+            } else {
+                None
+            })
+        } else {
+            None
+        };
+        let title = if let Some(get_proposal_title) = get_proposal_title {
+            get_proposal_title(if resume_branch.is_some() {
+                existing_proposal.as_ref()
+            } else {
+                None
+            })
+        } else {
+            None
+        };
+        let title =
+            title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
+        let (proposal, is_new) = propose_changes(
+            local_branch,
+            main_branch,
+            &forge,
+            name,
+            mp_description.as_str(),
+            resume_branch,
+            existing_proposal,
+            overwrite_existing,
+            labels,
+            commit_message.as_deref(),
+            Some(title.as_str()),
+            None,
+            None,
+            reviewers,
+            tags,
+            derived_owner,
+            Some(&stop_revision),
+            allow_collaboration,
+            None,
+        )?;
+        Ok(PublishResult {
+            mode,
+            proposal: Some(proposal),
+            is_new: Some(is_new),
+            target_branch: main_branch.clone(),
+            forge: forge.clone(),
+        })
+    })
+}
+
+pub struct PublishResult {
+    pub mode: Mode,
+    pub proposal: Option<MergeProposal>,
+    pub is_new: Option<bool>,
+    pub target_branch: Branch,
+    pub forge: Forge,
 }

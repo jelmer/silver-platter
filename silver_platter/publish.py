@@ -15,8 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import logging
-from typing import Callable, Dict, List, Optional, Union
+from typing import List, Optional
 
 from breezy import errors
 from breezy import merge as _mod_merge  # type: ignore
@@ -24,20 +23,14 @@ from breezy import revision as _mod_revision
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
 from breezy.forge import (
-    Forge,
-    MergeProposal,
     NoSuchProject,
     SourceNotDerivedFromTarget,
-    TitleUnsupported,
     UnsupportedForge,
-    determine_title,
-    get_forge,
 )
 from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
 
 from . import _svp_rs
-from .utils import full_branch_url, open_branch
 
 __all__ = [
     "push_changes",
@@ -45,7 +38,6 @@ __all__ = [
     "propose_changes",
     "EmptyMergeProposal",
     "check_proposal_diff",
-    "DryRunProposal",
     "find_existing_proposed",
     "NoSuchProject",
     "PermissionDenied",
@@ -66,17 +58,13 @@ SUPPORTED_MODES: List[str] = [
 ]
 
 
-def _tag_selector_from_tags(tags):
-    def select(tag):
-        assert isinstance(tag, str)
-        return tags.__contains__(tag)
-    return select
-
-
 push_result = _svp_rs.push_result
 push_changes = _svp_rs.push_changes
 push_derived_changes = _svp_rs.push_derived_changes
 propose_changes = _svp_rs.propose_changes
+publish_changes = _svp_rs.publish_changes
+PublishResult = _svp_rs.PublishResult
+InsufficientChangesForNewProposal = _svp_rs.InsufficientChangesForNewProposal
 
 
 class EmptyMergeProposal(Exception):
@@ -114,105 +102,6 @@ def check_proposal_diff(
             changes = tt.iter_changes()
             if not any(changes):
                 raise EmptyMergeProposal(other_branch, main_branch)
-
-
-class DryRunProposal(MergeProposal):
-    """A merge proposal that is not actually created.
-
-    :ivar url: URL for the merge proposal
-    """
-
-    def __init__(
-        self,
-        source_branch: Branch,
-        target_branch: Branch,
-        labels: Optional[List[str]] = None,
-        description: Optional[str] = None,
-        commit_message: Optional[str] = None,
-        title: Optional[str] = None,
-        reviewers: Optional[List[str]] = None,
-        owner: Optional[str] = None,
-        stop_revision: Optional[RevisionID] = None,
-    ) -> None:
-        self.description = description
-        self.closed = False
-        self.labels = labels or []
-        self.source_branch = source_branch
-        self.target_branch = target_branch
-        self.commit_message = commit_message
-        self.title = title
-        self.url = None
-        self.reviewers = reviewers
-        self.owner = owner
-        self.stop_revision = stop_revision
-
-    @classmethod
-    def from_existing(
-        cls, mp: MergeProposal, source_branch: Optional[Branch] = None
-    ) -> MergeProposal:
-        if source_branch is None:
-            source_branch = open_branch(mp.get_source_branch_url())
-        commit_message = mp.get_commit_message()
-        try:
-            title = mp.get_title()
-        except TitleUnsupported:
-            title = None
-        return cls(
-            source_branch=source_branch,
-            target_branch=open_branch(mp.get_target_branch_url()),
-            description=mp.get_description(),
-            commit_message=commit_message,
-            title=title,
-        )
-
-    def __repr__(self) -> str:
-        return "{}({!r}, {!r})".format(
-            self.__class__.__name__,
-            self.source_branch,
-            self.target_branch,
-        )
-
-    def get_description(self) -> Optional[str]:
-        """Get the description of the merge proposal."""
-        return self.description
-
-    def set_description(self, description: str) -> None:
-        self.description = description
-
-    def get_commit_message(self) -> Optional[str]:
-        return self.commit_message
-
-    def set_commit_message(self, commit_message: str) -> None:
-        self.commit_message = commit_message
-
-    def get_title(self) -> Optional[str]:
-        return self.title
-
-    def set_title(self, title: str) -> None:
-        self.title = title
-
-    def get_source_branch_url(self, *, preferred_schemes=None) -> str:
-        """Return the source branch."""
-        return full_branch_url(self.source_branch)
-
-    def get_target_branch_url(self, preferred_schemes=None) -> str:
-        """Return the target branch."""
-        return full_branch_url(self.target_branch)
-
-    def close(self) -> None:
-        """Close the merge proposal (without merging it)."""
-        self.closed = True
-
-    def is_merged(self) -> bool:
-        """Check whether this merge proposal has been merged."""
-        return False
-
-    def is_closed(self) -> bool:
-        """Check whether this merge proposal has been closed."""
-        return False
-
-    def reopen(self) -> None:
-        pass
 
 
 find_existing_proposed = _svp_rs.find_existing_proposed
@@ -268,172 +157,3 @@ def merge_conflicts(
     finally:
         _mod_merge.Merger.hooks["merge_file_content"] = (
             old_file_content_mergers)
-
-
-class PublishResult:
-    """A object describing the result of a publish action."""
-
-    def __init__(
-        self, *, mode: str,
-        target_branch: Branch,
-        forge: Optional[Forge] = None,
-        proposal: Optional[MergeProposal] = None,
-        is_new: bool = False
-    ) -> None:
-        self.mode = mode
-        self.target_branch = target_branch
-        self.forge = forge
-        self.proposal = proposal
-        self.is_new = is_new
-
-
-class InsufficientChangesForNewProposal(Exception):
-    """There were not enough changes for a new merge proposal."""
-
-
-def publish_changes(
-    local_branch: Branch,
-    main_branch: Branch,
-    resume_branch: Optional[Branch],
-    mode: str,
-    name: str,
-    *,
-    get_proposal_description: Callable[[str, Optional[MergeProposal]], str],
-    get_proposal_commit_message: Optional[Callable[
-        [Optional[MergeProposal]], Optional[str]
-    ]] = None,
-    get_proposal_title:
-        Optional[Callable[[Optional[MergeProposal]], Optional[str]]] = None,
-    forge: Optional[Forge] = None,
-    allow_create_proposal: bool = True,
-    labels: Optional[List[str]] = None,
-    overwrite_existing: Optional[bool] = True,
-    existing_proposal: Optional[MergeProposal] = None,
-    reviewers: Optional[List[str]] = None,
-    tags: Optional[Union[List[str], Dict[str, RevisionID]]] = None,
-    derived_owner: Optional[str] = None,
-    allow_collaboration: bool = False,
-    stop_revision: Optional[RevisionID] = None,
-) -> PublishResult:
-    """Publish a set of changes.
-
-    Args:
-      ws: Workspace to push from
-      mode: Mode to use ('push', 'push-derived', 'propose')
-      name: Branch name to push
-      get_proposal_description: Function to retrieve proposal description
-      get_proposal_commit_message: Function to retrieve proposal commit message
-      get_proposal_title: Function to retrieve proposal title
-      forge: Forge, if known
-      allow_create_proposal: Whether to allow creating proposals
-      labels: Labels to set for any merge proposals
-      overwrite_existing: Whether to overwrite existing (but unrelated) branch
-      existing_proposal: Existing proposal to update
-      reviewers: List of reviewers for merge proposal
-      tags: Tags to push (None for default behaviour)
-      derived_owner: Name of any derived branch
-      allow_collaboration: Whether to allow target branch owners to modify
-        source branch.
-    """
-    if mode not in SUPPORTED_MODES:
-        raise ValueError("invalid mode %r" % mode)
-
-    if stop_revision is None:
-        stop_revision = local_branch.last_revision()
-
-    if forge is None:
-        forge = get_forge(main_branch)
-
-    if stop_revision == main_branch.last_revision():
-        if existing_proposal is not None:
-            logging.info("closing existing merge proposal - no new revisions")
-            existing_proposal.close()
-        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
-
-    if resume_branch and resume_branch.last_revision() == stop_revision:
-        # No new revisions added on this iteration, but changes since main
-        # branch. We may not have gotten round to updating/creating the
-        # merge proposal last time.
-        logging.info(
-            "No changes added; making sure merge proposal is up to date.")
-
-    if mode == MODE_PUSH_DERIVED:
-        (remote_branch, public_url) = push_derived_changes(
-            local_branch,
-            main_branch,
-            forge=forge,
-            name=name,
-            overwrite_existing=overwrite_existing,
-            tags=tags,
-            owner=derived_owner,
-            stop_revision=stop_revision,
-        )
-        return PublishResult(mode=mode, target_branch=main_branch, forge=forge)
-
-    if mode in (MODE_PUSH, MODE_ATTEMPT_PUSH):
-        try:
-            # breezy would do this check too, but we want to be *really* sure.
-            with local_branch.lock_read():
-                graph = local_branch.repository.get_graph()
-                if not graph.is_ancestor(
-                        main_branch.last_revision(), stop_revision):
-                    raise errors.DivergedBranches(main_branch, local_branch)
-            push_changes(
-                local_branch,
-                main_branch,
-                forge=forge,
-                tags=tags,
-                stop_revision=stop_revision,
-            )
-        except errors.PermissionDenied:
-            if mode == MODE_ATTEMPT_PUSH:
-                logging.info("push access denied, falling back to propose")
-                mode = MODE_PROPOSE
-            else:
-                logging.info("permission denied during push")
-                raise
-        else:
-            return PublishResult(
-                mode=mode, target_branch=main_branch, forge=forge)
-
-    assert mode == "propose"
-    if not resume_branch and not allow_create_proposal:
-        raise InsufficientChangesForNewProposal()
-
-    mp_description = get_proposal_description(
-        forge.merge_proposal_description_format,
-        existing_proposal if resume_branch else None,
-    )
-    if get_proposal_commit_message is not None:
-        commit_message = get_proposal_commit_message(
-            existing_proposal if resume_branch else None
-        )
-    if get_proposal_title is not None:
-        title = get_proposal_title(
-            existing_proposal if resume_branch else None
-        )
-    else:
-        title = None
-    if title is None:
-        title = determine_title(mp_description)
-    (proposal, is_new) = propose_changes(
-        local_branch,
-        main_branch,
-        forge=forge,
-        name=name,
-        mp_description=mp_description,
-        resume_branch=resume_branch,
-        resume_proposal=existing_proposal,
-        overwrite_existing=overwrite_existing,
-        labels=labels,
-        commit_message=commit_message,
-        title=title,
-        reviewers=reviewers,
-        tags=tags,
-        owner=derived_owner,
-        allow_collaboration=allow_collaboration,
-        stop_revision=stop_revision,
-    )
-    return PublishResult(
-        mode=mode, proposal=proposal, is_new=is_new,
-        target_branch=main_branch, forge=forge)

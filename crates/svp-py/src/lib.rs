@@ -1,8 +1,9 @@
-use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
+use pyo3::{create_exception, import_exception};
 use silver_platter::codemod::Error as CodemodError;
+use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
 
 create_exception!(
@@ -30,6 +31,12 @@ create_exception!(
     ResultFileFormatError,
     pyo3::exceptions::PyException
 );
+create_exception!(
+    silver_platter.publish,
+    InsufficientChangesForNewProposal,
+    pyo3::exceptions::PyException
+);
+import_exception!(breezy.errors, DivergedBranches);
 
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
@@ -576,6 +583,97 @@ fn propose_changes(
     .map(|(p, b)| (MergeProposal(p), b))
 }
 
+#[pyclass]
+struct PublishResult(silver_platter::publish::PublishResult);
+
+#[pymethods]
+impl PublishResult {
+    #[getter]
+    fn is_new(&self) -> Option<bool> {
+        self.0.is_new
+    }
+}
+
+#[pyfunction]
+fn publish_changes(
+    local_branch: &Branch,
+    main_branch: &Branch,
+    mode: Mode,
+    name: &str,
+    get_proposal_description: PyObject,
+    resume_branch: Option<&Branch>,
+    get_proposal_commit_message: Option<PyObject>,
+    get_proposal_title: Option<PyObject>,
+    forge: Option<&Forge>,
+    allow_create_proposal: Option<bool>,
+    labels: Option<Vec<String>>,
+    overwrite_existing: Option<bool>,
+    existing_proposal: Option<&MergeProposal>,
+    reviewers: Option<Vec<String>>,
+    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    derived_owner: Option<&str>,
+    allow_collaboration: Option<bool>,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<PublishResult> {
+    let get_proposal_description =
+        |format: &str, proposal: Option<&silver_platter::MergeProposal>| {
+            Python::with_gil(|py| {
+                let proposal = proposal.map(|mp| MergeProposal(mp.clone()));
+                get_proposal_description
+                    .call1(py, (format, proposal))
+                    .unwrap()
+                    .extract(py)
+                    .unwrap()
+            })
+        };
+    let get_proposal_commit_message = get_proposal_commit_message.map(|f| {
+        move |proposal: Option<&silver_platter::MergeProposal>| -> Option<String> {
+            Python::with_gil(|py| {
+                let proposal = proposal.map(|mp| MergeProposal(mp.clone()));
+                f.call1(py, (proposal,)).unwrap().extract(py).unwrap()
+            })
+        }
+    });
+    let get_proposal_title = get_proposal_title.map(|f| {
+        move |proposal: Option<&silver_platter::MergeProposal>| -> Option<String> {
+            Python::with_gil(|py| {
+                let proposal = proposal.map(|mp| MergeProposal(mp.clone()));
+                f.call1(py, (proposal,)).unwrap().extract(py).unwrap()
+            })
+        }
+    });
+    silver_platter::publish::publish_changes(
+        &local_branch.0,
+        &main_branch.0,
+        resume_branch.as_ref().map(|b| &b.0),
+        mode,
+        name,
+        get_proposal_description,
+        get_proposal_commit_message,
+        get_proposal_title,
+        forge.map(|f| &f.0),
+        allow_create_proposal,
+        labels,
+        overwrite_existing,
+        existing_proposal.map(|p| p.0.clone()),
+        reviewers,
+        tags,
+        derived_owner,
+        allow_collaboration,
+        stop_revision.as_ref(),
+    )
+    .map_err(|e| match e {
+        silver_platter::publish::Error::DivergedBranches() => {
+            PyErr::new::<DivergedBranches, _>("DivergedBranches")
+        }
+        silver_platter::publish::Error::InsufficientChangesForNewProposal => {
+            PyErr::new::<InsufficientChangesForNewProposal, _>("InsufficientChangesForNewProposal")
+        }
+        silver_platter::publish::Error::Other(e) => e,
+    })
+    .map(PublishResult)
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -623,6 +721,12 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
     m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
+    m.add_function(wrap_pyfunction!(publish_changes, m)?)?;
+    m.add_class::<PublishResult>()?;
+    m.add(
+        "InsufficientChangesForNewProposal",
+        py.get_type::<InsufficientChangesForNewProposal>(),
+    )?;
 
     Ok(())
 }
