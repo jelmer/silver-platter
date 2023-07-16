@@ -674,6 +674,39 @@ fn publish_changes(
     .map(PublishResult)
 }
 
+#[pyclass]
+struct DestroyFn(Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>);
+
+#[pymethods]
+impl DestroyFn {
+    fn __call__(&mut self) -> PyResult<()> {
+        if let Some(f) = self.0.take() {
+            Ok(f()?)
+        } else {
+            Err(PyRuntimeError::new_err("Already called"))
+        }
+    }
+}
+
+#[pyfunction]
+fn create_temp_sprout(
+    branch: PyObject,
+    additional_colocated_branches: Option<std::collections::HashMap<String, String>>,
+    dir: Option<std::path::PathBuf>,
+    path: Option<std::path::PathBuf>,
+) -> PyResult<(PyObject, DestroyFn)> {
+    silver_platter::utils::create_temp_sprout(
+        &breezyshim::Branch(branch),
+        additional_colocated_branches,
+        dir.as_deref(),
+        path.as_deref(),
+    )
+    .map_err(|e| match e {
+        silver_platter::utils::Error::Other(e) => e,
+    })
+    .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -727,6 +760,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
         "InsufficientChangesForNewProposal",
         py.get_type::<InsufficientChangesForNewProposal>(),
     )?;
+    m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
 
     Ok(())
 }

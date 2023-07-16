@@ -98,6 +98,29 @@ import_exception!(breezy.bzr, LineEndingError);
 import_exception!(breezy.errors, InvalidHttpResponse);
 
 impl BranchOpenError {
+    pub fn from_err(
+        py: Python,
+        url: url::Url,
+        e: &breezyshim::controldir::BranchOpenError,
+    ) -> Self {
+        match e {
+            breezyshim::controldir::BranchOpenError::Other(e) => {
+                Self::from_py_err(py, url, e).unwrap_or_else(|| Self::Other(e.clone_ref(py)))
+            }
+            breezyshim::controldir::BranchOpenError::NotBranchError => Self::Unavailable {
+                url,
+                description: format!("branch does not exist: {}", e),
+            },
+            breezyshim::controldir::BranchOpenError::NoColocatedBranchSupport => {
+                Self::Unsupported {
+                    url,
+                    description: "no colocated branch support".to_string(),
+                    vcs: None,
+                }
+            }
+        }
+    }
+
     pub fn from_py_err(py: Python, url: url::Url, e: &PyErr) -> Option<Self> {
         if e.is_instance_of::<error>(py) {
             return Some(Self::Unavailable {
@@ -259,10 +282,8 @@ pub fn open_branch(
             BranchOpenError::from_py_err(py, url.clone(), &e)
                 .unwrap_or_else(|| BranchOpenError::Other(e))
         })?;
-        dir.open_branch(name.as_deref()).map_err(|e| {
-            BranchOpenError::from_py_err(py, url.clone(), &e)
-                .unwrap_or_else(|| BranchOpenError::Other(e))
-        })
+        dir.open_branch(name.as_deref())
+            .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))
     })
 }
 
@@ -288,10 +309,8 @@ pub fn open_branch_containing(
                     .unwrap_or_else(|| BranchOpenError::Other(e))
             })?;
         Ok((
-            dir.open_branch(name.as_deref()).map_err(|e| {
-                BranchOpenError::from_py_err(py, url.clone(), &e)
-                    .unwrap_or_else(|| BranchOpenError::Other(e))
-            })?,
+            dir.open_branch(name.as_deref())
+                .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))?,
             subpath,
         ))
     })

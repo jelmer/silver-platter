@@ -15,75 +15,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import os
-import shutil
 import subprocess
-import tempfile
-from typing import Callable, Dict, Optional, Tuple
+from typing import Dict, Optional
 
-from breezy import errors
 from breezy.branch import Branch
-from breezy.controldir import NoColocatedBranchSupport
 from breezy.revision import RevisionID
 from breezy.workingtree import WorkingTree
 from . import _svp_rs
 
-
-def create_temp_sprout(
-    branch: Branch,
-    additional_colocated_branches: Optional[Dict[str, str]] = None,
-    dir: Optional[str] = None,
-    path: Optional[str] = None,
-) -> Tuple[WorkingTree, Callable[[], None]]:
-    """Create a temporary sprout of a branch.
-
-    This attempts to fetch the least amount of history as possible.
-    """
-    if path is None:
-        td = tempfile.mkdtemp(dir=dir)
-    else:
-        td = path
-        os.mkdir(path)
-
-    def destroy() -> None:
-        shutil.rmtree(td)
-
-    # Only use stacking if the remote repository supports chks because of
-    # https://bugs.launchpad.net/bzr/+bug/375013
-    use_stacking = (
-        branch._format.supports_stacking() and  # type: ignore
-        branch.repository._format.supports_chks  # type: ignore
-    )
-    try:
-        # preserve whatever source format we have.
-        to_dir = branch.controldir.sprout(  # type: ignore
-            td,
-            None,
-            create_tree_if_local=True,
-            source_branch=branch,
-            stacked=use_stacking,
-        )
-        # TODO(jelmer): Fetch these during the initial clone
-        for from_branch_name in set(additional_colocated_branches or []):
-            try:
-                add_branch = branch.controldir.open_branch(  # type: ignore
-                    name=from_branch_name)
-            except (errors.NotBranchError, NoColocatedBranchSupport):
-                pass
-            else:
-                if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[
-                        from_branch_name]
-                else:
-                    to_branch_name = from_branch_name
-                local_add_branch = to_dir.create_branch(name=to_branch_name)
-                add_branch.push(local_add_branch)
-                assert add_branch.last_revision() \
-                    == local_add_branch.last_revision()
-        return to_dir.open_workingtree(), destroy
-    except BaseException as e:
-        destroy()
-        raise e
+create_temp_sprout = _svp_rs.create_temp_sprout
 
 
 class TemporarySprout:

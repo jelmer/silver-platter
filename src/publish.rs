@@ -54,21 +54,21 @@ pub fn push_result(
         for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default()
         {
             match local_branch
-                .get_controldir()
+                .controldir()
                 .open_branch(Some(from_branch_name.as_str()))
             {
                 Ok(branch) => {
                     let tag_selector =
                         Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
-                    remote_branch.get_controldir().push_branch(
+                    remote_branch.controldir().push_branch(
                         &branch,
                         Some(to_branch_name.as_str()),
                         Some(false),
                         Some(tag_selector),
                     )?;
                 }
-                Err(e) if e.is_instance_of::<NotBranchError>(py) => {}
-                Err(e) => return Err(e),
+                Err(breezyshim::controldir::BranchOpenError::NotBranchError) => {}
+                Err(e) => return Err(e.into()),
             };
         }
         Ok(())
@@ -257,11 +257,11 @@ pub fn propose_changes(
         for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default()
         {
             match local_branch
-                .get_controldir()
+                .controldir()
                 .open_branch(Some(from_branch_name.as_str()))
             {
                 Ok(b) => {
-                    remote_branch.get_controldir().push_branch(
+                    remote_branch.controldir().push_branch(
                         &b,
                         Some(to_branch_name.as_str()),
                         Some(overwrite_existing),
@@ -270,8 +270,8 @@ pub fn propose_changes(
                         }),
                     )?;
                 }
-                Err(e) if e.is_instance_of::<NotBranchError>(py) => {}
-                Err(e) => return Err(e),
+                Err(breezyshim::controldir::BranchOpenError::NotBranchError) => {}
+                Err(e) => return Err(e.into()),
             }
         }
         if let Some(mp) = resume_proposal.as_ref() {
