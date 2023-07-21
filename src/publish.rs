@@ -67,7 +67,7 @@ pub fn push_result(
                         Some(tag_selector),
                     )?;
                 }
-                Err(breezyshim::controldir::BranchOpenError::NotBranchError) => {}
+                Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
                 Err(e) => return Err(e.into()),
             };
         }
@@ -270,7 +270,7 @@ pub fn propose_changes(
                         }),
                     )?;
                 }
-                Err(breezyshim::controldir::BranchOpenError::NotBranchError) => {}
+                Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
                 Err(e) => return Err(e.into()),
             }
         }

@@ -1,5 +1,4 @@
-use breezyshim::branch::Branch;
-use breezyshim::controldir::BranchOpenError;
+use breezyshim::branch::{Branch, BranchOpenError};
 use breezyshim::tree::WorkingTree;
 use pyo3::PyErr;
 use std::collections::HashMap;
@@ -55,9 +54,12 @@ pub fn create_temp_sprout(
                 add_branch.push(&local_add_branch, false, None, None)?;
                 assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
             }
-            Err(BranchOpenError::NotBranchError)
+            Err(BranchOpenError::NotBranchError(_))
             | Err(BranchOpenError::NoColocatedBranchSupport) => {
                 // Ignore branches that don't exist or don't support colocated branches.
+            }
+            Err(BranchOpenError::DependencyNotPresent(e, d)) => {
+                panic!("Need dependency to sprout branch: {} {}", e, d);
             }
             Err(BranchOpenError::Other(err)) => {
                 return Err(err.into());

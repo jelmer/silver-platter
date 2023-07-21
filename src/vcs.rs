@@ -98,26 +98,24 @@ import_exception!(breezy.bzr, LineEndingError);
 import_exception!(breezy.errors, InvalidHttpResponse);
 
 impl BranchOpenError {
-    pub fn from_err(
-        py: Python,
-        url: url::Url,
-        e: &breezyshim::controldir::BranchOpenError,
-    ) -> Self {
+    pub fn from_err(py: Python, url: url::Url, e: &breezyshim::branch::BranchOpenError) -> Self {
         match e {
-            breezyshim::controldir::BranchOpenError::Other(e) => {
+            breezyshim::branch::BranchOpenError::Other(e) => {
                 Self::from_py_err(py, url, e).unwrap_or_else(|| Self::Other(e.clone_ref(py)))
             }
-            breezyshim::controldir::BranchOpenError::NotBranchError => Self::Unavailable {
+            breezyshim::branch::BranchOpenError::NotBranchError(e) => Self::Unavailable {
                 url,
-                description: format!("branch does not exist: {}", e),
+                description: e.clone(),
             },
-            breezyshim::controldir::BranchOpenError::NoColocatedBranchSupport => {
-                Self::Unsupported {
-                    url,
-                    description: "no colocated branch support".to_string(),
-                    vcs: None,
-                }
-            }
+            breezyshim::branch::BranchOpenError::DependencyNotPresent(l, e) => Self::Unavailable {
+                url,
+                description: format!("missing {}: {}", l, e),
+            },
+            breezyshim::branch::BranchOpenError::NoColocatedBranchSupport => Self::Unsupported {
+                url,
+                description: "no colocated branch support".to_string(),
+                vcs: None,
+            },
         }
     }
 
