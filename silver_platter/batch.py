@@ -76,7 +76,8 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
 
         try:
             result = script_runner(
-                ws.local_tree, recipe.command, recipe.commit_pending,
+                ws.local_tree, recipe.command,
+                commit_pending=recipe.commit_pending,
                 subpath=subpath)
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
@@ -240,7 +241,7 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
                 *,
                 subpath: str = '',
                 existing_proposal_url: Optional[str] = None,
-                labels: Optional[List[str]] = None, dry_run: bool = False,
+                labels: Optional[List[str]] = None,
                 derived_owner: Optional[str] = None, refresh: bool = False,
                 commit_message: Optional[str] = None,
                 title: Optional[str] = None,
@@ -302,7 +303,6 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
             get_proposal_commit_message=lambda ep: commit_message,
             get_proposal_title=lambda ep: title,
             allow_create_proposal=True,
-            dry_run=dry_run,
             forge=forge,
             labels=labels,
             overwrite_existing=overwrite,
@@ -343,7 +343,7 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
     return publish_result
 
 
-def publish(directory, *, dry_run: bool = False, selector=None):
+def publish(directory, *, selector=None):
     batch = load_batch_metadata(directory)
     try:
         batch_name = batch['name']
@@ -366,7 +366,7 @@ def publish(directory, *, dry_run: bool = False, selector=None):
                     entry['mode'],
                     subpath=entry.get('subpath', ''),
                     labels=entry.get('labels', []),
-                    dry_run=dry_run, derived_owner=entry.get('derived-owner'),
+                    derived_owner=entry.get('derived-owner'),
                     commit_message=entry.get('commit-message'),
                     title=entry.get('title'),
                     existing_proposal_url=entry.get('proposal-url'),
@@ -378,15 +378,13 @@ def publish(directory, *, dry_run: bool = False, selector=None):
                 errors += 1
             else:
                 if publish_result.mode == 'push':
-                    if not dry_run:
-                        drop_batch_entry(directory, name)
+                    drop_batch_entry(directory, name)
                     del work[name]
                 elif publish_result.proposal:
                     entry['proposal-url'] = publish_result.proposal.url
             save_batch_metadata(directory, batch)
     finally:
-        if not dry_run:
-            save_batch_metadata(directory, batch)
+        save_batch_metadata(directory, batch)
     if not work:
         logging.info('No work left in batch.yaml; you can now remove %s',
                      directory)
@@ -408,7 +406,6 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     publish_parser = subparsers.add_parser("publish")
     publish_parser.add_argument('directory')
     publish_parser.add_argument('name', nargs='?')
-    publish_parser.add_argument('--dry-run', action='store_true')
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument('directory')
     status_parser.add_argument('codebase', nargs='?', default=None)
@@ -442,7 +439,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
                 return n == args.name
         else:
             selector = None
-        publish(args.directory, dry_run=args.dry_run, selector=selector)
+        publish(args.directory, selector=selector)
         logging.info(
             'To see the status of open merge requests, run: '
             '"svp batch status %s"', args.directory)

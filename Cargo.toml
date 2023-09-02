@@ -10,6 +10,21 @@ homepage = "https://github.com/jelmer/silver-platter"
 
 [dependencies]
 pyo3 = { version = "0.18", features=["auto-initialize"]}
+serde = { version = "1.0.171", features = ["derive"] }
+serde_json = "1.0.102"
+tempfile = "3.6.0"
+debversion = { version = ">=0.1", optional = true }
+tera = "1.19.0"
+serde_yaml = "0.9.22"
+url = { version = "2.4.0", features = ["serde"] }
+log = "0.4.19"
+percent-encoding = "2.3.0"
+#breezyshim = { path = "../breezyshim/trunk" }
+breezyshim = "0.1.4"
+
+[features]
+default = []
+debian = ["dep:debversion"]
 
 [workspace]
 members = [ "crates/*" ]
