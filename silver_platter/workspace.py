@@ -162,10 +162,9 @@ class Workspace:
         )
 
     def _inverse_additional_colocated_branches(self):
-        return {
-            to_name: from_name
-            for from_name, to_name in
-            self.additional_colocated_branches.items()}
+        return [(to_name, from_name)
+                for from_name, to_name in
+                self.additional_colocated_branches.items()]
 
     def __enter__(self) -> Any:
         sprout_base = None
@@ -313,7 +312,7 @@ class Workspace:
 
     def push_tags(
             self,
-            tags: Union[Dict[str, RevisionID], List[str]],
+            tags: Dict[str, RevisionID],
             *,
             forge: Optional[Forge] = None):
         if not self.main_branch:
@@ -327,7 +326,7 @@ class Workspace:
         self,
         *,
         forge: Optional[Forge] = None,
-        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        tags: Optional[Dict[str, RevisionID]] = None,
         stop_revision: Optional[RevisionID] = None,
     ) -> None:
         if not self.main_branch:
