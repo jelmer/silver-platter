@@ -9,14 +9,23 @@ repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 
 [dependencies]
-serde_json = "1.0.102"
+pyo3 = { workspace = true }
+serde = { version = "1.0.171", features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = "3.6.0"
-tera = "1.19.0"
+tera = { workspace = true }
 serde_yaml = "0.9.22"
-log = "0.4.19"
+log = "0.4"
 percent-encoding = "2.3.0"
-#breezyshim = { path = "../breezyshim/trunk" }
+breezyshim = { workspace = true }
+
+[workspace.dependencies]
+pyo3 = "0.19"
+pyo3-log = "0.8"
+serde_json = "1"
+tera = "1"
 breezyshim = "0.1.4"
+#breezyshim = { path = "../breezyshim/trunk" }
 
 [features]
 default = []
