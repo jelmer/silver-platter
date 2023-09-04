@@ -26,6 +26,8 @@ from breezy.forge import (
     NoSuchProject,
     SourceNotDerivedFromTarget,
     UnsupportedForge,
+    MergeProposal,
+    MergeProposalExists,
 )
 from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
@@ -43,6 +45,8 @@ __all__ = [
     "PermissionDenied",
     "UnsupportedForge",
     "SourceNotDerivedFromTarget",
+    "MergeProposal",
+    "MergeProposalExists",
 ]
 
 
