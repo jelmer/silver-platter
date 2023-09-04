@@ -80,7 +80,7 @@ then the following command would process each repository in turn::
     svp run --recipe=framwork.yaml --candidates=candidates.yaml
 
 Batch Mode
-~~~~~~~~~
+~~~~~~~~~~
 
 Use batch mode when you're going to make a large number of changes and would
 like to review or modify the diffs before sending them out::
