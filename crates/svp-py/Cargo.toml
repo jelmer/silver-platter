@@ -16,6 +16,6 @@ pyo3 = { workspace = true, features = ["extension-module"] }
 pyo3-log = { workspace = true }
 tera = { workspace = true }
 serde_json = { workspace = true }
-url = { version = "2.4.0", features = ["serde"] }
+url = { workspace = true, features = ["serde"] }
 #breezyshim = { path = "../../../breezyshim/trunk" }
 breezyshim = { workspace = true }
