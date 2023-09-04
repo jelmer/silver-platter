@@ -93,11 +93,11 @@ def merge_directive_changes(
     )
     public_branch = open_branch(public_branch_url)
     return MergeDirective2.from_objects(
-        local_branch.repository,
-        local_branch.last_revision(),
-        time.time(),
-        osutils.local_time_offset(),
-        main_branch,
+        repository=local_branch.repository,
+        revision_id=local_branch.last_revision(),
+        time=time.time(),
+        timezone=osutils.local_time_offset(),
+        target_branch=main_branch,
         public_branch=public_branch,
         include_patch=include_patch,
         include_bundle=include_bundle,
