@@ -69,17 +69,15 @@ jobs:
 
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/silver-platter
     steps:
       - uses: actions/setup-python@v3
 
-      - name: Install twine
-        run: |
-          python -m pip install --upgrade pip
-          pip install twine
       - name: Download wheels
         uses: actions/download-artifact@v2
-      - name: Publish wheels
-        env:
-          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-        run: twine upload artifact/*.whl
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
