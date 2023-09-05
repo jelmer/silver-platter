@@ -26,8 +26,8 @@ pyo3 = "0.19"
 pyo3-log = "0.8"
 serde_json = "1"
 tera = "1"
-breezyshim = "0.1.4"
 serde = "1.0.171"
+breezyshim = "0.1.20"
 #breezyshim = { path = "../breezyshim/trunk" }
 url = "2.4.0"
 
