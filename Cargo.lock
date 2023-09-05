@@ -986,6 +986,7 @@ version = "0.0.0"
 dependencies = [
  "breezyshim",
  "pyo3",
+ "pyo3-file",
  "pyo3-log",
  "serde_json",
  "silver-platter",
