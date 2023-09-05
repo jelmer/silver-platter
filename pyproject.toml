@@ -1,3 +1,110 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=61.2", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "silver-platter"
+authors = [{name = "Jelmer Vernooij", email = "jelmer@jelmer.uk"}]
+description = "Large scale VCS change management"
+readme = "README.rst"
+license = {text = "GNU GPL v2 or later"}
+keywords = ["git bzr vcs github gitlab launchpad"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: GNU General Public License (GPL)",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Operating System :: POSIX",
+    "Topic :: Software Development :: Version Control",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "breezy>=3.3.3",
+    "dulwich>=0.20.23",
+    "jinja2",
+    "pyyaml",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://jelmer.uk/code/silver-platter"
+"Bug Tracker" = "https://github.com/jelmer/silver-platter/issues"
+Repository = "https://github.com/jelmer/silver-platter"
+GitHub = "https://github.com/jelmer/silver-platter"
+
+[project.optional-dependencies]
+debian = [
+    "debmutate>=0.3",
+    "python_debian>=0.1.48",
+    "brz-debian",
+]
+launchpad = ["launchpadlib"]
+detect-gbp-dch = ["lintian-brush"]
+testing = [
+    "testtools",
+    "debmutate>=0.3",
+    "python-debian",
+    "brz-debian",
+]
+
+[project.scripts]
+svp = "silver_platter.__main__:main"
+debian-svp = "silver_platter.debian.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "silver_platter",
+    "silver_platter.debian",
+]
+include-package-data = false
+
+[tool.setuptools.package-data]
+silver_platter = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "silver_platter.__version__"}
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.ruff]
+select = [
+    "ANN",
+    "D",
+    "E",
+    "F",
+    "I",
+    "UP",
+]
+target-version = "py37"
+line-length = 79
+ignore = [
+    "ANN001",
+    "ANN002",
+    "ANN003",
+    "ANN101",
+    "ANN102",
+    "ANN201",
+    "ANN202",
+    "ANN204",
+    "ANN206",
+    "ANN401",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "D300",
+    "D417",
+    "E501",
+]
+
+[tool.ruff.pydocstyle]
+convention = "google"

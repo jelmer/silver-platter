@@ -19,32 +19,42 @@
 
 import argparse
 import logging
-import os
 import subprocess
 import sys
 from typing import List, Optional
 
-from breezy import osutils
-
 import silver_platter  # noqa: F401
 
-from .apply import (ScriptFailed, ScriptMadeNoChanges, ScriptNotFound,
-                    script_runner)
-from .proposal import (ForgeLoginRequired, MergeProposal, UnsupportedForge,
-                       enable_tag_pushing, find_existing_proposed, get_forge)
+from .apply import (
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+    script_runner,
+)
+from .proposal import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    enable_tag_pushing,
+    find_existing_proposed,
+    get_forge,
+)
 from .publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
-from .utils import (BranchMissing, BranchUnavailable, BranchUnsupported,
-                    full_branch_url, open_branch)
+from .utils import (
+    BranchMissing,
+    BranchUnavailable,
+    BranchUnsupported,
+    full_branch_url,
+    open_branch,
+)
 from .workspace import Workspace
 
-
-def derived_branch_name(script: str) -> str:
-    return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
+from ._svp_rs import derived_branch_name
 
 
 def apply_and_publish(  # noqa: C901
         url: str, name: str, command: str, mode: str,
-        commit_pending: Optional[bool] = None, dry_run: bool = False,
+        commit_pending: Optional[bool] = None,
         labels: Optional[List[str]] = None, diff: bool = False,
         verify_command: Optional[str] = None,
         derived_owner: Optional[str] = None,
@@ -130,7 +140,6 @@ def apply_and_publish(  # noqa: C901
                     lambda ep: get_title(result, ep)),
                 allow_create_proposal=(
                     lambda: allow_create_proposal(result)),
-                dry_run=dry_run,
                 forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
@@ -207,12 +216,6 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         choices=["yes", "no", "auto"],
         default=None,
         type=str,
-    )
-    parser.add_argument(
-        "--dry-run",
-        help="Create branches but don't push or propose anything.",
-        action="store_true",
-        default=False,
     )
     parser.add_argument(
         "--verify-command", type=str, help="Command to run to verify changes."
@@ -315,7 +318,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     for url in urls:
         result = apply_and_publish(
                 url, name=name, command=command, mode=mode,
-                commit_pending=commit_pending, dry_run=args.dry_run,
+                commit_pending=commit_pending,
                 labels=args.label, diff=args.diff,
                 derived_owner=args.derived_owner, refresh=refresh,
                 allow_create_proposal=allow_create_proposal,

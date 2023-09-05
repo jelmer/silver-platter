@@ -28,7 +28,7 @@ from contextlib import suppress
 from email.utils import parseaddr
 from typing import Callable, List, Optional, Tuple
 
-from breezy import gpg
+from breezy import gpg  # type: ignore
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.config import NoEmailInUsername, extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
@@ -38,26 +38,44 @@ from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import DistributionBranch
 from breezy.plugins.debian.release import release
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
-from breezy.plugins.debian.util import (MissingChangelogError,
-                                        NoPreviousUpload,
-                                        changelog_find_previous_upload,
-                                        dput_changes, find_changelog)
+from breezy.plugins.debian.util import (
+    MissingChangelogError,
+    NoPreviousUpload,
+    changelog_find_previous_upload,
+    dput_changes,
+    find_changelog,
+)
 from breezy.revision import NULL_REVISION
 from breezy.tree import MissingNestedTree
 from breezy.workingtree import WorkingTree
 from debian.changelog import Version, get_maintainer
-from debmutate.changelog import (ChangelogEditor, ChangelogParseError,
-                                 changeblock_ensure_first_line, gbp_dch)
+from debmutate.changelog import (
+    ChangelogEditor,
+    ChangelogParseError,
+    changeblock_ensure_first_line,
+    gbp_dch,
+)
 from debmutate.control import ControlEditor
 from debmutate.reformatting import GeneratedFile
 
 import silver_platter  # noqa: F401
 
 from ..probers import select_probers
-from ..utils import (BranchMissing, BranchRateLimited, BranchUnavailable,
-                     BranchUnsupported, open_branch)
-from . import (DEFAULT_BUILDER, NoSuchPackage, Workspace,
-               apt_get_source_package, source_package_vcs, split_vcs_url)
+from ..utils import (
+    BranchMissing,
+    BranchRateLimited,
+    BranchUnavailable,
+    BranchUnsupported,
+    open_branch,
+)
+from . import (
+    DEFAULT_BUILDER,
+    NoSuchPackage,
+    Workspace,
+    apt_get_source_package,
+    source_package_vcs,
+    split_vcs_url,
+)
 
 
 def debsign(path, keyid=None):
@@ -72,19 +90,19 @@ def debsign(path, keyid=None):
 class LastUploadMoreRecent(Exception):
     """Last version in archive is newer than vcs version."""
 
-    def __init__(self, archive_version, vcs_version):
+    def __init__(self, archive_version, vcs_version) -> None:
         self.archive_version = archive_version
         self.vcs_version = vcs_version
         super().__init__(
-            "last upload (%s) is more recent than vcs (%s)"
-            % (archive_version, vcs_version)
+            f"last upload ({archive_version}) is more recent "
+            f"than vcs ({vcs_version})"
         )
 
 
 class NoUnuploadedChanges(Exception):
     """Indicates there are no unuploaded changes for a package."""
 
-    def __init__(self, archive_version):
+    def __init__(self, archive_version) -> None:
         self.archive_version = archive_version
         super().__init__(
             "nothing to upload, latest version is in archive: %s" %
@@ -95,7 +113,7 @@ class NoUnuploadedChanges(Exception):
 class NoUnreleasedChanges(Exception):
     """Indicates there are no unreleased changes for a package."""
 
-    def __init__(self, version):
+    def __init__(self, version) -> None:
         self.version = version
         super().__init__(
             "nothing to upload, latest version in vcs is not unreleased: %s" %
@@ -106,7 +124,7 @@ class NoUnreleasedChanges(Exception):
 class RecentCommits(Exception):
     """Indicates there are too recent commits for a package."""
 
-    def __init__(self, commit_age, min_commit_age):
+    def __init__(self, commit_age, min_commit_age) -> None:
         self.commit_age = commit_age
         self.min_commit_age = min_commit_age
         super().__init__(
@@ -118,24 +136,24 @@ class RecentCommits(Exception):
 class CommitterNotAllowed(Exception):
     """Specified committer is not allowed."""
 
-    def __init__(self, committer, allowed_committers):
+    def __init__(self, committer, allowed_committers) -> None:
         self.committer = committer
         self.allowed_committers = allowed_committers
         super().__init__(
-            "Committer %s not in allowed committers: %r"
-            % (self.committer, self.allowed_committers)
+            f"Committer {self.committer} not in allowed committers: "
+            f"{self.allowed_committers!r}"
         )
 
 
 class LastReleaseRevisionNotFound(Exception):
     """The revision for the last uploaded release can't be found."""
 
-    def __init__(self, package, version):
+    def __init__(self, package, version) -> None:
         self.package = package
         self.version = version
         super().__init__(
-            "Unable to find revision matching version %r for %s" %
-            (version, package)
+            f"Unable to find revision matching version {version!r} "
+            f"for {package}"
         )
 
 
@@ -180,7 +198,7 @@ def get_maintainer_keys(context):
 
 
 class GbpDchFailed(Exception):
-    """gbp dch failed to run"""
+    """gbp dch failed to run."""
 
 
 class GeneratedChangelogFile(Exception):
@@ -334,14 +352,14 @@ def select_apt_packages(apt_repo, package_names, maintainer):
 
 class PackageProcessingFailure(Exception):
 
-    def __init__(self, reason, description=None):
+    def __init__(self, reason, description=None) -> None:
         self.reason = reason
         self.description = description
 
 
 class PackageIgnored(Exception):
 
-    def __init__(self, reason, description=None):
+    def __init__(self, reason, description=None) -> None:
         self.reason = reason
         self.description = description
 
@@ -360,7 +378,7 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
                 datestr.strip(), "%a %b %d %H:%M:%S %Y %z")
             return dt.timestamp()
 
-        def __init__(self, commit_id, headers, message):
+        def __init__(self, commit_id, headers, message) -> None:
             self.commit_id = commit_id
             self.headers = headers
             self.message = message
@@ -406,7 +424,7 @@ def process_package(
         apt_repo, package,
         builder: str, *, exclude=None, autopkgtest_only: bool = False,
         gpg_verification: bool = False,
-        acceptable_keys=None, debug: bool = False, dry_run: bool = False,
+        acceptable_keys=None, debug: bool = False,
         diff: bool = False, min_commit_age=None, allowed_committers=None,
         vcs_type=None, vcs_url=None, source_name=None,
         archive_version=None, verify_command: Optional[str] = None):
@@ -595,15 +613,14 @@ def process_package(
             logging.info("Pushing tag %s", tag_name)
             tags.append(tag_name)
         try:
-            ws.push(dry_run=dry_run, tags=tags)
+            ws.push(tags=tags)
         except PermissionDenied:
             logging.info(
                 "%s: Permission denied pushing to branch, skipping.",
                 source_name
             )
             raise PackageProcessingFailure('vcs-permission-denied')
-        if not dry_run:
-            dput_changes(target_changes)
+        dput_changes(target_changes)
         if diff:
             sys.stdout.flush()
             ws.show_diff(sys.stdout.buffer)
@@ -714,8 +731,6 @@ def main(argv):  # noqa: C901
 
     parser = argparse.ArgumentParser(prog="upload-pending-commits")
     parser.add_argument("packages", nargs="*")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Dry run changes.")
     parser.add_argument(
         "--acceptable-keys",
         help="List of acceptable GPG keys",
@@ -883,7 +898,7 @@ def main(argv):  # noqa: C901
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
                 acceptable_keys=args.acceptable_keys,
-                debug=args.debug, dry_run=args.dry_run,
+                debug=args.debug,
                 diff=args.diff, min_commit_age=args.min_commit_age,
                 allowed_committers=args.allowed_committer,
                 vcs_type=vcs_type, vcs_url=vcs_url,

@@ -31,10 +31,15 @@ from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 
 from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
-from .publish import PublishResult, propose_changes
-from .publish import publish_changes as _publish_changes
-from .publish import push_changes, push_derived_changes
+from .publish import (
+    PublishResult,
+    propose_changes,
+    push_changes,
+    push_derived_changes,
+    publish_changes as _publish_changes,
+)
 from .utils import create_temp_sprout, full_branch_url
+from . import _svp_rs
 
 __all__ = [
     "Workspace",
@@ -44,23 +49,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def fetch_colocated(controldir: ControlDir, from_controldir: ControlDir,
-                    additional_colocated_branches: Dict[str, str]):
-    logger.debug(
-        "Fetching colocated branches: %r",
-        additional_colocated_branches,
-    )
-    for (from_branch_name,
-         to_branch_name) in additional_colocated_branches.items():
-        try:
-            remote_colo_branch = from_controldir.open_branch(
-                name=from_branch_name
-            )
-        except (NotBranchError, NoColocatedBranchSupport):
-            continue
-        controldir.push_branch(
-            name=to_branch_name, source=remote_colo_branch, overwrite=True
-        )
+fetch_colocated = _svp_rs.fetch_colocated
 
 
 class Workspace:
@@ -126,10 +115,10 @@ class Workspace:
     def path(self):
         return self.local_tree.abspath('.')
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self._path is None:
-            if self.main_branch:
-                return "Worspace"
+            if self.main_branch is None:
+                return "Workspace"
             else:
                 return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
@@ -140,12 +129,12 @@ class Workspace:
             else:
                 return "Workspace at %s" % self._path
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
-            "%s(%r, resume_branch=%r, cached_branch=%r, "
-            "additional_colocated_branches=%r, "
-            "resume_branch_additional_colocated_branches=%r, dir=%r, path=%r)"
-            % (
+            "{}({!r}, resume_branch={!r}, cached_branch={!r}, "
+            "additional_colocated_branches={!r}, "
+            "resume_branch_additional_colocated_branches={!r}, "
+            "dir={!r}, path={!r})".format(
                 type(self).__name__,
                 self.main_branch,
                 self.resume_branch,
@@ -158,10 +147,9 @@ class Workspace:
         )
 
     def _inverse_additional_colocated_branches(self):
-        return {
-            to_name: from_name
-            for from_name, to_name in
-            self.additional_colocated_branches.items()}
+        return [(to_name, from_name)
+                for from_name, to_name in
+                self.additional_colocated_branches.items()]
 
     def __enter__(self) -> Any:
         sprout_base = None
@@ -309,15 +297,13 @@ class Workspace:
 
     def push_tags(
             self,
-            tags: Union[Dict[str, RevisionID], List[str]],
+            tags: Dict[str, RevisionID],
             *,
-            forge: Optional[Forge] = None,
-            dry_run: bool = False):
+            forge: Optional[Forge] = None):
         if not self.main_branch:
             raise RuntimeError('no main branch known')
         return self.push(
             forge=forge,
-            dry_run=dry_run,
             tags=tags,
             stop_revision=self.main_branch.last_revision())
 
@@ -325,8 +311,7 @@ class Workspace:
         self,
         *,
         forge: Optional[Forge] = None,
-        dry_run: bool = False,
-        tags: Optional[Union[Dict[str, RevisionID], List[str]]] = None,
+        tags: Optional[Dict[str, RevisionID]] = None,
         stop_revision: Optional[RevisionID] = None,
     ) -> None:
         if not self.main_branch:
@@ -347,7 +332,6 @@ class Workspace:
             forge=forge,
             additional_colocated_branches=(
                 self._inverse_additional_colocated_branches()),
-            dry_run=dry_run,
             tags=tags,
             stop_revision=stop_revision,
         )
@@ -362,7 +346,6 @@ class Workspace:
         existing_proposal: Optional[MergeProposal] = None,
         overwrite_existing: Optional[bool] = None,
         labels: Optional[List[str]] = None,
-        dry_run: bool = False,
         commit_message: Optional[str] = None,
         title: Optional[str] = None,
         reviewers: Optional[List[str]] = None,
@@ -387,7 +370,6 @@ class Workspace:
             resume_proposal=existing_proposal,
             overwrite_existing=(overwrite_existing or False),
             labels=labels,
-            dry_run=dry_run,
             commit_message=commit_message,
             title=title,
             reviewers=reviewers,

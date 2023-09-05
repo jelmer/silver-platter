@@ -23,7 +23,7 @@ from breezy.git import RemoteGitProber
 
 
 class UnsupportedVCSProber(Prober):
-    def __init__(self, vcs_type):
+    def __init__(self, vcs_type) -> None:
         self.vcs_type = vcs_type
 
     def __eq__(self, other):

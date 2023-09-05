@@ -23,16 +23,29 @@ import breezy.plugins.gitlab  # noqa: F401
 import breezy.plugins.launchpad  # noqa: F401
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
-from breezy.forge import (Forge, ForgeLoginRequired, MergeProposal,
-                          NoSuchProject, SourceNotDerivedFromTarget,
-                          UnsupportedForge, forges, get_forge,
-                          iter_forge_instances)
+from breezy.forge import (
+    Forge,
+    ForgeLoginRequired,
+    MergeProposal,
+    NoSuchProject,
+    SourceNotDerivedFromTarget,
+    UnsupportedForge,
+    forges,
+    get_forge,
+    iter_forge_instances,
+)
 from breezy.merge_directive import MergeDirective, MergeDirective2
 from breezy.transport import Transport
 
-from .publish import (SUPPORTED_MODES, DryRunProposal, EmptyMergeProposal,
-                      check_proposal_diff, find_existing_proposed,
-                      propose_changes, push_changes, push_derived_changes)
+from .publish import (
+    SUPPORTED_MODES,
+    EmptyMergeProposal,
+    check_proposal_diff,
+    find_existing_proposed,
+    propose_changes,
+    push_changes,
+    push_derived_changes,
+)
 from .utils import full_branch_url, open_branch
 
 __all__ = [
@@ -47,7 +60,6 @@ __all__ = [
     "SUPPORTED_MODES",
     "push_derived_changes",
     "propose_changes",
-    "DryRunProposal",
     "check_proposal_diff",
     "EmptyMergeProposal",
     "find_existing_proposed",
@@ -81,11 +93,11 @@ def merge_directive_changes(
     )
     public_branch = open_branch(public_branch_url)
     return MergeDirective2.from_objects(
-        local_branch.repository,
-        local_branch.last_revision(),
-        time.time(),
-        osutils.local_time_offset(),
-        main_branch,
+        repository=local_branch.repository,
+        revision_id=local_branch.last_revision(),
+        time=time.time(),
+        timezone=osutils.local_time_offset(),
+        target_branch=main_branch,
         public_branch=public_branch,
         include_patch=include_patch,
         include_bundle=include_bundle,
@@ -97,7 +109,7 @@ def merge_directive_changes(
 def iter_all_mps(
     statuses: Optional[List[str]] = None,
 ) -> Iterator[Tuple[Forge, MergeProposal, str]]:
-    """iterate over all existing merge proposals."""
+    """Iterate over all existing merge proposals."""
     if statuses is None:
         statuses = ["open", "merged", "closed"]
     for instance in iter_forge_instances():

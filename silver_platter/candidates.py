@@ -15,55 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from dataclasses import dataclass
-from typing import List, Optional
+from . import _svp_rs
 
-import yaml
-
-
-@dataclass
-class Candidate:
-    """Candidate."""
-
-    url: str
-    name: Optional[str] = None
-    branch: Optional[str] = None
-    subpath: str = ''
-    default_mode: Optional[str] = None
-
-    @classmethod
-    def from_yaml(cls, d):
-        if isinstance(d, dict):
-            return cls(
-                url=d.get('url'),
-                name=d.get('name'),
-                branch=d.get('branch'),
-                subpath=d.get('path'),
-                default_mode=d.get('default-mode'),
-                )
-        elif isinstance(d, str):
-            return cls(url=d)
-        else:
-            raise TypeError(d)
-
-
-@dataclass
-class CandidateList:
-    """Candidate list."""
-
-    candidates: List[Candidate]
-
-    def __iter__(self):
-        return iter(self.candidates)
-
-    @classmethod
-    def from_yaml(cls, d):
-        candidates = []
-        for entry in d:
-            candidates.append(Candidate.from_yaml(entry))
-        return cls(candidates=candidates)
-
-    @classmethod
-    def from_path(cls, path):
-        with open(path) as f:
-            return cls.from_yaml(yaml.full_load(f))
+Candidate = _svp_rs.Candidate
+CandidateList = _svp_rs.CandidateList

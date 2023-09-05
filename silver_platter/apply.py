@@ -15,166 +15,23 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import json
 import logging
-import os
 import subprocess
 import sys
-import tempfile
-from contextlib import suppress
-from dataclasses import dataclass, field
-from typing import BinaryIO, Dict, List, Optional, Tuple, Union
+from typing import List, Optional
 
-from breezy.commit import PointlessCommit
-from breezy.revision import RevisionID
 from breezy.workingtree import WorkingTree
 from breezy.workspace import check_clean_tree, reset_tree
+from . import _svp_rs
 
 
-class ScriptMadeNoChanges(Exception):
-    "Script made no changes."
-
-
-class ScriptFailed(Exception):
-    """Script failed to run."""
-
-
-class ScriptNotFound(Exception):
-    """Script to run was not found."""
-
-
-class DetailedFailure(Exception):
-    """Detailed failure"""
-
-    def __init__(self, result_code, description, stage=None, details=None):
-        self.result_code = result_code
-        self.description = description
-        self.stage = stage
-        self.details = details
-
-    @classmethod
-    def from_json(cls, json):
-        return cls(
-            result_code=json.get('result_code'),
-            description=json.get('description'),
-            stage=tuple(json['stage']) if json.get('stage') else None,
-            details=json.get('details'))
-
-
-class ResultFileFormatError(Exception):
-    """The result file was invalid."""
-
-    def __init__(self, inner_error):
-        self.inner_error = inner_error
-
-
-@dataclass
-class CommandResult:
-
-    description: Optional[str] = None
-    value: Optional[int] = None
-    serialized_context: Optional[str] = None
-    context: Dict[str, str] = field(default_factory=dict)
-    tags: List[Tuple[str, RevisionID]] = field(default_factory=list)
-    old_revision: Optional[RevisionID] = None
-    new_revision: Optional[RevisionID] = None
-    target_branch_url: Optional[str] = None
-
-    @classmethod
-    def from_json(cls, data):
-        if 'tags' in data:
-            tags = []
-            for name, revid in data['tags']:
-                tags.append((name, revid.encode('utf-8')))
-        else:
-            tags = None
-        return cls(
-            value=data.get('value', None),
-            context=data.get('context', {}),
-            description=data.get('description'),
-            serialized_context=data.get('serialized_context', None),
-            target_branch_url=data.get('target-branch-url', None),
-            tags=tags)
-
-
-def script_runner(  # noqa: C901
-    local_tree: WorkingTree, script: Union[str, List[str]],
-    commit_pending: Optional[bool] = None,
-    resume_metadata=None, subpath: str = '', committer: Optional[str] = None,
-    extra_env: Optional[Dict[str, str]] = None,
-    stderr: Optional[BinaryIO] = None
-) -> CommandResult:  # noqa: C901
-    """Run a script in a tree and commit the result.
-
-    This ignores newly added files.
-
-    Args:
-      local_tree: Local tree to run script in
-      script: Script to run
-      commit_pending: Whether to commit pending changes
-        (True, False or None: only commit if there were no commits by the
-         script)
-    """
-    env = dict(os.environ)
-    if extra_env:
-        env.update(extra_env)
-    env['SVP_API'] = '1'
-    last_revision = local_tree.last_revision()
-    orig_tags = local_tree.branch.tags.get_tag_dict()
-    with tempfile.TemporaryDirectory() as td:
-        env['SVP_RESULT'] = os.path.join(td, 'result.json')
-        if resume_metadata:
-            env['SVP_RESUME'] = os.path.join(td, 'resume-metadata.json')
-            with open(env['SVP_RESUME'], 'w') as f:
-                json.dump(resume_metadata, f)
-        try:
-            p = subprocess.Popen(
-                script, cwd=local_tree.abspath(subpath),
-                stdout=subprocess.PIPE,
-                shell=isinstance(script, str),
-                stderr=stderr, env=env)
-        except FileNotFoundError as e:
-            raise ScriptNotFound(script) from e
-        (description_encoded, err) = p.communicate(b"")
-        try:
-            with open(env['SVP_RESULT']) as f:
-                try:
-                    result_json = json.load(f)
-                except json.decoder.JSONDecodeError as e:
-                    raise ResultFileFormatError(e)
-        except FileNotFoundError:
-            result_json = None
-        if p.returncode != 0:
-            if result_json is not None:
-                raise DetailedFailure.from_json(result_json)
-            raise ScriptFailed(script, p.returncode)
-        if result_json is not None:
-            result = CommandResult.from_json(result_json)
-        else:
-            result = CommandResult()
-    if not result.description:
-        result.description = description_encoded.decode()
-    new_revision = local_tree.last_revision()
-    if result.tags is None:
-        result.tags = []
-        for name, revid in local_tree.branch.tags.get_tag_dict().items():
-            if orig_tags.get(name) != revid:
-                result.tags.append((name, revid))
-    if last_revision == new_revision and commit_pending is None:
-        # Automatically commit pending changes if the script did not
-        # touch the branch.
-        commit_pending = True
-    if commit_pending:
-        local_tree.smart_add([local_tree.abspath(subpath)])
-        with suppress(PointlessCommit):
-            new_revision = local_tree.commit(
-                result.description, allow_pointless=False,
-                committer=committer)
-    if new_revision == last_revision:
-        raise ScriptMadeNoChanges()
-    result.old_revision = last_revision
-    result.new_revision = local_tree.last_revision()
-    return result
+ScriptMadeNoChanges = _svp_rs.ScriptMadeNoChanges
+ScriptFailed = _svp_rs.ScriptFailed
+ScriptNotFound = _svp_rs.ScriptNotFound
+DetailedFailure = _svp_rs.DetailedFailure
+ResultFileFormatError = _svp_rs.ResultFileFormatError
+CommandResult = _svp_rs.CommandResult
+script_runner = _svp_rs.script_runner
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
