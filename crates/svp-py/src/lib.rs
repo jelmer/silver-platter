@@ -6,6 +6,7 @@ use silver_platter::codemod::Error as CodemodError;
 use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
+use std::os::unix::io::FromRawFd;
 
 create_exception!(
     silver_platter.utils,
@@ -261,6 +262,7 @@ fn script_runner(
     resume_metadata: Option<&CommandResult>,
     committer: Option<&str>,
     extra_env: Option<std::collections::HashMap<String, String>>,
+    stderr: Option<PyObject>,
 ) -> PyResult<PyObject> {
     let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
         script
@@ -278,7 +280,17 @@ fn script_runner(
         resume_metadata.as_ref().map(|obj| &obj.0),
         committer,
         extra_env,
-        std::process::Stdio::inherit(),
+        match stderr {
+            Some(stderr) => {
+                let fd = stderr
+                    .call_method0(py, "fileno")?
+                    .extract::<i32>(py)
+                    .unwrap();
+                let f = unsafe { std::fs::File::from_raw_fd(fd) };
+                std::process::Stdio::from(f)
+            }
+            None => std::process::Stdio::inherit(),
+        },
     )
     .map(|result| CommandResult(result).into_py(py))
     .map_err(|err| match err {
