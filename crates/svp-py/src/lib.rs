@@ -5,6 +5,7 @@ use pyo3::{create_exception, import_exception};
 use silver_platter::codemod::Error as CodemodError;
 use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
+use std::collections::HashMap;
 
 create_exception!(
     silver_platter.utils,
@@ -750,6 +751,21 @@ fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyRe
     })
 }
 
+#[pyfunction]
+fn fetch_colocated(
+    controldir: PyObject,
+    from_controldir: PyObject,
+    additional_colocated_branches: HashMap<&str, &str>,
+) -> PyResult<()> {
+    let controldir = breezyshim::ControlDir::new(controldir).unwrap();
+    let from_controldir = breezyshim::ControlDir::new(from_controldir).unwrap();
+    silver_platter::workspace::fetch_colocated(
+        &controldir,
+        &from_controldir,
+        additional_colocated_branches,
+    )
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -806,6 +822,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
     m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
     m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
 
