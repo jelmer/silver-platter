@@ -7,3 +7,5 @@ silver_platter.dist-info
 .mypy_cache
 dist
 .coverage
+target
+silver_platter/_*.so

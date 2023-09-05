@@ -15,81 +15,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import logging
-import os
-import shutil
-import socket
-import subprocess
-import tempfile
-from http.client import IncompleteRead
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
-from breezy import errors, urlutils
 from breezy.branch import Branch
-from breezy.bzr import LineEndingError
-from breezy.controldir import ControlDir, NoColocatedBranchSupport, Prober
-from breezy.git.remote import RemoteGitError
-from breezy.revision import RevisionID
-from breezy.transport import (Transport, UnsupportedProtocol, UnusableRedirect,
-                              get_transport)
 from breezy.workingtree import WorkingTree
+from . import _svp_rs
 
-
-def create_temp_sprout(
-    branch: Branch,
-    additional_colocated_branches: Optional[Dict[str, str]] = None,
-    dir: Optional[str] = None,
-    path: Optional[str] = None,
-) -> Tuple[WorkingTree, Callable[[], None]]:
-    """Create a temporary sprout of a branch.
-
-    This attempts to fetch the least amount of history as possible.
-    """
-    if path is None:
-        td = tempfile.mkdtemp(dir=dir)
-    else:
-        td = path
-        os.mkdir(path)
-
-    def destroy() -> None:
-        shutil.rmtree(td)
-
-    # Only use stacking if the remote repository supports chks because of
-    # https://bugs.launchpad.net/bzr/+bug/375013
-    use_stacking = (
-        branch._format.supports_stacking() and  # type: ignore
-        branch.repository._format.supports_chks  # type: ignore
-    )
-    try:
-        # preserve whatever source format we have.
-        to_dir = branch.controldir.sprout(  # type: ignore
-            td,
-            None,
-            create_tree_if_local=True,
-            source_branch=branch,
-            stacked=use_stacking,
-        )
-        # TODO(jelmer): Fetch these during the initial clone
-        for from_branch_name in set(additional_colocated_branches or []):
-            try:
-                add_branch = branch.controldir.open_branch(  # type: ignore
-                    name=from_branch_name)
-            except (errors.NotBranchError, NoColocatedBranchSupport):
-                pass
-            else:
-                if isinstance(additional_colocated_branches, dict):
-                    to_branch_name = additional_colocated_branches[
-                        from_branch_name]
-                else:
-                    to_branch_name = from_branch_name
-                local_add_branch = to_dir.create_branch(name=to_branch_name)
-                add_branch.push(local_add_branch)
-                assert add_branch.last_revision() \
-                    == local_add_branch.last_revision()
-        return to_dir.open_workingtree(), destroy
-    except BaseException as e:
-        destroy()
-        raise e
+create_temp_sprout = _svp_rs.create_temp_sprout
+PreCheckFailed = _svp_rs.PreCheckFailed
+PostCheckFailed = _svp_rs.PostCheckFailed
+run_pre_check = _svp_rs.run_pre_check
+run_post_check = _svp_rs.run_post_check
 
 
 class TemporarySprout:
@@ -103,7 +39,7 @@ class TemporarySprout:
         branch: Branch,
         additional_colocated_branches: Optional[Dict[str, str]] = None,
         dir: Optional[str] = None,
-    ):
+    ) -> None:
         self.branch = branch
         self.additional_colocated_branches = additional_colocated_branches
         self.dir = dir
@@ -121,212 +57,14 @@ class TemporarySprout:
         return False
 
 
-class PreCheckFailed(Exception):
-    """The post check failed."""
-
-
-def run_pre_check(tree: WorkingTree, script: Optional[str]) -> None:
-    """Run a script ahead of making any changes to a tree.
-
-    Args:
-      tree: The working tree to operate in
-      script: Command to run
-    Raises:
-      PreCheckFailed: If the pre-check failed
-    """
-    if not script:
-        return
-    try:
-        subprocess.check_call(script, shell=True, cwd=tree.basedir)
-    except subprocess.CalledProcessError:
-        raise PreCheckFailed()
-
-
-class PostCheckFailed(Exception):
-    """The post check failed."""
-
-
-def run_post_check(
-    tree: WorkingTree, script: Optional[str], since_revid: RevisionID
-) -> None:
-    """Run a script after making any changes to a tree.
-
-    Args:
-      tree: The working tree to operate in
-      script: Command to run
-      since_revid: Revision id since which changes were made
-    Raises:
-      PostCheckFailed: If the pre-check failed
-    """
-    if not script:
-        return
-    try:
-        subprocess.check_call(
-            script, shell=True, cwd=tree.basedir,
-            env={"SINCE_REVID": since_revid}
-        )
-    except subprocess.CalledProcessError:
-        raise PostCheckFailed()
-
-
-class BranchUnavailable(Exception):
-    """Opening branch failed."""
-
-    def __init__(self, url: str, description: str):
-        self.url = url
-        self.description = description
-
-    def __str__(self) -> str:
-        return self.description
-
-
-class BranchTemporarilyUnavailable(BranchUnavailable):
-    """Branch unavailable for temporary reasons, e.g. DNS failed."""
-
-
-class BranchRateLimited(Exception):
-    """Opening branch was rate-limited."""
-
-    def __init__(self, url: str, description: str,
-                 retry_after: Optional[int] = None):
-        self.url = url
-        self.description = description
-        self.retry_after = retry_after
-
-    def __str__(self) -> str:
-        if self.retry_after is not None:
-            return "{} (retry after {})".format(
-                self.description, self.retry_after)
-        else:
-            return self.description
-
-
-class BranchMissing(Exception):
-    """Branch did not exist."""
-
-    def __init__(self, url: str, description: str):
-        self.url = url
-        self.description = description
-
-    def __str__(self) -> str:
-        return self.description
-
-
-class BranchUnsupported(Exception):
-    """The branch uses a VCS or protocol that is unsupported."""
-
-    def __init__(self, url: str, description: str, vcs: Optional[str] = None):
-        self.url = url
-        self.description = description
-        self.vcs = vcs
-
-    def __str__(self) -> str:
-        return self.description
-
-
-def _convert_exception(url: str, e: Exception) -> Optional[Exception]:
-    if isinstance(e, socket.error):
-        return BranchUnavailable(url, "Socket error: %s" % e)
-    if isinstance(e, errors.NotBranchError):
-        return BranchMissing(url, "Branch does not exist: %s" % e)
-    if isinstance(e, UnsupportedProtocol):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, errors.ConnectionError):
-        if "Temporary failure in name resolution" in str(e):
-            return BranchTemporarilyUnavailable(url, str(e))
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.PermissionDenied):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, urlutils.InvalidURL):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.InvalidHttpResponse):
-        if "Unexpected HTTP status 429" in str(e):
-            try:
-                retry_after = int(e.headers['Retry-After'])  # type: ignore
-            except TypeError:
-                logging.warning(
-                    'Unable to parse retry-after header: %s',
-                    e.headers['Retry-After'])  # type: ignore
-                retry_after = None
-            else:
-                retry_after = None
-            raise BranchRateLimited(url, str(e), retry_after=retry_after)
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, errors.TransportError):
-        return BranchUnavailable(url, str(e))
-    if UnusableRedirect is not None and isinstance(e, UnusableRedirect):
-        return BranchUnavailable(url, str(e))
-    if (hasattr(errors, 'UnsupportedVcs')
-            and isinstance(e, errors.UnsupportedVcs)):
-        return BranchUnsupported(url, str(e), vcs=e.vcs)
-    if isinstance(e, errors.UnsupportedFormatError):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, errors.UnknownFormatError):
-        return BranchUnsupported(url, str(e))
-    if isinstance(e, RemoteGitError):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, LineEndingError):
-        return BranchUnavailable(url, str(e))
-    if isinstance(e, IncompleteRead):
-        return BranchUnavailable(url, str(e))
-    return None
-
-
-def open_branch(
-    url: str,
-    possible_transports: Optional[List[Transport]] = None,
-    probers: Optional[List[Prober]] = None,
-    name: Optional[str] = None,
-) -> Branch:
-    """Open a branch by URL."""
-    url, params = urlutils.split_segment_parameters(url)
-    if name is None:
-        try:
-            name = urlutils.unquote(params["branch"])
-        except KeyError:
-            name = None
-    try:
-        transport = get_transport(url, possible_transports=possible_transports)
-        dir = ControlDir.open_from_transport(transport, probers)
-        return dir.open_branch(name=name)
-    except Exception as e:
-        converted = _convert_exception(url, e)
-        if converted is not None:
-            raise converted
-        raise e
-
-
-def open_branch_containing(
-    url: str,
-    possible_transports: Optional[List[Transport]] = None,
-    probers: Optional[List[Prober]] = None,
-) -> Tuple[Branch, str]:
-    """Open a branch by URL."""
-    try:
-        transport = get_transport(url, possible_transports=possible_transports)
-        dir, subpath = ControlDir.open_containing_from_transport(
-            transport, probers)  # type: ignore
-        return dir.open_branch(), subpath
-    except Exception as e:
-        converted = _convert_exception(url, e)
-        if converted is not None:
-            raise converted
-        raise e
-
-
-def full_branch_url(branch: Branch) -> str:
-    """Get the full URL for a branch.
-
-    Ideally this should just return Branch.user_url,
-    but that currently exclude the branch name
-    in some situations.
-    """
-    if branch.name is None:
-        return branch.user_url
-    url, params = urlutils.split_segment_parameters(branch.user_url)
-    if branch.name != "":
-        params["branch"] = urlutils.quote(branch.name, "")
-    return urlutils.join_segment_parameters(url, params)
+BranchTemporarilyUnavailable = _svp_rs.BranchTemporarilyUnavailable
+BranchRateLimited = _svp_rs.BranchRateLimited
+BranchUnavailable = _svp_rs.BranchUnavailable
+BranchMissing = _svp_rs.BranchMissing
+BranchUnsupported = _svp_rs.BranchUnsupported
+open_branch = _svp_rs.open_branch
+open_branch_containing = _svp_rs.open_branch_containing
+full_branch_url = _svp_rs.full_branch_url
 
 
 def get_branch_vcs_type(branch):

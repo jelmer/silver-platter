@@ -31,7 +31,7 @@ from . import uploader as debian_uploader
 def main(argv: Optional[List[str]] = None) -> Optional[int]:
     import breezy
 
-    breezy.initialize()
+    breezy.initialize()  # type: ignore
 
     from ..__main__ import subcommands as main_subcommands
 

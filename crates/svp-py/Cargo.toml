@@ -1,0 +1,21 @@
+[package]
+name = "svp-py"
+version = "0.0.0"
+authors = ["Jelmer Vernooĳ <jelmer@jelmer.uk>"]
+edition = "2018"
+license = "Apache-2.0"
+repository = "https://github.com/jelmer/silver-platter.git"
+homepage = "https://github.com/jelmer/silver-platter"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+silver-platter = { path = "../.." }
+pyo3 = { workspace = true, features = ["extension-module"] }
+pyo3-log = { workspace = true }
+tera = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+#breezyshim = { path = "../../../breezyshim/trunk" }
+breezyshim = { workspace = true }

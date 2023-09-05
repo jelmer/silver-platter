@@ -1,6 +1,9 @@
 all:
 
-coverage:
+build-inplace:
+	python3 setup.py build_ext -i
+
+coverage: build-inplace
 	python3 -m coverage run -m unittest tests.test_suite
 
 coverage-html:
@@ -13,13 +16,10 @@ style:
 
 check:: typing
 
-typing:
+typing: build-inplace
 	mypy silver_platter/
 
 check:: testsuite
 
-testsuite:
+testsuite: build-inplace
 	python3 setup.py test
-
-%_pb2.py: %.proto
-	protoc --python_out=. $<

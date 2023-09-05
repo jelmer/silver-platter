@@ -1,8 +1,7 @@
-Silver-Platter Codemod Protocol, v1
-===================================
+# Silver-Platter Codemod Protocol, v1
 
-The core of silver-platter are codemod commands, which get run in version
-control checkouts to make changes.
+The core of silver-platter are user-provided codemod commands, which get run in
+version control checkouts to make changes.
 
 Commands will be run in a clean VCS checkout, where they can make changes as
 they deem fit. Changes should ideally be committed; by default pending changes
@@ -29,7 +28,7 @@ The command should exit with code 0 when successful (or no-op), and 1 otherwise.
 the case of failure, the branch is discarded.
 
 If it is known that the command supports resuming, then a previous branch
-may be loaded if present. The SVP_RESUME environment variable
+may be loaded if present. The `SVP_RESUME` environment variable
 will be set to a path to a JSON file with the previous runs metadata.
 The command is expected to import any metadata about the older changes
 and carry it forward.
@@ -38,16 +37,18 @@ If resuming is not supported then all older changes will be discarded
 
 Environment variables that will be set:
 
-* SVP_API: Silver-platter API major version number. Currently set to 1
-* COMMITTER: Set to a committer identity (optional)
-* SVP_RESUME: Set to a file path with JSON results from the last run, if available and if --resume is enabled.
-* SVP_RESULT: Set to a (optional) path that should be created by the command with extra details
+* `SVP_API`: Silver-platter API major version number. Currently set to 1
+* `COMMITTER`: Set to a committer identity (optional)
+* `SVP_RESUME`: Set to a file path with JSON results from the last run, if
+    available and if --resume is enabled.
+* `SVP_RESULT`: Set to a (optional) path that should be created by the command
+    with extra details
 
 The output JSON should include the following fields:
 
 * *code*: In case of an error, category of error that occurred. Special values are
-  + *success*: Changes were successfully made
-  + *nothing-to-do*: There were no relevant changes that could be made
+  * *success*: Changes were successfully made
+  * *nothing-to-do*: There were no relevant changes that could be made
 * *transient*: Optional boolean indicating whether the error was transient
 * *stage*: Optional list with the name of the stage the codemod was in when it failed
 * *description*: Optional one-line text description of the error or changes made
@@ -67,6 +68,6 @@ For Debian branches, branches will be provided named according to
 `DEP-14 <https://dep-team.pages.debian.net/deps/dep14/>`_.
 The following environment variables will be set as well:
 
-* *DEB_SOURCE*: Source package name
-* *DEB_UPDATE_CHANGELOG*: Set to either update_changelog/leave_changelog (optional)
-* *ALLOW_REFORMATTING*: boolean indicating whether reformatting is allowed
+* `DEB_SOURCE`: Source package name
+* `DEB_UPDATE_CHANGELOG`: Set to either update_changelog/leave_changelog (optional)
+* `ALLOW_REFORMATTING`: boolean indicating whether reformatting is allowed

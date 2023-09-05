@@ -32,11 +32,22 @@ from breezy.workspace import check_clean_tree, reset_tree
 from debian.changelog import Changelog
 from debian.deb822 import Deb822
 
-from ..apply import (ResultFileFormatError, ScriptFailed, ScriptMadeNoChanges,
-                     ScriptNotFound)
-from . import (DEFAULT_BUILDER, BuildFailedError, MissingUpstreamTarball,
-               _get_maintainer_from_env, add_changelog_entry, build,
-               control_files_in_root, guess_update_changelog)
+from ..apply import (
+    ResultFileFormatError,
+    ScriptFailed,
+    ScriptMadeNoChanges,
+    ScriptNotFound,
+)
+from . import (
+    DEFAULT_BUILDER,
+    BuildFailedError,
+    MissingUpstreamTarball,
+    _get_maintainer_from_env,
+    add_changelog_entry,
+    build,
+    control_files_in_root,
+    guess_update_changelog,
+)
 
 
 class MissingChangelog(Exception):
@@ -44,10 +55,10 @@ class MissingChangelog(Exception):
 
 
 class DetailedFailure(Exception):
-    """Detailed failure"""
+    """Detailed failure."""
 
     def __init__(self, source_name, result_code, description, stage=None,
-                 details=None):
+                 details=None) -> None:
         self.source = source_name
         self.result_code = result_code
         self.description = description
