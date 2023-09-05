@@ -17,7 +17,11 @@ Build-Depends: dh-python,
                python3-upstream-ontologist,
                lintian-brush (>= 0.70),
                debhelper-compat (= 13),
-               python3-setuptools
+               python3-setuptools,
+               python3-setuptools-rust,
+               librust-breezyshim-dev,
+               librust-tera-dev,
+               librust-serde-yaml-dev,
 Standards-Version: 4.6.2
 Homepage: https://www.jelmer.uk/code/silver-platter
 Rules-Requires-Root: no
@@ -25,7 +29,7 @@ Vcs-Git: https://salsa.debian.org/jelmer/silver-platter.git
 Vcs-Browser: https://salsa.debian.org/jelmer/silver-platter
 
 Package: silver-platter
-Architecture: all
+Architecture: any
 Depends: devscripts,
          brz-debian (>= 2.8.50),
          python3-breezy (>= 3.3.0),

@@ -2,6 +2,7 @@ silver-platter (0.5.10-1) UNRELEASED; urgency=medium
 
   * Drop upstream PGP signature; no longer supported by pypi
   * New upstream release.
+  * Change architecture to any, since it now ships .so files.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 06 Sep 2023 00:09:23 -0000
 

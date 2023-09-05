@@ -1,0 +1,13 @@
+=== modified file 'Cargo.toml'
+--- old/Cargo.toml	2023-09-05 21:50:49 +0000
++++ new/Cargo.toml	2023-09-05 23:24:16 +0000
+@@ -10,7 +10,7 @@
+ 
+ [dependencies]
+ tempfile = "3.6.0"
+-serde_yaml = "0.9.22"
++serde_yaml = "0.8"
+ log = "0.4"
+ percent-encoding = "2.3.0"
+ 
+
