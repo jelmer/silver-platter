@@ -16,7 +16,8 @@ Build-Depends: dh-python,
                python3-testtools,
                python3-upstream-ontologist,
                lintian-brush (>= 0.70),
-               debhelper-compat (= 13)
+               debhelper-compat (= 13),
+               python3-setuptools
 Standards-Version: 4.6.2
 Homepage: https://www.jelmer.uk/code/silver-platter
 Rules-Requires-Root: no
