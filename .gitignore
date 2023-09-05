@@ -9,3 +9,4 @@ dist
 .coverage
 target
 silver_platter/_*.so
+build
