@@ -39,6 +39,7 @@ from .publish import (
     publish_changes as _publish_changes,
 )
 from .utils import create_temp_sprout, full_branch_url
+from . import _svp_rs
 
 __all__ = [
     "Workspace",
@@ -48,23 +49,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def fetch_colocated(controldir: ControlDir, from_controldir: ControlDir,
-                    additional_colocated_branches: Dict[str, str]):
-    logger.debug(
-        "Fetching colocated branches: %r",
-        additional_colocated_branches,
-    )
-    for (from_branch_name,
-         to_branch_name) in additional_colocated_branches.items():
-        try:
-            remote_colo_branch = from_controldir.open_branch(
-                name=from_branch_name
-            )
-        except (NotBranchError, NoColocatedBranchSupport):
-            continue
-        controldir.push_branch(
-            name=to_branch_name, source=remote_colo_branch, overwrite=True
-        )
+fetch_colocated = _svp_rs.fetch_colocated
 
 
 class Workspace:

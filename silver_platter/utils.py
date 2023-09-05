@@ -15,15 +15,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import subprocess
 from typing import Dict, Optional
 
 from breezy.branch import Branch
-from breezy.revision import RevisionID
 from breezy.workingtree import WorkingTree
 from . import _svp_rs
 
 create_temp_sprout = _svp_rs.create_temp_sprout
+PreCheckFailed = _svp_rs.PreCheckFailed
+PostCheckFailed = _svp_rs.PostCheckFailed
+run_pre_check = _svp_rs.run_pre_check
+run_post_check = _svp_rs.run_post_check
 
 
 class TemporarySprout:
@@ -53,54 +55,6 @@ class TemporarySprout:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._destroy()
         return False
-
-
-class PreCheckFailed(Exception):
-    """The post check failed."""
-
-
-def run_pre_check(tree: WorkingTree, script: Optional[str]) -> None:
-    """Run a script ahead of making any changes to a tree.
-
-    Args:
-      tree: The working tree to operate in
-      script: Command to run
-    Raises:
-      PreCheckFailed: If the pre-check failed
-    """
-    if not script:
-        return
-    try:
-        subprocess.check_call(script, shell=True, cwd=tree.basedir)
-    except subprocess.CalledProcessError:
-        raise PreCheckFailed()
-
-
-class PostCheckFailed(Exception):
-    """The post check failed."""
-
-
-def run_post_check(
-    tree: WorkingTree, script: Optional[str], since_revid: RevisionID
-) -> None:
-    """Run a script after making any changes to a tree.
-
-    Args:
-      tree: The working tree to operate in
-      script: Command to run
-      since_revid: Revision id since which changes were made
-    Raises:
-      PostCheckFailed: If the pre-check failed
-    """
-    if not script:
-        return
-    try:
-        subprocess.check_call(
-            script, shell=True, cwd=tree.basedir,
-            env={"SINCE_REVID": since_revid}
-        )
-    except subprocess.CalledProcessError:
-        raise PostCheckFailed()
 
 
 BranchTemporarilyUnavailable = _svp_rs.BranchTemporarilyUnavailable

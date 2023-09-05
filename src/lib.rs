@@ -1,10 +1,12 @@
 pub mod candidates;
+pub mod checks;
 pub mod codemod;
 pub mod probers;
 pub mod publish;
 pub mod recipe;
 pub mod utils;
 pub mod vcs;
+pub mod workspace;
 pub use breezyshim::branch::Branch;
 pub use breezyshim::controldir::{ControlDir, Prober};
 pub use breezyshim::forge::{Forge, MergeProposal};
