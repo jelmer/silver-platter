@@ -47,32 +47,29 @@ pub fn push_result(
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
 ) -> PyResult<()> {
-    Python::with_gil(|py| {
-        let tag_selector = Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
-        local_branch.push(remote_branch, false, stop_revision, Some(tag_selector))?;
+    let tag_selector = Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
+    local_branch.push(remote_branch, false, stop_revision, Some(tag_selector))?;
 
-        for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default()
+    for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
+        match local_branch
+            .controldir()
+            .open_branch(Some(from_branch_name.as_str()))
         {
-            match local_branch
-                .controldir()
-                .open_branch(Some(from_branch_name.as_str()))
-            {
-                Ok(branch) => {
-                    let tag_selector =
-                        Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
-                    remote_branch.controldir().push_branch(
-                        &branch,
-                        Some(to_branch_name.as_str()),
-                        Some(false),
-                        Some(tag_selector),
-                    )?;
-                }
-                Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
-                Err(e) => return Err(e.into()),
-            };
-        }
-        Ok(())
-    })
+            Ok(branch) => {
+                let tag_selector =
+                    Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
+                remote_branch.controldir().push_branch(
+                    &branch,
+                    Some(to_branch_name.as_str()),
+                    Some(false),
+                    Some(tag_selector),
+                )?;
+            }
+            Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
+            Err(e) => return Err(e.into()),
+        };
+    }
+    Ok(())
 }
 
 pub fn push_changes(

@@ -7,6 +7,18 @@ use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
 
 create_exception!(
+    silver_platter.utils,
+    PreCheckFailed,
+    pyo3::exceptions::PyException
+);
+
+create_exception!(
+    silver_platter.utils,
+    PostCheckFailed,
+    pyo3::exceptions::PyException
+);
+
+create_exception!(
     silver_platter.apply,
     ScriptMadeNoChanges,
     pyo3::exceptions::PyException
@@ -707,6 +719,37 @@ fn create_temp_sprout(
     .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
 }
 
+/// Run a script before making any changes to a tree.
+///
+/// Args:
+///   tree: The working tree to operate in
+///   script: Command to run
+/// Raises:
+///   PreCheckFailed: If the pre-check failed
+#[pyfunction]
+fn run_pre_check(tree: PyObject, script: &str) -> PyResult<()> {
+    let tree = WorkingTree::new(tree).unwrap();
+    silver_platter::checks::run_pre_check(tree, script).map_err(|e| match e {
+        silver_platter::checks::PreCheckFailed => PreCheckFailed::new_err(()),
+    })
+}
+
+/// Run a script after making any changes to a tree.
+///
+/// Args:
+///   tree: The working tree to operate in
+///   script: Command to run
+///   since_revid: The revision to run the script since
+/// Raises:
+///   PreCheckFailed: If the pre-check failed
+#[pyfunction]
+fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyResult<()> {
+    let tree = WorkingTree::new(tree).unwrap();
+    silver_platter::checks::run_post_check(tree, script, &since_revid).map_err(|e| match e {
+        silver_platter::checks::PostCheckFailed => PostCheckFailed::new_err(()),
+    })
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -761,6 +804,10 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
         py.get_type::<InsufficientChangesForNewProposal>(),
     )?;
     m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
+    m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
+    m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
+    m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
+    m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
 
     Ok(())
 }

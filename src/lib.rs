@@ -1,4 +1,5 @@
 pub mod candidates;
+pub mod checks;
 pub mod codemod;
 pub mod probers;
 pub mod publish;
