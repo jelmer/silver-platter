@@ -61,9 +61,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.21"
+version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6102db57aef76d2e25700640eef361456e8162b506e9eba3b80205d7e12be3"
+checksum = "49d6c4e60ac1b8f5f736d08c9b7b8bdc27b16baec1951be321c7db3f995f62ed"
 dependencies = [
  "debversion",
  "pyo3",
@@ -929,7 +929,7 @@ dependencies = [
 
 [[package]]
 name = "silver-platter"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "breezyshim",
  "debversion",

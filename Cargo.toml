@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.9"
+version = "0.5.10"
 authors = [ "Jelmer Vernooij <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
@@ -9,17 +9,41 @@ repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 
 [dependencies]
-pyo3 = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 tempfile = "3.6.0"
-tera = { workspace = true }
 serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
-breezyshim = { workspace = true }
-debversion = { version = ">=0.1", optional = true }
-url = { workspace = true, features = [ "serde" ] }
+
+[workspace]
+members = [ "crates/*",]
+
+[features]
+default = []
+debian = [ "dep:debversion",]
+
+[dependencies.pyo3]
+workspace = true
+
+[dependencies.serde]
+workspace = true
+features = [ "derive",]
+
+[dependencies.serde_json]
+workspace = true
+
+[dependencies.tera]
+workspace = true
+
+[dependencies.breezyshim]
+workspace = true
+
+[dependencies.debversion]
+version = ">=0.1"
+optional = true
+
+[dependencies.url]
+workspace = true
+features = [ "serde",]
 
 [workspace.dependencies]
 pyo3 = "0.19"
@@ -29,12 +53,3 @@ tera = "1"
 serde = "1.0.171"
 breezyshim = "0.1.21"
 url = "2.4.0"
-
-[features]
-default = []
-debian = [ "dep:debversion",]
-
-[workspace]
-members = [ "crates/*",]
-
-
