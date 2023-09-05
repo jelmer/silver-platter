@@ -1,3 +1,9 @@
+silver-platter (0.5.6-3) UNRELEASED; urgency=medium
+
+  * Drop upstream PGP signature; no longer supported by pypi
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 06 Sep 2023 00:09:03 +0100
+
 silver-platter (0.5.6-2) unstable; urgency=medium
 
   * Fix test suite invocation in debian/tests/control. Closes: #1031303
