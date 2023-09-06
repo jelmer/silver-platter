@@ -43,6 +43,7 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_PLATFORM: macos linux
           CIBW_ARCHS_LINUX: x86_64
           # ARM builds fail at the moment:
           # CIBW_ARCHS_LINUX: x86_64 aarch64
