@@ -3,7 +3,7 @@ use breezyshim::RevisionId;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::process::{Command, ExitStatus};
+use std::process::Command;
 
 #[derive(Debug)]
 pub struct PreCheckFailed;

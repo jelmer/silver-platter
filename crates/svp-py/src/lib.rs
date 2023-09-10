@@ -50,6 +50,11 @@ create_exception!(
     InsufficientChangesForNewProposal,
     pyo3::exceptions::PyException
 );
+create_exception!(
+    silver_platter.publish,
+    EmptyMergeProposal,
+    pyo3::exceptions::PyException
+);
 import_exception!(breezy.errors, DivergedBranches);
 
 #[pyclass]
@@ -781,6 +786,25 @@ fn fetch_colocated(
     )
 }
 
+#[pyfunction]
+fn check_proposal_diff(
+    local_branch: PyObject,
+    target_branch: PyObject,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<()> {
+    let local_branch = breezyshim::branch::RegularBranch::new(local_branch);
+    let target_branch = breezyshim::branch::RegularBranch::new(target_branch);
+    if silver_platter::publish::check_proposal_diff_empty(
+        &local_branch,
+        &target_branch,
+        stop_revision.as_ref(),
+    )? {
+        Err(EmptyMergeProposal::new_err(()))
+    } else {
+        Ok(())
+    }
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -838,8 +862,10 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
+    m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
     m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
     m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
+    m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
 
     Ok(())
 }

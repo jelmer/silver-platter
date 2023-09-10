@@ -1,15 +1,22 @@
 use crate::vcs::open_branch;
 use crate::Mode;
+use breezyshim::branch::MemoryBranch;
+use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
-use pyo3::exceptions::PyPermissionError;
+use pyo3::create_exception;
+use pyo3::exceptions::PyException;
 use pyo3::import_exception;
 use pyo3::prelude::*;
+use std::borrow::Cow;
 use std::collections::HashMap;
+use url::Url;
 
 import_exception!(breezy.errors, NotBranchError);
 import_exception!(breezy.errors, UnsupportedOperation);
 import_exception!(breezy.errors, MergeProposalExists);
 import_exception!(breezy.errors, PermissionDenied);
+
+create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
 
 fn _tag_selector_from_tags(
     tags: std::collections::HashMap<String, RevisionId>,
@@ -223,10 +230,16 @@ pub fn propose_changes(
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
+    let mut ref_resume_branch = None;
     Python::with_gil(|py| {
-        let mut ref_resume_branch = None;
-        if !allow_empty.unwrap_or(false) {
-            check_proposal_diff(local_branch, main_branch, stop_revision)?;
+        if !allow_empty.unwrap_or(false)
+            && check_proposal_diff_empty(local_branch, main_branch, stop_revision)?
+        {
+            return Err(EmptyMergeProposal::new_err((
+                "Proposal is empty",
+                local_branch.to_object(py),
+                main_branch.to_object(py),
+            )));
         }
         let overwrite_existing = overwrite_existing.unwrap_or(true);
         let remote_branch = if let Some(resume_branch) = resume_branch {
@@ -376,25 +389,6 @@ pub fn propose_changes(
     })
 }
 
-pub fn check_proposal_diff(
-    other_branch: &dyn Branch,
-    main_branch: &dyn Branch,
-    stop_revision: Option<&RevisionId>,
-) -> PyResult<()> {
-    Python::with_gil(|py| {
-        let svp_publish = py.import("silver_platter.publish")?;
-        let check_proposal_diff = svp_publish.getattr("check_proposal_diff")?;
-
-        check_proposal_diff.call1((
-            other_branch.to_object(py),
-            main_branch.to_object(py),
-            stop_revision.map(|r| r.as_bytes()),
-        ))?;
-
-        Ok(())
-    })
-}
-
 #[derive(Debug)]
 pub enum Error {
     DivergedBranches(),
@@ -491,7 +485,7 @@ pub fn publish_changes(
         }
         match mode {
             Mode::PushDerived => {
-                let (remote_branch, public_url) = push_derived_changes(
+                let (_remote_branch, _public_url) = push_derived_changes(
                     local_branch,
                     main_branch,
                     &forge,
@@ -535,7 +529,7 @@ pub fn publish_changes(
                             return Err(e.into());
                         }
                     }
-                    Ok(o) => {
+                    Ok(_) => {
                         return Ok(PublishResult {
                             proposal: None,
                             mode,
@@ -616,7 +610,7 @@ pub fn publish_changes(
             proposal: Some(proposal),
             is_new: Some(is_new),
             target_branch: main_branch.get_user_url(),
-            forge: forge.clone(),
+            forge,
         })
     })
 }
@@ -627,4 +621,34 @@ pub struct PublishResult {
     pub is_new: Option<bool>,
     pub target_branch: url::Url,
     pub forge: Forge,
+}
+
+pub fn check_proposal_diff_empty(
+    other_branch: &dyn Branch,
+    main_branch: &dyn Branch,
+    stop_revision: Option<&RevisionId>,
+) -> PyResult<bool> {
+    let stop_revision = match stop_revision {
+        Some(rev) => rev.clone(),
+        None => other_branch.last_revision(),
+    };
+    let main_revid = main_branch.last_revision();
+    let other_repository = other_branch.repository();
+    other_repository.fetch(&main_branch.repository(), Some(&main_revid))?;
+
+    let lock = other_branch.lock_read();
+    let main_tree = other_repository.revision_tree(&main_revid)?;
+    let revision_graph = other_repository.get_graph();
+    let tree_branch = MemoryBranch::new(&other_repository, None, &main_revid)?;
+    let mut merger = Merger::new(&tree_branch, &main_tree, &revision_graph);
+    merger.set_other_revision(&stop_revision, other_branch)?;
+    if merger.find_base()?.is_none() {
+        merger.set_base_revision(&RevisionId::null(), other_branch)?;
+    }
+    merger.set_merge_type(MergeType::Merge3);
+    let tree_merger = merger.make_merger()?;
+    let tt = tree_merger.make_preview_transform()?;
+    let mut changes = tt.iter_changes()?;
+    std::mem::drop(lock);
+    Ok(!changes.any(|_| true))
 }
