@@ -19,7 +19,6 @@ from typing import List, Optional
 
 from breezy import errors
 from breezy import merge as _mod_merge  # type: ignore
-from breezy import revision as _mod_revision
 from breezy.branch import Branch
 from breezy.errors import PermissionDenied
 from breezy.forge import (
@@ -29,7 +28,6 @@ from breezy.forge import (
     MergeProposal,
     MergeProposalExists,
 )
-from breezy.memorybranch import MemoryBranch
 from breezy.revision import RevisionID
 
 from . import _svp_rs
@@ -69,43 +67,8 @@ propose_changes = _svp_rs.propose_changes
 publish_changes = _svp_rs.publish_changes
 PublishResult = _svp_rs.PublishResult
 InsufficientChangesForNewProposal = _svp_rs.InsufficientChangesForNewProposal
-
-
-class EmptyMergeProposal(Exception):
-    """Merge proposal does not have any changes."""
-
-    def __init__(self, local_branch: Branch, main_branch: Branch) -> None:
-        self.local_branch = local_branch
-        self.main_branch = main_branch
-
-
-def check_proposal_diff(
-    other_branch: Branch, main_branch: Branch,
-    stop_revision: Optional[RevisionID] = None
-) -> None:
-    if stop_revision is None:
-        stop_revision = other_branch.last_revision()
-    main_revid = main_branch.last_revision()
-    other_branch.repository.fetch(main_branch.repository, main_revid)
-    with other_branch.lock_read():
-        main_tree = other_branch.repository.revision_tree(main_revid)
-        revision_graph = other_branch.repository.get_graph()
-        tree_branch = MemoryBranch(
-            other_branch.repository, (None, main_revid), None)
-        merger = _mod_merge.Merger(
-            tree_branch, this_tree=main_tree, revision_graph=revision_graph
-        )
-        merger.set_other_revision(stop_revision, other_branch)
-        try:
-            merger.find_base()
-        except errors.UnrelatedBranches:
-            merger.set_base_revision(_mod_revision.NULL_REVISION, other_branch)
-        merger.merge_type = _mod_merge.Merge3Merger  # type: ignore
-        tree_merger = merger.make_merger()
-        with tree_merger.make_preview_transform() as tt:
-            changes = tt.iter_changes()
-            if not any(changes):
-                raise EmptyMergeProposal(other_branch, main_branch)
+check_proposal_diff = _svp_rs.check_proposal_diff
+EmptyMergeProposal = _svp_rs.EmptyMergeProposal
 
 
 find_existing_proposed = _svp_rs.find_existing_proposed

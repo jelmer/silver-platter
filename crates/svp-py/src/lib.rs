@@ -50,6 +50,11 @@ create_exception!(
     InsufficientChangesForNewProposal,
     pyo3::exceptions::PyException
 );
+create_exception!(
+    silver_platter.publish,
+    EmptyMergeProposal,
+    pyo3::exceptions::PyException
+);
 import_exception!(breezy.errors, DivergedBranches);
 
 #[pyclass]
@@ -362,7 +367,7 @@ impl ControlDir {
 }
 
 #[pyclass]
-struct Branch(silver_platter::Branch);
+struct Branch(Box<dyn silver_platter::Branch>);
 
 #[pyclass]
 struct Forge(silver_platter::Forge);
@@ -379,9 +384,9 @@ fn push_derived_changes(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<(Branch, String)> {
     let (b, u) = silver_platter::publish::push_derived_changes(
-        &silver_platter::Branch::new(local_branch),
-        &silver_platter::Branch::new(main_branch),
-        &silver_platter::Forge::new(forge),
+        &silver_platter::RegularBranch::new(local_branch),
+        &silver_platter::RegularBranch::new(main_branch),
+        &silver_platter::Forge::from(forge),
         name,
         overwrite_existing,
         owner,
@@ -457,9 +462,9 @@ fn push_changes(
     let possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     silver_platter::publish::push_changes(
-        &silver_platter::Branch::new(local_branch),
-        &silver_platter::Branch::new(main_branch),
-        forge.map(silver_platter::Forge::new).as_ref(),
+        &silver_platter::RegularBranch::new(local_branch),
+        &silver_platter::RegularBranch::new(main_branch),
+        forge.map(silver_platter::Forge::from).as_ref(),
         possible_transports,
         additional_colocated_branches,
         tags,
@@ -477,8 +482,8 @@ fn push_result(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
     silver_platter::publish::push_result(
-        &silver_platter::Branch::new(local_branch),
-        &silver_platter::Branch::new(remote_branch),
+        &silver_platter::RegularBranch::new(local_branch),
+        &silver_platter::RegularBranch::new(remote_branch),
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
@@ -488,7 +493,10 @@ fn push_result(
 
 #[pyfunction]
 fn full_branch_url(branch: PyObject) -> PyResult<String> {
-    Ok(silver_platter::vcs::full_branch_url(&silver_platter::Branch::new(branch)).to_string())
+    Ok(
+        silver_platter::vcs::full_branch_url(&silver_platter::RegularBranch::new(branch))
+            .to_string(),
+    )
 }
 
 #[pyfunction]
@@ -542,8 +550,8 @@ fn find_existing_proposed(
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
 ) -> PyResult<(Option<Branch>, Option<bool>, Option<Vec<MergeProposal>>)> {
-    let main_branch = silver_platter::Branch::new(main_branch);
-    let forge = silver_platter::Forge::new(forge);
+    let main_branch = silver_platter::RegularBranch::new(main_branch);
+    let forge = silver_platter::Forge::from(forge);
     let preferred_schemes = preferred_schemes
         .as_ref()
         .map(|s| s.iter().map(|s| s.as_ref()).collect::<Vec<_>>());
@@ -585,12 +593,12 @@ fn propose_changes(
     auto_merge: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
     silver_platter::publish::propose_changes(
-        &local_branch.0,
-        &main_branch.0,
+        local_branch.0.as_ref(),
+        main_branch.0.as_ref(),
         &forge.0,
         name,
         mp_description,
-        resume_branch.as_ref().map(|b| &b.0),
+        resume_branch.map(|b| b.0.as_ref()),
         resume_proposal.as_ref().map(|p| p.0.clone()),
         overwrite_existing,
         labels,
@@ -668,9 +676,9 @@ fn publish_changes(
         }
     });
     silver_platter::publish::publish_changes(
-        &local_branch.0,
-        &main_branch.0,
-        resume_branch.as_ref().map(|b| &b.0),
+        local_branch.0.as_ref(),
+        main_branch.0.as_ref(),
+        resume_branch.map(|b| b.0.as_ref()),
         mode,
         name,
         get_proposal_description,
@@ -721,7 +729,7 @@ fn create_temp_sprout(
     path: Option<std::path::PathBuf>,
 ) -> PyResult<(PyObject, DestroyFn)> {
     silver_platter::utils::create_temp_sprout(
-        &breezyshim::Branch(branch),
+        &breezyshim::branch::RegularBranch::new(branch),
         additional_colocated_branches,
         dir.as_deref(),
         path.as_deref(),
@@ -769,13 +777,32 @@ fn fetch_colocated(
     from_controldir: PyObject,
     additional_colocated_branches: HashMap<&str, &str>,
 ) -> PyResult<()> {
-    let controldir = breezyshim::ControlDir::new(controldir).unwrap();
-    let from_controldir = breezyshim::ControlDir::new(from_controldir).unwrap();
+    let controldir = breezyshim::ControlDir::new(controldir);
+    let from_controldir = breezyshim::ControlDir::new(from_controldir);
     silver_platter::workspace::fetch_colocated(
         &controldir,
         &from_controldir,
         additional_colocated_branches,
     )
+}
+
+#[pyfunction]
+fn check_proposal_diff(
+    local_branch: PyObject,
+    target_branch: PyObject,
+    stop_revision: Option<RevisionId>,
+) -> PyResult<()> {
+    let local_branch = breezyshim::branch::RegularBranch::new(local_branch);
+    let target_branch = breezyshim::branch::RegularBranch::new(target_branch);
+    if silver_platter::publish::check_proposal_diff_empty(
+        &local_branch,
+        &target_branch,
+        stop_revision.as_ref(),
+    )? {
+        Err(EmptyMergeProposal::new_err(()))
+    } else {
+        Ok(())
+    }
 }
 
 #[pymodule]
@@ -835,8 +862,10 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
+    m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
     m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
     m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
+    m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
 
     Ok(())
 }

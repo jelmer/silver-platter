@@ -265,7 +265,7 @@ pub fn open_branch(
     possible_transports: Option<Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
-) -> Result<Branch, BranchOpenError> {
+) -> Result<Box<dyn Branch>, BranchOpenError> {
     let (url, params) = split_segment_parameters(&url);
 
     let name = if let Some(name) = name {
@@ -290,7 +290,7 @@ pub fn open_branch_containing(
     possible_transports: Option<Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
-) -> Result<(Branch, String), BranchOpenError> {
+) -> Result<(Box<dyn Branch>, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(&url);
 
     let name = if let Some(name) = name {
@@ -319,7 +319,7 @@ pub fn open_branch_containing(
 /// Ideally this should just return Branch.user_url,
 /// but that currently exclude the branch name
 /// in some situations.
-pub fn full_branch_url(branch: &Branch) -> url::Url {
+pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
     if branch.name().is_none() {
         return branch.get_user_url();
     }
