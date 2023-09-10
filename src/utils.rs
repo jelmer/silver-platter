@@ -17,7 +17,7 @@ impl From<PyErr> for Error {
 ///
 /// This attempts to fetch the least amount of history as possible.
 pub fn create_temp_sprout(
-    branch: &Branch,
+    branch: &dyn Branch,
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
@@ -51,7 +51,7 @@ pub fn create_temp_sprout(
         match controldir.open_branch(Some(from_branch_name.as_str())) {
             Ok(add_branch) => {
                 let local_add_branch = to_dir.create_branch(Some(to_branch_name.as_str()))?;
-                add_branch.push(&local_add_branch, false, None, None)?;
+                add_branch.push(local_add_branch.as_ref(), false, None, None)?;
                 assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
             }
             Err(BranchOpenError::NotBranchError(_))

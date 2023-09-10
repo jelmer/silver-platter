@@ -18,7 +18,7 @@ pub fn fetch_colocated(
         match from_controldir.open_branch(Some(from_branch_name)) {
             Ok(remote_colo_branch) => {
                 controldir.push_branch(
-                    &remote_colo_branch,
+                    remote_colo_branch.as_ref(),
                     Some(to_branch_name),
                     Some(true),
                     None,
