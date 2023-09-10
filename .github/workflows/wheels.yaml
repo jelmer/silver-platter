@@ -79,5 +79,7 @@ jobs:
 
       - name: Download wheels
         uses: actions/download-artifact@v2
+        with:
+          path: dist
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
