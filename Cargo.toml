@@ -13,16 +13,19 @@ tempfile = "3.6.0"
 serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
+chrono = "0.4.30"
+pyo3-file = { workspace = true }
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
-default = []
+default = ["debian"]
 debian = [ "dep:debversion",]
 
 [dependencies.pyo3]
 workspace = true
+features = ["chrono"]
 
 [dependencies.serde]
 workspace = true
@@ -52,5 +55,5 @@ pyo3-file = "0.7"
 serde_json = "1"
 tera = "1"
 serde = "1.0.171"
-breezyshim = "0.1.22"
+breezyshim = "0.1.25"
 url = "2.4.0"

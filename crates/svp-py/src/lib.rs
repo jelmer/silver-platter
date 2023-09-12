@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
 use silver_platter::codemod::Error as CodemodError;
+use silver_platter::debian::codemod::Error as DebianCodemodError;
 use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
@@ -53,6 +54,11 @@ create_exception!(
 create_exception!(
     silver_platter.publish,
     EmptyMergeProposal,
+    pyo3::exceptions::PyException
+);
+create_exception!(
+    silver_platter.publish,
+    MissingChangelog,
     pyo3::exceptions::PyException
 );
 import_exception!(breezy.errors, DivergedBranches);
@@ -255,6 +261,120 @@ impl CommandResult {
     fn context(&self, py: Python) -> Option<PyObject> {
         self.0.context.as_ref().map(|c| json_to_py(py, c))
     }
+}
+
+#[pyclass]
+struct DebianCommandResult(silver_platter::debian::codemod::CommandResult);
+
+#[pymethods]
+impl DebianCommandResult {
+    #[getter]
+    fn value(&self) -> Option<u32> {
+        self.0.value
+    }
+
+    #[getter]
+    fn description(&self) -> &str {
+        self.0.description.as_str()
+    }
+
+    #[getter]
+    fn serialized_context(&self) -> Option<&str> {
+        self.0.serialized_context.as_deref()
+    }
+
+    #[getter]
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
+        self.0.tags.clone()
+    }
+
+    #[getter]
+    fn target_branch_url(&self) -> Option<&str> {
+        self.0.target_branch_url.as_ref().map(|u| u.as_str())
+    }
+
+    #[getter]
+    fn old_revision(&self) -> RevisionId {
+        self.0.old_revision.clone()
+    }
+
+    #[getter]
+    fn new_revision(&self) -> RevisionId {
+        self.0.new_revision.clone()
+    }
+
+    #[getter]
+    fn context(&self, py: Python) -> Option<PyObject> {
+        self.0.context.as_ref().map(|c| json_to_py(py, c))
+    }
+}
+
+#[pyfunction]
+fn debian_script_runner(
+    py: Python,
+    local_tree: PyObject,
+    script: PyObject,
+    subpath: Option<std::path::PathBuf>,
+    commit_pending: Option<bool>,
+    resume_metadata: Option<&DebianCommandResult>,
+    committer: Option<&str>,
+    extra_env: Option<std::collections::HashMap<String, String>>,
+    stderr: Option<PyObject>,
+    update_changelog: Option<bool>,
+) -> PyResult<PyObject> {
+    let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
+        script
+    } else {
+        vec!["sh", "-c", script.extract::<&str>(py)?]
+    };
+
+    silver_platter::debian::codemod::script_runner(
+        &WorkingTree::new(local_tree).unwrap(),
+        script.as_slice(),
+        subpath
+            .as_ref()
+            .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
+        commit_pending,
+        resume_metadata.as_ref().map(|obj| &obj.0),
+        committer,
+        extra_env,
+        match stderr {
+            Some(stderr) => {
+                let fd = stderr
+                    .call_method0(py, "fileno")?
+                    .extract::<i32>(py)
+                    .unwrap();
+                let f = unsafe { std::fs::File::from_raw_fd(fd) };
+                std::process::Stdio::from(f)
+            }
+            None => std::process::Stdio::inherit(),
+        },
+        update_changelog,
+    )
+    .map(|result| DebianCommandResult(result).into_py(py))
+    .map_err(|err| match err {
+        DebianCodemodError::ScriptMadeNoChanges => {
+            ScriptMadeNoChanges::new_err("Script made no changes")
+        }
+        DebianCodemodError::ExitCode(code) => {
+            ScriptFailed::new_err(format!("Script failed with exit code {}", code))
+        }
+        DebianCodemodError::ScriptNotFound => ScriptNotFound::new_err("Script not found"),
+        DebianCodemodError::Detailed(df) => {
+            DetailedFailure::new_err(format!("Script failed: {}", df.description.unwrap()))
+        }
+        DebianCodemodError::Json(err) => {
+            ResultFileFormatError::new_err(format!("Result file format error: {}", err))
+        }
+        DebianCodemodError::Io(err) => err.into(),
+        DebianCodemodError::Other(err) => {
+            PyRuntimeError::new_err(format!("Script failed: {}", err))
+        }
+        DebianCodemodError::Utf8(err) => err.into(),
+        DebianCodemodError::MissingChangelog(p) => {
+            MissingChangelog::new_err(format!("Missing changelog entry for {}", p.display()))
+        }
+    })
 }
 
 #[pyfunction]
@@ -805,20 +925,69 @@ fn check_proposal_diff(
     }
 }
 
+#[pyfunction]
+fn get_maintainer_from_env(env: HashMap<String, String>) -> Option<(String, String)> {
+    silver_platter::debian::get_maintainer_from_env(env)
+}
+
+#[pyfunction]
+fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> {
+    let tree = WorkingTree::new(tree).unwrap();
+    Ok(silver_platter::debian::is_debcargo_package(
+        &tree,
+        std::path::Path::new(path),
+    ))
+}
+
+#[pyfunction]
+fn control_files_in_root(tree: PyObject, path: &str) -> PyResult<bool> {
+    let tree = WorkingTree::new(tree).unwrap();
+    Ok(silver_platter::debian::control_files_in_root(
+        &tree,
+        std::path::Path::new(path),
+    ))
+}
+
+#[pyclass]
+struct ChangelogBehaviour(silver_platter::debian::ChangelogBehaviour);
+
+#[pymethods]
+impl ChangelogBehaviour {
+    #[getter]
+    fn get_update_changelog(&self) -> bool {
+        self.0.update_changelog
+    }
+
+    #[getter]
+    fn get_explanation(&self) -> String {
+        self.0.explanation.clone()
+    }
+}
+
+#[pyfunction]
+fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<ChangelogBehaviour> {
+    let tree = WorkingTree::new(tree).unwrap();
+    silver_platter::debian::guess_update_changelog(&tree, std::path::Path::new(debian_path))
+        .map(ChangelogBehaviour)
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(derived_branch_name, m)?)?;
     m.add_function(wrap_pyfunction!(script_runner, m)?)?;
+    m.add_function(wrap_pyfunction!(debian_script_runner, m)?)?;
     m.add("ScriptMadeNoChanges", py.get_type::<ScriptMadeNoChanges>())?;
     m.add("ScriptFailed", py.get_type::<ScriptFailed>())?;
     m.add("ScriptNotFound", py.get_type::<ScriptNotFound>())?;
     m.add("DetailedFailure", py.get_type::<DetailedFailure>())?;
+    m.add("MissingChangelog", py.get_type::<MissingChangelog>())?;
     m.add(
         "ResultFileFormatError",
         py.get_type::<ResultFileFormatError>(),
     )?;
     m.add_class::<CommandResult>()?;
+    m.add_class::<DebianCommandResult>()?;
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
     m.add_class::<Branch>()?;
@@ -828,6 +997,8 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
     m.add_function(wrap_pyfunction!(push_changes, m)?)?;
     m.add_function(wrap_pyfunction!(full_branch_url, m)?)?;
+    m.add_function(wrap_pyfunction!(guess_update_changelog, m)?)?;
+    m.add_class::<ChangelogBehaviour>()?;
     m.add(
         "BranchTemporarilyUnavailable",
         py.get_type::<silver_platter::vcs::BranchTemporarilyUnavailable>(),
@@ -848,6 +1019,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
         "BranchUnsupported",
         py.get_type::<silver_platter::vcs::BranchUnsupported>(),
     )?;
+    m.add_function(wrap_pyfunction!(get_maintainer_from_env, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
@@ -866,6 +1038,8 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
     m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
     m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
+    m.add_function(wrap_pyfunction!(is_debcargo_package, m)?)?;
+    m.add_function(wrap_pyfunction!(control_files_in_root, m)?)?;
 
     Ok(())
 }

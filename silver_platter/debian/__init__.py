@@ -13,16 +13,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import logging
-import os
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
 import breezy.plugins.debian  # For apt: URL support  # noqa: F401
 from breezy import urlutils
 from breezy.branch import Branch
 from breezy.git.repository import GitRepository
-from breezy.mutabletree import MutableTree
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.changelog import debcommit
 from breezy.plugins.debian.cmds import cmd_builddeb
@@ -31,27 +27,34 @@ from breezy.plugins.debian.directory import (
     vcs_field_to_bzr_url_converters,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
-from breezy.tree import Tree
 from breezy.urlutils import InvalidURL
 from breezy.workingtree import WorkingTree
-from debian.changelog import Version, get_maintainer
+from debian.changelog import Version
 from debian.deb822 import Deb822
-from debmutate.changelog import Changelog
-from debmutate.changelog import changelog_add_entry as _changelog_add_entry
 from debmutate.vcs import split_vcs_url
 
 from .. import workspace as _mod_workspace
 from ..probers import select_probers
 from ..utils import open_branch
+from .._svp_rs import (
+    get_maintainer_from_env as _get_maintainer_from_env,
+    is_debcargo_package,
+    control_files_in_root,
+    guess_update_changelog,
+    MissingChangelog,
+)
 
 __all__ = [
-    "add_changelog_entry",
-    "guess_update_changelog",
+    "MissingChangelog",
+    "is_debcargo_package",
+    "control_files_in_root",
+    "_get_maintainer_from_env",
     "source_package_vcs",
     "build",
     "BuildFailedError",
     "MissingUpstreamTarball",
     "vcs_field_to_bzr_url_converters",
+    "guess_update_changelog",
 ]
 
 
@@ -65,82 +68,6 @@ class NoSuchPackage(Exception):
 
 class NoVcsInformation(Exception):
     """Package does not have any Vcs headers."""
-
-
-try:
-    from lintian_brush.detect_gbp_dch import guess_update_changelog
-except ModuleNotFoundError:
-
-    class ChangelogBehaviour:
-
-        def __init__(self, update_changelog, explanation) -> None:
-            self.update_changelog = update_changelog
-            self.explanation = explanation
-
-        def __str__(self) -> str:
-            return self.explanation
-
-        def __repr__(self) -> str:
-            return "{}(update_changelog={!r}, explanation={!r})".format(
-                type(self).__name__, self.update_changelog,
-                self.explanation)
-
-    def guess_update_changelog(
-        tree: WorkingTree, debian_path: str, cl: Optional[Changelog] = None
-    ) -> Optional[ChangelogBehaviour]:
-        logging.warning(
-            'Install lintian-brush to detect automatically whether '
-            'the changelog should be updated.')
-        return ChangelogBehaviour(
-            'update_changelog',
-            'defaulting to updating changelog since '
-            'lintian-brush is not installed')
-
-
-def add_changelog_entry(
-    tree: MutableTree,
-    path: str,
-    summary: List[str],
-    maintainer: Optional[Tuple[str, str]] = None,
-    timestamp: Optional[datetime] = None,
-    urgency: str = DEFAULT_URGENCY,
-) -> None:
-    """Add a changelog entry.
-
-    Args:
-      tree: Tree to edit
-      path: Path to the changelog file
-      summary: Entry to add
-      maintainer: Maintainer details; tuple of fullname and email
-      suppress_warnings: Whether to suppress any warnings from 'dch'
-    """
-    # TODO(jelmer): This logic should ideally be in python-debian.
-    with tree.get_file(path) as f:
-        cl = Changelog()
-        cl.parse_changelog(
-            f, max_blocks=None, allow_empty_author=True, strict=False)
-        _changelog_add_entry(
-            cl,
-            summary=summary,
-            maintainer=maintainer,
-            timestamp=timestamp,
-            urgency=urgency,
-        )
-    # Workaround until
-    # https://salsa.debian.org/python-debian-team/python-debian/-/merge_requests/22
-    # lands.
-    pieces = []
-    for line in cl.initial_blank_lines:
-        pieces.append(line.encode(cl._encoding) + b"\n")
-    for block in cl._blocks:
-        try:
-            serialized = block._format(allow_missing_author=True).encode(
-                block._encoding
-            )
-        except TypeError:  # older python-debian
-            serialized = bytes(block)
-        pieces.append(serialized)
-    tree.put_file_bytes_non_atomic(path, b"".join(pieces))
 
 
 def build(
@@ -278,28 +205,3 @@ class Workspace(_mod_workspace.Workspace):
         return debcommit(
             self.local_tree, committer=committer, subpath=subpath,
             paths=paths, reporter=reporter, message=message)
-
-
-def is_debcargo_package(tree: Tree, subpath: str) -> bool:
-    control_path = os.path.join(subpath, "debian", "debcargo.toml")
-    return tree.has_filename(control_path)
-
-
-def control_files_in_root(tree: Tree, subpath: str) -> bool:
-    debian_path = os.path.join(subpath, "debian")
-    if tree.has_filename(debian_path):
-        return False
-    control_path = os.path.join(subpath, "control")
-    if tree.has_filename(control_path):
-        return True
-    return tree.has_filename(control_path + ".in")
-
-
-def _get_maintainer_from_env(env):
-    old_env = dict(os.environ.items())
-    try:
-        os.environ.update(env)
-        return get_maintainer()
-    finally:
-        os.environ.clear()
-        os.environ.update(old_env)
