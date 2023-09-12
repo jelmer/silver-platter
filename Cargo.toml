@@ -18,7 +18,7 @@ percent-encoding = "2.3.0"
 members = [ "crates/*",]
 
 [features]
-default = []
+default = ["debian"]
 debian = [ "dep:debversion",]
 
 [dependencies.pyo3]
