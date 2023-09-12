@@ -149,7 +149,9 @@ checksum = "defd4e7873dbddba6c7c91e199c7fcb946abc4a6a4ac3195400bcfb01b5de877"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-targets",
 ]
 
@@ -677,6 +679,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e681a6cfdc4adcc93b4d3cf993749a4552018ee0a9b65fc0ccfad74352c72a38"
 dependencies = [
  "cfg-if",
+ "chrono",
  "indoc",
  "libc",
  "memoffset",
@@ -932,10 +935,12 @@ name = "silver-platter"
 version = "0.5.10"
 dependencies = [
  "breezyshim",
+ "chrono",
  "debversion",
  "log",
  "percent-encoding",
  "pyo3",
+ "pyo3-file",
  "serde",
  "serde_json",
  "serde_yaml",
