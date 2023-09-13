@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "silver-platter"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "breezyshim",
  "chrono",

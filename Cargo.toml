@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.11"
+version = "0.5.12"
 authors = [ "Jelmer Vernooij <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
@@ -14,18 +14,20 @@ serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
 chrono = "0.4.30"
-pyo3-file = { workspace = true }
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
-default = ["debian"]
+default = [ "debian",]
 debian = [ "dep:debversion",]
+
+[dependencies.pyo3-file]
+workspace = true
 
 [dependencies.pyo3]
 workspace = true
-features = ["chrono"]
+features = [ "chrono",]
 
 [dependencies.serde]
 workspace = true
