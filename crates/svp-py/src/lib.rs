@@ -971,6 +971,28 @@ fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<Changelog
         .map(ChangelogBehaviour)
 }
 
+/// Check whether two branches are conflicted when merged.
+///
+/// Args:
+///   main_branch: Main branch to merge into
+///   other_branch: Branch to merge (and use for scratch access, needs write
+///                 access)
+///   other_revision: Other revision to check
+/// Returns:
+///   boolean indicating whether the merge would result in conflicts
+#[pyfunction]
+fn merge_conflicts(
+    main_branch: PyObject,
+    other_branch: PyObject,
+    other_revision: Option<RevisionId>,
+) -> PyResult<bool> {
+    Ok(silver_platter::utils::merge_conflicts(
+        &breezyshim::branch::RegularBranch::new(main_branch),
+        &breezyshim::branch::RegularBranch::new(other_branch),
+        other_revision.as_ref(),
+    ))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -998,6 +1020,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_changes, m)?)?;
     m.add_function(wrap_pyfunction!(full_branch_url, m)?)?;
     m.add_function(wrap_pyfunction!(guess_update_changelog, m)?)?;
+    m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     m.add_class::<ChangelogBehaviour>()?;
     m.add(
         "BranchTemporarilyUnavailable",
