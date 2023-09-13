@@ -60,10 +60,9 @@ from .apply import (
     install_built_package,
     script_runner,
 )
-
-
-def derived_branch_name(script: str) -> str:
-    return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
+from .._svp_rs import (
+    derived_branch_name,
+)
 
 
 def apply_and_publish(  # noqa: C901
