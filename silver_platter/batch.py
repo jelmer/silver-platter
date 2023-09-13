@@ -239,7 +239,6 @@ class UnrelatedBranchExists(Exception):
 
 def publish_one(url: str, path: str, batch_name: str, mode: str,
                 *,
-                subpath: str = '',
                 existing_proposal_url: Optional[str] = None,
                 labels: Optional[List[str]] = None,
                 derived_owner: Optional[str] = None, refresh: bool = False,
@@ -266,6 +265,7 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
             e,
             full_branch_url(main_branch),
         )
+        forge = None
     else:
         if existing_proposal_url is not None:
             existing_proposal = forge.get_proposal_by_url(
@@ -364,7 +364,6 @@ def publish(directory, *, selector=None):
                 publish_result = publish_one(
                     entry['url'], os.path.join(directory, name), batch_name,
                     entry['mode'],
-                    subpath=entry.get('subpath', ''),
                     labels=entry.get('labels', []),
                     derived_owner=entry.get('derived-owner'),
                     commit_message=entry.get('commit-message'),

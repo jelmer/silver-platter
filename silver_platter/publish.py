@@ -69,8 +69,6 @@ PublishResult = _svp_rs.PublishResult
 InsufficientChangesForNewProposal = _svp_rs.InsufficientChangesForNewProposal
 check_proposal_diff = _svp_rs.check_proposal_diff
 EmptyMergeProposal = _svp_rs.EmptyMergeProposal
-
-
 find_existing_proposed = _svp_rs.find_existing_proposed
 
 
