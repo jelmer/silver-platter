@@ -23,6 +23,7 @@ from breezy.forge import (
     MergeProposal,
     MergeProposalExists,
 )
+from typing import List
 from . import _svp_rs
 
 __all__ = [
@@ -45,7 +46,7 @@ MODE_PUSH = "push"
 MODE_ATTEMPT_PUSH = "attempt-push"
 MODE_PROPOSE = "propose"
 MODE_PUSH_DERIVED = "push-derived"
-SUPPORTED_MODES: list[str] = [
+SUPPORTED_MODES: List[str] = [
     MODE_PUSH,
     MODE_ATTEMPT_PUSH,
     MODE_PROPOSE,
