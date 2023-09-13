@@ -102,7 +102,7 @@ pub fn merge_conflicts(
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
     let old_file_contents_mergers = MERGE_HOOKS.get("merge_file_content").unwrap();
-    MERGE_HOOKS.clear("merge_file_contents");
+    MERGE_HOOKS.clear("merge_file_contents").unwrap();
 
     let other_tree = other_repository.revision_tree(&other_revision).unwrap();
     let result = match Merger::from_revision_ids(
@@ -124,7 +124,7 @@ pub fn merge_conflicts(
         }
     };
     for hook in old_file_contents_mergers {
-        MERGE_HOOKS.add("merge_file_content", hook);
+        MERGE_HOOKS.add("merge_file_content", hook).unwrap();
     }
     result
 }
