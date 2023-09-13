@@ -141,6 +141,7 @@ mod tests {
     use std::path::Path;
 
     pub fn make_branch_and_tree(path: &std::path::Path) -> WorkingTree {
+        let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
         let branch = ControlDir::create_branch_convenience(&url).unwrap();
         branch.controldir().open_workingtree().unwrap()
