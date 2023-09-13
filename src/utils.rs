@@ -94,10 +94,12 @@ pub fn merge_conflicts(
         return false;
     }
 
-    other_repository.fetch(
-        &main_branch.repository(),
-        Some(&main_branch.last_revision()),
-    );
+    other_repository
+        .fetch(
+            &main_branch.repository(),
+            Some(&main_branch.last_revision()),
+        )
+        .unwrap();
 
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
