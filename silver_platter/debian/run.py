@@ -19,11 +19,9 @@
 
 import argparse
 import logging
-import os
 import sys
 from typing import List, Optional
 
-from breezy import osutils
 from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401

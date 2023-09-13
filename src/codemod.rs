@@ -130,7 +130,7 @@ pub fn script_runner(
     script: &[&str],
     subpath: &std::path::Path,
     commit_pending: Option<bool>,
-    resume_metadata: Option<&CommandResult>,
+    resume_metadata: Option<&serde_json::Value>,
     committer: Option<&str>,
     extra_env: Option<HashMap<String, String>>,
     stderr: std::process::Stdio,
@@ -163,7 +163,6 @@ pub fn script_runner(
             resume_path.to_string_lossy().to_string(),
         );
         let w = std::fs::File::create(&resume_path)?;
-        let resume_metadata: DetailedSuccess = resume_metadata.into();
         serde_json::to_writer(w, &resume_metadata)?;
     }
 
