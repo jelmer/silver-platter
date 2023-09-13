@@ -15,11 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from typing import List, Optional
-
-from breezy import errors
-from breezy import merge as _mod_merge  # type: ignore
-from breezy.branch import Branch
 from breezy.errors import PermissionDenied
 from breezy.forge import (
     NoSuchProject,
@@ -28,8 +23,7 @@ from breezy.forge import (
     MergeProposal,
     MergeProposalExists,
 )
-from breezy.revision import RevisionID
-
+from typing import List
 from . import _svp_rs
 
 __all__ = [
@@ -69,58 +63,5 @@ PublishResult = _svp_rs.PublishResult
 InsufficientChangesForNewProposal = _svp_rs.InsufficientChangesForNewProposal
 check_proposal_diff = _svp_rs.check_proposal_diff
 EmptyMergeProposal = _svp_rs.EmptyMergeProposal
-
-
 find_existing_proposed = _svp_rs.find_existing_proposed
-
-
-def merge_conflicts(
-    main_branch: Branch, other_branch: Branch,
-    other_revision: Optional[RevisionID] = None
-) -> bool:
-    """Check whether two branches are conflicted when merged.
-
-    Args:
-      main_branch: Main branch to merge into
-      other_branch: Branch to merge (and use for scratch access, needs write
-                    access)
-      other_revision: Other revision to check
-    Returns:
-      boolean indicating whether the merge would result in conflicts
-    """
-    if other_revision is None:
-        other_revision = other_branch.last_revision()
-    if other_branch.repository.get_graph().is_ancestor(
-        main_branch.last_revision(), other_revision
-    ):
-        return False
-
-    other_branch.repository.fetch(
-        main_branch.repository, revision_id=main_branch.last_revision()
-    )
-
-    # Reset custom merge hooks, since they could make it harder to detect
-    # conflicted merges that would appear on the hosting site.
-    old_file_content_mergers = _mod_merge.Merger.hooks["merge_file_content"]
-    _mod_merge.Merger.hooks["merge_file_content"] = []
-
-    other_tree = other_branch.repository.revision_tree(other_revision)
-    try:
-        try:
-            merger = _mod_merge.Merger.from_revision_ids(
-                other_tree,
-                other_branch=other_branch,
-                other=main_branch.last_revision(),
-                tree_branch=other_branch,
-            )
-        except errors.UnrelatedBranches:
-            # Unrelated branches don't technically *have* to lead to
-            # conflicts, but there's not a lot to be salvaged here, either.
-            return True
-        merger.merge_type = _mod_merge.Merge3Merger
-        tree_merger = merger.make_merger()
-        with tree_merger.make_preview_transform():
-            return bool(tree_merger.cooked_conflicts)
-    finally:
-        _mod_merge.Merger.hooks["merge_file_content"] = (
-            old_file_content_mergers)
+merge_conflicts = _svp_rs.merge_conflicts

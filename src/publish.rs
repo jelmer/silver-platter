@@ -7,9 +7,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::import_exception;
 use pyo3::prelude::*;
-use std::borrow::Cow;
 use std::collections::HashMap;
-use url::Url;
 
 import_exception!(breezy.errors, NotBranchError);
 import_exception!(breezy.errors, UnsupportedOperation);

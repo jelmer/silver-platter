@@ -99,6 +99,34 @@ fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
     }
 }
 
+fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
+    if obj.is_none() {
+        Ok(serde_json::Value::Null)
+    } else if let Ok(b) = obj.downcast::<pyo3::types::PyBool>() {
+        Ok(serde_json::Value::Bool(b.is_true()))
+    } else if let Ok(f) = obj.downcast::<pyo3::types::PyFloat>() {
+        Ok(serde_json::Value::Number(
+            serde_json::Number::from_f64(f.value()).unwrap(),
+        ))
+    } else if let Ok(s) = obj.downcast::<pyo3::types::PyString>() {
+        Ok(serde_json::Value::String(s.to_string_lossy().to_string()))
+    } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
+        Ok(serde_json::Value::Array(
+            l.iter().map(py_to_json).collect::<PyResult<Vec<_>>>()?,
+        ))
+    } else if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
+        let mut ret = serde_json::Map::new();
+        for (k, v) in d.iter() {
+            let k = k.extract::<String>()?;
+            let v = py_to_json(v)?;
+            ret.insert(k, v);
+        }
+        Ok(serde_json::Value::Object(ret))
+    } else {
+        Err(PyTypeError::new_err(("unsupported type",)))
+    }
+}
+
 #[pymethods]
 impl Recipe {
     #[classmethod]
@@ -316,7 +344,7 @@ fn debian_script_runner(
     script: PyObject,
     subpath: Option<std::path::PathBuf>,
     commit_pending: Option<bool>,
-    resume_metadata: Option<&DebianCommandResult>,
+    resume_metadata: Option<PyObject>,
     committer: Option<&str>,
     extra_env: Option<std::collections::HashMap<String, String>>,
     stderr: Option<PyObject>,
@@ -335,7 +363,9 @@ fn debian_script_runner(
             .as_ref()
             .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
         commit_pending,
-        resume_metadata.as_ref().map(|obj| &obj.0),
+        resume_metadata
+            .map(|m| py_to_json(m.as_ref(py)).unwrap())
+            .as_ref(),
         committer,
         extra_env,
         match stderr {
@@ -384,7 +414,7 @@ fn script_runner(
     script: PyObject,
     subpath: Option<std::path::PathBuf>,
     commit_pending: Option<bool>,
-    resume_metadata: Option<&CommandResult>,
+    resume_metadata: Option<PyObject>,
     committer: Option<&str>,
     extra_env: Option<std::collections::HashMap<String, String>>,
     stderr: Option<PyObject>,
@@ -402,7 +432,9 @@ fn script_runner(
             .as_ref()
             .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
         commit_pending,
-        resume_metadata.as_ref().map(|obj| &obj.0),
+        resume_metadata
+            .map(|m| py_to_json(m.as_ref(py)).unwrap())
+            .as_ref(),
         committer,
         extra_env,
         match stderr {
@@ -971,6 +1003,28 @@ fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<Changelog
         .map(ChangelogBehaviour)
 }
 
+/// Check whether two branches are conflicted when merged.
+///
+/// Args:
+///   main_branch: Main branch to merge into
+///   other_branch: Branch to merge (and use for scratch access, needs write
+///                 access)
+///   other_revision: Other revision to check
+/// Returns:
+///   boolean indicating whether the merge would result in conflicts
+#[pyfunction]
+fn merge_conflicts(
+    main_branch: PyObject,
+    other_branch: PyObject,
+    other_revision: Option<RevisionId>,
+) -> PyResult<bool> {
+    Ok(silver_platter::utils::merge_conflicts(
+        &breezyshim::branch::RegularBranch::new(main_branch),
+        &breezyshim::branch::RegularBranch::new(other_branch),
+        other_revision.as_ref(),
+    ))
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -998,6 +1052,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_changes, m)?)?;
     m.add_function(wrap_pyfunction!(full_branch_url, m)?)?;
     m.add_function(wrap_pyfunction!(guess_update_changelog, m)?)?;
+    m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     m.add_class::<ChangelogBehaviour>()?;
     m.add(
         "BranchTemporarilyUnavailable",

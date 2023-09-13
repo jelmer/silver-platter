@@ -19,11 +19,9 @@
 
 import argparse
 import logging
-import os
 import sys
 from typing import List, Optional
 
-from breezy import osutils
 from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
@@ -60,10 +58,9 @@ from .apply import (
     install_built_package,
     script_runner,
 )
-
-
-def derived_branch_name(script: str) -> str:
-    return os.path.splitext(osutils.basename(script.split(" ")[0]))[0]
+from .._svp_rs import (
+    derived_branch_name,
+)
 
 
 def apply_and_publish(  # noqa: C901

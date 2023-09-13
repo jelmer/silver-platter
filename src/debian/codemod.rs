@@ -121,7 +121,7 @@ pub fn script_runner(
     script: &[&str],
     subpath: &std::path::Path,
     commit_pending: Option<bool>,
-    resume_metadata: Option<&CommandResult>,
+    resume_metadata: Option<&serde_json::Value>,
     committer: Option<&str>,
     extra_env: Option<HashMap<String, String>>,
     stderr: std::process::Stdio,
@@ -143,7 +143,7 @@ pub fn script_runner(
         subpath.join("debian")
     };
 
-    let update_changelog = if update_changelog.is_none() {
+    let update_changelog = update_changelog.unwrap_or_else(|| {
         if let Some(dch_guess) = guess_update_changelog(local_tree, &debian_path) {
             log::info!("{}", dch_guess.explanation);
             dch_guess.update_changelog
@@ -151,9 +151,7 @@ pub fn script_runner(
             // Assume yes.
             true
         }
-    } else {
-        update_changelog.unwrap()
-    };
+    });
 
     let cl_path = debian_path.join("changelog");
     let source_name = match local_tree.get_file_text(&cl_path) {
@@ -192,7 +190,6 @@ pub fn script_runner(
             resume_path.to_string_lossy().to_string(),
         );
         let w = std::fs::File::create(&resume_path)?;
-        let resume_metadata: DetailedSuccess = resume_metadata.into();
         serde_json::to_writer(w, &resume_metadata)?;
     }
 
