@@ -1025,6 +1025,22 @@ fn merge_conflicts(
     ))
 }
 
+#[pyfunction]
+fn install_built_package(
+    local_tree: PyObject,
+    subpath: std::path::PathBuf,
+    build_target_dir: std::path::PathBuf,
+) -> PyResult<()> {
+    let local_tree = WorkingTree::new(local_tree).unwrap();
+    silver_platter::debian::install_built_package(
+        &local_tree,
+        subpath.as_path(),
+        build_target_dir.as_path(),
+    )
+    .unwrap();
+    Ok(())
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -1095,6 +1111,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
     m.add_function(wrap_pyfunction!(is_debcargo_package, m)?)?;
     m.add_function(wrap_pyfunction!(control_files_in_root, m)?)?;
+    m.add_function(wrap_pyfunction!(install_built_package, m)?)?;
 
     Ok(())
 }

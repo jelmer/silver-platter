@@ -17,14 +17,11 @@
 
 import json
 import logging
-import os
 import sys
 from typing import List, Optional
 
 from breezy.workingtree import WorkingTree
 from breezy.workspace import check_clean_tree, reset_tree
-from debian.changelog import Changelog
-from debian.deb822 import Deb822
 
 from .._svp_rs import (
     ScriptMadeNoChanges,
@@ -32,6 +29,7 @@ from .._svp_rs import (
     debian_script_runner as script_runner,
     ScriptFailed,
     ScriptNotFound,
+    install_built_package,
 )
 
 __all__ = [
@@ -49,28 +47,6 @@ from . import (
     MissingUpstreamTarball,
     build,
 )
-
-
-def install_built_package(local_tree, subpath, build_target_dir):
-    import re
-    import subprocess
-    abspath = local_tree.abspath(os.path.join(subpath, 'debian/changelog'))
-    with open(abspath) as f:
-        cl = Changelog(f)
-    non_epoch_version = cl[0].version.upstream_version
-    if cl[0].version.debian_version is not None:
-        non_epoch_version += "-%s" % cl[0].version.debian_version
-    c = re.compile(
-        '{}_{}_(.*).changes'.format(
-            re.escape(cl[0].package),
-            re.escape(non_epoch_version)))  # type: ignore
-    for entry in os.scandir(build_target_dir):
-        if not c.match(entry.name):
-            continue
-        with open(entry.path, 'rb') as g:
-            changes = Deb822(g)
-            if changes.get('Binary'):
-                subprocess.check_call(['debi', entry.path])
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901

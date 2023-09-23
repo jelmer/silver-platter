@@ -14,6 +14,8 @@ serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
 chrono = "0.4.30"
+pyo3-file = { workspace = true }
+regex = "1.9.5"
 
 [workspace]
 members = [ "crates/*",]
@@ -21,9 +23,6 @@ members = [ "crates/*",]
 [features]
 default = [ "debian",]
 debian = [ "dep:debversion",]
-
-[dependencies.pyo3-file]
-workspace = true
 
 [dependencies.pyo3]
 workspace = true
