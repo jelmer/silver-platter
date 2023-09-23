@@ -4,6 +4,10 @@ use debian_changelog::ChangeLog;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
+use debversion::Version;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use std::io::Read;
 use std::path::Path;
 
 const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
@@ -646,4 +650,66 @@ pub fn build(
         cmd_builddeb.call((path,), Some(kwargs))?;
         Ok(())
     })
+}
+
+pub fn install_built_package(
+    local_tree: &WorkingTree,
+    subpath: &Path,
+    build_target_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let abspath = local_tree
+        .abspath(subpath)
+        .unwrap()
+        .join("debian/changelog");
+    let changelog_content = std::fs::read(&abspath)?;
+
+    let (package, version): (String, Version) = Python::with_gil(|py| {
+        let m = py.import("debian.changelog")?;
+        let changelog = m.getattr("Changelog")?.call1((changelog_content,))?;
+
+        let block = changelog.get_item(0)?;
+
+        Ok::<_, PyErr>((
+            block.getattr("package")?.extract()?,
+            block.getattr("version")?.extract()?,
+        ))
+    })?;
+
+    let mut non_epoch_version = version.upstream_version.clone();
+    if let Some(debian_version) = &version.debian_revision {
+        non_epoch_version.push_str(&format!("-{}", debian_version));
+    }
+
+    let re_pattern = format!(
+        "{}_{}_.*\\.changes",
+        regex::escape(&package),
+        regex::escape(&non_epoch_version)
+    );
+    let c = regex::Regex::new(&re_pattern)?;
+
+    for entry in std::fs::read_dir(build_target_dir)? {
+        let entry = entry?;
+        let file_name = entry.file_name().into_string().unwrap_or_default();
+        if !c.is_match(&file_name) {
+            continue;
+        }
+
+        let path = entry.path();
+        let contents = std::fs::read(&path)?;
+
+        let binary: Option<String> = Python::with_gil(|py| {
+            let m = py.import("debian.deb822")?;
+            let changes = m.getattr("Changes")?.call1((contents,))?;
+
+            changes.call_method1("get", ("Binary",))?.extract()
+        })?;
+
+        if binary.is_some() {
+            std::process::Command::new("debi")
+                .arg(entry.path())
+                .status()?;
+        }
+    }
+
+    Ok(())
 }
