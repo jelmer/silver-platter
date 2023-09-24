@@ -617,7 +617,7 @@ fn push_changes(
         &silver_platter::RegularBranch::new(local_branch),
         &silver_platter::RegularBranch::new(main_branch),
         forge.map(silver_platter::Forge::from).as_ref(),
-        possible_transports,
+        possible_transports.as_deref_mut(),
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
@@ -664,7 +664,7 @@ fn open_branch(
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     Ok(Branch(silver_platter::vcs::open_branch(
         url.parse().unwrap(),
-        possible_transports,
+        possible_transports.as_deref_mut(),
         probers.as_deref(),
         name,
     )?))
@@ -683,7 +683,7 @@ fn open_branch_containing(
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     let (b, u) = silver_platter::vcs::open_branch_containing(
         url.parse().unwrap(),
-        possible_transports,
+        possible_transports.as_deref_mut(),
         probers.as_deref(),
         name,
     )?;

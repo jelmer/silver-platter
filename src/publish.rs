@@ -81,7 +81,7 @@ pub fn push_changes(
     local_branch: &dyn Branch,
     main_branch: &dyn Branch,
     forge: Option<&Forge>,
-    possible_transports: Option<Vec<Transport>>,
+    possible_transports: Option<&mut Vec<Transport>>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
