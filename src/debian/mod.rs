@@ -5,6 +5,8 @@ use pyo3::types::PyDict;
 use std::io::Read;
 use std::path::Path;
 
+const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
+
 pub mod codemod;
 
 pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
@@ -660,4 +662,35 @@ pub fn install_built_package(
     }
 
     Ok(())
+}
+
+/// Build a debian package in a directory.
+///
+/// # Arguments
+/// * `tree` - Working tree
+/// * `subpath` - Subpath to build in
+/// * `builder` - Builder command (e.g. 'sbuild', 'debuild')
+/// * `result_dir` - Directory to copy results to
+pub fn build(
+    tree: &WorkingTree,
+    subpath: &Path,
+    builder: Option<&str>,
+    result_dir: Option<&Path>,
+) -> PyResult<()> {
+    let builder = builder.unwrap_or(DEFAULT_BUILDER);
+
+    let path = tree.abspath(subpath).unwrap();
+
+    // TODO(jelmer): Refactor brz-debian so it's not necessary
+    // to call out to cmd_builddeb, but to lower-level
+    // functions instead.
+    Python::with_gil(|py| {
+        let m = py.import("breezy.plugins.debian.cmds")?;
+        let cmd_builddeb = m.getattr("cmd_builddeb")?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("builder", builder)?;
+        kwargs.set_item("result_dir", result_dir)?;
+        cmd_builddeb.call((path,), Some(kwargs))?;
+        Ok(())
+    })
 }
