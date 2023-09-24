@@ -4,6 +4,7 @@ pub mod codemod;
 #[cfg(feature = "debian")]
 pub mod debian;
 pub mod probers;
+pub mod proposal;
 pub mod publish;
 pub mod recipe;
 pub mod utils;
