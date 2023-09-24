@@ -1,5 +1,7 @@
+use crate::publish::{Error as PublishError, PublishResult};
 use breezyshim::branch::{open as open_branch, Branch, BranchOpenError};
-use breezyshim::tree::RevisionTree;
+use breezyshim::forge::{Forge, MergeProposal};
+use breezyshim::tree::{RevisionTree, WorkingTree};
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use log::info;
@@ -79,6 +81,36 @@ impl Workspace {
             kwargs.set_item("format", format).unwrap();
             let workspace = workspace_cls.call((), Some(kwargs)).unwrap();
             Workspace(workspace.into())
+        })
+    }
+
+    pub fn main_branch(&self) -> Box<dyn Branch> {
+        Python::with_gil(|py| {
+            let branch = self.0.getattr(py, "main_branch").unwrap();
+            Box::new(breezyshim::branch::RegularBranch::new(branch))
+        })
+    }
+
+    pub fn local_tree(&self) -> WorkingTree {
+        Python::with_gil(|py| {
+            let tree = self.0.getattr(py, "local_tree").unwrap();
+            WorkingTree(tree.into())
+        })
+    }
+
+    pub fn resume_branch(&self) -> Option<Box<dyn Branch>> {
+        Python::with_gil(|py| {
+            let branch: Option<PyObject> = self
+                .0
+                .getattr(py, "resume_branch")
+                .unwrap()
+                .extract(py)
+                .unwrap();
+            if let Some(b) = branch {
+                Some(Box::new(breezyshim::branch::RegularBranch::new(b)) as Box<dyn Branch>)
+            } else {
+                None
+            }
         })
     }
 
@@ -163,6 +195,57 @@ impl Workspace {
         Python::with_gil(|py| {
             let tree = self.0.call_method0(py, "base_tree").unwrap();
             RevisionTree(tree)
+        })
+    }
+
+    pub fn publish_changes(
+        &self,
+        target_branch: Option<&dyn Branch>,
+        mode: crate::Mode,
+        name: &str,
+        get_proposal_description: impl Fn(&str, Option<&MergeProposal>) -> String,
+        get_proposal_commit_message: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+        get_proposal_title: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+        forge: Option<&Forge>,
+        allow_create_proposal: Option<bool>,
+        labels: Option<Vec<String>>,
+        overwrite_existing: Option<bool>,
+        existing_proposal: Option<MergeProposal>,
+        reviewers: Option<Vec<String>>,
+        tags: Option<HashMap<String, RevisionId>>,
+        derived_owner: Option<&str>,
+        allow_collaboration: Option<bool>,
+        stop_revision: Option<&RevisionId>,
+    ) -> Result<PublishResult, PublishError> {
+        let main_branch = self.main_branch();
+        let _target_branch = target_branch.unwrap_or_else(|| main_branch.as_ref());
+        crate::publish::publish_changes(
+            self.local_tree().branch().as_ref(),
+            self.main_branch().as_ref(),
+            self.resume_branch().as_deref(),
+            mode,
+            name,
+            get_proposal_description,
+            get_proposal_commit_message,
+            get_proposal_title,
+            forge,
+            allow_create_proposal,
+            labels,
+            overwrite_existing,
+            existing_proposal,
+            reviewers,
+            tags,
+            derived_owner,
+            allow_collaboration,
+            stop_revision,
+        )
+    }
+}
+
+impl Drop for Workspace {
+    fn drop(&mut self) {
+        Python::with_gil(|py| {
+            self.0.call_method0(py, "__exit__").unwrap();
         })
     }
 }
