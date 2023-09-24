@@ -650,3 +650,14 @@ pub fn check_proposal_diff_empty(
     std::mem::drop(lock);
     Ok(!changes.any(|_| true))
 }
+
+pub fn enable_tag_pushing(branch: &dyn Branch) -> PyResult<()> {
+    Python::with_gil(|py| {
+        let branch = branch.to_object(py);
+        let config = branch.call_method0(py, "get_config").unwrap();
+        config
+            .call_method1(py, "set_user_option", ("branch.fetch_tags", true))
+            .unwrap();
+        Ok(())
+    })
+}
