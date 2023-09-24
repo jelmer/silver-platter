@@ -15,15 +15,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+from typing import List
+
 from breezy.errors import PermissionDenied
 from breezy.forge import (
+    MergeProposal,
+    MergeProposalExists,
     NoSuchProject,
     SourceNotDerivedFromTarget,
     UnsupportedForge,
-    MergeProposal,
-    MergeProposalExists,
 )
-from typing import List
+
 from . import _svp_rs
 
 __all__ = [

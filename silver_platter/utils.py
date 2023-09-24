@@ -19,6 +19,7 @@ from typing import Dict, Optional
 
 from breezy.branch import Branch
 from breezy.workingtree import WorkingTree
+
 from . import _svp_rs
 
 create_temp_sprout = _svp_rs.create_temp_sprout

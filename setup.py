@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 from setuptools import setup
-from setuptools_rust import RustExtension, Binding
+from setuptools_rust import Binding, RustExtension
 
 setup(
     rust_extensions=[RustExtension(

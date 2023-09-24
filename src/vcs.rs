@@ -17,6 +17,7 @@ create_exception!(
     PyException
 );
 
+#[derive(Debug)]
 pub enum BranchOpenError {
     Unsupported {
         url: url::Url,
@@ -262,7 +263,7 @@ impl BranchOpenError {
 
 pub fn open_branch(
     url: url::Url,
-    possible_transports: Option<Vec<Transport>>,
+    possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
 ) -> Result<Box<dyn Branch>, BranchOpenError> {
@@ -287,7 +288,7 @@ pub fn open_branch(
 
 pub fn open_branch_containing(
     url: url::Url,
-    possible_transports: Option<Vec<Transport>>,
+    possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
 ) -> Result<(Box<dyn Branch>, String), BranchOpenError> {

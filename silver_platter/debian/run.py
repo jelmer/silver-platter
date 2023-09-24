@@ -26,6 +26,9 @@ from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
 
+from .._svp_rs import (
+    derived_branch_name,
+)
 from ..candidates import Candidate, CandidateList
 from ..proposal import (
     ForgeLoginRequired,
@@ -57,9 +60,6 @@ from .apply import (
     ScriptNotFound,
     install_built_package,
     script_runner,
-)
-from .._svp_rs import (
-    derived_branch_name,
 )
 
 

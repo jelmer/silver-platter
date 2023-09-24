@@ -611,13 +611,13 @@ fn push_changes(
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     silver_platter::publish::push_changes(
         &silver_platter::RegularBranch::new(local_branch),
         &silver_platter::RegularBranch::new(main_branch),
         forge.map(silver_platter::Forge::from).as_ref(),
-        possible_transports,
+        possible_transports.as_mut(),
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
@@ -658,13 +658,13 @@ fn open_branch(
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
 ) -> PyResult<Branch> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     Ok(Branch(silver_platter::vcs::open_branch(
         url.parse().unwrap(),
-        possible_transports,
+        possible_transports.as_mut(),
         probers.as_deref(),
         name,
     )?))
@@ -677,13 +677,13 @@ fn open_branch_containing(
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
 ) -> PyResult<(Branch, String)> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     let (b, u) = silver_platter::vcs::open_branch_containing(
         url.parse().unwrap(),
-        possible_transports,
+        possible_transports.as_mut(),
         probers.as_deref(),
         name,
     )?;
@@ -1025,6 +1025,22 @@ fn merge_conflicts(
     ))
 }
 
+#[pyfunction]
+fn install_built_package(
+    local_tree: PyObject,
+    subpath: std::path::PathBuf,
+    build_target_dir: std::path::PathBuf,
+) -> PyResult<()> {
+    let local_tree = WorkingTree::new(local_tree).unwrap();
+    silver_platter::debian::install_built_package(
+        &local_tree,
+        subpath.as_path(),
+        build_target_dir.as_path(),
+    )
+    .unwrap();
+    Ok(())
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
@@ -1095,6 +1111,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
     m.add_function(wrap_pyfunction!(is_debcargo_package, m)?)?;
     m.add_function(wrap_pyfunction!(control_files_in_root, m)?)?;
+    m.add_function(wrap_pyfunction!(install_built_package, m)?)?;
 
     Ok(())
 }
