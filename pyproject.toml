@@ -28,6 +28,7 @@ dependencies = [
     "dulwich>=0.20.23",
     "jinja2",
     "pyyaml",
+    "ruamel.yaml",
 ]
 dynamic = ["version"]
 
