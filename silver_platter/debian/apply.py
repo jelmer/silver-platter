@@ -24,12 +24,16 @@ from breezy.workingtree import WorkingTree
 from breezy.workspace import check_clean_tree, reset_tree
 
 from .._svp_rs import (
-    ScriptMadeNoChanges,
     DebianCommandResult as CommandResult,
-    debian_script_runner as script_runner,
+)
+from .._svp_rs import (
     ScriptFailed,
+    ScriptMadeNoChanges,
     ScriptNotFound,
     install_built_package,
+)
+from .._svp_rs import (
+    debian_script_runner as script_runner,
 )
 
 __all__ = [
@@ -42,8 +46,8 @@ __all__ = [
 
 from . import (
     DEFAULT_BUILDER,
-    MissingChangelog,
     BuildFailedError,
+    MissingChangelog,
     MissingUpstreamTarball,
     build,
 )

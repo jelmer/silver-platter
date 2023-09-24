@@ -25,6 +25,7 @@ from typing import List, Optional
 
 import silver_platter  # noqa: F401
 
+from ._svp_rs import derived_branch_name
 from .apply import (
     ScriptFailed,
     ScriptMadeNoChanges,
@@ -48,8 +49,6 @@ from .utils import (
     open_branch,
 )
 from .workspace import Workspace
-
-from ._svp_rs import derived_branch_name
 
 
 def apply_and_publish(  # noqa: C901

@@ -30,16 +30,18 @@ from breezy.transport.local import LocalTransport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 
+from . import _svp_rs
 from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
 from .publish import (
     PublishResult,
     propose_changes,
     push_changes,
     push_derived_changes,
+)
+from .publish import (
     publish_changes as _publish_changes,
 )
 from .utils import create_temp_sprout, full_branch_url
-from . import _svp_rs
 
 __all__ = [
     "Workspace",

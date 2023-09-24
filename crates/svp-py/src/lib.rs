@@ -611,13 +611,13 @@ fn push_changes(
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     silver_platter::publish::push_changes(
         &silver_platter::RegularBranch::new(local_branch),
         &silver_platter::RegularBranch::new(main_branch),
         forge.map(silver_platter::Forge::from).as_ref(),
-        possible_transports.as_deref_mut(),
+        possible_transports.as_mut(),
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
@@ -658,13 +658,13 @@ fn open_branch(
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
 ) -> PyResult<Branch> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     Ok(Branch(silver_platter::vcs::open_branch(
         url.parse().unwrap(),
-        possible_transports.as_deref_mut(),
+        possible_transports.as_mut(),
         probers.as_deref(),
         name,
     )?))
@@ -677,13 +677,13 @@ fn open_branch_containing(
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
 ) -> PyResult<(Branch, String)> {
-    let possible_transports: Option<Vec<silver_platter::Transport>> =
+    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     let (b, u) = silver_platter::vcs::open_branch_containing(
         url.parse().unwrap(),
-        possible_transports.as_deref_mut(),
+        possible_transports.as_mut(),
         probers.as_deref(),
         name,
     )?;

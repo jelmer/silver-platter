@@ -34,15 +34,17 @@ from debian.deb822 import Deb822
 from debmutate.vcs import split_vcs_url
 
 from .. import workspace as _mod_workspace
-from ..probers import select_probers
-from ..utils import open_branch
 from .._svp_rs import (
-    get_maintainer_from_env as _get_maintainer_from_env,
-    is_debcargo_package,
+    MissingChangelog,
     control_files_in_root,
     guess_update_changelog,
-    MissingChangelog,
+    is_debcargo_package,
 )
+from .._svp_rs import (
+    get_maintainer_from_env as _get_maintainer_from_env,
+)
+from ..probers import select_probers
+from ..utils import open_branch
 
 __all__ = [
     "MissingChangelog",

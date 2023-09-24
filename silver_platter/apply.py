@@ -22,8 +22,8 @@ from typing import List, Optional
 
 from breezy.workingtree import WorkingTree
 from breezy.workspace import check_clean_tree, reset_tree
-from . import _svp_rs
 
+from . import _svp_rs
 
 ScriptMadeNoChanges = _svp_rs.ScriptMadeNoChanges
 ScriptFailed = _svp_rs.ScriptFailed

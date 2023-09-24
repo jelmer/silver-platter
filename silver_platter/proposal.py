@@ -35,7 +35,6 @@ from breezy.forge import (
     iter_forge_instances,
 )
 from breezy.merge_directive import MergeDirective, MergeDirective2
-from breezy.transport import Transport
 
 from .publish import (
     SUPPORTED_MODES,
@@ -46,7 +45,7 @@ from .publish import (
     push_changes,
     push_derived_changes,
 )
-from .utils import full_branch_url, open_branch
+from .utils import open_branch
 
 __all__ = [
     "ForgeLoginRequired",
