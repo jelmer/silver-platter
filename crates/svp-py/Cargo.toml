@@ -19,3 +19,4 @@ tera = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 breezyshim = { workspace = true }
+debian-changelog = { workspace = true }
