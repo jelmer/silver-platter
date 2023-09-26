@@ -1,4 +1,5 @@
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
+use debian_changelog::ChangeLog;
 use debversion::Version;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -115,26 +116,6 @@ pub fn add_changelog_entry(
 pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
     let control_path = subpath.join("debian").join("debcargo.toml");
     tree.has_filename(&control_path)
-}
-
-pub fn get_maintainer_from_env(
-    env: std::collections::HashMap<String, String>,
-) -> Option<(String, String)> {
-    Python::with_gil(|py| {
-        let debian_changelog = py.import("debian.changelog").unwrap();
-        let get_maintainer = debian_changelog.getattr("get_maintainer").unwrap();
-
-        let os = py.import("os").unwrap();
-        let active_env = os.getattr("environ").unwrap();
-        let old_env_items = active_env.call_method0("items").unwrap();
-        active_env.call_method1("update", (env,)).unwrap();
-        let result = get_maintainer.call0().unwrap();
-
-        active_env.call_method0("clear").unwrap();
-        active_env.call_method1("update", (old_env_items,)).unwrap();
-
-        result.extract().unwrap()
-    })
 }
 
 #[cfg(test)]
@@ -579,29 +560,6 @@ lintian-brush (0.35) unstable; urgency=medium
     }
 }
 
-#[cfg(test)]
-mod get_maintainer_from_env_tests {
-    use super::*;
-
-    #[test]
-    fn test_normal() {
-        let t = get_maintainer_from_env(std::collections::HashMap::new());
-        assert!(t.is_some());
-    }
-
-    #[test]
-    fn test_env() {
-        let mut d = std::collections::HashMap::new();
-        d.insert("DEBFULLNAME".to_string(), "Jelmer".to_string());
-        d.insert("DEBEMAIL".to_string(), "jelmer@example.com".to_string());
-        let t = get_maintainer_from_env(d);
-        assert_eq!(
-            Some(("Jelmer".to_string(), "jelmer@example.com".to_string())),
-            t
-        );
-    }
-}
-
 pub fn install_built_package(
     local_tree: &WorkingTree,
     subpath: &Path,
@@ -611,19 +569,13 @@ pub fn install_built_package(
         .abspath(subpath)
         .unwrap()
         .join("debian/changelog");
-    let changelog_content = std::fs::read(&abspath)?;
 
-    let (package, version): (String, Version) = Python::with_gil(|py| {
-        let m = py.import("debian.changelog")?;
-        let changelog = m.getattr("Changelog")?.call1((changelog_content,))?;
+    let cl = ChangeLog::read_path(&abspath)?;
 
-        let block = changelog.get_item(0)?;
+    let first_entry = cl.entries().next().unwrap();
 
-        Ok::<_, PyErr>((
-            block.getattr("package")?.extract()?,
-            block.getattr("version")?.extract()?,
-        ))
-    })?;
+    let package = first_entry.package().unwrap().clone();
+    let version = first_entry.version().unwrap().clone();
 
     let mut non_epoch_version = version.upstream_version.clone();
     if let Some(debian_version) = &version.debian_revision {

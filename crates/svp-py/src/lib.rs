@@ -401,6 +401,9 @@ fn debian_script_runner(
             PyRuntimeError::new_err(format!("Script failed: {}", err))
         }
         DebianCodemodError::Utf8(err) => err.into(),
+        DebianCodemodError::ChangelogParse(e) => {
+            MissingChangelog::new_err(format!("Failed to parse changelog {}", e))
+        }
         DebianCodemodError::MissingChangelog(p) => {
             MissingChangelog::new_err(format!("Missing changelog entry for {}", p.display()))
         }
@@ -958,8 +961,8 @@ fn check_proposal_diff(
 }
 
 #[pyfunction]
-fn get_maintainer_from_env(env: HashMap<String, String>) -> Option<(String, String)> {
-    silver_platter::debian::get_maintainer_from_env(env)
+fn get_maintainer_from_env(env: HashMap<String, String>) -> (Option<String>, Option<String>) {
+    debian_changelog::get_maintainer_from_env(|k| env.get(k).map(|s| s.to_string()))
 }
 
 #[pyfunction]

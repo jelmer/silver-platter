@@ -16,6 +16,7 @@ percent-encoding = "2.3.0"
 chrono = "0.4.30"
 pyo3-file = { workspace = true }
 regex = "1.9.5"
+debian-changelog = { workspace = true }
 
 [workspace]
 members = [ "crates/*",]
@@ -58,3 +59,4 @@ tera = "1"
 serde = "1.0.171"
 breezyshim = "0.1.34"
 url = "2.4.0"
+debian-changelog = "0.1.4"

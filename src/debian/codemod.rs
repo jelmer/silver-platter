@@ -1,8 +1,8 @@
-use crate::debian::{
-    add_changelog_entry, control_files_in_root, get_maintainer_from_env, guess_update_changelog,
-};
+use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
 use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, WorkingTree};
 use breezyshim::RevisionId;
+use debian_changelog::get_maintainer_from_env;
+use debian_changelog::ChangeLog;
 use pyo3::types::PyBytes;
 use std::collections::HashMap;
 use url::Url;
@@ -54,12 +54,22 @@ pub enum Error {
     ScriptMadeNoChanges,
     ScriptNotFound,
     MissingChangelog(std::path::PathBuf),
+    ChangelogParse(debian_changelog::ParseError),
     ExitCode(i32),
     Detailed(DetailedFailure),
     Io(std::io::Error),
     Json(serde_json::Error),
     Utf8(std::string::FromUtf8Error),
     Other(String),
+}
+
+impl From<debian_changelog::Error> for Error {
+    fn from(e: debian_changelog::Error) -> Self {
+        match e {
+            debian_changelog::Error::Io(e) => Error::Io(e),
+            debian_changelog::Error::Parse(e) => Error::ChangelogParse(e),
+        }
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -73,6 +83,7 @@ impl std::fmt::Display for Error {
             Error::Json(e) => write!(f, "JSON error: {}", e),
             Error::Utf8(e) => write!(f, "UTF-8 error: {}", e),
             Error::Other(s) => write!(f, "{}", s),
+            Error::ChangelogParse(e) => write!(f, "Changelog parse error: {}", e),
             Error::MissingChangelog(p) => write!(f, "Missing changelog at {}", p.display()),
         }
     }
@@ -155,17 +166,11 @@ pub fn script_runner(
 
     let cl_path = debian_path.join("changelog");
     let source_name = match local_tree.get_file_text(&cl_path) {
-        Ok(text) => Some(
-            pyo3::Python::with_gil(|py| {
-                let clm = py.import("debian.changelog")?;
-                let clc = clm.getattr("Changelog")?;
-                let pb = PyBytes::new(py, text.as_slice());
-                let cl = clc.call1((pb,))?;
-                let first_block = cl.call_method1("__getitem__", (0,))?;
-                first_block.getattr("package")?.extract::<String>()
-            })
-            .unwrap(),
-        ),
+        Ok(text) => debian_changelog::ChangeLog::read(text.as_slice())
+            .unwrap()
+            .entries()
+            .next()
+            .and_then(|e| e.package()),
         Err(TreeError::NoSuchFile(_)) => None,
         Err(e) => {
             return Err(Error::Other(format!("Failed to read changelog: {}", e)));
@@ -229,15 +234,19 @@ pub fn script_runner(
         source_name
     } else {
         match local_tree.get_file_text(&cl_path) {
-            Ok(text) => pyo3::Python::with_gil(|py| {
-                let clm = py.import("debian.changelog")?;
-                let clc = clm.getattr("Changelog")?;
-                let pb = PyBytes::new(py, text.as_slice());
-                let cl = clc.call1((pb,))?;
-                let first_block = cl.call_method1("__getitem__", (0,))?;
-                first_block.getattr("package")?.extract::<String>()
-            })
-            .unwrap(),
+            Ok(text) => match ChangeLog::read(text.as_slice())?
+                .entries()
+                .next()
+                .and_then(|e| e.package())
+            {
+                Some(source_name) => source_name,
+                None => {
+                    return Err(Error::Other(format!(
+                        "Failed to read changelog: {}",
+                        cl_path.display()
+                    )));
+                }
+            },
             Err(TreeError::NoSuchFile(_)) => {
                 return Err(Error::MissingChangelog(cl_path));
             }
@@ -288,11 +297,17 @@ pub fn script_runner(
 
     if commit_pending {
         if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
+            let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
+            {
+                Some((Some(name), Some(email))) => Some((name, email)),
+                _ => None,
+            };
+
             add_changelog_entry(
                 local_tree,
                 &debian_path.join("changelog"),
                 vec![result.description.as_ref().unwrap().as_str()].as_slice(),
-                extra_env.and_then(get_maintainer_from_env).as_ref(),
+                maintainer.as_ref(),
                 None,
                 None,
             );
