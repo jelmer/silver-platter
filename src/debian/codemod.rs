@@ -3,7 +3,6 @@ use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, Worki
 use breezyshim::RevisionId;
 use debian_changelog::get_maintainer_from_env;
 use debian_changelog::ChangeLog;
-use pyo3::types::PyBytes;
 use std::collections::HashMap;
 use url::Url;
 

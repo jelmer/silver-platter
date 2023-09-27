@@ -467,7 +467,7 @@ pub fn publish_changes(
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
-                forge: forge.clone(),
+                forge,
                 proposal: existing_proposal,
                 is_new: Some(false),
             });
