@@ -1,3 +1,4 @@
+pub use crate::proposal::DescriptionFormat;
 use crate::vcs::open_branch;
 use crate::Mode;
 use breezyshim::branch::MemoryBranch;
@@ -14,8 +15,13 @@ import_exception!(breezy.errors, NotBranchError);
 import_exception!(breezy.errors, UnsupportedOperation);
 import_exception!(breezy.errors, MergeProposalExists);
 import_exception!(breezy.errors, PermissionDenied);
+import_exception!(breezy.errors, DivergedBranches);
+import_exception!(breezy.forge, UnsupportedForge);
+import_exception!(breezy.forge, ForgeLoginRequired);
 
 create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
+
+import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
 
 fn _tag_selector_from_tags(
     tags: std::collections::HashMap<String, RevisionId>,
@@ -392,13 +398,18 @@ pub fn propose_changes(
 pub enum Error {
     DivergedBranches(),
     Other(PyErr),
-    Forge(ForgeError),
+    UnsupportedForge(url::Url),
+    ForgeLoginRequired,
     InsufficientChangesForNewProposal,
 }
 
 impl From<ForgeError> for Error {
     fn from(e: ForgeError) -> Self {
-        Error::Forge(e)
+        match e {
+            ForgeError::UnsupportedForge(s) => Error::UnsupportedForge(s),
+            ForgeError::LoginRequired => Error::ForgeLoginRequired,
+            _ => panic!("Unexpected ForgeError: {:?}", e),
+        }
     }
 }
 
@@ -407,7 +418,8 @@ impl std::fmt::Display for Error {
         match self {
             Error::DivergedBranches() => write!(f, "Diverged branches"),
             Error::Other(e) => write!(f, "{}", e),
-            Error::Forge(e) => write!(f, "{}", e),
+            Error::UnsupportedForge(u) => write!(f, "Unsupported forge: {}", u),
+            Error::ForgeLoginRequired => write!(f, "Forge login required"),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
@@ -418,6 +430,22 @@ impl std::fmt::Display for Error {
 impl From<PyErr> for Error {
     fn from(e: PyErr) -> Self {
         Error::Other(e)
+    }
+}
+
+impl From<Error> for PyErr {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
+            Error::Other(e) => e,
+            Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
+            Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
+            Error::InsufficientChangesForNewProposal => {
+                PyErr::new::<InsufficientChangesForNewProposal, _>(
+                    "InsufficientChangesForNewProposal",
+                )
+            }
+        }
     }
 }
 
@@ -447,9 +475,9 @@ pub fn publish_changes(
     resume_branch: Option<&dyn Branch>,
     mut mode: Mode,
     name: &str,
-    get_proposal_description: impl Fn(&str, Option<&MergeProposal>) -> String,
-    get_proposal_commit_message: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
-    get_proposal_title: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+    get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
+    get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+    get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
     forge: Option<&Forge>,
     allow_create_proposal: Option<bool>,
     labels: Option<Vec<String>>,
@@ -566,7 +594,7 @@ pub fn publish_changes(
         }
 
         let mp_description = get_proposal_description(
-            forge.merge_proposal_description_format().as_str(),
+            forge.merge_proposal_description_format().parse().unwrap(),
             if resume_branch.is_some() {
                 existing_proposal.as_ref()
             } else {

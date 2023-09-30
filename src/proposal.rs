@@ -3,6 +3,8 @@ use breezyshim::branch::Branch;
 use breezyshim::forge::{
     iter_forge_instances, Error as ForgeError, Forge, MergeProposal, MergeProposalStatus,
 };
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use url::Url;
 
 fn instance_iter_mps(
@@ -96,4 +98,35 @@ pub fn iter_conflicted(
             }
         }
     })
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DescriptionFormat {
+    Markdown,
+    Html,
+    Plain,
+}
+
+impl FromStr for DescriptionFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "markdown" => Ok(DescriptionFormat::Markdown),
+            "html" => Ok(DescriptionFormat::Html),
+            "plain" => Ok(DescriptionFormat::Plain),
+            _ => Err(format!("Unknown description format: {}", s)),
+        }
+    }
+}
+
+impl ToString for DescriptionFormat {
+    fn to_string(&self) -> String {
+        match self {
+            DescriptionFormat::Markdown => "markdown".to_string(),
+            DescriptionFormat::Html => "html".to_string(),
+            DescriptionFormat::Plain => "plain".to_string(),
+        }
+    }
 }
