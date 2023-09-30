@@ -7,7 +7,7 @@ use url::Url;
 pub struct CommandResult {
     pub value: Option<u32>,
     pub context: Option<serde_json::Value>,
-    pub description: String,
+    pub description: Option<String>,
     pub serialized_context: Option<String>,
     pub tags: Vec<(String, Option<RevisionId>)>,
     pub target_branch_url: Option<Url>,
@@ -20,7 +20,7 @@ impl From<&CommandResult> for DetailedSuccess {
         DetailedSuccess {
             value: r.value,
             context: r.context.clone(),
-            description: Some(r.description.clone()),
+            description: r.description.clone(),
             serialized_context: r.serialized_context.clone(),
             tags: Some(
                 r.tags
@@ -265,7 +265,7 @@ pub fn script_runner(
         old_revision,
         new_revision,
         tags,
-        description: result.description.unwrap(),
+        description: result.description,
         value: result.value,
         context: result.context,
         serialized_context: result.serialized_context,

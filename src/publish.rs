@@ -1,6 +1,7 @@
 use crate::vcs::open_branch;
 use crate::Mode;
 use breezyshim::branch::MemoryBranch;
+use breezyshim::forge::Error as ForgeError;
 use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use pyo3::create_exception;
@@ -92,7 +93,7 @@ pub fn push_changes(
         main_branch.get_user_url()
     };
     log::info!("pushing to {}", push_url);
-    let target_branch = open_branch(push_url, possible_transports, None, None)?;
+    let target_branch = open_branch(&push_url, possible_transports, None, None)?;
     push_result(
         local_branch,
         target_branch.as_ref(),
@@ -391,7 +392,14 @@ pub fn propose_changes(
 pub enum Error {
     DivergedBranches(),
     Other(PyErr),
+    Forge(ForgeError),
     InsufficientChangesForNewProposal,
+}
+
+impl From<ForgeError> for Error {
+    fn from(e: ForgeError) -> Self {
+        Error::Forge(e)
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -399,6 +407,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::DivergedBranches() => write!(f, "Diverged branches"),
             Error::Other(e) => write!(f, "{}", e),
+            Error::Forge(e) => write!(f, "{}", e),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
@@ -457,7 +466,10 @@ pub fn publish_changes(
             stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
         let allow_create_proposal = allow_create_proposal.unwrap_or(true);
 
-        let forge = forge.map_or_else(|| breezyshim::forge::get_forge(main_branch), |f| f.clone());
+        let forge = match forge {
+            Some(forge) => forge.clone(),
+            None => breezyshim::forge::get_forge(main_branch)?,
+        };
 
         if stop_revision == main_branch.last_revision() {
             if let Some(existing_proposal) = existing_proposal.as_ref() {

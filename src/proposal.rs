@@ -62,14 +62,14 @@ pub fn iter_conflicted(
             None
         } else {
             let main_branch = open_branch(
-                mp.get_target_branch_url().unwrap().unwrap(),
+                &mp.get_target_branch_url().unwrap().unwrap(),
                 Some(&mut possible_transports),
                 None,
                 None,
             )
             .unwrap();
             let resume_branch = open_branch(
-                mp.get_source_branch_url().unwrap().unwrap(),
+                &mp.get_source_branch_url().unwrap().unwrap(),
                 Some(&mut possible_transports),
                 None,
                 None,

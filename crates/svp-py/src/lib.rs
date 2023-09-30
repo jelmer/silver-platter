@@ -1,4 +1,4 @@
-use pyo3::exceptions::{PyRuntimeError, PyTypeError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
@@ -206,6 +206,17 @@ impl Recipe {
             return Ok(None);
         };
         let context = py_dict_to_tera_context(context)?;
+        let format = match format {
+            "markdown" => silver_platter::recipe::DescriptionFormat::Markdown,
+            "html" => silver_platter::recipe::DescriptionFormat::Html,
+            "plain" => silver_platter::recipe::DescriptionFormat::Plain,
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "Invalid merge request description format: {}",
+                    format
+                )))
+            }
+        };
         merge_request
             .render_description(format, &context)
             .map_err(|e| {
@@ -256,8 +267,8 @@ impl CommandResult {
     }
 
     #[getter]
-    fn description(&self) -> &str {
-        self.0.description.as_str()
+    fn description(&self) -> Option<&str> {
+        self.0.description.as_deref()
     }
 
     #[getter]
@@ -666,7 +677,7 @@ fn open_branch(
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     Ok(Branch(silver_platter::vcs::open_branch(
-        url.parse().unwrap(),
+        &url.parse().unwrap(),
         possible_transports.as_mut(),
         probers.as_deref(),
         name,
@@ -685,7 +696,7 @@ fn open_branch_containing(
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
     let (b, u) = silver_platter::vcs::open_branch_containing(
-        url.parse().unwrap(),
+        &url.parse().unwrap(),
         possible_transports.as_mut(),
         probers.as_deref(),
         name,
@@ -858,6 +869,7 @@ fn publish_changes(
             PyErr::new::<InsufficientChangesForNewProposal, _>("InsufficientChangesForNewProposal")
         }
         silver_platter::publish::Error::Other(e) => e,
+        silver_platter::publish::Error::Forge(e) => e.into(),
     })
     .map(PublishResult)
 }
