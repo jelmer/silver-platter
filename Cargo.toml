@@ -18,6 +18,7 @@ pyo3-file = { workspace = true }
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
+clap = { version = "4.4.6", features = ["derive"] }
 
 [workspace]
 members = [ "crates/*",]
