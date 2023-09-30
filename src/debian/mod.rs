@@ -1,9 +1,9 @@
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::ChangeLog;
-use debversion::Version;
+
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::io::Read;
+
 use std::path::Path;
 
 const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
@@ -574,8 +574,8 @@ pub fn install_built_package(
 
     let first_entry = cl.entries().next().unwrap();
 
-    let package = first_entry.package().unwrap().clone();
-    let version = first_entry.version().unwrap().clone();
+    let package = first_entry.package().unwrap();
+    let version = first_entry.version().unwrap();
 
     let mut non_epoch_version = version.upstream_version.clone();
     if let Some(debian_version) = &version.debian_revision {
