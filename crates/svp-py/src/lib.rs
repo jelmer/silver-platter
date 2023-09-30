@@ -8,6 +8,7 @@ use silver_platter::Mode;
 use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
+use std::path::Path;
 
 create_exception!(
     silver_platter.utils,
@@ -605,7 +606,7 @@ impl Candidate {
     }
 
     #[getter]
-    fn subpath(&self) -> Option<&str> {
+    fn subpath(&self) -> Option<&Path> {
         self.0.subpath.as_deref()
     }
 
