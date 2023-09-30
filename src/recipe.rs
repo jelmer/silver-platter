@@ -2,7 +2,15 @@ use crate::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DescriptionFormat {
+    Markdown,
+    Html,
+    Plain,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MergeRequest {
     #[serde(rename = "commit-message")]
     pub commit_message: Option<String>,
@@ -12,7 +20,7 @@ pub struct MergeRequest {
     #[serde(rename = "propose-threshold")]
     pub propose_threshold: Option<u32>,
 
-    pub description: HashMap<Option<String>, String>,
+    pub description: HashMap<Option<DescriptionFormat>, String>,
 }
 
 impl MergeRequest {
@@ -34,23 +42,22 @@ impl MergeRequest {
 
     pub fn render_description(
         &self,
-        description_format: &str,
+        description_format: DescriptionFormat,
         context: &tera::Context,
     ) -> tera::Result<Option<String>> {
         let mut tera = tera::Tera::default();
-        let template =
-            if let Some(template) = self.description.get(&Some(description_format.to_string())) {
-                template
-            } else if let Some(template) = self.description.get(&None) {
-                template
-            } else {
-                return Ok(None);
-            };
+        let template = if let Some(template) = self.description.get(&Some(description_format)) {
+            template
+        } else if let Some(template) = self.description.get(&None) {
+            template
+        } else {
+            return Ok(None);
+        };
         Ok(Some(tera.render_str(template.as_str(), context)?))
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
     pub name: Option<String>,
 

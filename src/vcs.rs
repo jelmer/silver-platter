@@ -262,7 +262,7 @@ impl BranchOpenError {
 }
 
 pub fn open_branch(
-    url: url::Url,
+    url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
@@ -287,7 +287,7 @@ pub fn open_branch(
 }
 
 pub fn open_branch_containing(
-    url: url::Url,
+    url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
