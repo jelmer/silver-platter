@@ -22,7 +22,7 @@ debian-changelog = { workspace = true }
 members = [ "crates/*",]
 
 [features]
-default = [ "debian",]
+default = [ "debian", "pyo3"]
 debian = [ "dep:debversion",]
 pyo3 = [ "dep:pyo3",]
 
