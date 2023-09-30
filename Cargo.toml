@@ -17,6 +17,7 @@ chrono = "0.4.30"
 pyo3-file = { workspace = true }
 regex = "1.9.5"
 debian-changelog = { workspace = true }
+tera.workspace = true
 
 [workspace]
 members = [ "crates/*",]
@@ -36,9 +37,6 @@ workspace = true
 features = [ "derive",]
 
 [dependencies.serde_json]
-workspace = true
-
-[dependencies.tera]
 workspace = true
 
 [dependencies.breezyshim]

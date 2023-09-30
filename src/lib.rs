@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod candidates;
 pub mod checks;
 pub mod codemod;
@@ -19,7 +20,7 @@ pub use breezyshim::RevisionId;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
     #[serde(rename = "push")]
     Push,
@@ -28,6 +29,7 @@ pub enum Mode {
     Propose,
 
     #[serde(rename = "attempt-push")]
+    #[default]
     AttemptPush,
 
     #[serde(rename = "push-derived")]

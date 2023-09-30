@@ -6,7 +6,7 @@ pub struct Candidate {
     pub url: url::Url,
     pub name: Option<String>,
     pub branch: Option<String>,
-    pub subpath: Option<String>,
+    pub subpath: Option<std::path::PathBuf>,
     #[serde(rename = "default-mode")]
     pub default_mode: Option<Mode>,
 }

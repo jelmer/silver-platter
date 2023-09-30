@@ -9,6 +9,8 @@ pub struct CommandResult {
     pub context: Option<serde_json::Value>,
     pub description: Option<String>,
     pub serialized_context: Option<String>,
+    pub commit_message: Option<String>,
+    pub title: Option<String>,
     pub tags: Vec<(String, Option<RevisionId>)>,
     pub target_branch_url: Option<Url>,
     pub old_revision: RevisionId,
@@ -21,6 +23,8 @@ impl From<&CommandResult> for DetailedSuccess {
             value: r.value,
             context: r.context.clone(),
             description: r.description.clone(),
+            commit_message: r.commit_message.clone(),
+            title: r.title.clone(),
             serialized_context: r.serialized_context.clone(),
             tags: Some(
                 r.tags
@@ -39,6 +43,9 @@ struct DetailedSuccess {
     context: Option<serde_json::Value>,
     description: Option<String>,
     serialized_context: Option<String>,
+    #[serde(rename = "commit-message")]
+    commit_message: Option<String>,
+    title: Option<String>,
     tags: Option<Vec<(String, Option<String>)>>,
     #[serde(rename = "target-branch-url")]
     target_branch_url: Option<Url>,
@@ -268,6 +275,8 @@ pub fn script_runner(
         description: result.description,
         value: result.value,
         context: result.context,
+        commit_message: result.commit_message,
+        title: result.title,
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })

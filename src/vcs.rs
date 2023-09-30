@@ -44,6 +44,43 @@ pub enum BranchOpenError {
     Other(PyErr),
 }
 
+impl std::fmt::Display for BranchOpenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BranchOpenError::Unsupported {
+                url,
+                description,
+                vcs,
+            } => write!(
+                f,
+                "Unsupported VCS for {}: {} ({})",
+                url,
+                description,
+                vcs.as_deref().unwrap_or("unknown")
+            ),
+            BranchOpenError::Missing { url, description } => {
+                write!(f, "Missing branch {}: {}", url, description)
+            }
+            BranchOpenError::RateLimited {
+                url,
+                description,
+                retry_after,
+            } => write!(
+                f,
+                "Rate limited {}: {} (retry after: {:?})",
+                url, description, retry_after
+            ),
+            BranchOpenError::Unavailable { url, description } => {
+                write!(f, "Unavailable {}: {}", url, description)
+            }
+            BranchOpenError::TemporarilyUnavailable { url, description } => {
+                write!(f, "Temporarily unavailable {}: {}", url, description)
+            }
+            BranchOpenError::Other(e) => write!(f, "Error: {}", e),
+        }
+    }
+}
+
 impl From<BranchOpenError> for PyErr {
     fn from(e: BranchOpenError) -> Self {
         match e {

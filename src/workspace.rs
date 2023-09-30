@@ -44,6 +44,21 @@ pub fn fetch_colocated(
     Ok(())
 }
 
+#[derive(Debug)]
+pub enum Error {}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl From<PyErr> for Error {
+    fn from(e: PyErr) -> Self {
+        todo!()
+    }
+}
+
 pub struct Workspace(PyObject);
 
 impl Workspace {
@@ -144,7 +159,7 @@ impl Workspace {
         })
     }
 
-    pub fn start(&self) -> Result<(), PyErr> {
+    pub fn start(&self) -> Result<(), Error> {
         Python::with_gil(|py| {
             self.0.call_method0(py, "__enter__")?;
             Ok(())
@@ -195,6 +210,12 @@ impl Workspace {
         Python::with_gil(|py| {
             let tree = self.0.call_method0(py, "base_tree").unwrap();
             RevisionTree(tree)
+        })
+    }
+
+    pub fn defer_destroy(&self) {
+        Python::with_gil(|py| {
+            self.0.call_method0(py, "defer_destroy").unwrap();
         })
     }
 
