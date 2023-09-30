@@ -11,7 +11,7 @@ homepage = "https://github.com/jelmer/silver-platter"
 crate-type = ["cdylib"]
 
 [dependencies]
-silver-platter = { path = "../.." }
+silver-platter = { path = "../..", features = ["pyo3"] }
 pyo3 = { workspace = true, features = ["extension-module"] }
 pyo3-log = { workspace = true }
 pyo3-file = { workspace = true }

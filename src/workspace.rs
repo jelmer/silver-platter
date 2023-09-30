@@ -1,4 +1,4 @@
-use crate::publish::{Error as PublishError, PublishResult};
+use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
 use breezyshim::branch::{open as open_branch, Branch, BranchOpenError};
 use breezyshim::forge::{Forge, MergeProposal};
 use breezyshim::tree::{RevisionTree, WorkingTree};
@@ -203,9 +203,9 @@ impl Workspace {
         target_branch: Option<&dyn Branch>,
         mode: crate::Mode,
         name: &str,
-        get_proposal_description: impl Fn(&str, Option<&MergeProposal>) -> String,
-        get_proposal_commit_message: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
-        get_proposal_title: Option<impl Fn(Option<&MergeProposal>) -> Option<String>>,
+        get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
+        get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+        get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
         forge: Option<&Forge>,
         allow_create_proposal: Option<bool>,
         labels: Option<Vec<String>>,
@@ -238,6 +238,21 @@ impl Workspace {
             derived_owner,
             allow_collaboration,
             stop_revision,
+        )
+    }
+
+    pub fn show_diff(
+        &self,
+        outf: Box<dyn std::io::Write + Send>,
+        old_label: Option<&str>,
+        new_label: Option<&str>,
+    ) -> Result<(), PyErr> {
+        breezyshim::diff::show_diff_trees::<std::fs::File>(
+            &self.base_tree(),
+            self.local_tree().basis_tree().as_ref(),
+            outf,
+            old_label,
+            new_label,
         )
     }
 }

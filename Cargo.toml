@@ -24,9 +24,11 @@ members = [ "crates/*",]
 [features]
 default = [ "debian",]
 debian = [ "dep:debversion",]
+pyo3 = [ "dep:pyo3",]
 
 [dependencies.pyo3]
 workspace = true
+optional = true
 features = [ "chrono",]
 
 [dependencies.serde]

@@ -207,9 +207,9 @@ impl Recipe {
         };
         let context = py_dict_to_tera_context(context)?;
         let format = match format {
-            "markdown" => silver_platter::recipe::DescriptionFormat::Markdown,
-            "html" => silver_platter::recipe::DescriptionFormat::Html,
-            "plain" => silver_platter::recipe::DescriptionFormat::Plain,
+            "markdown" => silver_platter::proposal::DescriptionFormat::Markdown,
+            "html" => silver_platter::proposal::DescriptionFormat::Html,
+            "plain" => silver_platter::proposal::DescriptionFormat::Plain,
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "Invalid merge request description format: {}",
@@ -815,11 +815,12 @@ fn publish_changes(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<PublishResult> {
     let get_proposal_description =
-        |format: &str, proposal: Option<&silver_platter::MergeProposal>| {
+        |format: silver_platter::proposal::DescriptionFormat,
+         proposal: Option<&silver_platter::MergeProposal>| {
             Python::with_gil(|py| {
                 let proposal = proposal.map(|mp| MergeProposal(mp.clone()));
                 get_proposal_description
-                    .call1(py, (format, proposal))
+                    .call1(py, (format.to_string(), proposal))
                     .unwrap()
                     .extract(py)
                     .unwrap()
@@ -841,7 +842,7 @@ fn publish_changes(
             })
         }
     });
-    silver_platter::publish::publish_changes(
+    Ok(PublishResult(silver_platter::publish::publish_changes(
         local_branch.0.as_ref(),
         main_branch.0.as_ref(),
         resume_branch.map(|b| b.0.as_ref()),
@@ -860,18 +861,7 @@ fn publish_changes(
         derived_owner,
         allow_collaboration,
         stop_revision.as_ref(),
-    )
-    .map_err(|e| match e {
-        silver_platter::publish::Error::DivergedBranches() => {
-            PyErr::new::<DivergedBranches, _>("DivergedBranches")
-        }
-        silver_platter::publish::Error::InsufficientChangesForNewProposal => {
-            PyErr::new::<InsufficientChangesForNewProposal, _>("InsufficientChangesForNewProposal")
-        }
-        silver_platter::publish::Error::Other(e) => e,
-        silver_platter::publish::Error::Forge(e) => e.into(),
-    })
-    .map(PublishResult)
+    )?))
 }
 
 #[pyclass]

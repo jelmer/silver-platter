@@ -1,14 +1,7 @@
+use crate::proposal::DescriptionFormat;
 use crate::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum DescriptionFormat {
-    Markdown,
-    Html,
-    Plain,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MergeRequest {
