@@ -66,7 +66,7 @@ pub struct Recipe {
     pub resume: Option<bool>,
 
     #[serde(rename = "commit-pending")]
-    pub commit_pending: Option<bool>,
+    pub commit_pending: crate::CommitPending,
 }
 
 impl Recipe {

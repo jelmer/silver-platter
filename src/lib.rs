@@ -18,7 +18,7 @@ pub use breezyshim::forge::{Forge, MergeProposal};
 pub use breezyshim::transport::Transport;
 pub use breezyshim::tree::WorkingTree;
 pub use breezyshim::RevisionId;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
@@ -113,5 +113,32 @@ impl std::str::FromStr for CommitPending {
             "no" => Ok(CommitPending::No),
             _ => Err(format!("Unknown commit-pending value: {}", s)),
         }
+    }
+}
+
+impl Serialize for CommitPending {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *self {
+            CommitPending::Auto => serializer.serialize_none(),
+            CommitPending::Yes => serializer.serialize_bool(true),
+            CommitPending::No => serializer.serialize_bool(false),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CommitPending {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<bool> = Option::deserialize(deserializer)?;
+        Ok(match opt {
+            None => CommitPending::Auto,
+            Some(true) => CommitPending::Yes,
+            Some(false) => CommitPending::No,
+        })
     }
 }

@@ -109,9 +109,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.40"
+version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4156d00bbf4eecdcf54c51ad45b2df73da4e458788a8c0201e46dc6dc0d6c1d1"
+checksum = "1572a8776431513fabbf946f350e6932c35b4970242071615b1742fa6985673b"
 dependencies = [
  "debversion",
  "lazy_static",
@@ -140,9 +140,9 @@ checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
 
 [[package]]
 name = "bytecount"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c676a478f63e9fa2dd5368a42f28bba0d6c560b775f38583c8bbaa7fcd67c9c"
+checksum = "ad152d03a2c813c80bb94fedbf3a3f02b28f793e39e7c214c8a0bcc196343de7"
 
 [[package]]
 name = "camino"
@@ -1088,6 +1088,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "shlex"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7cee0529a6d40f580e7a5e6c495c8fbfe21b7b52795ed4bb5e62cdf92bc6380"
+
+[[package]]
 name = "silver-platter"
 version = "0.5.12"
 dependencies = [
@@ -1104,6 +1110,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "shlex",
  "tempfile",
  "tera",
  "url",

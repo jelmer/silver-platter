@@ -19,6 +19,7 @@ regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
 clap = { version = "4.4.6", features = ["derive"] }
+shlex = "1.2.0"
 
 [workspace]
 members = [ "crates/*",]

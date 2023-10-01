@@ -24,6 +24,14 @@ impl Candidates {
     pub fn candidates(&self) -> &[Candidate] {
         self.0.as_slice()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Candidate> {
+        self.0.iter()
+    }
+
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
 }
 
 impl TryFrom<serde_yaml::Value> for Candidates {
