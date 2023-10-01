@@ -2,7 +2,7 @@ use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::ChangeLog;
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyBytes, PyDict};
 
 use std::path::Path;
 
@@ -83,10 +83,17 @@ pub fn add_changelog_entry(
     timestamp: Option<chrono::DateTime<chrono::FixedOffset>>,
     urgency: Option<&str>,
 ) {
-    let urgency = urgency.unwrap_or("low");
+    let maintainer = if let Some(maintainer) = maintainer {
+        Some(maintainer.clone())
+    } else {
+        let m = debian_changelog::get_maintainer();
+        Some((m.0.unwrap(), m.1.unwrap()))
+    };
+    let urgency = urgency.unwrap_or("medium");
     // TODO(jelmer): This logic should ideally be in python-debian.
     let f = tree.get_file_text(path).unwrap();
     let contents = Python::with_gil(|py| {
+        let f = PyBytes::new(py, f.as_slice());
         let m = py.import("debian.changelog").unwrap();
         let cl_cls = m.getattr("Changelog").unwrap();
         let cl = cl_cls.call0().unwrap();
@@ -98,17 +105,21 @@ pub fn add_changelog_entry(
             .unwrap();
 
         let m = py.import("debmutate.changelog").unwrap();
-        let _changelog_add_entry = m.getattr("_changelog_add_entry").unwrap();
+        let _changelog_add_entry = m.getattr("changelog_add_entry").unwrap();
         let kwargs = PyDict::new(py);
         kwargs.set_item("summary", summary).unwrap();
         kwargs.set_item("maintainer", maintainer).unwrap();
         kwargs.set_item("timestamp", timestamp).unwrap();
         kwargs.set_item("urgency", urgency).unwrap();
         _changelog_add_entry.call((cl,), Some(kwargs)).unwrap();
-        cl.call_method0("__bytes__")
+
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("allow_missing_author", true).unwrap();
+        cl.call_method("_format", (), Some(kwargs))
             .unwrap()
-            .extract::<Vec<u8>>()
+            .extract::<String>()
             .unwrap()
+            .into_bytes()
     });
     tree.put_file_bytes_non_atomic(path, &contents).unwrap();
 }
@@ -126,6 +137,7 @@ mod tests {
     use std::path::Path;
 
     pub fn make_branch_and_tree(path: &std::path::Path) -> WorkingTree {
+        breezyshim::init();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
         let branch = ControlDir::create_branch_convenience(&url).unwrap();
@@ -134,10 +146,11 @@ mod tests {
 
     #[test]
     fn test_edit_existing_new_author() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Initial change.
@@ -171,18 +184,18 @@ mod tests {
   * Add a foo
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap(),
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap(),
         );
     }
 
     #[test]
     fn test_edit_existing_multi_new_author() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
@@ -199,13 +212,11 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         .unwrap();
         tree.add(&[(Path::new("debian")), (Path::new("debian/changelog"))])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "jane@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
             &["Add a foo"],
-            None,
+            Some(&("Jane Example".to_string(), "jane@example.com".to_string())),
             None,
             None,
         );
@@ -224,18 +235,18 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
   * Add a foo
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_edit_existing_existing_author() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
@@ -252,7 +263,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             &tree,
             Path::new("debian/changelog"),
             &["Add a foo"],
-            None,
+            Some(&("Joe Example".to_string(), "joe@example.com".to_string())),
             None,
             None,
         );
@@ -265,18 +276,18 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
   * Add a foo
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_add_new() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) unstable; urgency=medium
 
@@ -289,8 +300,6 @@ lintian-brush (0.35) unstable; urgency=medium
         .unwrap();
         tree.add(&[(Path::new("debian")), (Path::new("debian/changelog"))])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "jane@example.com");
         std::env::set_var("DEBCHANGE_VENDOR", "debian");
         let timestamp = chrono::DateTime::<chrono::FixedOffset>::parse_from_rfc3339(
             "2020-05-24T15:27:26+00:00",
@@ -300,7 +309,10 @@ lintian-brush (0.35) unstable; urgency=medium
             &tree,
             Path::new("debian/changelog"),
             &["Add a foo"],
-            None,
+            Some(&(
+                String::from("Jane Example"),
+                String::from("jane@example.com"),
+            )),
             Some(timestamp),
             None,
         );
@@ -310,7 +322,7 @@ lintian-brush (0.36) UNRELEASED; urgency=medium
 
   * Add a foo
 
- -- Jane Example <jane@example.com>  Sun, 24 May 2020 15:27:26 -0000
+ -- Jane Example <jane@example.com>  Sun, 24 May 2020 15:27:26 +0000
 
 lintian-brush (0.35) unstable; urgency=medium
 
@@ -318,18 +330,18 @@ lintian-brush (0.35) unstable; urgency=medium
     template.
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_edit_broken_first_line() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 THIS IS NOT A PARSEABLE LINE
 lintian-brush (0.35) UNRELEASED; urgency=medium
@@ -343,13 +355,11 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         .unwrap();
         tree.add(&[Path::new("debian"), Path::new("debian/changelog")])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "jane@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
             &["Add a foo", "+ Bar"],
-            None,
+            Some(&("Jane Example".to_string(), "joe@example.com".to_string())),
             None,
             None,
         );
@@ -367,18 +377,18 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
     + Bar
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_add_long_line() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
@@ -392,15 +402,13 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         .unwrap();
         tree.add(&[Path::new("debian"), Path::new("debian/changelog")])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "joe@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
             &[
                 "This is adding a very long sentence that is longer than would fit on a single line in a 80-character-wide line."
             ],
-            None,
+            Some(&("Joe Example".to_string(), "joe@example.com".to_string())),
             None,
             None,
         );
@@ -414,18 +422,18 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
     single line in a 80-character-wide line.
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_add_long_subline() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
@@ -439,8 +447,6 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         .unwrap();
         tree.add(&[Path::new("debian"), Path::new("debian/changelog")])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "joe@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
@@ -448,7 +454,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
                 "This is the main item.",
                 "+ This is adding a very long sentence that is longer than would fit on a single line in a 80-character-wide line.",
             ],
-            None, None, None
+            Some(&("Joe Example".to_string(), "joe@example.com".to_string())), None, None
         );
         assert_eq!(
             r#"\
@@ -461,18 +467,18 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
       single line in a 80-character-wide line.
 
  -- Joe Example <joe@example.com>  Fri, 04 Oct 2019 02:36:13 +0000
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_trailer_only() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            Path::new("debian/changelog"),
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) unstable; urgency=medium
 
@@ -485,13 +491,11 @@ lintian-brush (0.35) unstable; urgency=medium
         .unwrap();
         tree.add(&[Path::new("debian"), Path::new("debian/changelog")])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Jane Example");
-        std::env::set_var("DEBEMAIL", "joe@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
             &["And this one is new."],
-            None,
+            Some(&("Jane Example".to_string(), "joe@example.com".to_string())),
             None,
             None,
         );
@@ -503,18 +507,18 @@ lintian-brush (0.35) unstable; urgency=medium
   * And this one is new.
 
  --
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 
     #[test]
     fn test_trailer_only_existing_author() {
-        let tree = make_branch_and_tree(Path::new("."));
-        std::fs::create_dir_all("debian").unwrap();
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
-            "debian/changelog",
+            td.path().join("debian/changelog"),
             r#"\
 lintian-brush (0.35) unstable; urgency=medium
 
@@ -530,13 +534,11 @@ lintian-brush (0.35) unstable; urgency=medium
         .unwrap();
         tree.add(&[Path::new("debian"), Path::new("debian/changelog")])
             .unwrap();
-        std::env::set_var("DEBFULLNAME", "Joe Example");
-        std::env::set_var("DEBEMAIL", "joe@example.com");
         add_changelog_entry(
             &tree,
             Path::new("debian/changelog"),
             &["And this one is new."],
-            None,
+            Some(&("Joe Example".to_string(), "joe@example.com".to_string())),
             None,
             None,
         );
@@ -553,9 +555,8 @@ lintian-brush (0.35) unstable; urgency=medium
   * And this one is new.
 
  --
-"#
-            .as_bytes(),
-            std::fs::read("debian/changelog").unwrap()
+"#,
+            std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
 }

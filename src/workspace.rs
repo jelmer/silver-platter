@@ -268,7 +268,7 @@ impl Workspace {
         old_label: Option<&str>,
         new_label: Option<&str>,
     ) -> Result<(), PyErr> {
-        breezyshim::diff::show_diff_trees::<std::fs::File>(
+        breezyshim::diff::show_diff_trees(
             &self.base_tree(),
             self.local_tree().basis_tree().as_ref(),
             outf,

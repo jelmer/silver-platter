@@ -27,6 +27,9 @@ default = [ "debian", "pyo3"]
 debian = [ "dep:debversion",]
 pyo3 = [ "dep:pyo3",]
 
+[dev-dependencies]
+pyo3 = { workspace = true, features = ["auto-initialize",] }
+
 [dependencies.pyo3]
 workspace = true
 optional = true
