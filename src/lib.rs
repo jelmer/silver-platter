@@ -8,6 +8,7 @@ pub mod probers;
 pub mod proposal;
 pub mod publish;
 pub mod recipe;
+pub mod run;
 pub mod utils;
 pub mod vcs;
 pub mod workspace;
