@@ -20,6 +20,7 @@ debian-changelog = { workspace = true }
 tera.workspace = true
 clap = { version = "4.4.6", features = ["derive"] }
 shlex = "1.2.0"
+env_logger = "0.10.0"
 
 [workspace]
 members = [ "crates/*",]

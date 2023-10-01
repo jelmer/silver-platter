@@ -8,6 +8,7 @@ use silver_platter::proposal::{MergeProposal, MergeProposalStatus};
 use silver_platter::publish::Error as PublishError;
 use silver_platter::vcs::open_branch;
 use silver_platter::Mode;
+use std::io::Write;
 use std::path::Path;
 
 #[derive(Parser)]
@@ -16,6 +17,9 @@ use std::path::Path;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(short, long)]
+    debug: bool,
 }
 
 #[derive(Subcommand)]
@@ -409,8 +413,21 @@ pub fn batch_publish(
 
 fn main() {
     pyo3::prepare_freethreaded_python();
-
     let cli = Cli::parse();
+
+    env_logger::builder()
+        .format(|buf, record| writeln!(buf, "{}", record.args()))
+        .filter(
+            None,
+            if cli.debug {
+                log::LevelFilter::Debug
+            } else {
+                log::LevelFilter::Info
+            },
+        )
+        .init();
+
+    breezyshim::init();
 
     std::process::exit(match &cli.command {
         Commands::Forges {} => {
