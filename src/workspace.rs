@@ -48,13 +48,13 @@ pub fn fetch_colocated(
 pub enum Error {}
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
         todo!()
     }
 }
 
 impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
+    fn from(_e: PyErr) -> Self {
         todo!()
     }
 }
@@ -109,7 +109,7 @@ impl Workspace {
     pub fn local_tree(&self) -> WorkingTree {
         Python::with_gil(|py| {
             let tree = self.0.getattr(py, "local_tree").unwrap();
-            WorkingTree(tree.into())
+            WorkingTree(tree)
         })
     }
 
@@ -121,11 +121,7 @@ impl Workspace {
                 .unwrap()
                 .extract(py)
                 .unwrap();
-            if let Some(b) = branch {
-                Some(Box::new(breezyshim::branch::RegularBranch::new(b)) as Box<dyn Branch>)
-            } else {
-                None
-            }
+            branch.map(|b| Box::new(breezyshim::branch::RegularBranch::new(b)) as Box<dyn Branch>)
         })
     }
 

@@ -6,7 +6,7 @@ use silver_platter::candidates::Candidates;
 use silver_platter::codemod::{script_runner, CommandResult};
 use silver_platter::proposal::{MergeProposal, MergeProposalStatus};
 use silver_platter::publish::Error as PublishError;
-use silver_platter::vcs::open_branch;
+
 use silver_platter::Mode;
 use std::io::Write;
 use std::path::Path;
@@ -161,11 +161,10 @@ enum BatchArgs {
 }
 
 fn run(args: &RunArgs) -> i32 {
-    let recipe = if let Some(recipe) = args.recipe.as_ref() {
-        Some(silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap())
-    } else {
-        None
-    };
+    let recipe = args
+        .recipe
+        .as_ref()
+        .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap());
 
     let mut urls = vec![];
 
@@ -200,13 +199,13 @@ fn run(args: &RunArgs) -> i32 {
     } else if let Some(recipe) = recipe.as_ref() {
         recipe.name.clone().unwrap()
     } else {
-        silver_platter::derived_branch_name(command.iter().next().unwrap()).to_string()
+        silver_platter::derived_branch_name(command.first().unwrap()).to_string()
     };
 
     let mode = if let Some(mode) = args.mode {
         mode
     } else if let Some(recipe) = &recipe {
-        recipe.mode.clone().unwrap()
+        recipe.mode.unwrap()
     } else {
         silver_platter::Mode::Propose
     };
@@ -230,7 +229,7 @@ fn run(args: &RunArgs) -> i32 {
                 }
             }
         }
-        return true;
+        true
     };
 
     let recipe_ref = recipe.as_ref();
@@ -245,7 +244,7 @@ fn run(args: &RunArgs) -> i32 {
         if let Some(existing_proposal) = existing_proposal.as_ref() {
             return existing_proposal.get_commit_message().unwrap();
         }
-        return None;
+        None
     };
 
     let recipe_ref = recipe.as_ref();
@@ -258,7 +257,7 @@ fn run(args: &RunArgs) -> i32 {
         if let Some(existing_proposal) = existing_proposal {
             return existing_proposal.get_title().unwrap();
         }
-        return None;
+        None
     };
 
     let get_description = |result: &CommandResult,
@@ -302,7 +301,7 @@ fn run(args: &RunArgs) -> i32 {
                 .as_slice(),
             mode,
             commit_pending,
-            labels_ref.as_ref().map(|labels| labels.as_slice()),
+            labels_ref.as_deref(),
             args.diff,
             args.verify_command.as_deref(),
             args.derived_owner.as_deref(),
@@ -315,7 +314,7 @@ fn run(args: &RunArgs) -> i32 {
         retcode = std::cmp::max(retcode, result)
     }
 
-    return retcode;
+    retcode
 }
 
 pub fn publish_entry(
@@ -328,7 +327,7 @@ pub fn publish_entry(
     let mut entry = batch.get_mut(name).unwrap();
     let tree = entry.working_tree().unwrap();
     let publish_result = match silver_platter::batch::publish_one(
-        &entry.target_branch_url.as_ref().unwrap(),
+        entry.target_branch_url.as_ref().unwrap(),
         &tree,
         batch_name.as_str(),
         entry.mode,
@@ -344,7 +343,7 @@ pub fn publish_entry(
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
-            batch.remove(name);
+            batch.remove(name).unwrap();
             return true;
         }
         Err(PublishError::UnrelatedBranchExists) => {
@@ -358,13 +357,13 @@ pub fn publish_entry(
 
     match publish_result.mode {
         Mode::Push => {
-            batch.remove(name);
+            batch.remove(name).unwrap();
         }
         Mode::Propose => {
-            entry.proposal_url = Some(publish_result.proposal.unwrap().url().unwrap().clone());
+            entry.proposal_url = Some(publish_result.proposal.unwrap().url().unwrap());
         }
         Mode::PushDerived => {
-            batch.remove(name);
+            batch.remove(name).unwrap();
         }
         _ => {
             unreachable!();
@@ -384,7 +383,7 @@ pub fn batch_publish(
     let mut errors = 0;
     if let Some(codebase) = codebase {
         if publish_entry(&mut batch, codebase, refresh, overwrite) {
-            silver_platter::batch::save_batch_metadata(directory, &batch);
+            silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
         } else {
             error!("Failed to publish {}", codebase);
             errors = 1;
@@ -396,7 +395,7 @@ pub fn batch_publish(
                 errors += 1;
             }
         }
-        silver_platter::batch::save_batch_metadata(directory, &batch);
+        silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
     }
     if batch.work.is_empty() {
         info!(
@@ -429,6 +428,14 @@ fn main() {
 
     breezyshim::init();
 
+    pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
+        let m = py.import("breezy.plugin").unwrap();
+        let load_plugins = m.getattr("load_plugins").unwrap();
+        load_plugins.call0().unwrap();
+        Ok(())
+    })
+    .unwrap();
+
     std::process::exit(match &cli.command {
         Commands::Forges {} => {
             for instance in breezyshim::forge::iter_forge_instances() {
@@ -436,7 +443,7 @@ fn main() {
             }
             0
         }
-        Commands::Login { url } => {
+        Commands::Login { url: _ } => {
             todo!();
         }
         Commands::Proposals { status } => {
@@ -454,11 +461,9 @@ fn main() {
             verify_command,
             recipe,
         } => {
-            let recipe = if let Some(recipe) = recipe {
-                Some(silver_platter::recipe::Recipe::from_path(recipe).unwrap())
-            } else {
-                None
-            };
+            let recipe = recipe
+                .as_ref()
+                .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe).unwrap());
 
             let commit_pending = if let Some(commit_pending) = commit_pending {
                 *commit_pending
@@ -498,7 +503,7 @@ fn main() {
                 Ok(result) => result,
                 Err(err) => {
                     error!("Failed: {}", err);
-                    reset_tree(&local_tree, None, Some(subpath.as_path()), None);
+                    reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
                     std::process::exit(1);
                 }
             };
@@ -515,12 +520,12 @@ fn main() {
                     Ok(status) if status.success() => {}
                     Ok(status) => {
                         error!("Verify command failed: {}", status);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None);
+                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
                         std::process::exit(1);
                     }
                     Err(err) => {
                         error!("Verify command failed: {}", err);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None);
+                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
                         std::process::exit(1);
                     }
                 }
@@ -535,7 +540,8 @@ fn main() {
                     Box::new(std::io::stdout()),
                     Some("old/"),
                     Some("new/"),
-                );
+                )
+                .unwrap();
             }
             0
         }
@@ -564,11 +570,12 @@ fn main() {
                     std::path::PathBuf::from(recipe.name.clone().unwrap())
                 };
 
-                let batch = silver_platter::batch::Batch::from_recipe(
+                silver_platter::batch::Batch::from_recipe(
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
-                );
+                )
+                .unwrap();
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
                 0
             }

@@ -9,7 +9,7 @@ use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
-use breezyshim::forge::{Error as ForgeError, Forge};
+use breezyshim::forge::{Error as ForgeError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;

@@ -304,7 +304,7 @@ pub fn open_branch(
     probers: Option<&[Prober]>,
     name: Option<&str>,
 ) -> Result<Box<dyn Branch>, BranchOpenError> {
-    let (url, params) = split_segment_parameters(&url);
+    let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
         Some(name.to_string())
@@ -329,7 +329,7 @@ pub fn open_branch_containing(
     probers: Option<&[Prober]>,
     name: Option<&str>,
 ) -> Result<(Box<dyn Branch>, String), BranchOpenError> {
-    let (url, params) = split_segment_parameters(&url);
+    let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
         Some(name.to_string())
