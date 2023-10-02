@@ -20,6 +20,7 @@ import_exception!(breezy.forge, UnsupportedForge);
 import_exception!(breezy.forge, ForgeLoginRequired);
 
 create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
+import_exception!(silver_platter.batch, UnrelatedBranchExists);
 
 import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
 
@@ -397,10 +398,19 @@ pub fn propose_changes(
 #[derive(Debug)]
 pub enum Error {
     DivergedBranches(),
+    UnrelatedBranchExists,
     Other(PyErr),
     UnsupportedForge(url::Url),
     ForgeLoginRequired,
     InsufficientChangesForNewProposal,
+    BranchOpenError(crate::vcs::BranchOpenError),
+    EmptyMergeProposal,
+}
+
+impl From<crate::vcs::BranchOpenError> for Error {
+    fn from(e: crate::vcs::BranchOpenError) -> Self {
+        Error::BranchOpenError(e)
+    }
 }
 
 impl From<ForgeError> for Error {
@@ -420,6 +430,9 @@ impl std::fmt::Display for Error {
             Error::Other(e) => write!(f, "{}", e),
             Error::UnsupportedForge(u) => write!(f, "Unsupported forge: {}", u),
             Error::ForgeLoginRequired => write!(f, "Forge login required"),
+            Error::BranchOpenError(e) => write!(f, "{}", e),
+            Error::EmptyMergeProposal => write!(f, "Empty merge proposal"),
+            Error::UnrelatedBranchExists => write!(f, "Unrelated branch exists"),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
@@ -438,8 +451,13 @@ impl From<Error> for PyErr {
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
             Error::Other(e) => e,
+            Error::BranchOpenError(e) => e.into(),
             Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
             Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
+            Error::UnrelatedBranchExists => {
+                PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
+            }
+            Error::EmptyMergeProposal => PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal"),
             Error::InsufficientChangesForNewProposal => {
                 PyErr::new::<InsufficientChangesForNewProposal, _>(
                     "InsufficientChangesForNewProposal",

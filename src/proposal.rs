@@ -1,8 +1,8 @@
 use crate::vcs::{full_branch_url, open_branch};
 use breezyshim::branch::Branch;
-use breezyshim::forge::{
-    iter_forge_instances, Error as ForgeError, Forge, MergeProposal, MergeProposalStatus,
-};
+pub use breezyshim::forge::MergeProposal;
+pub use breezyshim::forge::MergeProposalStatus;
+use breezyshim::forge::{iter_forge_instances, Error as ForgeError, Forge};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;

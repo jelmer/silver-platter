@@ -4,7 +4,7 @@ use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
 use silver_platter::codemod::Error as CodemodError;
 use silver_platter::debian::codemod::Error as DebianCodemodError;
-use silver_platter::Mode;
+use silver_platter::{CommitPending, Mode};
 use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
@@ -153,7 +153,11 @@ impl Recipe {
 
     #[getter]
     fn commit_pending(&self) -> Option<bool> {
-        self.0.commit_pending
+        match self.0.commit_pending {
+            CommitPending::Auto => None,
+            CommitPending::Yes => Some(true),
+            CommitPending::No => Some(false),
+        }
     }
 
     #[getter]
@@ -446,7 +450,11 @@ fn script_runner(
         subpath
             .as_ref()
             .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
-        commit_pending,
+        match commit_pending {
+            None => CommitPending::Auto,
+            Some(true) => CommitPending::Yes,
+            Some(false) => CommitPending::No,
+        },
         resume_metadata
             .map(|m| py_to_json(m.as_ref(py)).unwrap())
             .as_ref(),

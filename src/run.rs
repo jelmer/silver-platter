@@ -16,7 +16,7 @@ pub fn apply_and_publish(
     name: &str,
     command: &[&str],
     mode: Mode,
-    commit_pending: Option<bool>,
+    commit_pending: crate::CommitPending,
     labels: Option<&[&str]>,
     diff: bool,
     verify_command: Option<&str>,
@@ -242,8 +242,16 @@ pub fn apply_and_publish(
             error!("Credentials for hosting site missing. Run 'svp login'?",);
             return 2;
         }
-        Err(PublishError::DivergedBranches()) => {
+        Err(PublishError::DivergedBranches()) | Err(PublishError::UnrelatedBranchExists) => {
             error!("A branch exists on the server that has diverged from the local branch.");
+            return 2;
+        }
+        Err(PublishError::BranchOpenError(e)) => {
+            error!("Failed to open branch: {}", e);
+            return 2;
+        }
+        Err(PublishError::EmptyMergeProposal) => {
+            error!("No changes to publish.");
             return 2;
         }
         Err(PublishError::Other(e)) => {

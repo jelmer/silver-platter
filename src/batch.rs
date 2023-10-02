@@ -3,34 +3,42 @@
 use crate::candidates::Candidate;
 use crate::codemod::script_runner;
 use crate::proposal::DescriptionFormat;
+use crate::publish::{Error as PublishError, PublishResult};
 use crate::recipe::Recipe;
-use crate::vcs::open_branch;
+use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
+use breezyshim::branch::Branch;
+use breezyshim::forge::{Error as ForgeError, Forge};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
-    subpath: Option<PathBuf>,
-    target_branch_url: Option<Url>,
-    description: String,
+    #[serde(skip)]
+    local_path: PathBuf,
+    pub subpath: Option<PathBuf>,
+    pub target_branch_url: Option<Url>,
+    pub description: String,
     #[serde(rename = "commit-message")]
-    commit_message: Option<String>,
-    mode: Mode,
-    title: Option<String>,
-    labels: Option<Vec<String>>,
-    context: serde_yaml::Value,
+    pub commit_message: Option<String>,
+    pub mode: Mode,
+    pub title: Option<String>,
+    pub owner: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub context: serde_yaml::Value,
     #[serde(rename = "proposal-url")]
-    proposal_url: Option<Url>,
+    pub proposal_url: Option<Url>,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct Batch {
-    recipe: Recipe,
-    name: String,
-    work: HashMap<String, Entry>,
+    pub recipe: Recipe,
+    pub name: String,
+    pub work: HashMap<String, Entry>,
+    #[serde(skip)]
+    pub basepath: PathBuf,
 }
 
 #[derive(Debug)]
@@ -177,14 +185,18 @@ impl Entry {
         let labels = recipe.labels.clone();
         let context = result.context;
 
+        let owner = None;
+
         ws.defer_destroy();
 
         Ok(Entry {
+            local_path: basepath.to_path_buf(),
             subpath: Some(subpath.to_owned()),
             target_branch_url,
             description,
             commit_message,
             mode,
+            owner,
             title,
             labels,
             proposal_url: None,
@@ -212,6 +224,25 @@ impl Entry {
             Status::NotPublished()
         }
     }
+
+    pub fn working_tree(
+        &self,
+    ) -> Result<breezyshim::tree::WorkingTree, breezyshim::tree::WorkingTreeOpenError> {
+        breezyshim::tree::WorkingTree::open(&self.local_path)
+    }
+
+    pub fn target_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
+        open_branch(self.target_branch_url.as_ref().unwrap(), None, None, None)
+    }
+
+    pub fn local_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
+        open_branch(
+            &url::Url::from_directory_path(&self.local_path).unwrap(),
+            None,
+            None,
+            None,
+        )
+    }
 }
 
 pub enum Status {
@@ -233,9 +264,9 @@ impl std::fmt::Display for Status {
 }
 
 impl Batch {
-    pub fn from_recipe(
+    pub fn from_recipe<'a>(
         recipe: &Recipe,
-        candidates: impl Iterator<Item = Candidate>,
+        candidates: impl Iterator<Item = &'a Candidate>,
         directory: &Path,
     ) -> Result<Batch, Error> {
         std::fs::create_dir(directory)?;
@@ -246,21 +277,25 @@ impl Batch {
                 recipe: recipe.clone(),
                 name: recipe.name.clone().unwrap(),
                 work: HashMap::new(),
+                basepath: directory.to_path_buf(),
             },
         };
 
         for candidate in candidates {
             // TODO(jelmer): Move this logic to candidate
-            let basename: String = candidate.name.unwrap_or_else(|| {
-                candidate
-                    .url
-                    .to_string()
-                    .trim_end_matches('/')
-                    .rsplit('/')
-                    .last()
-                    .unwrap()
-                    .to_string()
-            });
+            let basename: String = candidate.name.as_ref().map_or_else(
+                || {
+                    candidate
+                        .url
+                        .to_string()
+                        .trim_end_matches('/')
+                        .rsplit('/')
+                        .last()
+                        .unwrap()
+                        .to_string()
+                },
+                |name| name.clone(),
+            );
 
             let mut name = basename.clone();
 
@@ -310,12 +345,26 @@ impl Batch {
         Ok(batch)
     }
 
+    pub fn get(&self, name: &str) -> Option<&Entry> {
+        self.work.get(name)
+    }
+
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Entry> {
+        self.work.get_mut(name)
+    }
+
     pub fn status(&self) -> HashMap<&str, Status> {
         let mut status = HashMap::new();
         for (name, entry) in self.work.iter() {
             status.insert(name.as_str(), entry.status());
         }
         status
+    }
+
+    pub fn remove(&mut self, name: &str) -> Result<(), Error> {
+        self.work.remove(name);
+        std::fs::remove_dir_all(self.basepath.join(name))?;
+        Ok(())
     }
 }
 
@@ -336,4 +385,142 @@ pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error>
 pub fn load_batch_metadata(directory: &Path) -> Option<Batch> {
     let file = std::fs::File::open(directory.join("batch.yaml")).ok()?;
     serde_yaml::from_reader(file).ok()
+}
+
+pub fn publish_one(
+    url: &url::Url,
+    local_tree: &breezyshim::tree::WorkingTree,
+    batch_name: &str,
+    mode: Mode,
+    existing_proposal_url: Option<&url::Url>,
+    labels: Option<Vec<String>>,
+    derived_owner: Option<&str>,
+    refresh: bool,
+    commit_message: Option<&str>,
+    title: Option<&str>,
+    description: Option<&str>,
+    mut overwrite: Option<bool>,
+) -> Result<PublishResult, PublishError> {
+    let main_branch = match crate::vcs::open_branch(url, None, None, None) {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("{}: {}", url, e);
+            return Err(e.into());
+        }
+    };
+
+    let (forge, existing_proposal, mut resume_branch) =
+        match breezyshim::forge::get_forge(main_branch.as_ref()) {
+            Ok(f) => {
+                let (existing_proposal, resume_branch) = if let Some(existing_proposal_url) =
+                    existing_proposal_url
+                {
+                    let existing_proposal = f.get_proposal_by_url(existing_proposal_url).unwrap();
+                    let resume_branch_url =
+                        existing_proposal.get_source_branch_url().unwrap().unwrap();
+                    let resume_branch =
+                        crate::vcs::open_branch(&resume_branch_url, None, None, None).unwrap();
+                    (Some(existing_proposal), Some(resume_branch))
+                } else {
+                    (None, None)
+                };
+                (Some(f), existing_proposal, resume_branch)
+            }
+            Err(ForgeError::UnsupportedForge(e)) => {
+                if mode != Mode::Push {
+                    return Err(ForgeError::UnsupportedForge(e).into());
+                }
+
+                // We can't figure out what branch to resume from when there's no forge
+                // that can tell us.
+                log::warn!(
+                    "Unsupported forge ({}), will attempt to push to {}",
+                    e,
+                    crate::vcs::full_branch_url(main_branch.as_ref()),
+                );
+                (None, None, None)
+            }
+            Err(e) => {
+                log::error!("{}: {}", url, e);
+                return Err(e.into());
+            }
+        };
+    if refresh {
+        if resume_branch.is_some() {
+            overwrite = Some(true);
+        }
+        resume_branch = None;
+    }
+    if let Some(ref existing_proposal) = existing_proposal {
+        log::info!("Updating {}", existing_proposal.url().unwrap());
+    }
+
+    let local_branch = local_tree.branch();
+
+    crate::publish::enable_tag_pushing(local_branch.as_ref()).unwrap();
+
+    let publish_result = match crate::publish::publish_changes(
+        local_branch.as_ref(),
+        main_branch.as_ref(),
+        resume_branch.as_ref().map(|b| b.as_ref()),
+        mode,
+        batch_name,
+        |_df, _ep| description.unwrap().to_string(),
+        Some(|_ep: Option<&crate::proposal::MergeProposal>| commit_message.map(|s| s.to_string())),
+        Some(|_ep: Option<&crate::proposal::MergeProposal>| title.map(|s| s.to_string())),
+        forge.as_ref(),
+        Some(true),
+        None,
+        overwrite,
+        existing_proposal,
+        labels,
+        None,
+        derived_owner,
+        None,
+        None,
+    ) {
+        Ok(r) => r,
+        Err(e) => match e {
+            PublishError::UnsupportedForge(ref url) => {
+                log::error!("No known supported forge for {}. Run 'svp login'?", url);
+                return Err(e);
+            }
+            PublishError::InsufficientChangesForNewProposal => {
+                log::info!("Insufficient changes for a new merge proposal");
+                return Err(e);
+            }
+            PublishError::DivergedBranches() => {
+                if resume_branch.is_none() {
+                    return Err(PublishError::UnrelatedBranchExists);
+                }
+                log::warn!("Branch exists that has diverged");
+                return Err(e);
+            }
+            PublishError::ForgeLoginRequired => {
+                log::error!(
+                    "Credentials for hosting site at {} missing. Run 'svp login'?",
+                    url
+                );
+                return Err(e);
+            }
+            _ => {
+                log::error!("Failed to publish: {}", e);
+                return Err(e);
+            }
+        },
+    };
+
+    if let Some(ref proposal) = publish_result.proposal {
+        if publish_result.is_new == Some(true) {
+            log::info!("Merge proposal created.");
+        } else {
+            log::info!("Merge proposal updated.")
+        }
+        log::info!("URL: {}", proposal.url().unwrap());
+        log::info!(
+            "Description: {}",
+            proposal.get_description().unwrap().unwrap()
+        );
+    }
+    Ok(publish_result)
 }

@@ -17,6 +17,13 @@ pub struct CommandResult {
     pub new_revision: RevisionId,
 }
 
+impl CommandResult {
+    pub fn tera_context(&self) -> tera::Context {
+        let context = self.context.as_ref().unwrap_or(&serde_json::Value::Null);
+        tera::Context::from_value(context.clone()).unwrap()
+    }
+}
+
 impl From<&CommandResult> for DetailedSuccess {
     fn from(r: &CommandResult) -> Self {
         DetailedSuccess {
@@ -136,7 +143,7 @@ pub fn script_runner(
     local_tree: &WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
-    commit_pending: Option<bool>,
+    commit_pending: crate::CommitPending,
     resume_metadata: Option<&serde_json::Value>,
     committer: Option<&str>,
     extra_env: Option<HashMap<String, String>>,
@@ -236,11 +243,15 @@ pub fn script_runner(
         tags
     };
 
-    let commit_pending = commit_pending.unwrap_or_else(|| {
-        // Automatically commit pending changes if the script did not
-        // touch the branch
-        last_revision == new_revision
-    });
+    let commit_pending = match commit_pending {
+        crate::CommitPending::Auto => {
+            // Automatically commit pending changes if the script did not
+            // touch the branch
+            last_revision == new_revision
+        }
+        crate::CommitPending::Yes => true,
+        crate::CommitPending::No => false,
+    };
 
     if commit_pending {
         local_tree
