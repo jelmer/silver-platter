@@ -9,6 +9,7 @@ use std::path::Path;
 const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
 
 pub mod codemod;
+pub mod uploader;
 pub mod vcswatch;
 
 pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
