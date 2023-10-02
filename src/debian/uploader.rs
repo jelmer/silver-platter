@@ -63,3 +63,19 @@ pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
         Ok(())
     }
 }
+
+pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
+    let status = std::process::Command::new("dput")
+        .arg(path.file_name().unwrap().to_string_lossy().to_string())
+        .current_dir(path.parent().unwrap())
+        .status()?;
+
+    if !status.success() {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "dput failed",
+        ))
+    } else {
+        Ok(())
+    }
+}
