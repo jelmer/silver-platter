@@ -3,7 +3,7 @@ use log::{debug, info};
 use std::path::Path;
 use trivialdb as tdb;
 
-struct LastAttemptDatabase {
+pub struct LastAttemptDatabase {
     db: tdb::Tdb,
 }
 
@@ -18,6 +18,20 @@ impl LastAttemptDatabase {
             )
             .unwrap(),
         }
+    }
+
+    pub fn get(&self, package: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        let key = package.to_string().into_bytes();
+        self.db.fetch(&key).unwrap().map(|value| {
+            let value = String::from_utf8(value).unwrap();
+            chrono::DateTime::parse_from_rfc3339(&value).unwrap()
+        })
+    }
+
+    pub fn set(&mut self, package: &str, value: chrono::DateTime<chrono::FixedOffset>) {
+        let key = package.to_string().into_bytes();
+        let value = value.to_rfc3339();
+        self.db.store(&key, value.as_bytes(), None).unwrap();
     }
 }
 
@@ -41,10 +55,10 @@ pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
         .status()?;
 
     if !status.success() {
-        return Err(std::io::Error::new(
+        Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "debsign failed",
-        ));
+        ))
     } else {
         Ok(())
     }
