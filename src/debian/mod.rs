@@ -6,9 +6,11 @@ use pyo3::types::{PyBytes, PyDict};
 
 use std::path::Path;
 
-const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
+pub const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
 
 pub mod codemod;
+pub mod uploader;
+pub mod vcswatch;
 
 pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
     let debian_path = subpath.join("debian");

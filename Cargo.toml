@@ -19,16 +19,22 @@ pyo3-file = { workspace = true }
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
-clap = { version = "4.4.6", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive", "env"] }
 shlex = "1.2.0"
 env_logger = "0.10.0"
+trivialdb = { version = "0.1.4", optional = true }
+flate2 = { version = "1", optional = true }
+reqwest = { version = "0.11", optional = true, features = ["blocking"] }
+lazy-regex = "3.0.2"
+libc = "0.2.148"
+xdg = "2.5.2"
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
 default = [ "debian", "pyo3"]
-debian = [ "dep:debversion",]
+debian = [ "dep:debversion", "dep:trivialdb", "dep:flate2", "dep:reqwest" ]
 pyo3 = [ "dep:pyo3",]
 
 [dev-dependencies]
@@ -70,3 +76,4 @@ debian-changelog = "0.1.4"
 
 [[bin]]
 name = "svp"
+
