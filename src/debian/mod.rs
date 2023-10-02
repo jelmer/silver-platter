@@ -649,3 +649,17 @@ pub fn build(
         Ok(())
     })
 }
+
+pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
+    let mut cmd = std::process::Command::new("gbp");
+    cmd.arg("dch").arg("--ignore-branch");
+    cmd.current_dir(path);
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("gbp dch failed: {}", status),
+        ));
+    }
+    Ok(())
+}
