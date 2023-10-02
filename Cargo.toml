@@ -24,7 +24,8 @@ shlex = "1.2.0"
 env_logger = "0.10.0"
 trivialdb = { version = "0.1.4", optional = true }
 flate2 = { version = "1", optional = true }
-reqwest = { version = "0.11", optional = true }
+reqwest = { version = "0.11", optional = true, features = ["blocking"] }
+lazy-regex = "3.0.2"
 
 [workspace]
 members = [ "crates/*",]
