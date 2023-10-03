@@ -298,7 +298,7 @@ pub fn script_runner(
         if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
             let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
             {
-                Some((Some(name), Some(email))) => Some((name, email)),
+                Some(Some((name, email))) => Some((name, email)),
                 _ => None,
             };
 
