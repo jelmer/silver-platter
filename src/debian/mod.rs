@@ -2,7 +2,7 @@ use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::{ChangeLog, Urgency};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::PyDict;
 
 use std::path::Path;
 
@@ -90,7 +90,6 @@ pub fn add_changelog_entry(
     } else {
         debian_changelog::get_maintainer()
     };
-    let urgency = urgency.unwrap_or(Urgency::Medium);
     // TODO(jelmer): This logic should ideally be in python-debian.
     let f = tree.get_file(path).unwrap();
 

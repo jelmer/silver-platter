@@ -142,3 +142,11 @@ impl<'de> Deserialize<'de> for CommitPending {
         })
     }
 }
+
+pub trait CodemodResult {
+    fn context(&self) -> serde_json::Value;
+
+    fn tera_context(&self) -> tera::Context {
+        tera::Context::from_value(self.context()).unwrap()
+    }
+}

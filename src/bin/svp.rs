@@ -6,6 +6,7 @@ use silver_platter::candidates::Candidates;
 use silver_platter::codemod::{script_runner, CommandResult};
 use silver_platter::proposal::{MergeProposal, MergeProposalStatus};
 use silver_platter::publish::Error as PublishError;
+use silver_platter::CodemodResult;
 
 use silver_platter::Mode;
 use std::io::Write;
@@ -484,7 +485,12 @@ fn main() {
 
             let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
 
-            check_clean_tree(&local_tree, &local_tree.basis_tree(), subpath.as_path()).unwrap();
+            check_clean_tree(
+                &local_tree,
+                local_tree.basis_tree().as_ref(),
+                subpath.as_path(),
+            )
+            .unwrap();
 
             let result = match script_runner(
                 &local_tree,

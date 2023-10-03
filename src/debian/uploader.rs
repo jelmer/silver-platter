@@ -1,5 +1,3 @@
-use debversion::Version;
-use log::{debug, info};
 use std::path::Path;
 use trivialdb as tdb;
 

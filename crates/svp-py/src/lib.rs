@@ -378,7 +378,11 @@ fn debian_script_runner(
         subpath
             .as_ref()
             .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
-        commit_pending,
+        match commit_pending {
+            Some(true) => CommitPending::Yes,
+            Some(false) => CommitPending::No,
+            None => CommitPending::Auto,
+        },
         resume_metadata
             .map(|m| py_to_json(m.as_ref(py)).unwrap())
             .as_ref(),
@@ -972,7 +976,7 @@ fn check_proposal_diff(
 }
 
 #[pyfunction]
-fn get_maintainer_from_env(env: HashMap<String, String>) -> (Option<String>, Option<String>) {
+fn get_maintainer_from_env(env: HashMap<String, String>) -> Option<(String, String)> {
     debian_changelog::get_maintainer_from_env(|k| env.get(k).map(|s| s.to_string()))
 }
 
