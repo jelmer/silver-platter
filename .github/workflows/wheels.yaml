@@ -55,6 +55,8 @@ jobs:
             rustup target add all &&
             rustup show
           CIBW_BEFORE_BUILD_LINUX: >
+            if command -v yum; then yum -y install openssl-devel; fi &&
+            if command -v apk; then apk add openssl-dev pkgconfig; fi &&
             pip install -U setuptools-rust &&
             curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=nightly --profile=minimal -y &&
             rustup target add all &&
