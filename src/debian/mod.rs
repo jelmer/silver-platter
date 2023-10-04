@@ -1,8 +1,8 @@
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
-use debian_changelog::ChangeLog;
+use debian_changelog::{ChangeLog, Urgency};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::PyDict;
 
 use std::path::Path;
 
@@ -83,47 +83,21 @@ pub fn add_changelog_entry(
     summary: &[&str],
     maintainer: Option<&(String, String)>,
     timestamp: Option<chrono::DateTime<chrono::FixedOffset>>,
-    urgency: Option<&str>,
+    urgency: Option<Urgency>,
 ) {
     let maintainer = if let Some(maintainer) = maintainer {
         Some(maintainer.clone())
     } else {
-        let m = debian_changelog::get_maintainer();
-        Some((m.0.unwrap(), m.1.unwrap()))
+        debian_changelog::get_maintainer()
     };
-    let urgency = urgency.unwrap_or("medium");
     // TODO(jelmer): This logic should ideally be in python-debian.
-    let f = tree.get_file_text(path).unwrap();
-    let contents = Python::with_gil(|py| {
-        let f = PyBytes::new(py, f.as_slice());
-        let m = py.import("debian.changelog").unwrap();
-        let cl_cls = m.getattr("Changelog").unwrap();
-        let cl = cl_cls.call0().unwrap();
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("max_blocks", py.None()).unwrap();
-        kwargs.set_item("allow_empty_author", true).unwrap();
-        kwargs.set_item("strict", false).unwrap();
-        cl.call_method("parse_changelog", (f,), Some(kwargs))
-            .unwrap();
+    let f = tree.get_file(path).unwrap();
 
-        let m = py.import("debmutate.changelog").unwrap();
-        let _changelog_add_entry = m.getattr("changelog_add_entry").unwrap();
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("summary", summary).unwrap();
-        kwargs.set_item("maintainer", maintainer).unwrap();
-        kwargs.set_item("timestamp", timestamp).unwrap();
-        kwargs.set_item("urgency", urgency).unwrap();
-        _changelog_add_entry.call((cl,), Some(kwargs)).unwrap();
+    let mut cl = ChangeLog::read(f).unwrap();
 
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("allow_missing_author", true).unwrap();
-        cl.call_method("_format", (), Some(kwargs))
-            .unwrap()
-            .extract::<String>()
-            .unwrap()
-            .into_bytes()
-    });
-    tree.put_file_bytes_non_atomic(path, &contents).unwrap();
+    cl.auto_add_change(summary, maintainer.unwrap(), timestamp, urgency);
+    tree.put_file_bytes_non_atomic(path, cl.to_string().as_bytes())
+        .unwrap();
 }
 
 pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
@@ -648,4 +622,18 @@ pub fn build(
         cmd_builddeb.call((path,), Some(kwargs))?;
         Ok(())
     })
+}
+
+pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
+    let mut cmd = std::process::Command::new("gbp");
+    cmd.arg("dch").arg("--ignore-branch");
+    cmd.current_dir(path);
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("gbp dch failed: {}", status),
+        ));
+    }
+    Ok(())
 }

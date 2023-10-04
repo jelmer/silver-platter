@@ -1,4 +1,5 @@
 use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
+use crate::CommitPending;
 use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, WorkingTree};
 use breezyshim::RevisionId;
 use debian_changelog::get_maintainer_from_env;
@@ -17,6 +18,12 @@ pub struct CommandResult {
     pub target_branch_url: Option<Url>,
     pub old_revision: RevisionId,
     pub new_revision: RevisionId,
+}
+
+impl crate::CodemodResult for CommandResult {
+    fn context(&self) -> serde_json::Value {
+        self.context.clone().unwrap_or_default()
+    }
 }
 
 impl From<&CommandResult> for DetailedSuccess {
@@ -130,7 +137,7 @@ pub fn script_runner(
     local_tree: &WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
-    commit_pending: Option<bool>,
+    commit_pending: CommitPending,
     resume_metadata: Option<&serde_json::Value>,
     committer: Option<&str>,
     extra_env: Option<HashMap<String, String>>,
@@ -288,17 +295,21 @@ pub fn script_runner(
         tags
     };
 
-    let commit_pending = commit_pending.unwrap_or_else(|| {
-        // Automatically commit pending changes if the script did not
-        // touch the branch
-        last_revision == new_revision
-    });
+    let commit_pending = match commit_pending {
+        CommitPending::Yes => true,
+        CommitPending::No => false,
+        CommitPending::Auto => {
+            // Automatically commit pending changes if the script did not
+            // touch the branch
+            last_revision == new_revision
+        }
+    };
 
     if commit_pending {
         if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
             let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
             {
-                Some((Some(name), Some(email))) => Some((name, email)),
+                Some(Some((name, email))) => Some((name, email)),
                 _ => None,
             };
 

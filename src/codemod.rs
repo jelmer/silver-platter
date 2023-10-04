@@ -17,10 +17,9 @@ pub struct CommandResult {
     pub new_revision: RevisionId,
 }
 
-impl CommandResult {
-    pub fn tera_context(&self) -> tera::Context {
-        let context = self.context.as_ref().unwrap_or(&serde_json::Value::Null);
-        tera::Context::from_value(context.clone()).unwrap()
+impl crate::CodemodResult for CommandResult {
+    fn context(&self) -> serde_json::Value {
+        self.context.clone().unwrap_or_default()
     }
 }
 
