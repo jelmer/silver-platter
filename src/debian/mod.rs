@@ -637,3 +637,16 @@ pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
     }
     Ok(())
 }
+
+pub fn find_last_release_revid(
+    branch: &dyn breezyshim::branch::Branch,
+    version: debversion::Version,
+) -> PyResult<breezyshim::revisionid::RevisionId> {
+    Python::with_gil(|py| {
+        let m = py.import("breezy.plugins.debian.import_dsc")?;
+        let db = m
+            .getattr("DistributionBranch")?
+            .call1((branch.to_object(py), py.None()))?;
+        db.call_method1("revid_of_version", (version,))?.extract()
+    })
+}

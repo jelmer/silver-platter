@@ -8,7 +8,7 @@ use silver_platter::{CommitPending, Mode};
 use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 create_exception!(
     silver_platter.utils,
@@ -1021,6 +1021,17 @@ fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<Changelog
         .map(ChangelogBehaviour)
 }
 
+#[pyfunction]
+fn build(
+    tree: PyObject,
+    subpath: PathBuf,
+    builder: Option<&str>,
+    result_dir: Option<PathBuf>,
+) -> PyResult<()> {
+    let tree = WorkingTree::new(tree).unwrap();
+    silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
+}
+
 /// Check whether two branches are conflicted when merged.
 ///
 /// Args:
@@ -1130,6 +1141,7 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_debcargo_package, m)?)?;
     m.add_function(wrap_pyfunction!(control_files_in_root, m)?)?;
     m.add_function(wrap_pyfunction!(install_built_package, m)?)?;
+    m.add_function(wrap_pyfunction!(build, m)?)?;
 
     Ok(())
 }

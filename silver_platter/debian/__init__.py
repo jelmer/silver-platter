@@ -21,14 +21,12 @@ from breezy.branch import Branch
 from breezy.git.repository import GitRepository
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.changelog import debcommit
-from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
     vcs_field_to_bzr_url_converters,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.urlutils import InvalidURL
-from breezy.workingtree import WorkingTree
 from debmutate.vcs import split_vcs_url
 
 from debian.changelog import Version
@@ -43,6 +41,7 @@ from .._svp_rs import (
 )
 from .._svp_rs import (
     get_maintainer_from_env as _get_maintainer_from_env,
+    build,
 )
 from ..probers import select_probers
 from ..utils import open_branch
@@ -71,29 +70,6 @@ class NoSuchPackage(Exception):
 
 class NoVcsInformation(Exception):
     """Package does not have any Vcs headers."""
-
-
-def build(
-    tree: WorkingTree,
-    subpath: str = "",
-    builder: Optional[str] = None,
-    result_dir: Optional[str] = None,
-) -> None:
-    """Build a debian package in a directory.
-
-    Args:
-      tree: Working tree
-      subpath: Subpath to build in
-      builder: Builder command (e.g. 'sbuild', 'debuild')
-      result_dir: Directory to copy results to
-    """
-    if builder is None:
-        builder = DEFAULT_BUILDER
-    # TODO(jelmer): Refactor brz-debian so it's not necessary
-    # to call out to cmd_builddeb, but to lower-level
-    # functions instead.
-    cmd_builddeb().run(
-        [tree.abspath(subpath)], builder=builder, result_dir=result_dir)
 
 
 def apt_get_source_package(apt_repo, name: str) -> Deb822:
