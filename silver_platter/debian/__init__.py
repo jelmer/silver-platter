@@ -21,14 +21,12 @@ from breezy.branch import Branch
 from breezy.git.repository import GitRepository
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.changelog import debcommit
-from breezy.plugins.debian.cmds import cmd_builddeb
 from breezy.plugins.debian.directory import (
     source_package_vcs,
     vcs_field_to_bzr_url_converters,
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.urlutils import InvalidURL
-from breezy.workingtree import WorkingTree
 from debmutate.vcs import split_vcs_url
 
 from debian.changelog import Version
