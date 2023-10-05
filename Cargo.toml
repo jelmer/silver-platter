@@ -72,7 +72,7 @@ tera = "1"
 serde = "1.0.171"
 breezyshim = "0.1.34"
 url = "2.4.0"
-debian-changelog = "0.1.4"
+debian-changelog = "0.1.10"
 
 [[bin]]
 name = "svp"
