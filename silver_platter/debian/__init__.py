@@ -83,7 +83,7 @@ def apt_get_source_package(apt_repo, name: str) -> Deb822:
     by_version: Dict[Version, Deb822] = {}
 
     for source in apt_repo.iter_source_by_name(name):
-        by_version[source['Version']] = source
+        by_version[source["Version"]] = source
 
     if len(by_version) == 0:
         raise NoSuchPackage(name)
@@ -105,13 +105,15 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
 
 
 def open_packaging_branch(
-        location, possible_transports=None, vcs_type=None, apt_repo=None):
+    location, possible_transports=None, vcs_type=None, apt_repo=None
+):
     """Open a packaging branch from a location string.
 
     location can either be a package name or a full URL
     """
     if apt_repo is None:
         from breezy.plugins.debian.apt_repo import LocalApt
+
         apt_repo = LocalApt()
     if "/" not in location and ":" not in location:
         with apt_repo:
@@ -130,14 +132,15 @@ def open_packaging_branch(
         subpath = ""
     probers = select_probers(vcs_type)
     branch = open_branch(
-        url, possible_transports=possible_transports, probers=probers,
-        name=branch_name
+        url,
+        possible_transports=possible_transports,
+        probers=probers,
+        name=branch_name,
     )
     return branch, subpath or ""
 
 
-def pick_additional_colocated_branches(
-        main_branch: Branch) -> Dict[str, str]:
+def pick_additional_colocated_branches(main_branch: Branch) -> Dict[str, str]:
     ret = {
         "pristine-tar": "pristine-tar",
         "pristine-lfs": "pristine-lfs",
@@ -158,7 +161,8 @@ class Workspace(_mod_workspace.Workspace):
             if "additional_colocated_branches" not in kwargs:
                 kwargs["additional_colocated_branches"] = {}
             kwargs["additional_colocated_branches"].update(
-                pick_additional_colocated_branches(main_branch))
+                pick_additional_colocated_branches(main_branch)
+            )
         super().__init__(main_branch, *args, **kwargs)
 
     @classmethod
@@ -179,8 +183,19 @@ class Workspace(_mod_workspace.Workspace):
             result_dir=result_dir,
         )
 
-    def commit(self, message=None, subpath="", paths=None, committer=None,
-               reporter=None):
+    def commit(
+        self,
+        message=None,
+        subpath="",
+        paths=None,
+        committer=None,
+        reporter=None,
+    ):
         return debcommit(
-            self.local_tree, committer=committer, subpath=subpath,
-            paths=paths, reporter=reporter, message=message)
+            self.local_tree,
+            committer=committer,
+            subpath=subpath,
+            paths=paths,
+            reporter=reporter,
+            message=message,
+        )

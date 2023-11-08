@@ -105,8 +105,8 @@ class NoUnuploadedChanges(Exception):
     def __init__(self, archive_version) -> None:
         self.archive_version = archive_version
         super().__init__(
-            "nothing to upload, latest version is in archive: %s" %
-            archive_version
+            "nothing to upload, latest version is in archive: %s"
+            % archive_version
         )
 
 
@@ -116,8 +116,8 @@ class NoUnreleasedChanges(Exception):
     def __init__(self, version) -> None:
         self.version = version
         super().__init__(
-            "nothing to upload, latest version in vcs is not unreleased: %s" %
-            version
+            "nothing to upload, latest version in vcs is not unreleased: %s"
+            % version
         )
 
 
@@ -177,8 +177,7 @@ def check_revision(rev, min_commit_age, allowed_committers):
     try:
         committer_email = extract_email_address(rev.committer)
     except NoEmailInUsername as e:
-        logging.warning(
-            'Unable to extract email from %r', rev.committer)
+        logging.warning("Unable to extract email from %r", rev.committer)
         raise CommitterNotAllowed(rev.committer, allowed_committers) from e
     if allowed_committers and committer_email not in allowed_committers:
         raise CommitterNotAllowed(committer_email, allowed_committers)
@@ -191,7 +190,8 @@ def find_last_release_revid(branch, version):
 
 def get_maintainer_keys(context):
     for key in context.keylist(
-            source="/usr/share/keyrings/debian-keyring.gpg"):
+        source="/usr/share/keyrings/debian-keyring.gpg"
+    ):
         yield key.fpr
         for subkey in key.subkeys:
             yield subkey.keyid
@@ -221,11 +221,10 @@ def prepare_upload_package(  # noqa: C901
     try:
         from lintian_brush.detect_gbp_dch import guess_update_changelog
     except ImportError:
-        run_gbp_dch = True   # Let's just try
+        run_gbp_dch = True  # Let's just try
     else:
         cl_behaviour = guess_update_changelog(local_tree, debian_path)
-        run_gbp_dch = (
-            cl_behaviour is None or not cl_behaviour.update_changelog)
+        run_gbp_dch = cl_behaviour is None or not cl_behaviour.update_changelog
     if run_gbp_dch:
         try:
             gbp_dch(local_tree.abspath(subpath))
@@ -235,21 +234,27 @@ def prepare_upload_package(  # noqa: C901
             # "dpkg --lt None <old-version>"
             raise GbpDchFailed()
         local_tree.commit(
-            specific_files=[os.path.join(debian_path, 'changelog')],
-            message='update changelog\n\nGbp-Dch: Ignore')
+            specific_files=[os.path.join(debian_path, "changelog")],
+            message="update changelog\n\nGbp-Dch: Ignore",
+        )
     cl, top_level = find_changelog(local_tree, merge=False, max_blocks=None)
-    if (last_uploaded_version is not None
-            and cl.version == last_uploaded_version):
+    if (
+        last_uploaded_version is not None
+        and cl.version == last_uploaded_version
+    ):
         raise NoUnuploadedChanges(cl.version)
     try:
         previous_version_in_branch = changelog_find_previous_upload(cl)
     except NoPreviousUpload:
         pass
     else:
-        if (last_uploaded_version is not None and
-                last_uploaded_version > previous_version_in_branch):
+        if (
+            last_uploaded_version is not None
+            and last_uploaded_version > previous_version_in_branch
+        ):
             raise LastUploadMoreRecent(
-                last_uploaded_version, previous_version_in_branch)
+                last_uploaded_version, previous_version_in_branch
+            )
 
     if last_uploaded_version is not None:
         logging.info("Checking revisions since %s", last_uploaded_version)
@@ -280,7 +285,8 @@ def prepare_upload_package(  # noqa: C901
             for revid, code, _key in result:
                 if code != gpg.SIGNATURE_VALID:
                     raise Exception(
-                        "No valid GPG signature on %r: %d" % (revid, code))
+                        "No valid GPG signature on %r: %d" % (revid, code)
+                    )
         for _revid, rev in local_tree.branch.repository.iter_revisions(revids):
             if rev is not None:
                 check_revision(rev, min_commit_age, allowed_committers)
@@ -298,7 +304,8 @@ def prepare_upload_package(  # noqa: C901
         # TODO(jelmer): determine whether this is a NMU upload
     if qa_upload or team_upload:
         changelog_path = local_tree.abspath(
-            os.path.join(debian_path, "changelog"))
+            os.path.join(debian_path, "changelog")
+        )
         with ChangelogEditor(changelog_path) as e:
             if qa_upload:
                 changeblock_ensure_first_line(e[0], "QA upload.")
@@ -323,13 +330,18 @@ def prepare_upload_package(  # noqa: C901
     target_dir = tempfile.mkdtemp()
     if last_uploaded_version is not None:
         builder = builder.replace(
-            "${LAST_VERSION}", str(last_uploaded_version))
+            "${LAST_VERSION}", str(last_uploaded_version)
+        )
     target_changes = _build_helper(
-        local_tree, subpath, local_tree.branch, target_dir, builder=builder,
-        apt=apt
+        local_tree,
+        subpath,
+        local_tree.branch,
+        target_dir,
+        builder=builder,
+        apt=apt,
     )
-    debsign(target_changes['source'])
-    return target_changes['source'], tag_name
+    debsign(target_changes["source"])
+    return target_changes["source"], tag_name
 
 
 def select_apt_packages(apt_repo, package_names, maintainer):
@@ -338,27 +350,25 @@ def select_apt_packages(apt_repo, package_names, maintainer):
     with apt_repo:
         for source in apt_repo.iter_sources():
             if maintainer:
-                fullname, email = parseaddr(source['Maintainer'])
+                fullname, email = parseaddr(source["Maintainer"])
                 if email not in maintainer:
                     continue
 
-            if package_names and source['Package'] not in package_names:
+            if package_names and source["Package"] not in package_names:
                 continue
 
-            packages.append(source['Package'])
+            packages.append(source["Package"])
 
         return packages
 
 
 class PackageProcessingFailure(Exception):
-
     def __init__(self, reason, description=None) -> None:
         self.reason = reason
         self.description = description
 
 
 class PackageIgnored(Exception):
-
     def __init__(self, reason, description=None) -> None:
         self.reason = reason
         self.description = description
@@ -366,16 +376,16 @@ class PackageIgnored(Exception):
 
 def check_git_commits(vcslog, min_commit_age, allowed_committers):
     class GitRevision:
-
         @property
         def committer(self):
-            return self.headers.get('Committer') or self.headers.get('Author')
+            return self.headers.get("Committer") or self.headers.get("Author")
 
         @property
         def timestamp(self):
-            datestr = self.headers.get('Date')
+            datestr = self.headers.get("Date")
             dt = datetime.datetime.strptime(
-                datestr.strip(), "%a %b %d %H:%M:%S %Y %z")
+                datestr.strip(), "%a %b %d %H:%M:%S %Y %z"
+            )
             return dt.timestamp()
 
         def __init__(self, commit_id, headers, message) -> None:
@@ -389,26 +399,24 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
             message = []
             headers = {}
             for i, line in enumerate(lines):
-                if line.startswith('commit '):
-                    commit_id = line[len('commit '):]
-                elif line == '':
-                    message = lines[i+1:]
+                if line.startswith("commit "):
+                    commit_id = line[len("commit ") :]
+                elif line == "":
+                    message = lines[i + 1 :]
                     break
                 else:
-                    name, value = line.split(': ')
+                    name, value = line.split(": ")
                     headers[name] = value
             return cls(commit_id, headers, message)
 
     last_commit_ts = None
     lines = []
     for line in vcslog.splitlines():
-        if line == '' and lines[-1][0].isspace():
+        if line == "" and lines[-1][0].isspace():
             gitrev = GitRevision.from_lines(lines)
             if last_commit_ts is None:
                 last_commit_ts = gitrev.timestamp
-            check_revision(
-                gitrev, min_commit_age,
-                allowed_committers)
+            check_revision(gitrev, min_commit_age, allowed_committers)
             lines = []
         else:
             lines.append(line)
@@ -421,13 +429,24 @@ def check_git_commits(vcslog, min_commit_age, allowed_committers):
 
 
 def process_package(
-        apt_repo, package,
-        builder: str, *, exclude=None, autopkgtest_only: bool = False,
-        gpg_verification: bool = False,
-        acceptable_keys=None, debug: bool = False,
-        diff: bool = False, min_commit_age=None, allowed_committers=None,
-        vcs_type=None, vcs_url=None, source_name=None,
-        archive_version=None, verify_command: Optional[str] = None):
+    apt_repo,
+    package,
+    builder: str,
+    *,
+    exclude=None,
+    autopkgtest_only: bool = False,
+    gpg_verification: bool = False,
+    acceptable_keys=None,
+    debug: bool = False,
+    diff: bool = False,
+    min_commit_age=None,
+    allowed_committers=None,
+    vcs_type=None,
+    vcs_url=None,
+    source_name=None,
+    archive_version=None,
+    verify_command: Optional[str] = None,
+):
     if exclude is None:
         exclude = set()
     logging.info("Processing %s", package)
@@ -439,20 +458,20 @@ def process_package(
                 pkg_source = apt_get_source_package(apt_repo, package)
         except NoSuchPackage:
             logging.info("%s: package not found in apt", package)
-            raise PackageProcessingFailure('not-in-apt')
+            raise PackageProcessingFailure("not-in-apt")
         if vcs_type is None or vcs_url is None:
             try:
                 vcs_type, vcs_url = source_package_vcs(pkg_source)
             except KeyError:
                 logging.info(
                     "%s: no declared vcs location, skipping",
-                    pkg_source["Package"]
+                    pkg_source["Package"],
                 )
-                raise PackageProcessingFailure('not-in-vcs')
+                raise PackageProcessingFailure("not-in-vcs")
         if source_name is None:
             source_name = pkg_source["Package"]
         if source_name in exclude:
-            raise PackageIgnored('excluded')
+            raise PackageIgnored("excluded")
         if archive_version is None:
             archive_version = pkg_source["Version"]
         has_testsuite = "Testsuite" in pkg_source
@@ -465,33 +484,31 @@ def process_package(
         subpath = ""
     probers = select_probers(vcs_type)
     try:
-        main_branch = open_branch(
-            location, probers=probers, name=branch_name)
+        main_branch = open_branch(location, probers=probers, name=branch_name)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
         if debug:
             logging.exception("%s: %s", vcs_url, e)
         else:
-            logging.info(
-                "%s: branch unavailable: %s", vcs_url, e)
-        raise PackageProcessingFailure('vcs-inaccessible')
+            logging.info("%s: branch unavailable: %s", vcs_url, e)
+        raise PackageProcessingFailure("vcs-inaccessible")
     with Workspace(main_branch) as ws:
         if source_name is None:
             with ControlEditor(
-                ws.local_tree.abspath(
-                    os.path.join(subpath, "debian/control"))
+                ws.local_tree.abspath(os.path.join(subpath, "debian/control"))
             ) as ce:
                 source_name = ce.source["Source"]
                 try:
                     with apt_repo:
                         pkg_source = apt_get_source_package(
-                            apt_repo, source_name)
+                            apt_repo, source_name
+                        )
                 except NoSuchPackage:
                     logging.info("%s: package not found in apt", package)
-                    raise PackageProcessingFailure('not-in-apt')
-                archive_version = pkg_source['Version']
+                    raise PackageProcessingFailure("not-in-apt")
+                archive_version = pkg_source["Version"]
             has_testsuite = "Testsuite" in ce.source
         if source_name in exclude:
-            raise PackageIgnored('excluded')
+            raise PackageIgnored("excluded")
         if (
             autopkgtest_only
             and not has_testsuite
@@ -500,14 +517,16 @@ def process_package(
             )
         ):
             logging.info(
-                "%s: Skipping, package has no autopkgtest.", source_name)
-            raise PackageIgnored('no-autopkgtest')
+                "%s: Skipping, package has no autopkgtest.", source_name
+            )
+            raise PackageIgnored("no-autopkgtest")
         branch_config = ws.local_tree.branch.get_config_stack()
         if gpg_verification:
             gpg_strategy = gpg.GPGStrategy(branch_config)
             if not acceptable_keys:
                 acceptable_keys = list(
-                    get_maintainer_keys(gpg_strategy.context))
+                    get_maintainer_keys(gpg_strategy.context)
+                )
             gpg_strategy.set_acceptable_keys(",".join(acceptable_keys))
         else:
             gpg_strategy = None
@@ -526,16 +545,17 @@ def process_package(
             )
         except GbpDchFailed as e:
             logging.warn("%s: 'gbp dch' failed to run: %s", source_name, e)
-            raise PackageProcessingFailure('gbp-dch-failed')
+            raise PackageProcessingFailure("gbp-dch-failed")
         except MissingUpstreamTarball as e:
-            logging.warning(
-                "%s: missing upstream tarball: %s", source_name, e)
-            raise PackageProcessingFailure('missing-upstream-tarball')
+            logging.warning("%s: missing upstream tarball: %s", source_name, e)
+            raise PackageProcessingFailure("missing-upstream-tarball")
         except BranchRateLimited as e:
             logging.warning(
-                '%s: rate limited by server (retrying after %s)',
-                source_name, e.retry_after)
-            raise PackageProcessingFailure('rate-limited')
+                "%s: rate limited by server (retrying after %s)",
+                source_name,
+                e.retry_after,
+            )
+            raise PackageProcessingFailure("rate-limited")
         except CommitterNotAllowed as e:
             logging.warn(
                 "%s: committer %s not in allowed list: %r",
@@ -543,10 +563,10 @@ def process_package(
                 e.committer,
                 e.allowed_committers,
             )
-            raise PackageIgnored('committer-not-allowed')
+            raise PackageIgnored("committer-not-allowed")
         except BuildFailedError as e:
             logging.warn("%s: package failed to build: %s", source_name, e)
-            raise PackageProcessingFailure('build-failed')
+            raise PackageProcessingFailure("build-failed")
         except LastReleaseRevisionNotFound as e:
             logging.warn(
                 "%s: Unable to find revision matching last release "
@@ -554,7 +574,7 @@ def process_package(
                 source_name,
                 e.version,
             )
-            raise PackageProcessingFailure('last-release-missing')
+            raise PackageProcessingFailure("last-release-missing")
         except LastUploadMoreRecent as e:
             logging.warn(
                 "%s: Last upload (%s) was more recent than VCS (%s)",
@@ -562,35 +582,39 @@ def process_package(
                 e.archive_version,
                 e.vcs_version,
             )
-            raise PackageProcessingFailure('last-upload-not-in-vcs')
+            raise PackageProcessingFailure("last-upload-not-in-vcs")
         except ChangelogParseError as e:
             logging.info("%s: Error parsing changelog: %s", source_name, e)
-            raise PackageProcessingFailure('changelog-parse-error')
+            raise PackageProcessingFailure("changelog-parse-error")
         except MissingChangelogError:
             logging.info("%s: No changelog found, skipping.", source_name)
-            raise PackageProcessingFailure('missing-changelog')
+            raise PackageProcessingFailure("missing-changelog")
         except GeneratedChangelogFile:
             logging.info(
                 "%s: Changelog is generated and unable to update, skipping.",
-                source_name)
-            raise PackageProcessingFailure('generated-changelog')
+                source_name,
+            )
+            raise PackageProcessingFailure("generated-changelog")
         except RecentCommits as e:
             logging.info(
                 "%s: Recent commits (%d days), skipping.",
-                source_name, e.commit_age
+                source_name,
+                e.commit_age,
             )
-            raise PackageIgnored('recent-commits')
+            raise PackageIgnored("recent-commits")
         except NoUnuploadedChanges as e:
-            logging.info("%s: No unuploaded changes (%s), skipping.",
-                         source_name, e.archive_version)
-            raise PackageIgnored('no-unuploaded-changes')
-        except NoUnreleasedChanges:
             logging.info(
-                "%s: No unreleased changes, skipping.", source_name)
-            raise PackageIgnored('no-unreleased-changes')
+                "%s: No unuploaded changes (%s), skipping.",
+                source_name,
+                e.archive_version,
+            )
+            raise PackageIgnored("no-unuploaded-changes")
+        except NoUnreleasedChanges:
+            logging.info("%s: No unreleased changes, skipping.", source_name)
+            raise PackageIgnored("no-unreleased-changes")
         except MissingNestedTree:
-            logging.exception('missing nested tree')
-            raise PackageIgnored('unsuported-nested-tree')
+            logging.exception("missing nested tree")
+            raise PackageIgnored("unsuported-nested-tree")
 
         if verify_command:
             try:
@@ -598,15 +622,18 @@ def process_package(
             except subprocess.CalledProcessError as e:
                 if e.returncode == 1:
                     raise PackageIgnored(
-                        'verify-command-declined',
+                        "verify-command-declined",
                         "{}: Verify command {!r} declined upload".format(
-                            source_name, verify_command))
+                            source_name, verify_command
+                        ),
+                    )
                 else:
                     raise PackageProcessingFailure(
-                        'verify-command-error',
+                        "verify-command-error",
                         f"{source_name}: "
                         f"Error running verify command {verify_command}: "
-                        f"returncode {e.returncode}")
+                        f"returncode {e.returncode}",
+                    )
 
         tags = []
         if tag_name is not None:
@@ -617,9 +644,9 @@ def process_package(
         except PermissionDenied:
             logging.info(
                 "%s: Permission denied pushing to branch, skipping.",
-                source_name
+                source_name,
             )
-            raise PackageProcessingFailure('vcs-permission-denied')
+            raise PackageProcessingFailure("vcs-permission-denied")
         dput_changes(target_changes)
         if diff:
             sys.stdout.flush()
@@ -628,31 +655,34 @@ def process_package(
 
 
 def vcswatch_prescan_package(
-        package, vw, exclude=None, min_commit_age=None,
-        allowed_committers=None):
+    package, vw, exclude=None, min_commit_age=None, allowed_committers=None
+):
     vcs_url = vw["url"]
     vcs_type = vw["vcs"]
     source_name = vw["package"]
     if source_name in exclude:
-        raise PackageIgnored('excluded')
+        raise PackageIgnored("excluded")
     if vcs_url is None or vcs_type is None:
-        raise PackageProcessingFailure('not-in-vcs')
+        raise PackageProcessingFailure("not-in-vcs")
     # TODO(jelmer): check autopkgtest_only ?
     # from debian.deb822 import Deb822
     # pkg_source = Deb822(vw["controlfile"])
     # has_testsuite = "Testsuite" in pkg_source
     if vw["commits"] == 0:
-        raise PackageIgnored('no-unuploaded-changes')
-    if vw['status'] == 'ERROR':
+        raise PackageIgnored("no-unuploaded-changes")
+    if vw["status"] == "ERROR":
         logging.warning(
-            'vcswatch: unable to access %s: %s', vw['package'], vw['error'])
-        raise PackageProcessingFailure('vcs-inaccessible')
+            "vcswatch: unable to access %s: %s", vw["package"], vw["error"]
+        )
+        raise PackageProcessingFailure("vcs-inaccessible")
     logging.debug("vcswatch last scanned at: %s", vw["last_scan"])
-    if vcs_type == 'Git' and vw["vcslog"] is not None:
+    if vcs_type == "Git" and vw["vcslog"] is not None:
         try:
             return check_git_commits(
-                vw["vcslog"], min_commit_age=min_commit_age,
-                allowed_committers=allowed_committers)
+                vw["vcslog"],
+                min_commit_age=min_commit_age,
+                allowed_committers=allowed_committers,
+            )
         except CommitterNotAllowed as e:
             logging.warn(
                 "%s: committer %s not in allowed list: %r",
@@ -660,32 +690,39 @@ def vcswatch_prescan_package(
                 e.committer,
                 e.allowed_committers,
             )
-            raise PackageIgnored('committer-not-allowed')
+            raise PackageIgnored("committer-not-allowed")
         except RecentCommits as e:
             logging.info(
                 "%s: Recent commits (%d days), skipping.",
-                source_name, e.commit_age
+                source_name,
+                e.commit_age,
             )
-            raise PackageIgnored('recent-commits')
+            raise PackageIgnored("recent-commits")
     return None
 
 
 def vcswatch_prescan_packages(
-        packages, inc_stats: Callable[[str], None],
-        exclude=None, min_commit_age=None,
-        allowed_committers=None):
-    logging.info('Using vcswatch to prescan %d packages', len(packages))
+    packages,
+    inc_stats: Callable[[str], None],
+    exclude=None,
+    min_commit_age=None,
+    allowed_committers=None,
+):
+    logging.info("Using vcswatch to prescan %d packages", len(packages))
     import gzip
     import json
     from urllib.request import Request, urlopen
 
     from .. import version_string
+
     url = "https://qa.debian.org/data/vcswatch/vcswatch.json.gz"
-    request = Request(url, headers={
-        'User-Agent': "silver-platter/%s" % version_string})
+    request = Request(
+        url, headers={"User-Agent": "silver-platter/%s" % version_string}
+    )
     vcswatch = {
-        p['package']: p
-        for p in json.load(gzip.GzipFile(fileobj=urlopen(request)))}
+        p["package"]: p
+        for p in json.load(gzip.GzipFile(fileobj=urlopen(request)))
+    }
     by_ts = {}
     failures = 0
     for package in packages:
@@ -695,9 +732,12 @@ def vcswatch_prescan_packages(
             continue
         try:
             ts = vcswatch_prescan_package(
-                    package, vw,
-                    exclude=exclude, min_commit_age=min_commit_age,
-                    allowed_committers=allowed_committers)
+                package,
+                vw,
+                exclude=exclude,
+                min_commit_age=min_commit_age,
+                allowed_committers=allowed_committers,
+            )
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             failures += 1
@@ -705,10 +745,16 @@ def vcswatch_prescan_packages(
             inc_stats(e.reason)
         else:
             by_ts[package] = ts
-    return ([k for (k, v) in
-             sorted(by_ts.items(), key=lambda k: k[1] or 0, reverse=True)],
-            failures,
-            vcswatch)
+    return (
+        [
+            k
+            for (k, v) in sorted(
+                by_ts.items(), key=lambda k: k[1] or 0, reverse=True
+            )
+        ],
+        failures,
+        vcswatch,
+    )
 
 
 def open_last_attempt_db():
@@ -719,11 +765,15 @@ def open_last_attempt_db():
         return None
     else:
         last_attempt_path = os.path.join(
-            xdg_data_home, 'silver-platter', 'last-upload-attempt.tdb')
+            xdg_data_home, "silver-platter", "last-upload-attempt.tdb"
+        )
         os.makedirs(os.path.dirname(last_attempt_path), exist_ok=True)
         return tdb.open(
-            last_attempt_path, tdb_flags=tdb.DEFAULT,
-            flags=os.O_RDWR | os.O_CREAT, mode=0o600)
+            last_attempt_path,
+            tdb_flags=tdb.DEFAULT,
+            flags=os.O_RDWR | os.O_CREAT,
+            mode=0o600,
+        )
 
 
 def main(argv):  # noqa: C901
@@ -769,11 +819,14 @@ def main(argv):  # noqa: C901
         "--vcswatch",
         action="store_true",
         default=False,
-        help="Use vcswatch to determine what packages need uploading."
+        help="Use vcswatch to determine what packages need uploading.",
     )
     parser.add_argument(
-        "--exclude", type=str, action="append", default=[],
-        help="Ignore source package"
+        "--exclude",
+        type=str,
+        action="append",
+        default=[],
+        help="Ignore source package",
     )
     parser.add_argument(
         "--autopkgtest-only",
@@ -786,28 +839,38 @@ def main(argv):  # noqa: C901
         action="append",
         help="Require that all new commits are from specified committers",
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true")
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument(
         "--shuffle",
         action="store_true",
-        help="Randomize order packages are processed in.")
+        help="Randomize order packages are processed in.",
+    )
     parser.add_argument(
-        "--verify-command", type=str, default=None,
-        help=("Command to verify whether upload is necessary. "
-              "Should return 1 to decline, 0 to upload."))
+        "--verify-command",
+        type=str,
+        default=None,
+        help=(
+            "Command to verify whether upload is necessary. "
+            "Should return 1 to decline, 0 to upload."
+        ),
+    )
     parser.add_argument(
-        '--apt-repository', type=str,
-        help='APT repository to use. Defaults to locally configured.',
+        "--apt-repository",
+        type=str,
+        help="APT repository to use. Defaults to locally configured.",
         default=(
-            os.environ.get('APT_REPOSITORY')
-            or os.environ.get('REPOSITORIES')))
+            os.environ.get("APT_REPOSITORY") or os.environ.get("REPOSITORIES")
+        ),
+    )
     parser.add_argument(
-        '--apt-repository-key', type=str,
-        help=('APT repository key to use for validation, '
-              'if --apt-repository is set.'),
-        default=os.environ.get('APT_REPOSITORY_KEY'))
+        "--apt-repository-key",
+        type=str,
+        help=(
+            "APT repository key to use for validation, "
+            "if --apt-repository is set."
+        ),
+        default=os.environ.get("APT_REPOSITORY_KEY"),
+    )
 
     args = parser.parse_args(argv)
 
@@ -830,16 +893,19 @@ def main(argv):  # noqa: C901
 
     if args.apt_repository:
         apt_repo = RemoteApt.from_string(
-            args.apt_repository, args.apt_repository_key)
+            args.apt_repository, args.apt_repository_key
+        )
     else:
         apt_repo = LocalApt()
 
     if args.maintainer:
         if args.packages:
             parser.print_error(
-                '--maintainer is incompatible with specifying package names')
+                "--maintainer is incompatible with specifying package names"
+            )
         packages = select_apt_packages(
-            apt_repo, args.packages, args.maintainer)
+            apt_repo, args.packages, args.maintainer
+        )
     else:
         packages = args.packages
 
@@ -850,6 +916,7 @@ def main(argv):  # noqa: C901
 
     if args.shuffle:
         import random
+
         random.shuffle(packages)
 
     stats = {}
@@ -860,9 +927,12 @@ def main(argv):  # noqa: C901
 
     if args.vcswatch:
         packages, failures, extra_data = vcswatch_prescan_packages(
-            packages, inc_stats, exclude=args.exclude,
+            packages,
+            inc_stats,
+            exclude=args.exclude,
             min_commit_age=args.min_commit_age,
-            allowed_committers=args.allowed_committer)
+            allowed_committers=args.allowed_committer,
+        )
         if failures > 0:
             ret = 1
     else:
@@ -870,7 +940,8 @@ def main(argv):  # noqa: C901
 
     if len(packages) > 1:
         logging.info(
-            "Uploading %d packages: %s", len(packages), ", ".join(packages))
+            "Uploading %d packages: %s", len(packages), ", ".join(packages)
+        )
 
     last_attempt = open_last_attempt_db()
 
@@ -879,32 +950,38 @@ def main(argv):  # noqa: C901
 
         def last_attempt_key(p):
             try:
-                t = int(last_attempt[p.encode('utf-8')])
+                t = int(last_attempt[p.encode("utf-8")])
             except KeyError:
                 t = 0
             return (t, orig_packages.index(p))
+
         packages.sort(key=last_attempt_key)
 
     for package in packages:
-        vcs_type = extra_data.get(package, {}).get('vcs_type')
-        vcs_url = extra_data.get(package, {}).get('vcs_url')
-        archive_version = extra_data.get(package, {}).get('archive_version')
-        source_name = extra_data.get(package, {}).get('package')
+        vcs_type = extra_data.get(package, {}).get("vcs_type")
+        vcs_url = extra_data.get(package, {}).get("vcs_url")
+        archive_version = extra_data.get(package, {}).get("archive_version")
+        source_name = extra_data.get(package, {}).get("package")
 
         try:
             process_package(
-                apt_repo, package,
-                builder=args.builder, exclude=args.exclude,
+                apt_repo,
+                package,
+                builder=args.builder,
+                exclude=args.exclude,
                 autopkgtest_only=args.autopkgtest_only,
                 gpg_verification=args.gpg_verification,
                 acceptable_keys=args.acceptable_keys,
                 debug=args.debug,
-                diff=args.diff, min_commit_age=args.min_commit_age,
+                diff=args.diff,
+                min_commit_age=args.min_commit_age,
                 allowed_committers=args.allowed_committer,
-                vcs_type=vcs_type, vcs_url=vcs_url,
+                vcs_type=vcs_type,
+                vcs_url=vcs_url,
                 archive_version=archive_version,
                 source_name=source_name,
-                verify_command=args.verify_command)
+                verify_command=args.verify_command,
+            )
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
             ret = 1
@@ -912,12 +989,12 @@ def main(argv):  # noqa: C901
             inc_stats(e.reason)
 
         if last_attempt:
-            last_attempt[package.encode('utf-8')] = b'%d' % (time.time())
+            last_attempt[package.encode("utf-8")] = b"%d" % (time.time())
 
     if len(packages) > 1:
-        logging.info('Results:')
+        logging.info("Results:")
         for error, c in stats.items():
-            logging.info('  %s: %d', error, c)
+            logging.info("  %s: %d", error, c)
 
     return ret
 

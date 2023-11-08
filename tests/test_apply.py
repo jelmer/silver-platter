@@ -23,81 +23,109 @@ from silver_platter.apply import ScriptMadeNoChanges, script_runner
 
 
 class TestScriptRunner(TestCaseWithTransport):
-
     def test_no_api(self):
-        tree = self.make_branch_and_tree('t')
-        self.build_tree_contents([
-            ('script.sh', """\
+        tree = self.make_branch_and_tree("t")
+        self.build_tree_contents(
+            [
+                (
+                    "script.sh",
+                    """\
 #!/bin/sh
 echo foo > bar
 echo Did a thing
-"""),
-            ('t/bar', 'initial')])
-        os.chmod('script.sh', 0o755)
-        tree.add('bar')
-        old_revid = tree.commit('initial')
+""",
+                ),
+                ("t/bar", "initial"),
+            ]
+        )
+        os.chmod("script.sh", 0o755)
+        tree.add("bar")
+        old_revid = tree.commit("initial")
         result = script_runner(
             tree,
-            script=os.path.abspath('script.sh'),
-            committer='Joe Example <joe@example.com>')
+            script=os.path.abspath("script.sh"),
+            committer="Joe Example <joe@example.com>",
+        )
         self.assertFalse(tree.has_changes())
         self.assertEqual(result.old_revision, old_revid)
         self.assertEqual(result.new_revision, tree.last_revision())
-        self.assertEqual(result.description, 'Did a thing\n')
+        self.assertEqual(result.description, "Did a thing\n")
 
     def test_api(self):
-        tree = self.make_branch_and_tree('t')
-        self.build_tree_contents([
-            ('script.sh', """\
+        tree = self.make_branch_and_tree("t")
+        self.build_tree_contents(
+            [
+                (
+                    "script.sh",
+                    """\
 #!/bin/sh
 echo foo > bar
 echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
-"""),
-            ('t/bar', 'initial')])
-        os.chmod('script.sh', 0o755)
-        tree.add('bar')
-        old_revid = tree.commit('initial')
+""",
+                ),
+                ("t/bar", "initial"),
+            ]
+        )
+        os.chmod("script.sh", 0o755)
+        tree.add("bar")
+        old_revid = tree.commit("initial")
         result = script_runner(
             tree,
-            script=os.path.abspath('script.sh'),
-            committer='Joe Example <joe@example.com>')
+            script=os.path.abspath("script.sh"),
+            committer="Joe Example <joe@example.com>",
+        )
         self.assertFalse(tree.has_changes())
         self.assertEqual(result.old_revision, old_revid)
         self.assertEqual(result.new_revision, tree.last_revision())
-        self.assertEqual(result.description, 'Did a thing')
+        self.assertEqual(result.description, "Did a thing")
 
     def test_new_file(self):
-        tree = self.make_branch_and_tree('t')
-        self.build_tree_contents([
-            ('script.sh', """\
+        tree = self.make_branch_and_tree("t")
+        self.build_tree_contents(
+            [
+                (
+                    "script.sh",
+                    """\
 #!/bin/sh
 echo foo > bar
 echo Did a thing
-""")])
-        os.chmod('script.sh', 0o755)
-        old_revid = tree.commit('initial')
+""",
+                )
+            ]
+        )
+        os.chmod("script.sh", 0o755)
+        old_revid = tree.commit("initial")
         result = script_runner(
             tree,
-            script=os.path.abspath('script.sh'),
-            committer='Joe Example <joe@example.com>')
+            script=os.path.abspath("script.sh"),
+            committer="Joe Example <joe@example.com>",
+        )
         self.assertFalse(tree.has_changes())
         self.assertEqual(result.old_revision, old_revid)
         self.assertEqual(result.new_revision, tree.last_revision())
-        self.assertEqual(result.description, 'Did a thing\n')
+        self.assertEqual(result.description, "Did a thing\n")
 
     def test_no_changes(self):
-        tree = self.make_branch_and_tree('t')
-        self.build_tree_contents([
-            ('script.sh', """\
+        tree = self.make_branch_and_tree("t")
+        self.build_tree_contents(
+            [
+                (
+                    "script.sh",
+                    """\
 #!/bin/sh
 echo Did a thing
-"""),
-            ('t/bar', 'initial')])
-        os.chmod('script.sh', 0o755)
-        tree.add('bar')
-        tree.commit('initial')
+""",
+                ),
+                ("t/bar", "initial"),
+            ]
+        )
+        os.chmod("script.sh", 0o755)
+        tree.add("bar")
+        tree.commit("initial")
         self.assertRaises(
-            ScriptMadeNoChanges, script_runner,
+            ScriptMadeNoChanges,
+            script_runner,
             tree,
-            script=os.path.abspath('script.sh'),
-            committer='Joe Example <joe@example.com>')
+            script=os.path.abspath("script.sh"),
+            committer="Joe Example <joe@example.com>",
+        )

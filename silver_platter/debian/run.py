@@ -64,24 +64,35 @@ from .apply import (
 
 
 def apply_and_publish(  # noqa: C901
-        url: str, name: str, command: str, mode: str,
-        subpath: str = '',
-        commit_pending: Optional[bool] = None,
-        labels: Optional[List[str]] = None, diff: bool = False,
-        verify_command: Optional[str] = None,
-        derived_owner: Optional[str] = None,
-        refresh: bool = False, allow_create_proposal=None,
-        get_commit_message=None, get_title=None, get_description=None,
-        build_verify=False, builder=DEFAULT_BUILDER, install=False,
-        build_target_dir=None, update_changelog: Optional[bool] = None,
-        preserve_repositories: bool = False):
+    url: str,
+    name: str,
+    command: str,
+    mode: str,
+    subpath: str = "",
+    commit_pending: Optional[bool] = None,
+    labels: Optional[List[str]] = None,
+    diff: bool = False,
+    verify_command: Optional[str] = None,
+    derived_owner: Optional[str] = None,
+    refresh: bool = False,
+    allow_create_proposal=None,
+    get_commit_message=None,
+    get_title=None,
+    get_description=None,
+    build_verify=False,
+    builder=DEFAULT_BUILDER,
+    install=False,
+    build_target_dir=None,
+    update_changelog: Optional[bool] = None,
+    preserve_repositories: bool = False,
+):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
         logging.fatal("%s: %s", url, e)
         return 1
     except InvalidURL as e:
-        logging.fatal('%s: %s', url, e)
+        logging.fatal("%s: %s", url, e)
         return 1
 
     overwrite = False
@@ -102,12 +113,17 @@ def apply_and_publish(  # noqa: C901
         )
     except ForgeLoginRequired as e:
         logging.error(
-            '%s: Forge login required: %s', full_branch_url(main_branch), e)
+            "%s: Forge login required: %s", full_branch_url(main_branch), e
+        )
         return 1
     else:
-        (resume_branch, resume_overwrite,
-         existing_proposals) = find_existing_proposed(
-             main_branch, forge, name, owner=derived_owner)
+        (
+            resume_branch,
+            resume_overwrite,
+            existing_proposals,
+        ) = find_existing_proposed(
+            main_branch, forge, name, owner=derived_owner
+        )
         if resume_overwrite is not None:
             overwrite = resume_overwrite
     if refresh:
@@ -115,19 +131,23 @@ def apply_and_publish(  # noqa: C901
 
     if existing_proposals and len(existing_proposals) > 1:
         logging.warning(
-            'Multiple open merge proposals for branch at %s: %r',
+            "Multiple open merge proposals for branch at %s: %r",
             resume_branch.user_url,  # type: ignore
-            [mp.url for mp in existing_proposals])
+            [mp.url for mp in existing_proposals],
+        )
         existing_proposal = existing_proposals[0]
-        logging.info('Updating just %s', existing_proposal.url)
+        logging.info("Updating just %s", existing_proposal.url)
     else:
         existing_proposal = None
 
     with Workspace(main_branch, resume_branch=resume_branch) as ws:
         try:
             result = script_runner(
-                ws.local_tree, command, commit_pending,
-                update_changelog=update_changelog)
+                ws.local_tree,
+                command,
+                commit_pending,
+                update_changelog=update_changelog,
+            )
         except MissingChangelog as e:
             logging.error("No debian changelog (%s) present", e.args[0])
             return 1
@@ -143,14 +163,19 @@ def apply_and_publish(  # noqa: C901
 
         if build_verify or install:
             try:
-                build(ws.local_tree, subpath, builder=builder,
-                      result_dir=build_target_dir)
+                build(
+                    ws.local_tree,
+                    subpath,
+                    builder=builder,
+                    result_dir=build_target_dir,
+                )
             except BuildFailedError:
                 logging.info("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
                 logging.info(
-                    "%s: unable to find upstream source", result.source)
+                    "%s: unable to find upstream source", result.source
+                )
                 return False
 
         if install:
@@ -163,19 +188,20 @@ def apply_and_publish(  # noqa: C901
                 mode,
                 name,
                 get_proposal_description=(
-                    lambda df, ep: get_description(result, df, ep)),
+                    lambda df, ep: get_description(result, df, ep)
+                ),
                 get_proposal_commit_message=(
-                    lambda ep: get_commit_message(result, ep)),
-                get_proposal_title=(
-                    lambda ep: get_title(result, ep)),
-                allow_create_proposal=(
-                    lambda: allow_create_proposal(result)),
+                    lambda ep: get_commit_message(result, ep)
+                ),
+                get_proposal_title=(lambda ep: get_title(result, ep)),
+                allow_create_proposal=(lambda: allow_create_proposal(result)),
                 forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
                 derived_owner=derived_owner,
                 existing_proposal=(
-                    existing_proposals[0] if existing_proposals else None),
+                    existing_proposals[0] if existing_proposals else None
+                ),
             )
         except UnsupportedForge as e:
             logging.error(
@@ -184,7 +210,7 @@ def apply_and_publish(  # noqa: C901
             )
             return 1
         except InsufficientChangesForNewProposal:
-            logging.info('Insufficient changes for a new merge proposal')
+            logging.info("Insufficient changes for a new merge proposal")
             return 0
         except ForgeLoginRequired as e:
             logging.error(
@@ -202,7 +228,8 @@ def apply_and_publish(  # noqa: C901
             if publish_result.proposal.url:
                 logging.info("URL: %s", publish_result.proposal.url)
             logging.info(
-                "Description: %s", publish_result.proposal.get_description())
+                "Description: %s", publish_result.proposal.get_description()
+            )
 
         if diff:
             ws.show_diff(sys.stdout.buffer)
@@ -210,17 +237,19 @@ def apply_and_publish(  # noqa: C901
         if preserve_repositories:
             ws.defer_destroy()
             logging.info(
-                'Workspace preserved in %s', ws.local_tree.abspath(ws.subpath))
+                "Workspace preserved in %s", ws.local_tree.abspath(ws.subpath)
+            )
 
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("url", help="URL of branch to work on.", type=str)
+    parser.add_argument("--command", help="Path to script to run.", type=str)
     parser.add_argument(
-        "--command", help="Path to script to run.", type=str)
-    parser.add_argument(
-        "--derived-owner", type=str, default=None,
-        help="Owner for derived branches."
+        "--derived-owner",
+        type=str,
+        default=None,
+        help="Owner for derived branches.",
     )
     parser.add_argument(
         "--refresh",
@@ -228,15 +257,21 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         help="Refresh changes if branch already exists",
     )
     parser.add_argument(
-        "--label", type=str, help="Label to attach",
-        action="append", default=[]
+        "--label",
+        type=str,
+        help="Label to attach",
+        action="append",
+        default=[],
     )
     parser.add_argument(
-        "--preserve-repositories", action="store_true",
-        help="Preserve temporary repositories.")
+        "--preserve-repositories",
+        action="store_true",
+        help="Preserve temporary repositories.",
+    )
 
     parser.add_argument(
-        "--name", type=str, help="Proposed branch name", default=None)
+        "--name", type=str, help="Proposed branch name", default=None
+    )
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -275,14 +310,16 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         ),
     )
     parser.add_argument(
-        "--install", "-i",
+        "--install",
+        "-i",
         action="store_true",
-        help="Install built package (implies --build-verify)")
+        help="Install built package (implies --build-verify)",
+    )
 
+    parser.add_argument("--recipe", type=str, help="Recipe to use.")
     parser.add_argument(
-        "--recipe", type=str, help="Recipe to use.")
-    parser.add_argument(
-        "--candidates", type=str, help="File with candidate list.")
+        "--candidates", type=str, help="File with candidate list."
+    )
     parser.add_argument(
         "--no-update-changelog",
         action="store_false",
@@ -302,6 +339,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     if args.recipe:
         from ..recipe import Recipe
+
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
@@ -316,8 +354,9 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         candidates.extend(candidatelist)
 
     if args.commit_pending:
-        commit_pending = {
-            "auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[
+            args.commit_pending
+        ]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -328,7 +367,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.command:
         command = recipe.command
     else:
-        parser.error('No command specified.')
+        parser.error("No command specified.")
 
     if args.name is not None:
         name = args.name
@@ -366,7 +405,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     def get_description(result, description_format, existing_proposal):
         if recipe:
             description = recipe.render_merge_request_description(
-                description_format, result.context)
+                description_format, result.context
+            )
             if description:
                 return description
         if result.description is not None:
@@ -379,19 +419,27 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     for candidate in candidates:
         if apply_and_publish(
-                candidate.url, name=name, command=command, mode=args.mode,
-                subpath=candidate.subpath,
-                commit_pending=commit_pending,
-                labels=args.label, diff=args.diff,
-                derived_owner=args.derived_owner, refresh=refresh,
-                allow_create_proposal=allow_create_proposal,
-                get_commit_message=get_commit_message,
-                get_title=get_title,
-                get_description=get_description,
-                build_verify=args.build_verify, builder=args.builder,
-                install=args.install, build_target_dir=args.build_target_dir,
-                update_changelog=args.update_changelog,
-                preserve_repositories=args.preserve_repositories):
+            candidate.url,
+            name=name,
+            command=command,
+            mode=args.mode,
+            subpath=candidate.subpath,
+            commit_pending=commit_pending,
+            labels=args.label,
+            diff=args.diff,
+            derived_owner=args.derived_owner,
+            refresh=refresh,
+            allow_create_proposal=allow_create_proposal,
+            get_commit_message=get_commit_message,
+            get_title=get_title,
+            get_description=get_description,
+            build_verify=args.build_verify,
+            builder=args.builder,
+            install=args.install,
+            build_target_dir=args.build_target_dir,
+            update_changelog=args.update_changelog,
+            preserve_repositories=args.preserve_repositories,
+        ):
             retcode = 1
 
     return retcode

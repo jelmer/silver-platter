@@ -36,10 +36,11 @@ script_runner = _svp_rs.script_runner
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", help="Path to script to run.", type=str,
-        nargs='?')
+        "command", help="Path to script to run.", type=str, nargs="?"
+    )
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -53,19 +54,20 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser.add_argument(
         "--verify-command", type=str, help="Command to run to verify changes."
     )
-    parser.add_argument(
-        "--recipe", type=str, help="Recipe to use.")
+    parser.add_argument("--recipe", type=str, help="Recipe to use.")
     args = parser.parse_args(argv)
 
     if args.recipe:
         from .recipe import Recipe
+
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
 
     if args.commit_pending:
-        commit_pending = {
-            "auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[
+            args.commit_pending
+        ]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -76,25 +78,29 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe.command:
         command = recipe.command
     else:
-        parser.error('No command specified.')
+        parser.error("No command specified.")
 
-    local_tree, subpath = WorkingTree.open_containing('.')
+    local_tree, subpath = WorkingTree.open_containing(".")
 
     check_clean_tree(local_tree)
 
     try:
         result = script_runner(
-            local_tree, script=command, commit_pending=commit_pending,
-            subpath=subpath)
+            local_tree,
+            script=command,
+            commit_pending=commit_pending,
+            subpath=subpath,
+        )
 
         if result.description:
-            logging.info('Succeeded: %s', result.description)
+            logging.info("Succeeded: %s", result.description)
 
         if args.verify_command:
             try:
                 subprocess.check_call(
-                    args.verify_command, shell=True,
-                    cwd=local_tree.abspath(subpath)
+                    args.verify_command,
+                    shell=True,
+                    cwd=local_tree.abspath(subpath),
                 )
             except subprocess.CalledProcessError:
                 parser.error("Verify command failed.")
@@ -104,12 +110,14 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     if args.diff:
         from breezy.diff import show_diff_trees
+
         old_tree = local_tree.revision_tree(result.old_revision)
         new_tree = local_tree.revision_tree(result.new_revision)
         show_diff_trees(
             old_tree,
             new_tree,
             sys.stdout.buffer,
-            old_label='old/',
-            new_label='new/')
+            old_label="old/",
+            new_label="new/",
+        )
     return 0

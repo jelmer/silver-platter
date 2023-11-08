@@ -52,13 +52,21 @@ from .workspace import Workspace
 
 
 def apply_and_publish(  # noqa: C901
-        url: str, name: str, command: str, mode: str,
-        commit_pending: Optional[bool] = None,
-        labels: Optional[List[str]] = None, diff: bool = False,
-        verify_command: Optional[str] = None,
-        derived_owner: Optional[str] = None,
-        refresh: bool = False, allow_create_proposal=None,
-        get_commit_message=None, get_title=None, get_description=None):
+    url: str,
+    name: str,
+    command: str,
+    mode: str,
+    commit_pending: Optional[bool] = None,
+    labels: Optional[List[str]] = None,
+    diff: bool = False,
+    verify_command: Optional[str] = None,
+    derived_owner: Optional[str] = None,
+    refresh: bool = False,
+    allow_create_proposal=None,
+    get_commit_message=None,
+    get_title=None,
+    get_description=None,
+):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -82,8 +90,11 @@ def apply_and_publish(  # noqa: C901
             full_branch_url(main_branch),
         )
     else:
-        (resume_branch, resume_overwrite,
-         existing_proposals) = find_existing_proposed(
+        (
+            resume_branch,
+            resume_overwrite,
+            existing_proposals,
+        ) = find_existing_proposed(
             main_branch, forge, name, owner=derived_owner
         )
         if resume_overwrite is not None:
@@ -95,11 +106,12 @@ def apply_and_publish(  # noqa: C901
 
     if existing_proposals and len(existing_proposals) > 1:
         logging.warning(
-            'Multiple open merge proposals for branch at %s: %r',
+            "Multiple open merge proposals for branch at %s: %r",
             resume_branch.user_url,  # type: ignore
-            [mp.url for mp in existing_proposals])
+            [mp.url for mp in existing_proposals],
+        )
         existing_proposal = existing_proposals[0]
-        logging.info('Updating %s', existing_proposal.url)
+        logging.info("Updating %s", existing_proposal.url)
     else:
         existing_proposal = None
 
@@ -132,13 +144,13 @@ def apply_and_publish(  # noqa: C901
                 mode=mode,
                 name=name,
                 get_proposal_description=(
-                    lambda df, ep: get_description(result, df, ep)),
+                    lambda df, ep: get_description(result, df, ep)
+                ),
                 get_proposal_commit_message=(
-                    lambda ep: get_commit_message(result, ep)),
-                get_proposal_title=(
-                    lambda ep: get_title(result, ep)),
-                allow_create_proposal=(
-                    lambda: allow_create_proposal(result)),
+                    lambda ep: get_commit_message(result, ep)
+                ),
+                get_proposal_title=(lambda ep: get_title(result, ep)),
+                allow_create_proposal=(lambda: allow_create_proposal(result)),
                 forge=forge,
                 labels=labels,
                 overwrite_existing=overwrite,
@@ -152,7 +164,7 @@ def apply_and_publish(  # noqa: C901
             )
             return 2
         except InsufficientChangesForNewProposal:
-            logging.info('Insufficient changes for a new merge proposal')
+            logging.info("Insufficient changes for a new merge proposal")
             return 1
         except ForgeLoginRequired as e:
             logging.error(
@@ -170,7 +182,8 @@ def apply_and_publish(  # noqa: C901
             if publish_result.proposal.url:
                 logging.info("URL: %s", publish_result.proposal.url)
             logging.info(
-                "Description: %s", publish_result.proposal.get_description())
+                "Description: %s", publish_result.proposal.get_description()
+            )
 
         if diff:
             ws.show_diff(sys.stdout.buffer)
@@ -181,12 +194,14 @@ def apply_and_publish(  # noqa: C901
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "url", help="URL of branch to work on.", type=str, nargs="?")
+        "url", help="URL of branch to work on.", type=str, nargs="?"
+    )
+    parser.add_argument("--command", help="Path to script to run.", type=str)
     parser.add_argument(
-        "--command", help="Path to script to run.", type=str)
-    parser.add_argument(
-        "--derived-owner", type=str, default=None,
-        help="Owner for derived branches."
+        "--derived-owner",
+        type=str,
+        default=None,
+        help="Owner for derived branches.",
     )
     parser.add_argument(
         "--refresh",
@@ -194,11 +209,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         help="Refresh changes if branch already exists",
     )
     parser.add_argument(
-        "--label", type=str, help="Label to attach", action="append",
-        default=[]
+        "--label",
+        type=str,
+        help="Label to attach",
+        action="append",
+        default=[],
     )
     parser.add_argument(
-        "--name", type=str, help="Proposed branch name", default=None)
+        "--name", type=str, help="Proposed branch name", default=None
+    )
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -219,14 +238,15 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     parser.add_argument(
         "--verify-command", type=str, help="Command to run to verify changes."
     )
+    parser.add_argument("--recipe", type=str, help="Recipe to use.")
     parser.add_argument(
-        "--recipe", type=str, help="Recipe to use.")
-    parser.add_argument(
-        "--candidates", type=str, help="File with candidate list.")
+        "--candidates", type=str, help="File with candidate list."
+    )
     args = parser.parse_args(argv)
 
     if args.recipe:
         from .recipe import Recipe
+
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
@@ -241,12 +261,14 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     if args.candidates:
         from .candidates import CandidateList
+
         candidatelist = CandidateList.from_path(args.candidates)
         urls.extend([candidate.url for candidate in candidatelist])
 
     if args.commit_pending:
-        commit_pending = {
-            "auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[
+            args.commit_pending
+        ]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -257,7 +279,7 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe.command:
         command = recipe.command
     else:
-        logging.exception('No command specified.')
+        logging.exception("No command specified.")
         return 1
 
     if args.name is not None:
@@ -303,7 +325,8 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     def get_description(result, description_format, existing_proposal):
         if recipe:
             description = recipe.render_merge_request_description(
-                description_format, result.context)
+                description_format, result.context
+            )
             if description:
                 return description
         if result.description is not None:
@@ -316,14 +339,20 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     for url in urls:
         result = apply_and_publish(
-                url, name=name, command=command, mode=mode,
-                commit_pending=commit_pending,
-                labels=args.label, diff=args.diff,
-                derived_owner=args.derived_owner, refresh=refresh,
-                allow_create_proposal=allow_create_proposal,
-                get_commit_message=get_commit_message,
-                get_title=get_title,
-                get_description=get_description)
+            url,
+            name=name,
+            command=command,
+            mode=mode,
+            commit_pending=commit_pending,
+            labels=args.label,
+            diff=args.diff,
+            derived_owner=args.derived_owner,
+            refresh=refresh,
+            allow_create_proposal=allow_create_proposal,
+            get_commit_message=get_commit_message,
+            get_title=get_title,
+            get_description=get_description,
+        )
         retcode = max(retcode, result)
 
     return retcode

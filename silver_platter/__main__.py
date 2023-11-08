@@ -27,6 +27,7 @@ from . import apply, batch, run, version_string
 
 def forges_main(argv: List[str]) -> Optional[int]:
     from .proposal import forges
+
     parser = argparse.ArgumentParser(prog="svp forges")
     parser.parse_args(argv)
 
@@ -46,7 +47,8 @@ def login_main(argv: List[str]) -> Optional[int]:
         from launchpadlib import uris as lp_uris
     except ModuleNotFoundError:
         logging.warning(
-            'launchpadlib is not installed, unable to log in to launchpad')
+            "launchpadlib is not installed, unable to log in to launchpad"
+        )
         lp_uris = []
 
     forge = None
@@ -126,7 +128,8 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         "--help", action="store_true", help="show this help message and exit"
     )
     parser.add_argument(
-        "subcommand", type=str, choices=list(subcommands.keys()))
+        "subcommand", type=str, choices=list(subcommands.keys())
+    )
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args, rest = parser.parse_known_args(argv)
     if args.help:

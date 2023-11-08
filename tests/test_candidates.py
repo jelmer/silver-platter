@@ -22,11 +22,17 @@ from silver_platter.candidates import CandidateList
 
 
 class TestReadCandidates(TestCaseWithTransport):
-
     def test_read(self):
-        self.build_tree_contents([('candidates.yaml', """\
+        self.build_tree_contents(
+            [
+                (
+                    "candidates.yaml",
+                    """\
 ---
 - url: https://foo
-""")])
-        candidates = CandidateList.from_path('candidates.yaml')
+""",
+                )
+            ]
+        )
+        candidates = CandidateList.from_path("candidates.yaml")
         self.assertEqual(len(candidates.candidates), 1)

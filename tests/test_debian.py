@@ -27,13 +27,17 @@ class ConvertDebianVcsUrlTests(TestCase):
         self.assertEqual(
             "https://salsa.debian.org/jelmer/blah.git",
             convert_debian_vcs_url(
-                "Git", "https://salsa.debian.org/jelmer/blah.git"),
+                "Git", "https://salsa.debian.org/jelmer/blah.git"
+            ),
         )
 
     def test_git_ssh(self):
         self.assertIn(
             convert_debian_vcs_url(
-                "Git", "ssh://git@git.kali.org/jelmer/blah.git"),
-            ("git+ssh://git@git.kali.org/jelmer/blah.git",
-             "ssh://git@git.kali.org/jelmer/blah.git")
+                "Git", "ssh://git@git.kali.org/jelmer/blah.git"
+            ),
+            (
+                "git+ssh://git@git.kali.org/jelmer/blah.git",
+                "ssh://git@git.kali.org/jelmer/blah.git",
+            ),
         )
