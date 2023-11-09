@@ -48,10 +48,7 @@ def main(argv: Optional[List[str]] = None) -> Optional[int]:
         action="version",
         version="%(prog)s " + silver_platter.version_string,
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Be more verbose")
+    parser.add_argument("--debug", action="store_true", help="Be more verbose")
     parser.add_argument(
         "--help", action="store_true", help="show this help message and exit"
     )

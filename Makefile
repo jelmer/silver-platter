@@ -12,7 +12,15 @@ coverage-html:
 check:: style
 
 style:
-	flake8
+	ruff check .
+
+fix:
+	ruff check --fix .
+	cargo fmt --all
+
+format:
+	ruff format .
+	cargo fmt --all
 
 check:: typing
 

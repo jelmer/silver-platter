@@ -21,12 +21,18 @@ from silver_platter.recipe import Recipe
 
 
 class TestReadRecipe(TestCaseWithTransport):
-
     def test_read(self):
-        self.build_tree_contents([('recipe.yaml', """\
+        self.build_tree_contents(
+            [
+                (
+                    "recipe.yaml",
+                    """\
 ---
 name: foo
 resume: true
-""")])
-        recipe = Recipe.from_path('recipe.yaml')
-        self.assertEqual(recipe.name, 'foo')
+""",
+                )
+            ]
+        )
+        recipe = Recipe.from_path("recipe.yaml")
+        self.assertEqual(recipe.name, "foo")

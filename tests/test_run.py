@@ -64,7 +64,8 @@ brz commit --quiet -m blah
         os.chmod("foo.sh", 0o755)
         result = script_runner(self.tree, os.path.abspath("foo.sh"))
         rev = self.tree.branch.repository.get_revision(
-            self.tree.last_revision())
+            self.tree.last_revision()
+        )
         self.assertEqual(rev.message, "blah")
         self.assertEqual(result.description, "Some message\n")
 

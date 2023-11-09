@@ -58,8 +58,10 @@ class CheckProposalDiffBase:
 
         self.addCleanup(proposal.lock_write().unlock)
         self.assertRaises(
-            EmptyMergeProposal, check_proposal_diff, proposal.branch,
-            orig.branch
+            EmptyMergeProposal,
+            check_proposal_diff,
+            proposal.branch,
+            orig.branch,
         )
 
     def test_indep(self):
@@ -82,8 +84,11 @@ class CheckProposalDiffBase:
 
         self.addCleanup(proposal.lock_write().unlock)
         self.assertRaises(
-            EmptyMergeProposal, check_proposal_diff, proposal.branch,
-            orig.branch)
+            EmptyMergeProposal,
+            check_proposal_diff,
+            proposal.branch,
+            orig.branch,
+        )
 
     def test_changes(self):
         orig = self.make_branch_and_tree("orig", format=self.format)
@@ -101,10 +106,8 @@ class CheckProposalDiffBase:
 
 
 class CheckProposalDiffGitTests(TestCaseWithTransport, CheckProposalDiffBase):
-
     format = "git"
 
 
 class CheckProposalDiffBzrTests(TestCaseWithTransport, CheckProposalDiffBase):
-
     format = "bzr"

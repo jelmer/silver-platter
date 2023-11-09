@@ -60,8 +60,14 @@ from .utils import (
 from .workspace import Workspace
 
 
-def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
-                           default_mode: Optional[str] = None):
+def generate_for_candidate(
+    recipe,
+    basepath,
+    url,
+    *,
+    subpath: str = "",
+    default_mode: Optional[str] = None,
+):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -69,16 +75,18 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
         raise
 
     with Workspace(main_branch, path=basepath) as ws:
-        logging.info('Making changes to %s', main_branch.user_url)
-        entry = {'url': url}
+        logging.info("Making changes to %s", main_branch.user_url)
+        entry = {"url": url}
         if subpath:
-            entry['subpath'] = subpath
+            entry["subpath"] = subpath
 
         try:
             result = script_runner(
-                ws.local_tree, recipe.command,
+                ws.local_tree,
+                recipe.command,
                 commit_pending=recipe.commit_pending,
-                subpath=subpath)
+                subpath=subpath,
+            )
         except ScriptMadeNoChanges:
             logging.error("Script did not make any changes.")
             return None
@@ -90,35 +98,39 @@ def generate_for_candidate(recipe, basepath, url, *, subpath: str = '',
             return None
         else:
             if result.target_branch_url:
-                entry['target_branch_url'] = result.target_branch_url
+                entry["target_branch_url"] = result.target_branch_url
             if result.description:
-                entry['description'] = LiteralScalarString(result.description)
+                entry["description"] = LiteralScalarString(result.description)
             else:
                 description = recipe.render_merge_request_description(
-                    'markdown', result.context)
+                    "markdown", result.context
+                )
                 if description:
-                    entry['description'] = LiteralScalarString(description)
+                    entry["description"] = LiteralScalarString(description)
             commit_message = recipe.render_merge_request_commit_message(
-                result.context)
+                result.context
+            )
             if commit_message:
-                entry['commit-message'] = commit_message
-            title = recipe.render_merge_request_title(
-                result.context)
+                entry["commit-message"] = commit_message
+            title = recipe.render_merge_request_title(result.context)
             if title:
-                entry['title'] = title
+                entry["title"] = title
             if recipe.mode:
-                entry['mode'] = recipe.mode or default_mode
+                entry["mode"] = recipe.mode or default_mode
             if recipe.labels:
-                entry['labels'] = recipe.labels
+                entry["labels"] = recipe.labels
             if result.context:
-                entry['context'] = recipe.context
+                entry["context"] = recipe.context
             ws.defer_destroy()
         return entry
 
 
 def generate(
-        recipe: Recipe, candidates: List[Candidate], directory: str,
-        recipe_path: str):
+    recipe: Recipe,
+    candidates: List[Candidate],
+    directory: str,
+    recipe_path: str,
+):
     with suppress(FileExistsError):
         os.mkdir(directory)
 
@@ -127,37 +139,41 @@ def generate(
         batch = load_batch_metadata(directory)
     except FileNotFoundError:
         batch = {
-            'recipe': recipe_path,
-            'name': recipe.name,
+            "recipe": recipe_path,
+            "name": recipe.name,
         }
-        batch['work'] = entries = {}
+        batch["work"] = entries = {}
     else:
-        entries = batch['work']
+        entries = batch["work"]
 
     try:
         for candidate in candidates:
             basename = candidate.name
             if basename is None:
                 # TODO(jelmer): Move this logic to Candidate?
-                basename = candidate.url.rstrip('/').rsplit('/', 1)[-1]
+                basename = candidate.url.rstrip("/").rsplit("/", 1)[-1]
             name = basename
             # TODO(jelmer): Search by URL rather than by name?
-            if name in entries and entries[name]['url'] == candidate.url:
+            if name in entries and entries[name]["url"] == candidate.url:
                 logging.info(
-                    'An entry %s for %s exists, skipping',
-                    name, entries[name]['url'])
+                    "An entry %s for %s exists, skipping",
+                    name,
+                    entries[name]["url"],
+                )
                 continue
             i = 0
             while os.path.exists(os.path.join(directory, name)):
                 i += 1
-                name = basename + '.%d' % i
+                name = basename + ".%d" % i
             work_path = os.path.join(directory, name)
             try:
                 entry = generate_for_candidate(
-                    recipe, work_path,
+                    recipe,
+                    work_path,
                     candidate.url,
-                    subpath=candidate.subpath or '',
-                    default_mode=candidate.default_mode)
+                    subpath=candidate.subpath or "",
+                    default_mode=candidate.default_mode,
+                )
             except Exception:
                 if os.path.exists(work_path):
                     shutil.rmtree(work_path)
@@ -176,50 +192,53 @@ def drop_batch_entry(directory, name):
 
 
 def save_batch_metadata(directory: str, batch) -> None:
-    with open(os.path.join(directory, 'batch.yaml'), 'w') as f:
+    with open(os.path.join(directory, "batch.yaml"), "w") as f:
         ruamel.yaml.round_trip_dump(batch, f)
 
 
 def load_batch_metadata(directory):
-    with open(os.path.join(directory, 'batch.yaml')) as f:
+    with open(os.path.join(directory, "batch.yaml")) as f:
         return ruamel.yaml.round_trip_load(f)
 
 
 def status(directory, codebase=None):
     batch = load_batch_metadata(directory)
-    work = batch.get('work', [])
+    work = batch.get("work", [])
     if not work:
-        logging.error('no work found in %s', directory)
+        logging.error("no work found in %s", directory)
         return 0
     for name, entry in work.items():
         if codebase is not None and name != codebase:
             continue
-        if entry.get('proposal-url'):
-            proposal = get_proposal_by_url(entry['proposal-url'])
+        if entry.get("proposal-url"):
+            proposal = get_proposal_by_url(entry["proposal-url"])
             if proposal.is_merged():
-                logging.info('%s: %s was merged', name,
-                             entry['proposal-url'])
+                logging.info("%s: %s was merged", name, entry["proposal-url"])
             elif proposal.is_closed():
-                logging.info('%s: %s was closed without being merged',
-                             name, entry['proposal-url'])
+                logging.info(
+                    "%s: %s was closed without being merged",
+                    name,
+                    entry["proposal-url"],
+                )
             else:
-                logging.info('%s: %s is still open',
-                             name, entry['proposal-url'])
+                logging.info(
+                    "%s: %s is still open", name, entry["proposal-url"]
+                )
         else:
-            logging.info('%s: not published yet', name)
+            logging.info("%s: not published yet", name)
 
 
 def diff(directory, codebase):
     batch = load_batch_metadata(directory)
-    work = batch.get('work', [])
+    work = batch.get("work", [])
     if not work:
-        logging.error('no work found in %s', directory)
+        logging.error("no work found in %s", directory)
         return 0
     entry = work[codebase]
     try:
-        main_branch = open_branch(entry['url'])
+        main_branch = open_branch(entry["url"])
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
-        logging.error("%s: %s", entry['url'], e)
+        logging.error("%s: %s", entry["url"], e)
         raise
 
     basepath = os.path.join(directory, codebase)
@@ -228,8 +247,8 @@ def diff(directory, codebase):
         local_branch.basis_tree(),
         local_branch.repository.revision_tree(main_branch.last_revision()),
         sys.stdout.buffer,
-        old_label='old/',
-        new_label='new/',
+        old_label="old/",
+        new_label="new/",
     )
 
 
@@ -237,14 +256,21 @@ class UnrelatedBranchExists(Exception):
     """An unrelated branch exists."""
 
 
-def publish_one(url: str, path: str, batch_name: str, mode: str,
-                *,
-                existing_proposal_url: Optional[str] = None,
-                labels: Optional[List[str]] = None,
-                derived_owner: Optional[str] = None, refresh: bool = False,
-                commit_message: Optional[str] = None,
-                title: Optional[str] = None,
-                description: Optional[str] = None, overwrite: bool = False):
+def publish_one(
+    url: str,
+    path: str,
+    batch_name: str,
+    mode: str,
+    *,
+    existing_proposal_url: Optional[str] = None,
+    labels: Optional[List[str]] = None,
+    derived_owner: Optional[str] = None,
+    refresh: bool = False,
+    commit_message: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    overwrite: bool = False,
+):
     try:
         main_branch = open_branch(url)
     except (BranchUnavailable, BranchMissing, BranchUnsupported) as e:
@@ -269,7 +295,8 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
     else:
         if existing_proposal_url is not None:
             existing_proposal = forge.get_proposal_by_url(
-                existing_proposal_url)
+                existing_proposal_url
+            )
             assert existing_proposal
             resume_branch_url = existing_proposal.get_source_branch_url()
             assert resume_branch_url is not None
@@ -283,7 +310,7 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         resume_branch = None
 
     if existing_proposal:
-        logging.info('Updating %s', existing_proposal.url)
+        logging.info("Updating %s", existing_proposal.url)
     else:
         existing_proposal = None
 
@@ -298,8 +325,7 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
             resume_branch,
             mode,
             batch_name,
-            get_proposal_description=(
-                lambda df, ep: description),  # type: ignore
+            get_proposal_description=(lambda df, ep: description),  # type: ignore
             get_proposal_commit_message=lambda ep: commit_message,
             get_proposal_title=lambda ep: title,
             allow_create_proposal=True,
@@ -316,17 +342,16 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         )
         raise
     except InsufficientChangesForNewProposal:
-        logging.info('Insufficient changes for a new merge proposal')
+        logging.info("Insufficient changes for a new merge proposal")
         raise
     except DivergedBranches:
         if not resume_branch:
             raise UnrelatedBranchExists()
-        logging.warning('Branch exists that has diverged')
+        logging.warning("Branch exists that has diverged")
         raise
     except ForgeLoginRequired as e:
         logging.exception(
-            "Credentials for hosting site at %r missing. "
-            "Run 'svp login'?",
+            "Credentials for hosting site at %r missing. " "Run 'svp login'?",
             e.forge.base_url,
         )
         raise
@@ -339,20 +364,21 @@ def publish_one(url: str, path: str, batch_name: str, mode: str,
         if publish_result.proposal.url:
             logging.info("URL: %s", publish_result.proposal.url)
         logging.info(
-            "Description: %s", publish_result.proposal.get_description())
+            "Description: %s", publish_result.proposal.get_description()
+        )
     return publish_result
 
 
 def publish(directory, *, selector=None):
     batch = load_batch_metadata(directory)
     try:
-        batch_name = batch['name']
+        batch_name = batch["name"]
     except KeyError:
-        logging.error('no name found in %s', directory)
+        logging.error("no name found in %s", directory)
         return 1
-    work = batch.get('work', [])
+    work = batch.get("work", [])
     if not work:
-        logging.error('no work found in %s', directory)
+        logging.error("no work found in %s", directory)
         return 0
     errors = 0
     try:
@@ -362,31 +388,35 @@ def publish(directory, *, selector=None):
                 continue
             try:
                 publish_result = publish_one(
-                    entry['url'], os.path.join(directory, name), batch_name,
-                    entry['mode'],
-                    labels=entry.get('labels', []),
-                    derived_owner=entry.get('derived-owner'),
-                    commit_message=entry.get('commit-message'),
-                    title=entry.get('title'),
-                    existing_proposal_url=entry.get('proposal-url'),
-                    description=entry.get('description'))   # type: ignore
+                    entry["url"],
+                    os.path.join(directory, name),
+                    batch_name,
+                    entry["mode"],
+                    labels=entry.get("labels", []),
+                    derived_owner=entry.get("derived-owner"),
+                    commit_message=entry.get("commit-message"),
+                    title=entry.get("title"),
+                    existing_proposal_url=entry.get("proposal-url"),
+                    description=entry.get("description"),
+                )  # type: ignore
             except EmptyMergeProposal:
-                logging.info('No changes left')
+                logging.info("No changes left")
                 del work[name]
             except UnrelatedBranchExists:
                 errors += 1
             else:
-                if publish_result.mode == 'push':
+                if publish_result.mode == "push":
                     drop_batch_entry(directory, name)
                     del work[name]
                 elif publish_result.proposal:
-                    entry['proposal-url'] = publish_result.proposal.url
+                    entry["proposal-url"] = publish_result.proposal.url
             save_batch_metadata(directory, batch)
     finally:
         save_batch_metadata(directory, batch)
     if not work:
-        logging.info('No work left in batch.yaml; you can now remove %s',
-                     directory)
+        logging.info(
+            "No work left in batch.yaml; you can now remove %s", directory
+        )
     if errors:
         return 1
     return 0
@@ -394,57 +424,67 @@ def publish(directory, *, selector=None):
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
+
     parser = argparse.ArgumentParser("svp batch")
     subparsers = parser.add_subparsers(dest="command")
     generate_parser = subparsers.add_parser("generate")
+    generate_parser.add_argument("--recipe", type=str, help="Recipe to use.")
     generate_parser.add_argument(
-        "--recipe", type=str, help="Recipe to use.")
-    generate_parser.add_argument(
-        "--candidates", type=str, help="File with candidate list.")
-    generate_parser.add_argument('directory', nargs='?')
+        "--candidates", type=str, help="File with candidate list."
+    )
+    generate_parser.add_argument("directory", nargs="?")
     publish_parser = subparsers.add_parser("publish")
-    publish_parser.add_argument('directory')
-    publish_parser.add_argument('name', nargs='?')
+    publish_parser.add_argument("directory")
+    publish_parser.add_argument("name", nargs="?")
     status_parser = subparsers.add_parser("status")
-    status_parser.add_argument('directory')
-    status_parser.add_argument('codebase', nargs='?', default=None)
+    status_parser.add_argument("directory")
+    status_parser.add_argument("codebase", nargs="?", default=None)
     diff_parser = subparsers.add_parser("diff")
-    diff_parser.add_argument('directory')
-    diff_parser.add_argument('codebase')
+    diff_parser.add_argument("directory")
+    diff_parser.add_argument("codebase")
     args = parser.parse_args(argv)
     if args.command == "generate":
         if args.recipe:
             recipe = Recipe.from_path(args.recipe)
         else:
-            parser.error('no recipe specified')
+            parser.error("no recipe specified")
         if args.candidates:
             candidates = CandidateList.from_path(args.candidates)
         else:
-            parser.error('no candidate list specified')
+            parser.error("no candidate list specified")
         if args.directory is None:
             args.directory = recipe.name
-            logging.info('Using output directory: %s', args.directory)
+            logging.info("Using output directory: %s", args.directory)
         generate(
-            recipe, candidates, args.directory,
-            recipe_path=os.path.relpath(args.recipe, args.directory))
+            recipe,
+            candidates,
+            args.directory,
+            recipe_path=os.path.relpath(args.recipe, args.directory),
+        )
         logging.info(
-            'Now, review the patches under %s, edit %s/batch.yaml as '
+            "Now, review the patches under %s, edit %s/batch.yaml as "
             'appropriate and then run "svp batch publish %s"',
-            args.directory, args.directory, args.directory)
-    elif args.command == 'publish':
+            args.directory,
+            args.directory,
+            args.directory,
+        )
+    elif args.command == "publish":
         selector: Optional[Callable]
         if args.name:
+
             def selector(n, e):
                 return n == args.name
         else:
             selector = None
         publish(args.directory, selector=selector)
         logging.info(
-            'To see the status of open merge requests, run: '
-            '"svp batch status %s"', args.directory)
-    elif args.command == 'status':
+            "To see the status of open merge requests, run: "
+            '"svp batch status %s"',
+            args.directory,
+        )
+    elif args.command == "status":
         status(args.directory, args.codebase)
-    elif args.command == 'diff':
+    elif args.command == "diff":
         diff(args.directory, args.codebase)
     else:
         parser.print_usage()

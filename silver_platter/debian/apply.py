@@ -37,10 +37,10 @@ from .._svp_rs import (
 )
 
 __all__ = [
-    'CommandResult',
-    'ScriptFailed',
-    'ScriptNotFound',
-    'script_runner',
+    "CommandResult",
+    "ScriptFailed",
+    "ScriptNotFound",
+    "script_runner",
 ]
 
 
@@ -55,9 +55,9 @@ from . import (
 
 def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--command", help="Path to script to run.", type=str)
+    parser.add_argument("--command", help="Path to script to run.", type=str)
     parser.add_argument(
         "--diff", action="store_true", help="Show diff of generated changes."
     )
@@ -104,26 +104,29 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
         ),
     )
     parser.add_argument(
-        "--install", "-i",
+        "--install",
+        "-i",
         action="store_true",
-        help="Install built package (implies --build-verify)")
+        help="Install built package (implies --build-verify)",
+    )
     parser.add_argument(
-        "--dump-context", action="store_true",
-        help="Report context on success")
+        "--dump-context", action="store_true", help="Report context on success"
+    )
 
-    parser.add_argument(
-        "--recipe", type=str, help="Recipe to use.")
+    parser.add_argument("--recipe", type=str, help="Recipe to use.")
     args = parser.parse_args(argv)
 
     if args.recipe:
         from ..recipe import Recipe
+
         recipe = Recipe.from_path(args.recipe)
     else:
         recipe = None
 
     if args.commit_pending:
-        commit_pending = {
-            "auto": None, "yes": True, "no": False}[args.commit_pending]
+        commit_pending = {"auto": None, "yes": True, "no": False}[
+            args.commit_pending
+        ]
     elif recipe:
         commit_pending = recipe.commit_pending
     else:
@@ -134,37 +137,46 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
     elif recipe and recipe.command:
         command = recipe.command
     else:
-        parser.error('No command or recipe specified.')
+        parser.error("No command or recipe specified.")
 
-    local_tree, subpath = WorkingTree.open_containing('.')
+    local_tree, subpath = WorkingTree.open_containing(".")
 
     check_clean_tree(local_tree)
 
     try:
         try:
             result = script_runner(
-                local_tree, script=command, commit_pending=commit_pending,
-                subpath=subpath, update_changelog=args.update_changelog)
+                local_tree,
+                script=command,
+                commit_pending=commit_pending,
+                subpath=subpath,
+                update_changelog=args.update_changelog,
+            )
         except MissingChangelog as e:
-            logging.error('No debian changelog file (%s) present', e.args[0])
+            logging.error("No debian changelog file (%s) present", e.args[0])
             return False
         except ScriptMadeNoChanges:
-            logging.info('Script made no changes')
+            logging.info("Script made no changes")
             return False
 
         if result.description:
-            logging.info('Succeeded: %s', result.description)
+            logging.info("Succeeded: %s", result.description)
 
         if args.build_verify or args.install:
             try:
-                build(local_tree, subpath, builder=args.builder,
-                      result_dir=args.build_target_dir)
+                build(
+                    local_tree,
+                    subpath,
+                    builder=args.builder,
+                    result_dir=args.build_target_dir,
+                )
             except BuildFailedError:
                 logging.error("%s: build failed", result.source)
                 return False
             except MissingUpstreamTarball:
                 logging.error(
-                    "%s: unable to find upstream source", result.source)
+                    "%s: unable to find upstream source", result.source
+                )
                 return False
     except Exception:
         reset_tree(local_tree, subpath=subpath)
@@ -175,14 +187,16 @@ def main(argv: List[str]) -> Optional[int]:  # noqa: C901
 
     if args.diff:
         from breezy.diff import show_diff_trees
+
         old_tree = local_tree.revision_tree(result.old_revision)
         new_tree = local_tree.revision_tree(result.new_revision)
         show_diff_trees(
             old_tree,
             new_tree,
             sys.stdout.buffer,
-            old_label='old/',
-            new_label='new/')
+            old_label="old/",
+            new_label="new/",
+        )
 
     if args.dump_context:
         json.dump(result.context, sys.stdout, indent=5)
