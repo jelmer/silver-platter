@@ -1,7 +1,0 @@
-filename = "*.py,svp"
-exclude = "*_pb2.py,.eggs"
-banned-modules = "dulwich.* = Don't use dulwich directly"
-extend-ignore = E203, E266, E501, W293, W291
-max-line-length = 88
-max-complexity = 18
-select = B,C,E,F,W,T4,B9
