@@ -427,7 +427,7 @@ fn main() {
         )
         .init();
 
-    breezyshim::init();
+    breezyshim::init().unwrap();
 
     pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
         let m = py.import("breezy.plugin").unwrap();
