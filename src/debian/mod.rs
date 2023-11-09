@@ -93,9 +93,23 @@ pub fn add_changelog_entry(
     // TODO(jelmer): This logic should ideally be in python-debian.
     let f = tree.get_file(path).unwrap();
 
-    let mut cl = ChangeLog::read(f).unwrap();
+    let mut cl = ChangeLog::read_relaxed(f).unwrap();
 
-    cl.auto_add_change(summary, maintainer.unwrap(), timestamp, urgency);
+    let summary = vec![format!("* {}", summary[0])]
+        .into_iter()
+        .chain(summary[1..].iter().map(|l| format!("  {}", l)))
+        .collect::<Vec<_>>();
+
+    cl.auto_add_change(
+        summary
+            .iter()
+            .map(|l| l.as_str())
+            .collect::<Vec<_>>()
+            .as_slice(),
+        maintainer.unwrap(),
+        timestamp,
+        urgency,
+    );
     tree.put_file_bytes_non_atomic(path, cl.to_string().as_bytes())
         .unwrap();
 }
@@ -113,7 +127,7 @@ mod tests {
     use std::path::Path;
 
     pub fn make_branch_and_tree(path: &std::path::Path) -> WorkingTree {
-        breezyshim::init();
+        breezyshim::init().unwrap();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
         let branch = ControlDir::create_branch_convenience(&url).unwrap();
@@ -172,8 +186,7 @@ mod tests {
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   [ Jane Example ]
   * Support updating templated debian/control files that use cdbs
@@ -197,8 +210,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   [ Jane Example ]
   * Support updating templated debian/control files that use cdbs
@@ -223,8 +235,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -244,8 +255,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -264,8 +274,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) unstable; urgency=medium
+            r#"lintian-brush (0.35) unstable; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -293,8 +302,7 @@ lintian-brush (0.35) unstable; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.36) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.36) UNRELEASED; urgency=low
 
   * Add a foo
 
@@ -318,8 +326,7 @@ lintian-brush (0.35) unstable; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-THIS IS NOT A PARSEABLE LINE
+            r#"THIS IS NOT A PARSEABLE LINE
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
@@ -340,8 +347,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-THIS IS NOT A PARSEABLE LINE
+            r#"THIS IS NOT A PARSEABLE LINE
 lintian-brush (0.35) UNRELEASED; urgency=medium
 
   [ Joe Example ]
@@ -365,8 +371,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -389,8 +394,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -410,8 +414,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -433,8 +436,7 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             Some(&("Joe Example".to_string(), "joe@example.com".to_string())), None, None
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) UNRELEASED; urgency=medium
+            r#"lintian-brush (0.35) UNRELEASED; urgency=medium
 
   * Support updating templated debian/control files that use cdbs
     template.
@@ -455,12 +457,11 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) unstable; urgency=medium
+            r#"lintian-brush (0.35) unstable; urgency=medium
 
   * This line already existed.
 
- --
+ -- 
 "#
             .as_bytes(),
         )
@@ -476,13 +477,12 @@ lintian-brush (0.35) unstable; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) unstable; urgency=medium
+            r#"lintian-brush (0.35) unstable; urgency=medium
 
   * This line already existed.
   * And this one is new.
 
- --
+ -- 
 "#,
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
@@ -495,15 +495,14 @@ lintian-brush (0.35) unstable; urgency=medium
         std::fs::create_dir_all(td.path().join("debian")).unwrap();
         std::fs::write(
             td.path().join("debian/changelog"),
-            r#"\
-lintian-brush (0.35) unstable; urgency=medium
+            r#"lintian-brush (0.35) unstable; urgency=medium
 
   * This line already existed.
 
   [ Jane Example ]
   * And this one has an existing author.
 
- --
+ -- 
 "#
             .as_bytes(),
         )
@@ -519,8 +518,7 @@ lintian-brush (0.35) unstable; urgency=medium
             None,
         );
         assert_eq!(
-            r#"\
-lintian-brush (0.35) unstable; urgency=medium
+            r#"lintian-brush (0.35) unstable; urgency=medium
 
   * This line already existed.
 
@@ -530,7 +528,7 @@ lintian-brush (0.35) unstable; urgency=medium
   [ Joe Example ]
   * And this one is new.
 
- --
+ -- 
 "#,
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
