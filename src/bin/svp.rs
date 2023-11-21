@@ -325,7 +325,7 @@ pub fn publish_entry(
     overwrite: Option<bool>,
 ) -> bool {
     let batch_name = batch.name.clone();
-    let mut entry = batch.get_mut(name).unwrap();
+    let entry = batch.get_mut(name).unwrap();
     let tree = entry.working_tree().unwrap();
     let publish_result = match silver_platter::batch::publish_one(
         entry.target_branch_url.as_ref().unwrap(),

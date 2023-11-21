@@ -548,6 +548,14 @@ impl ControlDir {
 #[pyclass]
 struct Branch(Box<dyn silver_platter::Branch>);
 
+#[pymethods]
+impl Branch {
+    #[getter]
+    fn name(&self) -> String {
+        self.0.name().to_string()
+    }
+}
+
 #[pyclass]
 struct Forge(silver_platter::Forge);
 
