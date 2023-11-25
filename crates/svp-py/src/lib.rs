@@ -551,8 +551,8 @@ struct Branch(Box<dyn silver_platter::Branch>);
 #[pymethods]
 impl Branch {
     #[getter]
-    fn name(&self) -> String {
-        self.0.name().to_string()
+    fn name(&self) -> Option<String> {
+        self.0.name().map(|s| s.to_string())
     }
 }
 
