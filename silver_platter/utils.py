@@ -58,11 +58,6 @@ class TemporarySprout:
         return False
 
 
-BranchTemporarilyUnavailable = _svp_rs.BranchTemporarilyUnavailable
-BranchRateLimited = _svp_rs.BranchRateLimited
-BranchUnavailable = _svp_rs.BranchUnavailable
-BranchMissing = _svp_rs.BranchMissing
-BranchUnsupported = _svp_rs.BranchUnsupported
 open_branch = _svp_rs.open_branch
 open_branch_containing = _svp_rs.open_branch_containing
 full_branch_url = _svp_rs.full_branch_url
@@ -74,3 +69,58 @@ def get_branch_vcs_type(branch):
         return vcs.abbreviation
     else:
         return "bzr"
+
+
+class BranchUnavailable(Exception):
+    """Opening branch failed."""
+
+    def __init__(self, url: str, description: str) -> None:
+        self.url = url
+        self.description = description
+
+    def __str__(self) -> str:
+        return self.description
+
+
+class BranchTemporarilyUnavailable(BranchUnavailable):
+    """Branch unavailable for temporary reasons, e.g. DNS failed."""
+
+
+class BranchRateLimited(Exception):
+    """Opening branch was rate-limited."""
+
+    def __init__(self, url: str, description: str,
+                 retry_after: Optional[int] = None) -> None:
+        self.url = url
+        self.description = description
+        self.retry_after = retry_after
+
+    def __str__(self) -> str:
+        if self.retry_after is not None:
+            return f"{self.description} (retry after {self.retry_after})"
+        else:
+            return self.description
+
+
+class BranchMissing(Exception):
+    """Branch did not exist."""
+
+    def __init__(self, url: str, description: str) -> None:
+        self.url = url
+        self.description = description
+
+    def __str__(self) -> str:
+        return self.description
+
+
+class BranchUnsupported(Exception):
+    """The branch uses a VCS or protocol that is unsupported."""
+
+    def __init__(self, url: str, description: str,
+                 vcs: Optional[str] = None) -> None:
+        self.url = url
+        self.description = description
+        self.vcs = vcs
+
+    def __str__(self) -> str:
+        return self.description

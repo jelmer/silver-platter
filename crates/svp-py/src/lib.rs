@@ -1107,26 +1107,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(guess_update_changelog, m)?)?;
     m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     m.add_class::<ChangelogBehaviour>()?;
-    m.add(
-        "BranchTemporarilyUnavailable",
-        py.get_type::<silver_platter::vcs::BranchTemporarilyUnavailable>(),
-    )?;
-    m.add(
-        "BranchMissing",
-        py.get_type::<silver_platter::vcs::BranchMissing>(),
-    )?;
-    m.add(
-        "BranchUnavailable",
-        py.get_type::<silver_platter::vcs::BranchUnavailable>(),
-    )?;
-    m.add(
-        "BranchRateLimited",
-        py.get_type::<silver_platter::vcs::BranchRateLimited>(),
-    )?;
-    m.add(
-        "BranchUnsupported",
-        py.get_type::<silver_platter::vcs::BranchUnsupported>(),
-    )?;
     m.add_function(wrap_pyfunction!(get_maintainer_from_env, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;

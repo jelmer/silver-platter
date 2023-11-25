@@ -3,19 +3,8 @@ use breezyshim::{
     Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
-use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::{create_exception, import_exception};
-
-create_exception!(silver_platter.utils, BranchMissing, PyException);
-create_exception!(silver_platter.utils, BranchUnsupported, PyException);
-create_exception!(silver_platter.utils, BranchUnavailable, PyException);
-create_exception!(silver_platter.utils, BranchRateLimited, PyException);
-create_exception!(
-    silver_platter.utils,
-    BranchTemporarilyUnavailable,
-    PyException
-);
+use pyo3::{import_exception};
 
 #[derive(Debug)]
 pub enum BranchOpenError {
@@ -88,30 +77,44 @@ impl From<BranchOpenError> for PyErr {
                 url,
                 description,
                 vcs,
-            } => BranchUnsupported::new_err(format!(
-                "Unsupported VCS for {}: {} ({})",
-                url,
+            } => {
+
+import_exception!(silver_platter.utils, BranchUnsupported);
+                BranchUnsupported::new_err((
+                url.to_string(),
                 description,
-                vcs.unwrap_or_else(|| "unknown".to_string())
-            )),
+                vcs
+            ))},
             BranchOpenError::Missing { url, description } => {
-                BranchMissing::new_err(format!("Missing branch {}: {}", url, description))
+
+import_exception!(silver_platter.utils, BranchMissing);
+                BranchMissing::new_err((url.to_string(), description))
             }
             BranchOpenError::RateLimited {
                 url,
                 description,
                 retry_after,
-            } => BranchRateLimited::new_err(format!(
-                "Rate limited {}: {} (retry after: {:?})",
-                url, description, retry_after
-            )),
+            } => {
+
+
+import_exception!(silver_platter.utils, BranchRateLimited);
+                BranchRateLimited::new_err((
+                url.to_string(), description, retry_after
+            ))},
             BranchOpenError::Unavailable { url, description } => {
-                BranchUnavailable::new_err(format!("Unavailable {}: {}", url, description))
+
+import_exception!(silver_platter.utils, BranchUnavailable);
+                BranchUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::TemporarilyUnavailable { url, description } => {
-                BranchTemporarilyUnavailable::new_err(format!(
-                    "Temporarily unavailable {}: {}",
-                    url, description
+                import_exception!(
+                    silver_platter.utils,
+                    BranchTemporarilyUnavailable
+                );
+
+
+                BranchTemporarilyUnavailable::new_err((
+                    url.to_string(), description
                 ))
             }
             BranchOpenError::Other(e) => e,
