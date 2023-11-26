@@ -22,7 +22,8 @@ jobs:
       run: |
         sudo apt -y update
         sudo apt -y install devscripts bzr libapt-pkg-dev libtdb-dev libssl-dev pkg-config
+        cargo install cargo-all-features
     - name: Build
       run: cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test-all-features --verbose

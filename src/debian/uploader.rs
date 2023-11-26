@@ -1,10 +1,13 @@
 use std::path::Path;
+#[cfg(feature = "last-attempt-db")]
 use trivialdb as tdb;
 
+#[cfg(feature = "last-attempt-db")]
 pub struct LastAttemptDatabase {
     db: tdb::Tdb,
 }
 
+#[cfg(feature = "last-attempt-db")]
 impl LastAttemptDatabase {
     pub fn open(path: &Path) -> Self {
         Self {
@@ -33,6 +36,7 @@ impl LastAttemptDatabase {
     }
 }
 
+#[cfg(feature = "last-attempt-db")]
 impl Default for LastAttemptDatabase {
     fn default() -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter").unwrap();
