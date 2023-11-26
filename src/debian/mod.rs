@@ -25,12 +25,17 @@ pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
     tree.has_filename(&template_control_path)
 }
 
+#[cfg(not(feature = "detect-update-changelog"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangelogBehaviour {
     pub update_changelog: bool,
     pub explanation: String,
 }
 
+#[cfg(feature = "detect-update-changelog")]
+pub use debian_analyzer::detect_gbp_dch::ChangelogBehaviour;
+
+#[cfg(not(feature = "detect-update-changelog"))]
 impl FromPyObject<'_> for ChangelogBehaviour {
     fn extract(obj: &PyAny) -> PyResult<Self> {
         let update_changelog = obj.getattr("update_changelog")?.extract()?;
@@ -46,28 +51,18 @@ pub fn guess_update_changelog(
     tree: &WorkingTree,
     debian_path: &Path,
 ) -> Option<ChangelogBehaviour> {
-    Python::with_gil(|py| {
-        let m = match py.import("lintian_brush") {
-            Ok(m) => m,
-            Err(e) => {
-                log::warn!("Install lintian-brush to detect automatically whether the changelog should be updated.");
-                return Some(ChangelogBehaviour {
-                    update_changelog: true,
-                    explanation: format!(
-                        "defaulting to updating changelog since lintian-brush is not installed: {}",
-                        e
-                    ),
-                });
-            }
-        };
-
-        let guess_update_changelog = m.getattr("guess_update_changelog").unwrap();
-
-        let result = guess_update_changelog
-            .call1((tree.to_object(py), debian_path))
-            .unwrap();
-        result.extract().unwrap()
-    })
+    #[cfg(feature = "detect-update-changelog")]
+    { debian_analyzer::detect_gbp_dch::guess_update_changelog(tree, debian_path, None) }
+    #[cfg(not(feature = "detect-update-changelog"))]
+    {
+            log::warn!("Install lintian-brush to detect automatically whether the changelog should be updated.");
+            return Some(ChangelogBehaviour {
+                update_changelog: true,
+                explanation: format!(
+                    "defaulting to updating changelog since silver-platter was built without lintian-brush"
+                ),
+            });
+        }
 }
 
 /// Add a changelog entry.
