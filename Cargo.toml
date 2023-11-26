@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.13"
+version = "0.5.12"
 authors = [ "Jelmer Vernooij <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
@@ -33,16 +33,14 @@ xdg = "2.5.2"
 members = [ "crates/*",]
 
 [features]
-default = [ "debian", "pyo3"]
+default = [ "debian" ]
 debian = [ "dep:debversion", "dep:trivialdb", "dep:flate2", "dep:reqwest" ]
-pyo3 = [ "dep:pyo3",]
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize",] }
 
 [dependencies.pyo3]
 workspace = true
-optional = true
 features = [ "chrono",]
 
 [dependencies.serde]

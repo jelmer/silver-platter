@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install native dependencies (Ubuntu)
-        run: sudo apt-get update && sudo apt-get install -y libgpgme-dev libtdb-dev libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libgpgme-dev libtdb-dev libssl-dev pkg-config
         if: "matrix.os == 'ubuntu-latest'"
       - name: set up rust
         if: matrix.os != 'ubuntu'
@@ -57,8 +57,8 @@ jobs:
             rustup target add all &&
             rustup show
           CIBW_BEFORE_BUILD_LINUX: >
-            if command -v yum; then yum -y install openssl-devel; fi &&
-            if command -v apk; then apk add openssl-dev pkgconfig; fi &&
+            if command -v yum; then yum -y install openssl-devel libtdb-devel clang; fi &&
+            if command -v apk; then apk add openssl-dev pkgconfig tdb-dev llvm clang; fi &&
             pip install -U setuptools-rust &&
             curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=nightly --profile=minimal -y &&
             rustup target add all &&
