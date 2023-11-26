@@ -327,7 +327,7 @@ fn script_runner(
     };
 
     silver_platter::codemod::script_runner(
-        &WorkingTree::new(local_tree).unwrap(),
+        &WorkingTree::from(local_tree),
         script.as_slice(),
         subpath
             .as_ref()
@@ -805,7 +805,7 @@ fn create_temp_sprout(
 ///   PreCheckFailed: If the pre-check failed
 #[pyfunction]
 fn run_pre_check(tree: PyObject, script: &str) -> PyResult<()> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     silver_platter::checks::run_pre_check(tree, script).map_err(|e| match e {
         silver_platter::checks::PreCheckFailed => PreCheckFailed::new_err(()),
     })
@@ -821,7 +821,7 @@ fn run_pre_check(tree: PyObject, script: &str) -> PyResult<()> {
 ///   PreCheckFailed: If the pre-check failed
 #[pyfunction]
 fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyResult<()> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     silver_platter::checks::run_post_check(tree, script, &since_revid).map_err(|e| match e {
         silver_platter::checks::PostCheckFailed => PostCheckFailed::new_err(()),
     })
@@ -932,7 +932,7 @@ pub(crate) fn debian_script_runner(
     };
 
     silver_platter::debian::codemod::script_runner(
-        &WorkingTree::new(local_tree).unwrap(),
+        &WorkingTree::from(local_tree),
         script.as_slice(),
         subpath
             .as_ref()
@@ -996,7 +996,7 @@ pub(crate) fn get_maintainer_from_env(env: HashMap<String, String>) -> Option<(S
 
 #[pyfunction]
 pub(crate) fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     Ok(silver_platter::debian::is_debcargo_package(
         &tree,
         std::path::Path::new(path),
@@ -1005,7 +1005,7 @@ pub(crate) fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> 
 
 #[pyfunction]
 pub(crate) fn control_files_in_root(tree: PyObject, path: &str) -> PyResult<bool> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     Ok(silver_platter::debian::control_files_in_root(
         &tree,
         std::path::Path::new(path),
@@ -1030,7 +1030,7 @@ impl ChangelogBehaviour {
 
 #[pyfunction]
 pub(crate) fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<ChangelogBehaviour> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     silver_platter::debian::guess_update_changelog(&tree, std::path::Path::new(debian_path))
         .map(ChangelogBehaviour)
 }
@@ -1042,7 +1042,7 @@ pub(crate) fn build(
     builder: Option<&str>,
     result_dir: Option<PathBuf>,
 ) -> PyResult<()> {
-    let tree = WorkingTree::new(tree).unwrap();
+    let tree = WorkingTree::from(tree);
     silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
 }
 
@@ -1052,7 +1052,7 @@ pub(crate) fn install_built_package(
     subpath: std::path::PathBuf,
     build_target_dir: std::path::PathBuf,
 ) -> PyResult<()> {
-    let local_tree = WorkingTree::new(local_tree).unwrap();
+    let local_tree = WorkingTree::from(local_tree);
     silver_platter::debian::install_built_package(
         &local_tree,
         subpath.as_path(),

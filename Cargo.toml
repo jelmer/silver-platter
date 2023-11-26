@@ -15,7 +15,6 @@ serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
 chrono = "0.4.30"
-pyo3-file = { workspace = true }
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
@@ -26,16 +25,18 @@ trivialdb = { version = "0.1.4", optional = true }
 flate2 = { version = "1", optional = true }
 reqwest = { version = "0.11", optional = true, features = ["blocking"] }
 lazy-regex = "3.0.2"
-libc = "0.2.148"
-xdg = "2.5.2"
+libc = "0.2"
+xdg = "2.5"
+debian-analyzer = { version = ">=0.1.148", optional = true }
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
-default = [ "debian" ]
+default = [ "debian", "detect-update-changelog" ]
 debian = [ "dep:debversion", "dep:flate2", "dep:reqwest" ]
 last-attempt-db = [ "dep:trivialdb" ]
+detect-update-changelog = [ "dep:debian-analyzer" ]
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize",] }
@@ -63,9 +64,8 @@ workspace = true
 features = [ "serde",]
 
 [workspace.dependencies]
-pyo3 = "0.19"
+pyo3 = ">=0.19"
 pyo3-log = "0.8"
-pyo3-file = "0.7"
 serde_json = "1"
 tera = "1"
 serde = "1.0.171"
