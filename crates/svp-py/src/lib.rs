@@ -432,6 +432,11 @@ impl Branch {
     fn name(&self) -> Option<String> {
         self.0.name().map(|s| s.to_string())
     }
+
+    #[getter]
+    fn user_url(&self) -> String {
+        self.0.get_user_url().to_string()
+    }
 }
 
 #[pyclass]
