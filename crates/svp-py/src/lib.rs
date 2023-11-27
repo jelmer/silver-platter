@@ -434,8 +434,8 @@ impl Branch {
     }
 
     #[getter]
-    fn user_url(&self) -> Option<url::Url> {
-        self.0.user_url().map(|s| s.parse().unwrap())
+    fn user_url(&self) -> String {
+        self.0.get_user_url().to_string()
     }
 }
 
