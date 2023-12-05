@@ -8,7 +8,6 @@ use crate::Mode;
 use breezyshim::branch::Branch;
 use breezyshim::forge::{get_forge, Error as ForgeError, Forge, MergeProposal};
 use log::{error, info, warn};
-use std::collections::HashMap;
 use url::Url;
 
 pub fn apply_and_publish(

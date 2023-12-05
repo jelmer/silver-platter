@@ -363,7 +363,7 @@ impl Workspace {
                 (name, description),
                 Some(kwargs),
             )?;
-            Ok(MergeProposal::new(proposal))
+            Ok(MergeProposal::from(proposal))
         })
     }
 
