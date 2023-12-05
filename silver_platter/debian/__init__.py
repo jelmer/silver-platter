@@ -39,6 +39,7 @@ from .._svp_rs import (
     control_files_in_root,
     guess_update_changelog,
     is_debcargo_package,
+    pick_additional_colocated_branches,
 )
 from .._svp_rs import (
     get_maintainer_from_env as _get_maintainer_from_env,
@@ -138,21 +139,6 @@ def open_packaging_branch(
         name=branch_name,
     )
     return branch, subpath or ""
-
-
-def pick_additional_colocated_branches(main_branch: Branch) -> Dict[str, str]:
-    ret = {
-        "pristine-tar": "pristine-tar",
-        "pristine-lfs": "pristine-lfs",
-        "upstream": "upstream",
-        "patch-queue/" + main_branch.name: "patch-queue",  # type: ignore
-    }
-    if main_branch.name.startswith("debian/"):  # type: ignore
-        parts = main_branch.name.split("/")  # type: ignore
-        parts[0] = "upstream"
-        ret["/".join(parts)] = "upstream"
-    existing_branch_names = main_branch.controldir.branch_names()
-    return {k: v for (k, v) in ret.items() if k in existing_branch_names}
 
 
 class Workspace(_mod_workspace.Workspace):

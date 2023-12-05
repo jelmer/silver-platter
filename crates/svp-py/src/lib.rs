@@ -871,6 +871,14 @@ pub(crate) mod debian {
     use super::*;
 use silver_platter::debian::codemod::Error as DebianCodemodError;
 
+#[cfg(feature = "debian")]
+#[pyfunction]
+pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
+    silver_platter::debian::pick_additional_colocated_branches(
+        &breezyshim::branch::RegularBranch::new(main_branch),
+    )
+}
+
 #[pyclass]
 pub(crate) struct DebianCommandResult(silver_platter::debian::codemod::CommandResult);
 
@@ -1119,16 +1127,16 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     #[cfg(feature = "debian")]
     {
-    m.add_class::<debian::ChangelogBehaviour>()?;
-    m.add_function(wrap_pyfunction!(debian::get_maintainer_from_env, m)?)?;
-    m.add_function(wrap_pyfunction!(debian::guess_update_changelog, m)?)?;
-    m.add_class::<debian::DebianCommandResult>()?;
-    m.add_function(wrap_pyfunction!(debian::debian_script_runner, m)?)?;
-    m.add_function(wrap_pyfunction!(debian::is_debcargo_package, m)?)?;
-    m.add_function(wrap_pyfunction!(debian::control_files_in_root, m)?)?;
-    m.add_function(wrap_pyfunction!(debian::install_built_package, m)?)?;
-    m.add_function(wrap_pyfunction!(debian::build, m)?)?;
-
+        m.add_class::<debian::ChangelogBehaviour>()?;
+        m.add_function(wrap_pyfunction!(debian::get_maintainer_from_env, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::guess_update_changelog, m)?)?;
+        m.add_class::<debian::DebianCommandResult>()?;
+        m.add_function(wrap_pyfunction!(debian::debian_script_runner, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::is_debcargo_package, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::control_files_in_root, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::install_built_package, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::build, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::pick_additional_colocated_branches, m)?)?;
     }
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;

@@ -376,7 +376,7 @@ pub fn propose_changes(
                 Err(e) if e.is_instance_of::<MergeProposalExists>(py) => {
                     let proposal = e.value(py).getattr("existing_proposal")?;
                     if !proposal.is_none() {
-                        MergeProposal::new(proposal.to_object(py))
+                        MergeProposal::from(proposal.to_object(py))
                     } else {
                         return Err(e);
                     }

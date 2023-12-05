@@ -1,5 +1,7 @@
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
+use breezyshim::branch::Branch;
 use debian_changelog::{ChangeLog, Urgency};
+use std::collections::HashMap;
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -642,4 +644,25 @@ pub fn find_last_release_revid(
             .call1((branch.to_object(py), py.None()))?;
         db.call_method1("revid_of_version", (version,))?.extract()
     })
+}
+
+pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<String, String> {
+    let mut ret: HashMap<String, String> = vec![
+        ("pristine-tar", "pristine-tar"),
+        ("pristine-lfs", "pristine-lfs"),
+        ("upstream", "upstream"),
+    ].into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+
+    if let Some(name) = main_branch.name() {
+        ret.insert(format!("patch-queue/{}", name), "patch-queue".to_string());
+
+        if name.starts_with("debian/") {
+            let mut parts = name.split('/').collect::<Vec<_>>();
+            parts[0] = "upstream";
+            ret.insert(parts.join("/"), "upstream".to_string());
+        }
+    }
+    let existing_branch_names = main_branch.controldir().branch_names().unwrap();
+
+    ret.into_iter().filter(|(k, _) | existing_branch_names.contains(k)).collect()
 }
