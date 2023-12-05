@@ -113,16 +113,10 @@ impl Entry {
             Err(e) => return Err(Error::Vcs(e)),
         };
 
-        let ws = Workspace::new(
-            Some(main_branch.as_ref()),
-            None,
-            None,
-            HashMap::new(),
-            HashMap::new(),
-            None,
-            Some(basepath),
-            None,
-        );
+        let ws = Workspace::builder()
+            .main_branch(main_branch.as_ref())
+            .path(basepath)
+            .build();
 
         ws.start()?;
 

@@ -129,16 +129,16 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let ws = Workspace::new(
-        Some(main_branch.as_ref()),
-        resume_branch.as_ref().map(|b| b.as_ref()),
-        None,
-        HashMap::new(),
-        HashMap::new(),
-        None,
-        None,
-        None,
-    );
+    let mut builder = Workspace::builder()
+        .main_branch(main_branch.as_ref());
+
+    builder = if let Some(resume_branch) = resume_branch.as_ref() {
+        builder.resume_branch(resume_branch.as_ref())
+    } else {
+        builder
+    };
+
+    let ws = builder.build();
 
     match ws.start() {
         Ok(_) => (),

@@ -59,6 +59,80 @@ impl From<PyErr> for Error {
     }
 }
 
+#[derive(Default)]
+pub struct WorkspaceBuilder<'a> {
+    main_branch: Option<&'a dyn Branch>,
+    resume_branch: Option<&'a dyn Branch>,
+    cached_branch: Option<&'a dyn Branch>,
+    additional_colocated_branches: HashMap<&'a str, &'a str>,
+    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+    dir: Option<&'a Path>,
+    path: Option<&'a Path>,
+    format: Option<&'a str>,
+}
+
+impl<'a> WorkspaceBuilder<'a> {
+    pub fn main_branch(mut self, main_branch: &'a dyn Branch) -> Self {
+        self.main_branch = Some(main_branch);
+        self
+    }
+
+    pub fn resume_branch(mut self, resume_branch: &'a dyn Branch) -> Self {
+        self.resume_branch = Some(resume_branch);
+        self
+    }
+
+    pub fn cached_branch(mut self, cached_branch: &'a dyn Branch) -> Self {
+        self.cached_branch = Some(cached_branch);
+        self
+    }
+
+    pub fn additional_colocated_branches(
+        mut self,
+        additional_colocated_branches: HashMap<&'a str, &'a str>,
+    ) -> Self {
+        self.additional_colocated_branches = additional_colocated_branches;
+        self
+    }
+
+    pub fn resume_branch_additional_colocated_branches(
+        mut self,
+        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+    ) -> Self {
+        self.resume_branch_additional_colocated_branches =
+            resume_branch_additional_colocated_branches;
+        self
+    }
+
+    pub fn dir(mut self, dir: &'a Path) -> Self {
+        self.dir = Some(dir);
+        self
+    }
+
+    pub fn path(mut self, path: &'a Path) -> Self {
+        self.path = Some(path);
+        self
+    }
+
+    pub fn format(mut self, format: &'a str) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    pub fn build(self) -> Workspace {
+        Workspace::new(
+            self.main_branch.as_deref(),
+            self.resume_branch.as_deref(),
+            self.cached_branch.as_deref(),
+            self.additional_colocated_branches,
+            self.resume_branch_additional_colocated_branches,
+            self.dir,
+            self.path,
+            self.format,
+        )
+    }
+}
+
 pub struct Workspace(PyObject);
 
 impl Workspace {
@@ -97,6 +171,10 @@ impl Workspace {
             let workspace = workspace_cls.call((), Some(kwargs)).unwrap();
             Workspace(workspace.into())
         })
+    }
+
+    pub fn builder<'a>() -> WorkspaceBuilder<'a> {
+        WorkspaceBuilder::default()
     }
 
     pub fn main_branch(&self) -> Box<dyn Branch> {
