@@ -336,6 +336,53 @@ impl Workspace {
         )
     }
 
+    pub fn propose(&self,
+        description: &str,
+        tags: Option<HashMap<String, RevisionId>>,
+        name: &str,
+        labels: Option<Vec<String>>,
+        overwrite_existing: Option<bool>,
+        commit_message: Option<&str>) -> Result<MergeProposal, Error> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            if let Some(tags) = tags {
+                kwargs.set_item("tags", tags.into_iter().map(|(k, v)| (k, (&v).to_object(py))).collect::<HashMap<_, _>>())?;
+            }
+            if let Some(labels) = labels {
+                kwargs.set_item("labels", labels)?;
+            }
+            if let Some(commit_message) = commit_message {
+                kwargs.set_item("commit_message", commit_message)?;
+            }
+            if let Some(overwrite_existing) = overwrite_existing {
+                kwargs.set_item("overwrite_existing", overwrite_existing)?;
+            }
+            let proposal = self.0.call_method(
+                py,
+                "propose",
+                (name, description),
+                Some(kwargs),
+            )?;
+            Ok(MergeProposal::new(proposal))
+        })
+    }
+
+    pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("tags", tags.into_iter().map(|(k, v)| (k, (&v).to_object(py))).collect::<HashMap<_, _>>())?;
+            self.0.call_method(py, "push_tags", (), Some(kwargs))?;
+            Ok(())
+        })
+    }
+
+    pub fn push(&self) -> Result<(), Error> {
+        Python::with_gil(|py| {
+            self.0.call_method0(py, "push")?;
+            Ok(())
+        })
+    }
+
     pub fn show_diff(
         &self,
         outf: Box<dyn std::io::Write + Send>,
