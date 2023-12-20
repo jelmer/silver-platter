@@ -45,7 +45,9 @@ pub fn fetch_colocated(
 }
 
 #[derive(Debug)]
-pub enum Error {}
+pub enum Error {
+    Python(PyErr),
+}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -54,8 +56,8 @@ impl std::fmt::Display for Error {
 }
 
 impl From<PyErr> for Error {
-    fn from(_e: PyErr) -> Self {
-        todo!()
+    fn from(e: PyErr) -> Self {
+        Error::Python(e)
     }
 }
 
@@ -121,9 +123,9 @@ impl<'a> WorkspaceBuilder<'a> {
 
     pub fn build(self) -> Workspace {
         Workspace::new(
-            self.main_branch.as_deref(),
-            self.resume_branch.as_deref(),
-            self.cached_branch.as_deref(),
+            self.main_branch,
+            self.resume_branch,
+            self.cached_branch,
             self.additional_colocated_branches,
             self.resume_branch_additional_colocated_branches,
             self.dir,
@@ -342,7 +344,7 @@ impl Workspace {
         name: &str,
         labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
-        commit_message: Option<&str>) -> Result<MergeProposal, Error> {
+        commit_message: Option<&str>) -> Result<(MergeProposal, bool), Error> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             if let Some(tags) = tags {
@@ -357,13 +359,13 @@ impl Workspace {
             if let Some(overwrite_existing) = overwrite_existing {
                 kwargs.set_item("overwrite_existing", overwrite_existing)?;
             }
-            let proposal = self.0.call_method(
+            let (proposal, is_new): (PyObject, bool)  = self.0.call_method(
                 py,
                 "propose",
                 (name, description),
                 Some(kwargs),
-            )?;
-            Ok(MergeProposal::from(proposal))
+            )?.extract(py)?;
+            Ok((MergeProposal::from(proposal), is_new))
         })
     }
 
