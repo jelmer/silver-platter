@@ -286,7 +286,7 @@ class Workspace:
         return any(br != r for name, br, r in self.result_branches())
 
     def result_branches(
-        self
+        self,
     ) -> List[
         Tuple[Optional[str], Optional[RevisionID], Optional[RevisionID]]
     ]:

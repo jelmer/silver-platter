@@ -99,7 +99,7 @@ def select_probers(vcs_type=None):
 
 
 def select_preferred_probers(
-    vcs_type: Optional[str] = None
+    vcs_type: Optional[str] = None,
 ) -> List[Type[Prober]]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
