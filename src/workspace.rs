@@ -421,7 +421,7 @@ impl Workspace {
 impl Drop for Workspace {
     fn drop(&mut self) {
         Python::with_gil(|py| {
-            self.0.call_method0(py, "__exit__").unwrap();
+            self.0.call_method1(py, "__exit__", (py.None(), py.None(), py.None())).unwrap();
         })
     }
 }
