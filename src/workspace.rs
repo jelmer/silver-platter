@@ -49,6 +49,12 @@ pub enum Error {
     Python(PyErr),
 }
 
+impl From<BranchOpenError> for Error {
+    fn from(e: BranchOpenError) -> Self {
+        Error::Python(e.into())
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
         todo!()
@@ -184,6 +190,17 @@ impl Workspace {
             let branch = self.0.getattr(py, "main_branch").unwrap();
             Box::new(breezyshim::branch::RegularBranch::new(branch))
         })
+    }
+
+    pub fn set_main_branch(&self, branch: &dyn Branch) -> Result<(), Error> {
+        Python::with_gil(|py| {
+            self.0.setattr(py, "main_branch", branch.to_object(py))?;
+            Ok(())
+        })
+    }
+
+    pub fn set_main_branch_url(&self, url: &Url) -> Result<(), Error> {
+        self.set_main_branch(breezyshim::branch::open(url)?.as_ref())
     }
 
     pub fn local_tree(&self) -> WorkingTree {
@@ -404,7 +421,7 @@ impl Workspace {
 impl Drop for Workspace {
     fn drop(&mut self) {
         Python::with_gil(|py| {
-            self.0.call_method0(py, "__exit__").unwrap();
+            self.0.call_method1(py, "__exit__", (py.None(), py.None(), py.None())).unwrap();
         })
     }
 }
