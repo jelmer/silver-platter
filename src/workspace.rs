@@ -56,8 +56,10 @@ impl From<BranchOpenError> for Error {
 }
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::Python(e) => write!(f, "{}", e),
+        }
     }
 }
 
