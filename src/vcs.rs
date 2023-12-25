@@ -1,10 +1,10 @@
+use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, Branch, ControlDir, Prober,
-    Transport,
+    get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
+use pyo3::import_exception;
 use pyo3::prelude::*;
-use pyo3::{import_exception};
 
 #[derive(Debug)]
 pub enum BranchOpenError {
@@ -78,16 +78,11 @@ impl From<BranchOpenError> for PyErr {
                 description,
                 vcs,
             } => {
-
-import_exception!(silver_platter.utils, BranchUnsupported);
-                BranchUnsupported::new_err((
-                url.to_string(),
-                description,
-                vcs
-            ))},
+                import_exception!(silver_platter.utils, BranchUnsupported);
+                BranchUnsupported::new_err((url.to_string(), description, vcs))
+            }
             BranchOpenError::Missing { url, description } => {
-
-import_exception!(silver_platter.utils, BranchMissing);
+                import_exception!(silver_platter.utils, BranchMissing);
                 BranchMissing::new_err((url.to_string(), description))
             }
             BranchOpenError::RateLimited {
@@ -95,27 +90,17 @@ import_exception!(silver_platter.utils, BranchMissing);
                 description,
                 retry_after,
             } => {
-
-
-import_exception!(silver_platter.utils, BranchRateLimited);
-                BranchRateLimited::new_err((
-                url.to_string(), description, retry_after
-            ))},
+                import_exception!(silver_platter.utils, BranchRateLimited);
+                BranchRateLimited::new_err((url.to_string(), description, retry_after))
+            }
             BranchOpenError::Unavailable { url, description } => {
-
-import_exception!(silver_platter.utils, BranchUnavailable);
+                import_exception!(silver_platter.utils, BranchUnavailable);
                 BranchUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::TemporarilyUnavailable { url, description } => {
-                import_exception!(
-                    silver_platter.utils,
-                    BranchTemporarilyUnavailable
-                );
+                import_exception!(silver_platter.utils, BranchTemporarilyUnavailable);
 
-
-                BranchTemporarilyUnavailable::new_err((
-                    url.to_string(), description
-                ))
+                BranchTemporarilyUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::Other(e) => e,
         }
@@ -317,7 +302,7 @@ pub fn open_branch(
 
     let transport = get_transport(&url, possible_transports);
     Python::with_gil(|py| {
-        let dir = ControlDir::open_from_transport(&transport, probers).map_err(|e| {
+        let dir = open_from_transport(&transport, probers).map_err(|e| {
             BranchOpenError::from_py_err(py, url.clone(), &e)
                 .unwrap_or_else(|| BranchOpenError::Other(e))
         })?;
@@ -342,11 +327,10 @@ pub fn open_branch_containing(
 
     let transport = get_transport(&url, possible_transports);
     Python::with_gil(|py| {
-        let (dir, subpath) = ControlDir::open_containing_from_transport(&transport, probers)
-            .map_err(|e| {
-                BranchOpenError::from_py_err(py, url.clone(), &e)
-                    .unwrap_or_else(|| BranchOpenError::Other(e))
-            })?;
+        let (dir, subpath) = open_containing_from_transport(&transport, probers).map_err(|e| {
+            BranchOpenError::from_py_err(py, url.clone(), &e)
+                .unwrap_or_else(|| BranchOpenError::Other(e))
+        })?;
         Ok((
             dir.open_branch(name.as_deref())
                 .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))?,

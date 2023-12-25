@@ -357,17 +357,24 @@ impl Workspace {
         )
     }
 
-    pub fn propose(&self,
+    pub fn propose(
+        &self,
         description: &str,
         tags: Option<HashMap<String, RevisionId>>,
         name: &str,
         labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
-        commit_message: Option<&str>) -> Result<(MergeProposal, bool), Error> {
+        commit_message: Option<&str>,
+    ) -> Result<(MergeProposal, bool), Error> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
             if let Some(tags) = tags {
-                kwargs.set_item("tags", tags.into_iter().map(|(k, v)| (k, (&v).to_object(py))).collect::<HashMap<_, _>>())?;
+                kwargs.set_item(
+                    "tags",
+                    tags.into_iter()
+                        .map(|(k, v)| (k, (&v).to_object(py)))
+                        .collect::<HashMap<_, _>>(),
+                )?;
             }
             if let Some(labels) = labels {
                 kwargs.set_item("labels", labels)?;
@@ -378,12 +385,10 @@ impl Workspace {
             if let Some(overwrite_existing) = overwrite_existing {
                 kwargs.set_item("overwrite_existing", overwrite_existing)?;
             }
-            let (proposal, is_new): (PyObject, bool)  = self.0.call_method(
-                py,
-                "propose",
-                (name, description),
-                Some(kwargs),
-            )?.extract(py)?;
+            let (proposal, is_new): (PyObject, bool) = self
+                .0
+                .call_method(py, "propose", (name, description), Some(kwargs))?
+                .extract(py)?;
             Ok((MergeProposal::from(proposal), is_new))
         })
     }
@@ -391,7 +396,12 @@ impl Workspace {
     pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
         Python::with_gil(|py| {
             let kwargs = PyDict::new(py);
-            kwargs.set_item("tags", tags.into_iter().map(|(k, v)| (k, (&v).to_object(py))).collect::<HashMap<_, _>>())?;
+            kwargs.set_item(
+                "tags",
+                tags.into_iter()
+                    .map(|(k, v)| (k, (&v).to_object(py)))
+                    .collect::<HashMap<_, _>>(),
+            )?;
             self.0.call_method(py, "push_tags", (), Some(kwargs))?;
             Ok(())
         })
@@ -423,7 +433,9 @@ impl Workspace {
 impl Drop for Workspace {
     fn drop(&mut self) {
         Python::with_gil(|py| {
-            self.0.call_method1(py, "__exit__", (py.None(), py.None(), py.None())).unwrap();
+            self.0
+                .call_method1(py, "__exit__", (py.None(), py.None(), py.None()))
+                .unwrap();
         })
     }
 }
