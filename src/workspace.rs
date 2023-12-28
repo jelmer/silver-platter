@@ -28,6 +28,7 @@ pub fn fetch_colocated(
                 controldir.push_branch(
                     remote_colo_branch.as_ref(),
                     Some(to_branch_name),
+                    None,
                     Some(true),
                     None,
                 )?;
