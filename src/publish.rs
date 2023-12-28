@@ -74,6 +74,7 @@ pub fn push_result(
                 remote_branch.controldir().push_branch(
                     branch.as_ref(),
                     Some(to_branch_name.as_str()),
+                    None,
                     Some(false),
                     Some(tag_selector),
                 )?;
@@ -287,6 +288,7 @@ pub fn propose_changes(
                     remote_branch.controldir().push_branch(
                         b.as_ref(),
                         Some(to_branch_name.as_str()),
+                        None,
                         Some(overwrite_existing),
                         tags.clone().map(|ts| {
                             Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
