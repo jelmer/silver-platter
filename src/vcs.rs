@@ -300,7 +300,10 @@ pub fn open_branch(
         params.get("name").map(|s| s.to_string())
     };
 
-    let transport = get_transport(&url, possible_transports);
+    let transport = match get_transport(&url, possible_transports) {
+        Ok(transport) => transport,
+        Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
+    };
     Python::with_gil(|py| {
         let dir = open_from_transport(&transport, probers).map_err(|e| match e {
             breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
@@ -335,7 +338,10 @@ pub fn open_branch_containing(
     };
 
     Python::with_gil(move |py| {
-        let transport = get_transport(&url, possible_transports);
+        let transport = match get_transport(&url, possible_transports) {
+            Ok(transport) => transport,
+            Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
+        };
         let (dir, subpath) =
             open_containing_from_transport(&transport, probers).map_err(|e| match e {
                 breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
