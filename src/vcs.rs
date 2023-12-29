@@ -325,8 +325,8 @@ pub fn open_branch_containing(
         params.get("name").map(|s| s.to_string())
     };
 
-    let transport = get_transport(&url, possible_transports);
-    Python::with_gil(|py| {
+    Python::with_gil(move |py| {
+        let transport = get_transport(&url, possible_transports);
         let (dir, subpath) = open_containing_from_transport(&transport, probers).map_err(|e| {
             BranchOpenError::from_py_err(py, url.clone(), &e)
                 .unwrap_or_else(|| BranchOpenError::Other(e))
