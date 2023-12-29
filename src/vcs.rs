@@ -302,9 +302,18 @@ pub fn open_branch(
 
     let transport = get_transport(&url, possible_transports);
     Python::with_gil(|py| {
-        let dir = open_from_transport(&transport, probers).map_err(|e| {
-            BranchOpenError::from_py_err(py, url.clone(), &e)
-                .unwrap_or_else(|| BranchOpenError::Other(e))
+        let dir = open_from_transport(&transport, probers).map_err(|e| match e {
+            breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
+                url: url.clone(),
+                description: e,
+            },
+            breezyshim::controldir::OpenError::UnknownFormat => {
+                unreachable!("open_containing_from_transport should not return UnknownFormat")
+            }
+            breezyshim::controldir::OpenError::Python(e) => {
+                BranchOpenError::from_py_err(py, url.clone(), &e)
+                    .unwrap_or_else(|| BranchOpenError::Other(e))
+            }
         })?;
         dir.open_branch(name.as_deref())
             .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))
@@ -327,10 +336,20 @@ pub fn open_branch_containing(
 
     Python::with_gil(move |py| {
         let transport = get_transport(&url, possible_transports);
-        let (dir, subpath) = open_containing_from_transport(&transport, probers).map_err(|e| {
-            BranchOpenError::from_py_err(py, url.clone(), &e)
-                .unwrap_or_else(|| BranchOpenError::Other(e))
-        })?;
+        let (dir, subpath) =
+            open_containing_from_transport(&transport, probers).map_err(|e| match e {
+                breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
+                    url: url.clone(),
+                    description: e,
+                },
+                breezyshim::controldir::OpenError::UnknownFormat => {
+                    unreachable!("open_containing_from_transport should not return UnknownFormat")
+                }
+                breezyshim::controldir::OpenError::Python(e) => {
+                    BranchOpenError::from_py_err(py, url.clone(), &e)
+                        .unwrap_or_else(|| BranchOpenError::Other(e))
+                }
+            })?;
         Ok((
             dir.open_branch(name.as_deref())
                 .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))?,

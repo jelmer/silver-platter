@@ -168,9 +168,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.71"
+version = "0.1.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ddc4e49c4b0d674e4b0973f539d16eac473a77853a3d1b7362a4ef3197c8a14"
+checksum = "9259d698c5cfa63afe1a56a640f5bd4dca96075fa5c3611236f32f0b2714424d"
 dependencies = [
  "chrono",
  "debversion",
@@ -255,9 +255,9 @@ dependencies = [
 
 [[package]]
 name = "chrono-tz"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e23185c0e21df6ed832a12e2bda87c7d1def6842881fb634a8511ced741b0d76"
+checksum = "91d7b79e99bfaa0d47da0687c43aa3b7381938a62ad3a6498599039321f660b7"
 dependencies = [
  "chrono",
  "chrono-tz-build",
