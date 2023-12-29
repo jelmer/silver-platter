@@ -128,8 +128,7 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let mut builder = Workspace::builder()
-        .main_branch(main_branch.as_ref());
+    let mut builder = Workspace::builder().main_branch(main_branch.as_ref());
 
     builder = if let Some(resume_branch) = resume_branch.as_ref() {
         builder.resume_branch(resume_branch.as_ref())

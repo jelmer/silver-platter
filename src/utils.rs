@@ -7,11 +7,24 @@ use std::collections::HashMap;
 
 pub enum Error {
     Other(PyErr),
+    UnknownFormat,
 }
 
 impl From<PyErr> for Error {
     fn from(e: PyErr) -> Self {
         Error::Other(e)
+    }
+}
+
+impl From<breezyshim::controldir::CreateError> for Error {
+    fn from(e: breezyshim::controldir::CreateError) -> Self {
+        match e {
+            breezyshim::controldir::CreateError::AlreadyExists => {
+                unreachable!("AlreadyExists")
+            }
+            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
+            breezyshim::controldir::CreateError::Python(e) => Error::Other(e.into()),
+        }
     }
 }
 

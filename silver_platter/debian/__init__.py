@@ -27,10 +27,9 @@ from breezy.plugins.debian.directory import (
 )
 from breezy.plugins.debian.upstream import MissingUpstreamTarball
 from breezy.urlutils import InvalidURL
-from debmutate.vcs import split_vcs_url
-
 from debian.changelog import Version
 from debian.deb822 import Deb822
+from debmutate.vcs import split_vcs_url
 
 from .. import workspace as _mod_workspace
 from .._svp_rs import (

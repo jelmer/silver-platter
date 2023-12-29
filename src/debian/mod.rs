@@ -1,5 +1,5 @@
-use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use breezyshim::branch::Branch;
+use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::{ChangeLog, Urgency};
 use std::collections::HashMap;
 
@@ -54,17 +54,19 @@ pub fn guess_update_changelog(
     debian_path: &Path,
 ) -> Option<ChangelogBehaviour> {
     #[cfg(feature = "detect-update-changelog")]
-    { debian_analyzer::detect_gbp_dch::guess_update_changelog(tree, debian_path, None) }
+    {
+        debian_analyzer::detect_gbp_dch::guess_update_changelog(tree, debian_path, None)
+    }
     #[cfg(not(feature = "detect-update-changelog"))]
     {
-            log::warn!("Install lintian-brush to detect automatically whether the changelog should be updated.");
-            return Some(ChangelogBehaviour {
+        log::warn!("Install lintian-brush to detect automatically whether the changelog should be updated.");
+        return Some(ChangelogBehaviour {
                 update_changelog: true,
                 explanation: format!(
                     "defaulting to updating changelog since silver-platter was built without lintian-brush"
                 ),
             });
-        }
+    }
 }
 
 /// Add a changelog entry.
@@ -651,7 +653,10 @@ pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<S
         ("pristine-tar", "pristine-tar"),
         ("pristine-lfs", "pristine-lfs"),
         ("upstream", "upstream"),
-    ].into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
 
     if let Some(name) = main_branch.name() {
         ret.insert(format!("patch-queue/{}", name), "patch-queue".to_string());
@@ -664,5 +669,7 @@ pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<S
     }
     let existing_branch_names = main_branch.controldir().branch_names().unwrap();
 
-    ret.into_iter().filter(|(k, _) | existing_branch_names.contains(k)).collect()
+    ret.into_iter()
+        .filter(|(k, _)| existing_branch_names.contains(k))
+        .collect()
 }

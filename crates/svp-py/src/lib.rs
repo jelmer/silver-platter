@@ -306,8 +306,6 @@ impl CommandResult {
     }
 }
 
-
-
 #[pyfunction]
 fn script_runner(
     py: Python,
@@ -396,10 +394,23 @@ impl ControlDir {
                 .map(silver_platter::Prober::new)
                 .collect()
         });
-        let control_dir = silver_platter::ControlDir::open_from_transport(
+        let control_dir = match breezyshim::controldir::open_from_transport(
             &silver_platter::Transport::new(transport),
             probers.as_deref(),
-        )?;
+        ) {
+            Ok(control_dir) => control_dir,
+            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
+            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
+                pyo3::import_exception!(breezy.errors, NotBranchError);
+                return Err(NotBranchError::new_err(e));
+            }
+            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
+                pyo3::import_exception!(breezy.errors, UnknownFormatError);
+                return Err(UnknownFormatError::new_err(
+                    "Unknown format (not a Breezy branch)",
+                ));
+            }
+        };
         Ok(ControlDir(control_dir))
     }
 
@@ -415,10 +426,23 @@ impl ControlDir {
                 .map(silver_platter::Prober::new)
                 .collect()
         });
-        let (control_dir, subpath) = silver_platter::ControlDir::open_containing_from_transport(
+        let (control_dir, subpath) = match breezyshim::controldir::open_containing_from_transport(
             &silver_platter::Transport::new(transport),
             probers.as_deref(),
-        )?;
+        ) {
+            Ok(control_dir) => control_dir,
+            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
+            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
+                pyo3::import_exception!(breezy.errors, NotBranchError);
+                return Err(NotBranchError::new_err(e));
+            }
+            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
+                pyo3::import_exception!(breezy.errors, UnknownFormatError);
+                return Err(UnknownFormatError::new_err(
+                    "Unknown format (not a Breezy branch)",
+                ));
+            }
+        };
         Ok((ControlDir(control_dir), subpath))
     }
 }
@@ -789,6 +813,7 @@ fn create_temp_sprout(
     dir: Option<std::path::PathBuf>,
     path: Option<std::path::PathBuf>,
 ) -> PyResult<(PyObject, DestroyFn)> {
+    import_exception!(breezy.errors, UnknownFormat);
     silver_platter::utils::create_temp_sprout(
         &breezyshim::branch::RegularBranch::new(branch),
         additional_colocated_branches,
@@ -797,6 +822,7 @@ fn create_temp_sprout(
     )
     .map_err(|e| match e {
         silver_platter::utils::Error::Other(e) => e,
+        silver_platter::utils::Error::UnknownFormat => UnknownFormat::new_err(()),
     })
     .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
 }
@@ -869,213 +895,216 @@ fn check_proposal_diff(
 #[cfg(feature = "debian")]
 pub(crate) mod debian {
     use super::*;
-use silver_platter::debian::codemod::Error as DebianCodemodError;
+    use silver_platter::debian::codemod::Error as DebianCodemodError;
 
-#[cfg(feature = "debian")]
-#[pyfunction]
-pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
-    silver_platter::debian::pick_additional_colocated_branches(
-        &breezyshim::branch::RegularBranch::new(main_branch),
-    )
-}
-
-#[pyclass]
-pub(crate) struct DebianCommandResult(silver_platter::debian::codemod::CommandResult);
-
-#[pymethods]
-impl DebianCommandResult {
-    #[getter]
-    fn value(&self) -> Option<u32> {
-        self.0.value
+    #[cfg(feature = "debian")]
+    #[pyfunction]
+    pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
+        silver_platter::debian::pick_additional_colocated_branches(
+            &breezyshim::branch::RegularBranch::new(main_branch),
+        )
     }
 
-    #[getter]
-    fn description(&self) -> &str {
-        self.0.description.as_str()
+    #[pyclass]
+    pub(crate) struct DebianCommandResult(silver_platter::debian::codemod::CommandResult);
+
+    #[pymethods]
+    impl DebianCommandResult {
+        #[getter]
+        fn value(&self) -> Option<u32> {
+            self.0.value
+        }
+
+        #[getter]
+        fn description(&self) -> &str {
+            self.0.description.as_str()
+        }
+
+        #[getter]
+        fn serialized_context(&self) -> Option<&str> {
+            self.0.serialized_context.as_deref()
+        }
+
+        #[getter]
+        fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
+            self.0.tags.clone()
+        }
+
+        #[getter]
+        fn target_branch_url(&self) -> Option<&str> {
+            self.0.target_branch_url.as_ref().map(|u| u.as_str())
+        }
+
+        #[getter]
+        fn old_revision(&self) -> RevisionId {
+            self.0.old_revision.clone()
+        }
+
+        #[getter]
+        fn new_revision(&self) -> RevisionId {
+            self.0.new_revision.clone()
+        }
+
+        #[getter]
+        fn context(&self, py: Python) -> Option<PyObject> {
+            self.0.context.as_ref().map(|c| json_to_py(py, c))
+        }
     }
 
-    #[getter]
-    fn serialized_context(&self) -> Option<&str> {
-        self.0.serialized_context.as_deref()
-    }
+    #[pyfunction]
+    pub(crate) fn debian_script_runner(
+        py: Python,
+        local_tree: PyObject,
+        script: PyObject,
+        subpath: Option<std::path::PathBuf>,
+        commit_pending: Option<bool>,
+        resume_metadata: Option<PyObject>,
+        committer: Option<&str>,
+        extra_env: Option<std::collections::HashMap<String, String>>,
+        stderr: Option<PyObject>,
+        update_changelog: Option<bool>,
+    ) -> PyResult<PyObject> {
+        let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
+            script
+        } else {
+            vec!["sh", "-c", script.extract::<&str>(py)?]
+        };
 
-    #[getter]
-    fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
-        self.0.tags.clone()
-    }
-
-    #[getter]
-    fn target_branch_url(&self) -> Option<&str> {
-        self.0.target_branch_url.as_ref().map(|u| u.as_str())
-    }
-
-    #[getter]
-    fn old_revision(&self) -> RevisionId {
-        self.0.old_revision.clone()
-    }
-
-    #[getter]
-    fn new_revision(&self) -> RevisionId {
-        self.0.new_revision.clone()
-    }
-
-    #[getter]
-    fn context(&self, py: Python) -> Option<PyObject> {
-        self.0.context.as_ref().map(|c| json_to_py(py, c))
-    }
-}
-
-#[pyfunction]
-pub(crate) fn debian_script_runner(
-    py: Python,
-    local_tree: PyObject,
-    script: PyObject,
-    subpath: Option<std::path::PathBuf>,
-    commit_pending: Option<bool>,
-    resume_metadata: Option<PyObject>,
-    committer: Option<&str>,
-    extra_env: Option<std::collections::HashMap<String, String>>,
-    stderr: Option<PyObject>,
-    update_changelog: Option<bool>,
-) -> PyResult<PyObject> {
-    let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
-        script
-    } else {
-        vec!["sh", "-c", script.extract::<&str>(py)?]
-    };
-
-    silver_platter::debian::codemod::script_runner(
-        &WorkingTree::from(local_tree),
-        script.as_slice(),
-        subpath
-            .as_ref()
-            .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
-        match commit_pending {
-            Some(true) => CommitPending::Yes,
-            Some(false) => CommitPending::No,
-            None => CommitPending::Auto,
-        },
-        resume_metadata
-            .map(|m| py_to_json(m.as_ref(py)).unwrap())
-            .as_ref(),
-        committer,
-        extra_env,
-        match stderr {
-            Some(stderr) => {
-                let fd = stderr
-                    .call_method0(py, "fileno")?
-                    .extract::<i32>(py)
-                    .unwrap();
-                let f = unsafe { std::fs::File::from_raw_fd(fd) };
-                std::process::Stdio::from(f)
+        silver_platter::debian::codemod::script_runner(
+            &WorkingTree::from(local_tree),
+            script.as_slice(),
+            subpath
+                .as_ref()
+                .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
+            match commit_pending {
+                Some(true) => CommitPending::Yes,
+                Some(false) => CommitPending::No,
+                None => CommitPending::Auto,
+            },
+            resume_metadata
+                .map(|m| py_to_json(m.as_ref(py)).unwrap())
+                .as_ref(),
+            committer,
+            extra_env,
+            match stderr {
+                Some(stderr) => {
+                    let fd = stderr
+                        .call_method0(py, "fileno")?
+                        .extract::<i32>(py)
+                        .unwrap();
+                    let f = unsafe { std::fs::File::from_raw_fd(fd) };
+                    std::process::Stdio::from(f)
+                }
+                None => std::process::Stdio::inherit(),
+            },
+            update_changelog,
+        )
+        .map(|result| DebianCommandResult(result).into_py(py))
+        .map_err(|err| match err {
+            DebianCodemodError::ScriptMadeNoChanges => {
+                ScriptMadeNoChanges::new_err("Script made no changes")
             }
-            None => std::process::Stdio::inherit(),
-        },
-        update_changelog,
-    )
-    .map(|result| DebianCommandResult(result).into_py(py))
-    .map_err(|err| match err {
-        DebianCodemodError::ScriptMadeNoChanges => {
-            ScriptMadeNoChanges::new_err("Script made no changes")
-        }
-        DebianCodemodError::ExitCode(code) => {
-            ScriptFailed::new_err(format!("Script failed with exit code {}", code))
-        }
-        DebianCodemodError::ScriptNotFound => ScriptNotFound::new_err("Script not found"),
-        DebianCodemodError::Detailed(df) => {
-            DetailedFailure::new_err(format!("Script failed: {}", df.description.unwrap()))
-        }
-        DebianCodemodError::Json(err) => {
-            ResultFileFormatError::new_err(format!("Result file format error: {}", err))
-        }
-        DebianCodemodError::Io(err) => err.into(),
-        DebianCodemodError::Other(err) => {
-            PyRuntimeError::new_err(format!("Script failed: {}", err))
-        }
-        DebianCodemodError::Utf8(err) => err.into(),
-        DebianCodemodError::ChangelogParse(e) => {
-            MissingChangelog::new_err(format!("Failed to parse changelog {}", e))
-        }
-        DebianCodemodError::MissingChangelog(p) => {
-            MissingChangelog::new_err(format!("Missing changelog entry for {}", p.display()))
-        }
-    })
-}
-
-#[pyfunction]
-pub(crate) fn get_maintainer_from_env(env: HashMap<String, String>) -> Option<(String, String)> {
-    debian_changelog::get_maintainer_from_env(|k| env.get(k).map(|s| s.to_string()))
-}
-
-#[pyfunction]
-pub(crate) fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> {
-    let tree = WorkingTree::from(tree);
-    Ok(silver_platter::debian::is_debcargo_package(
-        &tree,
-        std::path::Path::new(path),
-    ))
-}
-
-#[pyfunction]
-pub(crate) fn control_files_in_root(tree: PyObject, path: &str) -> PyResult<bool> {
-    let tree = WorkingTree::from(tree);
-    Ok(silver_platter::debian::control_files_in_root(
-        &tree,
-        std::path::Path::new(path),
-    ))
-}
-
-#[pyclass]
-pub(crate) struct ChangelogBehaviour(silver_platter::debian::ChangelogBehaviour);
-
-#[pymethods]
-impl ChangelogBehaviour {
-    #[getter]
-    fn get_update_changelog(&self) -> bool {
-        self.0.update_changelog
+            DebianCodemodError::ExitCode(code) => {
+                ScriptFailed::new_err(format!("Script failed with exit code {}", code))
+            }
+            DebianCodemodError::ScriptNotFound => ScriptNotFound::new_err("Script not found"),
+            DebianCodemodError::Detailed(df) => {
+                DetailedFailure::new_err(format!("Script failed: {}", df.description.unwrap()))
+            }
+            DebianCodemodError::Json(err) => {
+                ResultFileFormatError::new_err(format!("Result file format error: {}", err))
+            }
+            DebianCodemodError::Io(err) => err.into(),
+            DebianCodemodError::Other(err) => {
+                PyRuntimeError::new_err(format!("Script failed: {}", err))
+            }
+            DebianCodemodError::Utf8(err) => err.into(),
+            DebianCodemodError::ChangelogParse(e) => {
+                MissingChangelog::new_err(format!("Failed to parse changelog {}", e))
+            }
+            DebianCodemodError::MissingChangelog(p) => {
+                MissingChangelog::new_err(format!("Missing changelog entry for {}", p.display()))
+            }
+        })
     }
 
-    #[getter]
-    fn get_explanation(&self) -> String {
-        self.0.explanation.clone()
+    #[pyfunction]
+    pub(crate) fn get_maintainer_from_env(
+        env: HashMap<String, String>,
+    ) -> Option<(String, String)> {
+        debian_changelog::get_maintainer_from_env(|k| env.get(k).map(|s| s.to_string()))
     }
-}
 
-#[pyfunction]
-pub(crate) fn guess_update_changelog(tree: PyObject, debian_path: &str) -> Option<ChangelogBehaviour> {
-    let tree = WorkingTree::from(tree);
-    silver_platter::debian::guess_update_changelog(&tree, std::path::Path::new(debian_path))
-        .map(ChangelogBehaviour)
-}
+    #[pyfunction]
+    pub(crate) fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> {
+        let tree = WorkingTree::from(tree);
+        Ok(silver_platter::debian::is_debcargo_package(
+            &tree,
+            std::path::Path::new(path),
+        ))
+    }
 
-#[pyfunction]
-pub(crate) fn build(
-    tree: PyObject,
-    subpath: PathBuf,
-    builder: Option<&str>,
-    result_dir: Option<PathBuf>,
-) -> PyResult<()> {
-    let tree = WorkingTree::from(tree);
-    silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
-}
+    #[pyfunction]
+    pub(crate) fn control_files_in_root(tree: PyObject, path: &str) -> PyResult<bool> {
+        let tree = WorkingTree::from(tree);
+        Ok(silver_platter::debian::control_files_in_root(
+            &tree,
+            std::path::Path::new(path),
+        ))
+    }
 
-#[pyfunction]
-pub(crate) fn install_built_package(
-    local_tree: PyObject,
-    subpath: std::path::PathBuf,
-    build_target_dir: std::path::PathBuf,
-) -> PyResult<()> {
-    let local_tree = WorkingTree::from(local_tree);
-    silver_platter::debian::install_built_package(
-        &local_tree,
-        subpath.as_path(),
-        build_target_dir.as_path(),
-    )
-    .unwrap();
-    Ok(())
-}
+    #[pyclass]
+    pub(crate) struct ChangelogBehaviour(silver_platter::debian::ChangelogBehaviour);
 
+    #[pymethods]
+    impl ChangelogBehaviour {
+        #[getter]
+        fn get_update_changelog(&self) -> bool {
+            self.0.update_changelog
+        }
 
+        #[getter]
+        fn get_explanation(&self) -> String {
+            self.0.explanation.clone()
+        }
+    }
+
+    #[pyfunction]
+    pub(crate) fn guess_update_changelog(
+        tree: PyObject,
+        debian_path: &str,
+    ) -> Option<ChangelogBehaviour> {
+        let tree = WorkingTree::from(tree);
+        silver_platter::debian::guess_update_changelog(&tree, std::path::Path::new(debian_path))
+            .map(ChangelogBehaviour)
+    }
+
+    #[pyfunction]
+    pub(crate) fn build(
+        tree: PyObject,
+        subpath: PathBuf,
+        builder: Option<&str>,
+        result_dir: Option<PathBuf>,
+    ) -> PyResult<()> {
+        let tree = WorkingTree::from(tree);
+        silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
+    }
+
+    #[pyfunction]
+    pub(crate) fn install_built_package(
+        local_tree: PyObject,
+        subpath: std::path::PathBuf,
+        build_target_dir: std::path::PathBuf,
+    ) -> PyResult<()> {
+        let local_tree = WorkingTree::from(local_tree);
+        silver_platter::debian::install_built_package(
+            &local_tree,
+            subpath.as_path(),
+            build_target_dir.as_path(),
+        )
+        .unwrap();
+        Ok(())
+    }
 }
 
 /// Check whether two branches are conflicted when merged.
@@ -1136,7 +1165,10 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(debian::control_files_in_root, m)?)?;
         m.add_function(wrap_pyfunction!(debian::install_built_package, m)?)?;
         m.add_function(wrap_pyfunction!(debian::build, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::pick_additional_colocated_branches, m)?)?;
+        m.add_function(wrap_pyfunction!(
+            debian::pick_additional_colocated_branches,
+            m
+        )?)?;
     }
     m.add_function(wrap_pyfunction!(open_branch, m)?)?;
     m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
