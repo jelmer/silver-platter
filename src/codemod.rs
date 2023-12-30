@@ -104,7 +104,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq)]
 pub struct DetailedFailure {
     pub result_code: String,
     pub description: Option<String>,
@@ -290,4 +290,181 @@ pub fn script_runner(
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })
+}
+
+#[cfg(test)]
+mod script_runner_tests {
+    use breezyshim::tree::MutableTree;
+
+    fn make_executable(script_path: &std::path::Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Make script.sh executable
+            let mut perm = std::fs::metadata(script_path).unwrap().permissions();
+            perm.set_mode(0o755);
+            std::fs::set_permissions(script_path, perm).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_no_api() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree =
+            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
+                .unwrap();
+        let script_path = d.join("script.sh");
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+echo foo > bar
+echo Did a thing
+"#,
+        )
+        .unwrap();
+
+        make_executable(&script_path);
+
+        tree.add(&[std::path::Path::new("bar")]).unwrap();
+        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let script_path_str = script_path.to_str().unwrap();
+        let result = super::script_runner(
+            &tree,
+            &[script_path_str],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+        )
+        .unwrap();
+
+        assert!(!tree.has_changes().unwrap());
+        assert_eq!(result.old_revision, old_revid);
+        assert_eq!(result.new_revision, tree.last_revision().unwrap());
+        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+    }
+
+    #[test]
+    fn test_api() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree =
+            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
+                .unwrap();
+        let script_path = d.join("script.sh");
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+echo foo > bar
+echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
+"#,
+        )
+        .unwrap();
+
+        make_executable(&script_path);
+
+        tree.add(&[std::path::Path::new("bar")]).unwrap();
+        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let script_path_str = script_path.to_str().unwrap();
+        let result = super::script_runner(
+            &tree,
+            &[script_path_str],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+        )
+        .unwrap();
+
+        assert!(!tree.has_changes().unwrap());
+        assert_eq!(result.old_revision, old_revid);
+        assert_eq!(result.new_revision, tree.last_revision().unwrap());
+        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+    }
+
+    #[test]
+    fn test_new_file() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree =
+            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
+                .unwrap();
+        let script_path = d.join("script.sh");
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+echo foo > bar
+echo Did a thing
+"#,
+        )
+        .unwrap();
+
+        make_executable(&script_path);
+
+        std::fs::write(d.join("bar"), "initial").unwrap();
+
+        tree.add(&[std::path::Path::new("bar")]).unwrap();
+        let old_revid = tree.commit("initial", None, None, None).unwrap();
+
+        let script_path_str = script_path.to_str().unwrap();
+        let result = super::script_runner(
+            &tree,
+            &[script_path_str],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+        )
+        .unwrap();
+
+        assert!(!tree.has_changes().unwrap());
+        assert_eq!(result.old_revision, old_revid);
+        assert_eq!(result.new_revision, tree.last_revision().unwrap());
+        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+    }
+
+    #[test]
+    fn test_no_changes() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree = breezyshim::controldir::ControlDir::create_standalone_workingtree(
+            &d,
+            Some(&breezyshim::controldir::ControlDirFormat::get_default()),
+        )
+        .unwrap();
+        let script_path = d.join("script.sh");
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+echo Did a thing
+"#,
+        )
+        .unwrap();
+
+        make_executable(&script_path);
+
+        tree.commit("initial", None, None, None).unwrap();
+        let script_path_str = script_path.to_str().unwrap();
+        let err = super::script_runner(
+            &tree,
+            &[script_path_str],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+        )
+        .unwrap_err();
+
+        assert!(!tree.has_changes().unwrap());
+        assert!(matches!(err, super::Error::ScriptMadeNoChanges));
+    }
 }

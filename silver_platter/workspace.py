@@ -25,13 +25,13 @@ from breezy.branch import Branch
 from breezy.controldir import ControlDir, NoColocatedBranchSupport
 from breezy.diff import show_diff_trees
 from breezy.errors import DivergedBranches, NotBranchError
+from breezy.forge import Forge, MergeProposal, UnsupportedForge, get_forge
 from breezy.revision import NULL_REVISION, RevisionID
 from breezy.transport.local import LocalTransport
 from breezy.tree import Tree
 from breezy.workingtree import WorkingTree
 
 from . import _svp_rs
-from .proposal import Forge, MergeProposal, UnsupportedForge, get_forge
 from .publish import (
     PublishResult,
     propose_changes,
