@@ -1,7 +1,7 @@
 [package]
 name = "silver-platter"
 version = "0.5.20"
-authors = [ "Jelmer Vernooij <jelmer@jelmer.uk>",]
+authors = [ "Jelmer Vernooĳ <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
 description = "Large scale VCS change management"
