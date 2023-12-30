@@ -2,7 +2,7 @@
 import sys
 
 from setuptools import setup
-from setuptools_rust import Binding, RustExtension
+from setuptools_rust import Binding, RustExtension, RustBin
 
 features = []
 
@@ -17,6 +17,11 @@ setup(
             binding=Binding.PyO3,
             args=["--no-default-features"],
             features=features,
+        ),
+        RustBin(
+            "svp",
+            "Cargo.toml",
+            features=features
         )
     ],
 )
