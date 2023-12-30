@@ -22,6 +22,12 @@ import logging
 import sys
 from typing import List, Optional
 
+from breezy.forge import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    get_forge,
+)
 from breezy.urlutils import InvalidURL
 
 import silver_platter  # noqa: F401
@@ -30,14 +36,7 @@ from .._svp_rs import (
     derived_branch_name,
 )
 from ..candidates import Candidate, CandidateList
-from ..proposal import (
-    ForgeLoginRequired,
-    MergeProposal,
-    UnsupportedForge,
-    enable_tag_pushing,
-    find_existing_proposed,
-    get_forge,
-)
+from ..proposal import enable_tag_pushing, find_existing_proposed
 from ..publish import SUPPORTED_MODES, InsufficientChangesForNewProposal
 from ..utils import (
     BranchMissing,

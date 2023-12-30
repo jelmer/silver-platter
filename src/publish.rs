@@ -20,7 +20,7 @@ import_exception!(breezy.forge, UnsupportedForge);
 import_exception!(breezy.forge, ForgeLoginRequired);
 
 create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
-import_exception!(silver_platter.batch, UnrelatedBranchExists);
+import_exception!(silver_platter, UnrelatedBranchExists);
 
 import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
 

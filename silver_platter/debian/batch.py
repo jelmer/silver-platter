@@ -24,23 +24,27 @@ from typing import Any, Callable, Dict, List, Optional
 
 from breezy.branch import Branch
 from breezy.errors import DivergedBranches
-from breezy.forge import get_proposal_by_url
+from breezy.forge import (
+    ForgeLoginRequired,
+    MergeProposal,
+    UnsupportedForge,
+    get_forge,
+    get_proposal_by_url,
+)
 from breezy.workingtree import WorkingTree
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from ..batch import (
+from .. import (
     UnrelatedBranchExists,
+)
+from ..batch import (
     drop_batch_entry,
     load_batch_metadata,
     save_batch_metadata,
 )
 from ..candidates import Candidate, CandidateList
 from ..proposal import (
-    ForgeLoginRequired,
-    MergeProposal,
-    UnsupportedForge,
     enable_tag_pushing,
-    get_forge,
 )
 from ..publish import (
     EmptyMergeProposal,

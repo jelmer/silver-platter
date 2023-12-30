@@ -2,7 +2,7 @@
 import sys
 
 from setuptools import setup
-from setuptools_rust import Binding, RustExtension, RustBin
+from setuptools_rust import Binding, RustBin, RustExtension
 
 features = []
 
