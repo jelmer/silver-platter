@@ -54,7 +54,6 @@ testing = [
 ]
 
 [project.scripts]
-svp = "silver_platter.__main__:main"
 debian-svp = "silver_platter.debian.__main__:main"
 
 [tool.setuptools]
