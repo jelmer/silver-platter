@@ -11,6 +11,7 @@ use std::path::Path;
 pub const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
 
 pub mod codemod;
+pub mod run;
 pub mod uploader;
 pub mod vcswatch;
 

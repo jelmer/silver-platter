@@ -776,145 +776,46 @@ def open_last_attempt_db():
         )
 
 
-def main(argv):  # noqa: C901
-    import argparse
-
-    parser = argparse.ArgumentParser(prog="upload-pending-commits")
-    parser.add_argument("packages", nargs="*")
-    parser.add_argument(
-        "--acceptable-keys",
-        help="List of acceptable GPG keys",
-        action="append",
-        default=[],
-        type=str,
-    )
-    parser.add_argument(
-        "--gpg-verification",
-        help="Verify GPG signatures on commits",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--min-commit-age",
-        help="Minimum age of the last commit, in days",
-        type=int,
-        default=0,
-    )
-    parser.add_argument("--diff", action="store_true", help="Show diff.")
-    parser.add_argument(
-        "--builder",
-        type=str,
-        help="Build command",
-        default=(
-            DEFAULT_BUILDER + " --source --source-only-changes "
-            "--debbuildopt=-v${LAST_VERSION}"
-        ),
-    )
-    parser.add_argument(
-        "--maintainer",
-        type=str,
-        action="append",
-        help="Select all packages maintained by specified maintainer.",
-    )
-    parser.add_argument(
-        "--vcswatch",
-        action="store_true",
-        default=False,
-        help="Use vcswatch to determine what packages need uploading.",
-    )
-    parser.add_argument(
-        "--exclude",
-        type=str,
-        action="append",
-        default=[],
-        help="Ignore source package",
-    )
-    parser.add_argument(
-        "--autopkgtest-only",
-        action="store_true",
-        help="Only process packages with autopkgtests.",
-    )
-    parser.add_argument(
-        "--allowed-committer",
-        type=str,
-        action="append",
-        help="Require that all new commits are from specified committers",
-    )
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument(
-        "--shuffle",
-        action="store_true",
-        help="Randomize order packages are processed in.",
-    )
-    parser.add_argument(
-        "--verify-command",
-        type=str,
-        default=None,
-        help=(
-            "Command to verify whether upload is necessary. "
-            "Should return 1 to decline, 0 to upload."
-        ),
-    )
-    parser.add_argument(
-        "--apt-repository",
-        type=str,
-        help="APT repository to use. Defaults to locally configured.",
-        default=(
-            os.environ.get("APT_REPOSITORY") or os.environ.get("REPOSITORIES")
-        ),
-    )
-    parser.add_argument(
-        "--apt-repository-key",
-        type=str,
-        help=(
-            "APT repository key to use for validation, "
-            "if --apt-repository is set."
-        ),
-        default=os.environ.get("APT_REPOSITORY_KEY"),
-    )
-
-    args = parser.parse_args(argv)
-
+def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, builder, maintainer, vcswatch, exclude, autopkgtest_only, allowed_committer, debug, shuffle, verify_command, apt_repository, apt_repository_key):
     ret = 0
 
-    if not args.packages and not args.maintainer:
+    if not packages and not maintainer:
         (name, email) = get_maintainer()
         if email:
             logging.info("Processing packages maintained by %s", email)
-            args.maintainer = [email]
+            maintainer = [email]
         else:
             parser.print_usage()
             sys.exit(1)
 
-    if not args.vcswatch:
+    if not vcswatch:
         logging.info(
             "Use --vcswatch to only process packages for which "
             "vcswatch found pending commits."
         )
 
-    if args.apt_repository:
+    if apt_repository:
         apt_repo = RemoteApt.from_string(
-            args.apt_repository, args.apt_repository_key
+            apt_repository, apt_repository_key
         )
     else:
         apt_repo = LocalApt()
 
-    if args.maintainer:
-        if args.packages:
+    if maintainer:
+        if packages:
             parser.print_error(
                 "--maintainer is incompatible with specifying package names"
             )
         packages = select_apt_packages(
-            apt_repo, args.packages, args.maintainer
+            apt_repo, packages, maintainer
         )
-    else:
-        packages = args.packages
 
     if not packages:
         logging.info("No packages found.")
         parser.print_usage()
         sys.exit(1)
 
-    if args.shuffle:
+    if shuffle:
         import random
 
         random.shuffle(packages)
@@ -925,13 +826,13 @@ def main(argv):  # noqa: C901
         stats.setdefault(result, 0)
         stats[result] += 1
 
-    if args.vcswatch:
+    if vcswatch:
         packages, failures, extra_data = vcswatch_prescan_packages(
             packages,
             inc_stats,
-            exclude=args.exclude,
-            min_commit_age=args.min_commit_age,
-            allowed_committers=args.allowed_committer,
+            exclude=exclude,
+            min_commit_age=min_commit_age,
+            allowed_committers=allowed_committer,
         )
         if failures > 0:
             ret = 1
@@ -967,20 +868,20 @@ def main(argv):  # noqa: C901
             process_package(
                 apt_repo,
                 package,
-                builder=args.builder,
-                exclude=args.exclude,
-                autopkgtest_only=args.autopkgtest_only,
-                gpg_verification=args.gpg_verification,
-                acceptable_keys=args.acceptable_keys,
-                debug=args.debug,
-                diff=args.diff,
-                min_commit_age=args.min_commit_age,
-                allowed_committers=args.allowed_committer,
+                builder=builder,
+                exclude=exclude,
+                autopkgtest_only=autopkgtest_only,
+                gpg_verification=gpg_verification,
+                acceptable_keys=acceptable_keys,
+                debug=debug,
+                diff=diff,
+                min_commit_age=min_commit_age,
+                allowed_committers=allowed_committer,
                 vcs_type=vcs_type,
                 vcs_url=vcs_url,
                 archive_version=archive_version,
                 source_name=source_name,
-                verify_command=args.verify_command,
+                verify_command=verify_command,
             )
         except PackageProcessingFailure as e:
             inc_stats(e.reason)
