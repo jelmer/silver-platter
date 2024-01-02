@@ -76,3 +76,7 @@ debian-changelog = "0.1.10"
 [[bin]]
 name = "svp"
 
+[[bin]]
+name = "debian-svp"
+required-features = ["debian"]
+
