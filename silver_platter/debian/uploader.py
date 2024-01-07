@@ -69,7 +69,6 @@ from ..utils import (
     open_branch,
 )
 from . import (
-    DEFAULT_BUILDER,
     NoSuchPackage,
     Workspace,
     apt_get_source_package,
@@ -784,9 +783,6 @@ def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, buil
         if email:
             logging.info("Processing packages maintained by %s", email)
             maintainer = [email]
-        else:
-            parser.print_usage()
-            sys.exit(1)
 
     if not vcswatch:
         logging.info(
@@ -802,18 +798,13 @@ def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, buil
         apt_repo = LocalApt()
 
     if maintainer:
-        if packages:
-            parser.print_error(
-                "--maintainer is incompatible with specifying package names"
-            )
         packages = select_apt_packages(
             apt_repo, packages, maintainer
         )
 
     if not packages:
         logging.info("No packages found.")
-        parser.print_usage()
-        sys.exit(1)
+        return 1
 
     if shuffle:
         import random
@@ -898,7 +889,3 @@ def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, buil
             logging.info("  %s: %d", error, c)
 
     return ret
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv))

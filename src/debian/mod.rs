@@ -51,8 +51,8 @@ impl FromPyObject<'_> for ChangelogBehaviour {
 }
 
 pub fn guess_update_changelog(
-    tree: &WorkingTree,
-    debian_path: &Path,
+    #[allow(unused_variables)] tree: &WorkingTree,
+    #[allow(unused_variables)] debian_path: &Path,
 ) -> Option<ChangelogBehaviour> {
     #[cfg(feature = "detect-update-changelog")]
     {

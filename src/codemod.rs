@@ -456,7 +456,7 @@ echo Did a thing
             &tree,
             &[script_path_str],
             std::path::Path::new(""),
-            crate::CommitPending::Auto,
+            crate::CommitPending::Yes,
             None,
             Some("Joe Example <joe@example.com>"),
             None,

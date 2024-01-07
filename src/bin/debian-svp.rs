@@ -114,6 +114,7 @@ enum Commands {
         builder: String,
 
         /// Select all packages maintained by specified maintainer.
+        #[arg(conflicts_with = "packages")]
         maintainer: Option<Vec<String>>,
 
         /// Use vcswatch to determine what packages need uploading.
@@ -378,7 +379,7 @@ fn run(args: &RunArgs) -> i32 {
 
     let get_description = |result: &CommandResult,
                            description_format,
-                           existing_proposal: Option<&MergeProposal>|
+                           _existing_proposal: Option<&MergeProposal>|
      -> String {
         if let Some(recipe) = recipe.as_ref() {
             if let Some(merge_request) = recipe.merge_request.as_ref() {
