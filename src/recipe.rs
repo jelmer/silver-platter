@@ -3,7 +3,7 @@ use crate::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct MergeRequest {
     #[serde(rename = "commit-message")]
     pub commit_message: Option<String>,
@@ -78,4 +78,41 @@ impl Recipe {
         }
         Ok(recipe)
     }
+}
+
+#[test]
+fn test_simple() {
+    let td = tempfile::tempdir().unwrap();
+    let path = td.path().join("test.yaml");
+    std::fs::write(
+        &path,
+        r#"name: test
+command: ["echo", "hello"]
+mode: propose
+merge-request:
+  commit-message: "test commit message"
+  title: "test title"
+  description: "test description"
+"#,
+    )
+    .unwrap();
+
+    let recipe = Recipe::from_path(&path).unwrap();
+    assert_eq!(recipe.name, Some("test".to_string()));
+    assert_eq!(
+        recipe.command,
+        Some(vec!["echo".to_string(), "hello".to_string()])
+    );
+    assert_eq!(recipe.mode, Some(Mode::Propose));
+    assert_eq!(
+        recipe.merge_request,
+        Some(MergeRequest {
+            commit_message: Some("test commit message".to_string()),
+            title: Some("test title".to_string()),
+            propose_threshold: None,
+            description: vec![(None, "test description".to_string())]
+                .into_iter()
+                .collect(),
+        })
+    );
 }
