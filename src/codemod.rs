@@ -1,3 +1,6 @@
+use breezyshim::controldir::{
+    create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
+};
 use breezyshim::tree::{CommitError, WorkingTree};
 use breezyshim::RevisionId;
 use std::collections::HashMap;
@@ -294,6 +297,7 @@ pub fn script_runner(
 
 #[cfg(test)]
 mod script_runner_tests {
+    use super::*;
     use breezyshim::tree::MutableTree;
 
     fn make_executable(script_path: &std::path::Path) {
@@ -311,9 +315,7 @@ mod script_runner_tests {
     fn test_no_api() {
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
-        let tree =
-            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
-                .unwrap();
+        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
         let script_path = d.join("script.sh");
         std::fs::write(
             &script_path,
@@ -351,9 +353,7 @@ echo Did a thing
     fn test_api() {
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
-        let tree =
-            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
-                .unwrap();
+        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
         let script_path = d.join("script.sh");
         std::fs::write(
             &script_path,
@@ -391,9 +391,7 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
     fn test_new_file() {
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
-        let tree =
-            breezyshim::controldir::ControlDir::create_standalone_workingtree(&d, Some(&"bzr"))
-                .unwrap();
+        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
         let script_path = d.join("script.sh");
         std::fs::write(
             &script_path,
@@ -434,11 +432,9 @@ echo Did a thing
     fn test_no_changes() {
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
-        let tree = breezyshim::controldir::ControlDir::create_standalone_workingtree(
-            &d,
-            Some(&breezyshim::controldir::ControlDirFormat::get_default()),
-        )
-        .unwrap();
+        let tree =
+            create_standalone_workingtree(&d, &breezyshim::controldir::ControlDirFormat::default())
+                .unwrap();
         let script_path = d.join("script.sh");
         std::fs::write(
             &script_path,

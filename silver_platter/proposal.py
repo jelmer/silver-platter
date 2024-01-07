@@ -55,10 +55,4 @@ __all__ = [
     "EmptyMergeProposal",
     "find_existing_proposed",
     "SourceNotDerivedFromTarget",
-    "enable_tag_pushing",
 ]
-
-
-def enable_tag_pushing(branch: Branch) -> None:
-    stack = branch.get_config()
-    stack.set_user_option("branch.fetch_tags", True)

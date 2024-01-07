@@ -86,13 +86,15 @@ fn test_simple() {
     let path = td.path().join("test.yaml");
     std::fs::write(
         &path,
-        r#"name: test
+        r#"---
+name: test
 command: ["echo", "hello"]
 mode: propose
 merge-request:
   commit-message: "test commit message"
   title: "test title"
-  description: "test description"
+  description:
+    plain: "test description"
 "#,
     )
     .unwrap();
@@ -110,9 +112,12 @@ merge-request:
             commit_message: Some("test commit message".to_string()),
             title: Some("test title".to_string()),
             propose_threshold: None,
-            description: vec![(None, "test description".to_string())]
-                .into_iter()
-                .collect(),
+            description: vec![(
+                Some(DescriptionFormat::Plain),
+                "test description".to_string()
+            )]
+            .into_iter()
+            .collect(),
         })
     );
 }

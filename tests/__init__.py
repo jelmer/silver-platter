@@ -23,9 +23,6 @@ def test_suite():
         "debian",
         "probers",
         "proposal",
-        "publish",
-        "recipe",
-        "run",
         "workspace",
     ]
     module_names = [__name__ + ".test_" + name for name in names]
