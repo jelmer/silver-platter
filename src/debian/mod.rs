@@ -121,7 +121,7 @@ pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use breezyshim::controldir::ControlDir;
+    use breezyshim::controldir::create_branch_convenience;
     use breezyshim::tree::WorkingTree;
     use std::path::Path;
 
@@ -129,7 +129,7 @@ mod tests {
         breezyshim::init().unwrap();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
-        let branch = ControlDir::create_branch_convenience(&url).unwrap();
+        let branch = create_branch_convenience(&url).unwrap();
         branch.controldir().open_workingtree().unwrap()
     }
 
