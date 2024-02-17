@@ -2,6 +2,7 @@ all:
 
 build-inplace:
 	python3 setup.py build_ext -i
+	python3 setup.py build_rust -i
 
 coverage: build-inplace
 	python3 -m coverage run -m unittest tests.test_suite
