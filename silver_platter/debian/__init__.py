@@ -61,10 +61,6 @@ __all__ = [
 ]
 
 
-DEFAULT_URGENCY = "medium"
-DEFAULT_BUILDER = "sbuild --no-clean-source"
-
-
 class NoSuchPackage(Exception):
     """No such package."""
 

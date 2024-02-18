@@ -116,9 +116,7 @@ impl Entry {
         let ws = Workspace::builder()
             .main_branch(main_branch.as_ref())
             .path(basepath)
-            .build();
-
-        ws.start()?;
+            .build()?;
 
         log::info!("Making changes to {}", main_branch.get_user_url());
 

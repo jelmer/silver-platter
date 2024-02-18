@@ -130,8 +130,8 @@ impl<'a> WorkspaceBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Workspace {
-        Workspace::new(
+    pub fn build(self) -> Result<Workspace, Error> {
+        let ws = Workspace::new(
             self.main_branch,
             self.resume_branch,
             self.cached_branch,
@@ -140,7 +140,10 @@ impl<'a> WorkspaceBuilder<'a> {
             self.dir,
             self.path,
             self.format,
-        )
+        );
+
+        ws.start()?;
+        Ok(ws)
     }
 }
 
@@ -439,4 +442,11 @@ impl Drop for Workspace {
                 .unwrap();
         })
     }
+}
+
+#[test]
+fn test_create_workspace() {
+    let ws = Workspace::builder().build().unwrap();
+
+    assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
 }

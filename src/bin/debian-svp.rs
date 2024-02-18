@@ -3,7 +3,7 @@ use breezyshim::workspace::{check_clean_tree, reset_tree};
 use clap::{Args, Parser, Subcommand};
 use log::{error, info};
 use silver_platter::candidates::Candidates;
-use silver_platter::codemod::{script_runner, CommandResult};
+use silver_platter::debian::codemod::{script_runner, CommandResult};
 use silver_platter::proposal::{MergeProposal, MergeProposalStatus};
 use silver_platter::publish::Error as PublishError;
 use silver_platter::CodemodResult;
@@ -56,17 +56,102 @@ enum Commands {
         #[arg(long)]
         commit_pending: Option<silver_platter::CommitPending>,
 
-        /// Command to verify changes
+        /// Build package to verify it
         #[arg(long)]
-        verify_command: Option<String>,
+        build_verify: bool,
+
+        /// Build command to use when verifying build
+        #[arg(long, default_value(silver_platter::debian::DEFAULT_BUILDER))]
+        builder: String,
+
+        /// Store built Debian files in specific directory (with --build-verify)
+        #[arg(long)]
+        build_target_dir: Option<std::path::PathBuf>,
+
+        /// Install built packages (implies --build-verify)
+        #[arg(long)]
+        install: bool,
+
+        /// Report context on success
+        #[arg(long)]
+        dump_context: bool,
 
         /// Recipe to use
         #[arg(long)]
         recipe: Option<std::path::PathBuf>,
+
+        /// Don't update changelog
+        #[arg(long)]
+        no_update_changelog: bool,
+
+        /// Do update changelog
+        #[arg(long)]
+        update_changelog: bool,
     },
 
     #[clap(subcommand)]
     Batch(BatchArgs),
+
+    UploadPending {
+        /// List of acceptable GPG keys
+        #[arg(long)]
+        acceptable_keys: Option<Vec<String>>,
+
+        /// Verify GPG signatures on commit
+        #[arg(long)]
+        gpg_verification: bool,
+
+        /// Minimum age of the last commit, in days
+        #[arg(long, default_value_t = 0)]
+        min_commit_age: usize,
+
+        /// Show diff
+        #[arg(long)]
+        diff: bool,
+
+        /// Build command
+        #[arg(long, default_value = format!("{} --source --source-only-changes --debbuildopt=-v$(LAST_VERSION)", silver_platter::debian::DEFAULT_BUILDER))]
+        builder: String,
+
+        /// Select all packages maintained by specified maintainer.
+        #[arg(long, conflicts_with = "packages")]
+        maintainer: Option<Vec<String>>,
+
+        /// Use vcswatch to determine what packages need uploading.
+        #[arg(long)]
+        vcswatch: bool,
+
+        /// Ignore source package
+        #[arg(long)]
+        exclude: Option<Vec<String>>,
+
+        /// Only process packages with autopkgtest
+        #[arg(long)]
+        autopkgtest_only: bool,
+
+        /// Require that all new commits are from specified committers
+        #[arg(long)]
+        allowed_committer: Option<Vec<String>>,
+
+        /// Randomize order packages are processed in.
+        #[arg(long)]
+        shuffle: bool,
+
+        /// Command to verify whether upload is necessary. Should return 1 to decline, 0 to upload.
+        #[arg(long)]
+        verify_command: Option<String>,
+
+        /// APT repository to use. Defaults to locally configured.
+        #[arg(long, env = "APT_REPOSITORY")]
+        apt_repository: Option<String>,
+
+        /// APT repository key to use for validation, if --apt-repository is set.
+        #[arg(long, env = "APT_REPOSITORY_KEY")]
+        apt_repository_key: Option<String>,
+
+        /// Packages to upload
+        packages: Vec<String>,
+    },
 }
 
 /// Run a script to make a change, and publish (propose/push/etc) it
@@ -122,6 +207,30 @@ struct RunArgs {
     /// Mode for publishing
     #[arg(long)]
     mode: Option<silver_platter::Mode>,
+
+    /// Don't update changelog
+    #[arg(long)]
+    no_update_changelog: bool,
+
+    /// Do update changelog
+    #[arg(long)]
+    update_changelog: bool,
+
+    /// Build package to verify it
+    #[arg(long)]
+    build_verify: bool,
+
+    /// Build command to use when verifying build
+    #[arg(long, default_value(silver_platter::debian::DEFAULT_BUILDER))]
+    builder: String,
+
+    /// Store built Debian files in specific directory (with --build-verify)
+    #[arg(long)]
+    build_target_dir: Option<std::path::PathBuf>,
+
+    /// Install built packages (implies --build-verify)
+    #[arg(long)]
+    install: bool,
 }
 
 /// Operate on multiple repositories at once
@@ -178,6 +287,14 @@ fn run(args: &RunArgs) -> i32 {
         let candidates = Candidates::from_path(candidates.as_path()).unwrap();
         urls.extend(candidates.iter().map(|c| c.url.clone()));
     }
+
+    let update_changelog = if args.update_changelog {
+        Some(true)
+    } else if args.no_update_changelog {
+        Some(false)
+    } else {
+        None
+    };
 
     let commit_pending = if let Some(commit_pending) = args.commit_pending {
         commit_pending
@@ -264,7 +381,7 @@ fn run(args: &RunArgs) -> i32 {
 
     let get_description = |result: &CommandResult,
                            description_format,
-                           existing_proposal: Option<&MergeProposal>|
+                           _existing_proposal: Option<&MergeProposal>|
      -> String {
         if let Some(recipe) = recipe.as_ref() {
             if let Some(merge_request) = recipe.merge_request.as_ref() {
@@ -276,13 +393,7 @@ fn run(args: &RunArgs) -> i32 {
                 }
             }
         }
-        if let Some(description) = result.description.as_ref() {
-            return description.clone();
-        }
-        if let Some(existing_proposal) = existing_proposal {
-            return existing_proposal.get_description().unwrap().unwrap();
-        }
-        panic!("No description available");
+        return result.description.clone();
     };
 
     let mut retcode = 0;
@@ -293,7 +404,7 @@ fn run(args: &RunArgs) -> i32 {
         .map(|labels| labels.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
     for url in urls {
-        let result = silver_platter::run::apply_and_publish(
+        let result = silver_platter::debian::run::apply_and_publish(
             &url,
             branch.as_str(),
             command
@@ -305,13 +416,17 @@ fn run(args: &RunArgs) -> i32 {
             commit_pending,
             labels_ref.as_deref(),
             args.diff,
-            args.verify_command.as_deref(),
             args.derived_owner.as_deref(),
             refresh,
             Some(allow_create_proposal),
             Some(get_commit_message),
             Some(get_title),
             get_description,
+            update_changelog,
+            args.build_verify,
+            args.build_target_dir.clone(),
+            Some(args.builder.clone()),
+            args.install,
         );
         retcode = std::cmp::max(retcode, result)
     }
@@ -539,9 +654,19 @@ fn main() {
             command,
             diff,
             commit_pending,
-            verify_command,
+            install,
+            mut build_verify,
+            ref build_target_dir,
+            builder,
+            dump_context,
+            no_update_changelog,
+            update_changelog,
             recipe,
         } => {
+            if *install {
+                build_verify = true;
+            }
+
             let recipe = recipe
                 .as_ref()
                 .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe).unwrap());
@@ -572,6 +697,14 @@ fn main() {
             )
             .unwrap();
 
+            let update_changelog = if *update_changelog {
+                Some(true)
+            } else if *no_update_changelog {
+                Some(false)
+            } else {
+                None
+            };
+
             let result = match script_runner(
                 &local_tree,
                 command
@@ -585,6 +718,7 @@ fn main() {
                 None,
                 None,
                 std::process::Stdio::inherit(),
+                update_changelog,
             ) {
                 Ok(result) => result,
                 Err(err) => {
@@ -594,28 +728,26 @@ fn main() {
                 }
             };
 
-            if let Some(description) = result.description {
-                info!("Succeeded: {} ", description);
+            let mut td = None;
+
+            let mut build_target_dir = build_target_dir.clone();
+
+            if build_verify {
+                if build_target_dir.is_none() {
+                    td = Some(tempfile::tempdir().unwrap());
+                    build_target_dir = td.as_ref().map(|td| td.path().to_owned());
+                }
+
+                silver_platter::debian::build(
+                    &local_tree,
+                    &subpath,
+                    Some(builder),
+                    build_target_dir.as_deref(),
+                )
+                .unwrap();
             }
 
-            if let Some(verify_command) = verify_command {
-                match std::process::Command::new(verify_command)
-                    .current_dir(local_tree.abspath(subpath.as_path()).unwrap())
-                    .status()
-                {
-                    Ok(status) if status.success() => {}
-                    Ok(status) => {
-                        error!("Verify command failed: {}", status);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
-                        std::process::exit(1);
-                    }
-                    Err(err) => {
-                        error!("Verify command failed: {}", err);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
-                        std::process::exit(1);
-                    }
-                }
-            }
+            info!("Succeeded: {} ", result.description);
 
             if *diff {
                 let old_tree = local_tree.revision_tree(&result.old_revision);
@@ -629,8 +761,80 @@ fn main() {
                 )
                 .unwrap();
             }
+
+            if *install {
+                silver_platter::debian::install_built_package(
+                    &local_tree,
+                    subpath.as_path(),
+                    build_target_dir.as_ref().unwrap(),
+                )
+                .unwrap();
+            }
+
+            if let Some(td) = td.take() {
+                td.close().unwrap();
+            }
+
+            if *dump_context {
+                let context = result.context.unwrap();
+                println!("{}", serde_json::to_string_pretty(&context).unwrap());
+            }
             0
         }
+        Commands::UploadPending {
+            acceptable_keys,
+            gpg_verification,
+            min_commit_age,
+            diff,
+            maintainer,
+            builder,
+            autopkgtest_only,
+            vcswatch,
+            shuffle,
+            exclude,
+            verify_command,
+            allowed_committer,
+            apt_repository,
+            apt_repository_key,
+            packages,
+        } => pyo3::Python::with_gil(|py| {
+            let kwargs = pyo3::types::PyDict::new(py);
+            kwargs.set_item("maintainer", maintainer).unwrap();
+            kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
+            kwargs
+                .set_item("gpg_verification", gpg_verification)
+                .unwrap();
+            kwargs.set_item("min_commit_age", min_commit_age).unwrap();
+            kwargs.set_item("diff", diff).unwrap();
+            kwargs.set_item("builder", builder).unwrap();
+            kwargs
+                .set_item("autopkgtest_only", autopkgtest_only)
+                .unwrap();
+            kwargs.set_item("exclude", exclude).unwrap();
+            kwargs.set_item("verify_command", verify_command).unwrap();
+            kwargs.set_item("shuffle", shuffle).unwrap();
+            kwargs
+                .set_item("allowed_committer", allowed_committer)
+                .unwrap();
+            kwargs.set_item("vcswatch", vcswatch).unwrap();
+            kwargs.set_item("diff", diff).unwrap();
+            kwargs.set_item("debug", cli.debug).unwrap();
+            kwargs.set_item("apt_repository", apt_repository).unwrap();
+            kwargs
+                .set_item("apt_repository_key", apt_repository_key)
+                .unwrap();
+            kwargs.set_item("packages", packages).unwrap();
+
+            let m = py.import("silver_platter.debian.uploader").unwrap();
+            let main = m.getattr("main").unwrap();
+            match main.call((), Some(kwargs)) {
+                Ok(o) => o.extract().unwrap(),
+                Err(e) => {
+                    error!("Failed to upload: {}", e);
+                    1
+                }
+            }
+        }),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,

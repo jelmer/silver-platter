@@ -1,4 +1,4 @@
-use crate::codemod::{CommandResult, Error as CommandError};
+use crate::debian::codemod::{CommandResult, Error as CommandError};
 use crate::publish::{
     enable_tag_pushing, find_existing_proposed, DescriptionFormat, Error as PublishError,
 };
@@ -18,7 +18,6 @@ pub fn apply_and_publish(
     commit_pending: crate::CommitPending,
     labels: Option<&[&str]>,
     diff: bool,
-    verify_command: Option<&str>,
     derived_owner: Option<&str>,
     refresh: bool,
     allow_create_proposal: Option<impl FnOnce(&CommandResult) -> bool>,
@@ -27,6 +26,11 @@ pub fn apply_and_publish(
     >,
     get_title: Option<impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>>,
     get_description: impl FnOnce(&CommandResult, DescriptionFormat, Option<&MergeProposal>) -> String,
+    update_changelog: Option<bool>,
+    build_verify: bool,
+    mut build_target_dir: Option<std::path::PathBuf>,
+    builder: Option<String>,
+    install: bool,
 ) -> i32 {
     let main_branch = match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
@@ -128,15 +132,15 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let mut builder = Workspace::builder().main_branch(main_branch.as_ref());
+    let mut ws_builder = Workspace::builder().main_branch(main_branch.as_ref());
 
-    builder = if let Some(resume_branch) = resume_branch.as_ref() {
-        builder.resume_branch(resume_branch.as_ref())
+    ws_builder = if let Some(resume_branch) = resume_branch.as_ref() {
+        ws_builder.resume_branch(resume_branch.as_ref())
     } else {
-        builder
+        ws_builder
     };
 
-    let ws = match builder.build() {
+    let ws = match ws_builder.build() {
         Ok(ws) => ws,
         Err(e) => {
             error!("Failed to start workspace: {}", e);
@@ -144,7 +148,7 @@ pub fn apply_and_publish(
         }
     };
 
-    let result: CommandResult = match crate::codemod::script_runner(
+    let result: CommandResult = match crate::debian::codemod::script_runner(
         &ws.local_tree(),
         command,
         subpath,
@@ -153,6 +157,7 @@ pub fn apply_and_publish(
         None,
         None,
         std::process::Stdio::inherit(),
+        update_changelog,
     ) {
         Ok(r) => r,
         Err(CommandError::ScriptMadeNoChanges) => {
@@ -165,28 +170,21 @@ pub fn apply_and_publish(
         }
     };
 
-    if let Some(verify_command) = verify_command {
-        match std::process::Command::new("sh")
-            .arg("-c")
-            .arg(verify_command)
-            .current_dir(ws.local_tree().abspath(std::path::Path::new(".")).unwrap())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .output()
-        {
-            Ok(output) => {
-                if output.status.success() {
-                    info!("Verify command succeeded.");
-                } else {
-                    error!("Verify command failed.");
-                    return 2;
-                }
-            }
-            Err(e) => {
-                error!("Verify command failed: {}", e);
-                return 2;
-            }
+    let mut td = None;
+
+    if build_verify {
+        if build_target_dir.is_none() {
+            td = Some(tempfile::tempdir().unwrap());
+            build_target_dir = td.as_ref().map(|td| td.path().to_path_buf());
         }
+
+        crate::debian::build(
+            &ws.local_tree(),
+            subpath,
+            builder.as_deref(),
+            build_target_dir.as_deref(),
+        )
+        .unwrap();
     }
 
     enable_tag_pushing(ws.local_tree().branch().as_ref()).unwrap();
@@ -271,6 +269,19 @@ pub fn apply_and_publish(
     if diff {
         ws.show_diff(Box::new(std::io::stdout()), None, None)
             .unwrap();
+    }
+
+    if install {
+        crate::debian::install_built_package(
+            &ws.local_tree(),
+            subpath,
+            build_target_dir.as_ref().unwrap(),
+        )
+        .unwrap();
+    }
+
+    if let Some(td) = td.take() {
+        td.close().unwrap();
     }
 
     1
