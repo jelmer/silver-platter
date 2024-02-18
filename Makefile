@@ -1,4 +1,4 @@
-all:
+all: build-inplace
 
 build-inplace:
 	python3 setup.py build_ext -i

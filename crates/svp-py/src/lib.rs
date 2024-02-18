@@ -869,7 +869,7 @@ fn fetch_colocated(
     silver_platter::workspace::fetch_colocated(
         &controldir,
         &from_controldir,
-        additional_colocated_branches,
+        &additional_colocated_branches,
     )
 }
 
