@@ -47,3 +47,29 @@ impl From<Vec<Candidate>> for Candidates {
         Self(candidates)
     }
 }
+
+#[test]
+fn test_read() {
+    let td = tempfile::tempdir().unwrap();
+    let path = td.path().join("candidates.yaml");
+    std::fs::write(
+        &path,
+        r#"---
+- url: https://github.com/jelmer/dulwich
+- name: samba
+  url: https://git.samba.org/samba.git
+"#,
+    )
+    .unwrap();
+    let candidates = Candidates::from_path(&path).unwrap();
+    assert_eq!(candidates.candidates().len(), 2);
+    assert_eq!(
+        candidates.candidates()[0].url,
+        url::Url::parse("https://github.com/jelmer/dulwich").unwrap()
+    );
+    assert_eq!(
+        candidates.candidates()[1].url,
+        url::Url::parse("https://git.samba.org/samba.git").unwrap()
+    );
+    assert_eq!(candidates.candidates()[1].name, Some("samba".to_string()));
+}

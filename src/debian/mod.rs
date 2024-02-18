@@ -11,6 +11,7 @@ use std::path::Path;
 pub const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
 
 pub mod codemod;
+pub mod run;
 pub mod uploader;
 pub mod vcswatch;
 
@@ -50,8 +51,8 @@ impl FromPyObject<'_> for ChangelogBehaviour {
 }
 
 pub fn guess_update_changelog(
-    tree: &WorkingTree,
-    debian_path: &Path,
+    #[allow(unused_variables)] tree: &WorkingTree,
+    #[allow(unused_variables)] debian_path: &Path,
 ) -> Option<ChangelogBehaviour> {
     #[cfg(feature = "detect-update-changelog")]
     {

@@ -17,15 +17,9 @@
 
 __all__ = [
     'create_temp_sprout',
-    'PreCheckFailed',
-    'PostCheckFailed',
-    'run_pre_check',
-    'run_post_check',
-    'TemporarySprout',
     'open_branch',
     'open_branch_containing',
     'full_branch_url',
-    'get_branch_vcs_type',
     'Branch',
     'BranchUnavailable',
     'BranchTemporarilyUnavailable',
@@ -35,61 +29,19 @@ __all__ = [
 ]
 
 
-from typing import Dict, Optional
+from typing import Optional
 
 from breezy.branch import Branch
-from breezy.workingtree import WorkingTree
 
 from . import _svp_rs
 
 Branch = _svp_rs.Branch
 create_temp_sprout = _svp_rs.create_temp_sprout
-PreCheckFailed = _svp_rs.PreCheckFailed
-PostCheckFailed = _svp_rs.PostCheckFailed
-run_pre_check = _svp_rs.run_pre_check
-run_post_check = _svp_rs.run_post_check
-
-
-class TemporarySprout:
-    """Create a temporary sprout of a branch.
-
-    This attempts to fetch the least amount of history as possible.
-    """
-
-    def __init__(
-        self,
-        branch: Branch,
-        additional_colocated_branches: Optional[Dict[str, str]] = None,
-        dir: Optional[str] = None,
-    ) -> None:
-        self.branch = branch
-        self.additional_colocated_branches = additional_colocated_branches
-        self.dir = dir
-
-    def __enter__(self) -> WorkingTree:
-        tree, self._destroy = create_temp_sprout(
-            self.branch,
-            additional_colocated_branches=self.additional_colocated_branches,
-            dir=self.dir,
-        )
-        return tree
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._destroy()
-        return False
 
 
 open_branch = _svp_rs.open_branch
 open_branch_containing = _svp_rs.open_branch_containing
 full_branch_url = _svp_rs.full_branch_url
-
-
-def get_branch_vcs_type(branch):
-    vcs = getattr(branch.repository, "vcs", None)
-    if vcs:
-        return vcs.abbreviation
-    else:
-        return "bzr"
 
 
 class BranchUnavailable(Exception):

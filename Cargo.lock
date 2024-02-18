@@ -179,11 +179,12 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.78"
+version = "0.1.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc82232e62a810c854e0de2e23d71eec064eb05eb0afb741e77fc4eb1ba4ff7"
+checksum = "045a4a5cbf10d11ca9651dcff8f6c0936f4eca48ebfcb9874622f92cd9b9bb5e"
 dependencies = [
  "chrono",
+ "ctor",
  "debversion",
  "lazy_static",
  "pyo3",
@@ -443,6 +444,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5efa2b3d7902f4b634a20cae3c9c4e6209dc4779feb6863329607560143efa70"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ctor"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30d2b3721e861707777e3195b0158f950ae6dc4a27e4d02ff9f67e3eb3de199e"
+dependencies = [
+ "quote",
+ "syn 2.0.49",
 ]
 
 [[package]]

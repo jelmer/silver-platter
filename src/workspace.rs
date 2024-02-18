@@ -1,21 +1,18 @@
 use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
-use breezyshim::branch::{open as open_branch, Branch, BranchOpenError};
+use breezyshim::branch::{Branch, BranchOpenError};
 use breezyshim::forge::{Forge, MergeProposal};
-use breezyshim::tree::{RevisionTree, WorkingTree};
+use breezyshim::tree::{PullError, WorkingTree};
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use log::info;
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use pyo3::PyErr;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use url::Url;
 
 pub fn fetch_colocated(
     controldir: &ControlDir,
     from_controldir: &ControlDir,
-    additional_colocated_branches: HashMap<&str, &str>,
+    additional_colocated_branches: &HashMap<&str, &str>,
 ) -> Result<(), PyErr> {
     info!(
         "Fetching colocated branches: {:?}",
@@ -48,6 +45,28 @@ pub fn fetch_colocated(
 #[derive(Debug)]
 pub enum Error {
     Python(PyErr),
+    ForgeError(breezyshim::forge::Error),
+    IOError(std::io::Error),
+    UnknownFormat,
+}
+
+impl From<breezyshim::controldir::CreateError> for Error {
+    fn from(e: breezyshim::controldir::CreateError) -> Self {
+        match e {
+            breezyshim::controldir::CreateError::Python(e) => Error::Python(e),
+            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
+            breezyshim::controldir::CreateError::AlreadyExists => unreachable!(),
+        }
+    }
+}
+
+impl From<crate::utils::Error> for Error {
+    fn from(e: crate::utils::Error) -> Self {
+        match e {
+            crate::utils::Error::Other(e) => Error::Python(e),
+            crate::utils::Error::UnknownFormat => Error::UnknownFormat,
+        }
+    }
 }
 
 impl From<BranchOpenError> for Error {
@@ -56,10 +75,25 @@ impl From<BranchOpenError> for Error {
     }
 }
 
+impl From<breezyshim::forge::Error> for Error {
+    fn from(e: breezyshim::forge::Error) -> Self {
+        Error::ForgeError(e)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::IOError(e)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::Python(e) => write!(f, "{}", e),
+            Error::ForgeError(e) => write!(f, "{}", e),
+            Error::IOError(e) => write!(f, "{}", e),
+            Error::UnknownFormat => write!(f, "Unknown format"),
         }
     }
 }
@@ -130,8 +164,8 @@ impl<'a> WorkspaceBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Workspace {
-        Workspace::new(
+    pub fn build(self) -> Result<Workspace<'a>, Error> {
+        let mut ws = Workspace::new(
             self.main_branch,
             self.resume_branch,
             self.cached_branch,
@@ -140,179 +174,338 @@ impl<'a> WorkspaceBuilder<'a> {
             self.dir,
             self.path,
             self.format,
-        )
+        );
+
+        ws.start()?;
+        Ok(ws)
     }
 }
 
-pub struct Workspace(PyObject);
+struct WorkspaceState {
+    base_revid: RevisionId,
+    local_tree: WorkingTree,
+    refreshed: bool,
+    destroy_fn: Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>,
+    main_colo_revid: HashMap<String, RevisionId>,
+}
 
-impl Workspace {
+pub struct Workspace<'a> {
+    main_branch: Option<&'a dyn Branch>,
+    cached_branch: Option<&'a dyn Branch>,
+    resume_branch: Option<&'a dyn Branch>,
+    additional_colocated_branches: HashMap<&'a str, &'a str>,
+    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+    dir: Option<&'a Path>,
+    path: Option<&'a Path>,
+    state: Option<WorkspaceState>,
+    format: Option<breezyshim::controldir::ControlDirFormat>,
+}
+
+impl<'a> Workspace<'a> {
     pub fn new(
-        main_branch: Option<&dyn Branch>,
-        resume_branch: Option<&dyn Branch>,
-        cached_branch: Option<&dyn Branch>,
-        additional_colocated_branches: HashMap<&str, &str>,
-        resume_branch_additional_colocated_branches: HashMap<&str, &str>,
-        dir: Option<&Path>,
-        path: Option<&Path>,
-        format: Option<&str>,
+        main_branch: Option<&'a dyn Branch>,
+        resume_branch: Option<&'a dyn Branch>,
+        cached_branch: Option<&'a dyn Branch>,
+        additional_colocated_branches: HashMap<&'a str, &'a str>,
+        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+        dir: Option<&'a Path>,
+        path: Option<&'a Path>,
+        format: Option<impl breezyshim::controldir::AsFormat>,
     ) -> Self {
-        Python::with_gil(|py| {
-            let m = py.import("silver_platter.workspace").unwrap();
-            let workspace_cls = m.getattr("Workspace").unwrap();
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("main_branch", main_branch).unwrap();
-            kwargs.set_item("resume_branch", resume_branch).unwrap();
-            kwargs.set_item("cached_branch", cached_branch).unwrap();
-            kwargs
-                .set_item(
-                    "additional_colocated_branches",
-                    additional_colocated_branches,
-                )
-                .unwrap();
-            kwargs
-                .set_item(
-                    "resume_branch_additional_colocated_branches",
-                    resume_branch_additional_colocated_branches,
-                )
-                .unwrap();
-            kwargs.set_item("dir", dir).unwrap();
-            kwargs.set_item("path", path).unwrap();
-            kwargs.set_item("format", format).unwrap();
-            let workspace = workspace_cls.call((), Some(kwargs)).unwrap();
-            Workspace(workspace.into())
-        })
-    }
-
-    pub fn builder<'a>() -> WorkspaceBuilder<'a> {
-        WorkspaceBuilder::default()
-    }
-
-    pub fn main_branch(&self) -> Box<dyn Branch> {
-        Python::with_gil(|py| {
-            let branch = self.0.getattr(py, "main_branch").unwrap();
-            Box::new(breezyshim::branch::RegularBranch::new(branch))
-        })
-    }
-
-    pub fn set_main_branch(&self, branch: &dyn Branch) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            self.0.setattr(py, "main_branch", branch.to_object(py))?;
-            Ok(())
-        })
-    }
-
-    pub fn set_main_branch_url(&self, url: &Url) -> Result<(), Error> {
-        self.set_main_branch(breezyshim::branch::open(url)?.as_ref())
-    }
-
-    pub fn local_tree(&self) -> WorkingTree {
-        Python::with_gil(|py| {
-            let tree = self.0.getattr(py, "local_tree").unwrap();
-            WorkingTree(tree)
-        })
-    }
-
-    pub fn resume_branch(&self) -> Option<Box<dyn Branch>> {
-        Python::with_gil(|py| {
-            let branch: Option<PyObject> = self
-                .0
-                .getattr(py, "resume_branch")
-                .unwrap()
-                .extract(py)
-                .unwrap();
-            branch.map(|b| Box::new(breezyshim::branch::RegularBranch::new(b)) as Box<dyn Branch>)
-        })
-    }
-
-    pub fn from_url(
-        url: &Url,
-        resume_branch: Option<&dyn Branch>,
-        cached_branch: Option<&dyn Branch>,
-        additional_colocated_branches: HashMap<&str, &str>,
-        resume_branch_additional_colocated_branches: HashMap<&str, &str>,
-        dir: Option<&Path>,
-        path: Option<&Path>,
-        format: Option<&str>,
-    ) -> Self {
-        let main_branch = open_branch(url).unwrap();
-        Self::new(
-            Some(main_branch.as_ref()),
+        Self {
+            main_branch,
             resume_branch,
             cached_branch,
             additional_colocated_branches,
             resume_branch_additional_colocated_branches,
-            dir,
             path,
-            format,
-        )
+            dir,
+            format: format.and_then(|f| f.as_format()),
+            state: None,
+        }
+    }
+
+    pub fn start(&mut self) -> Result<(), Error> {
+        let mut td: Option<tempfile::TempDir> = None;
+        let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch {
+            (
+                Some(cache_branch),
+                self.additional_colocated_branches.clone(),
+            )
+        } else if let Some(resume_branch) = self.resume_branch {
+            (
+                Some(resume_branch),
+                self.resume_branch_additional_colocated_branches.clone(),
+            )
+        } else {
+            (self.main_branch, self.additional_colocated_branches.clone())
+        };
+
+        let (local_tree, destroy_fn) = if let Some(sprout_base) = sprout_base {
+            log::debug!("Creating sprout from {:?}", sprout_base.get_user_url());
+            let (wt, dfn) = crate::utils::create_temp_sprout(
+                sprout_base,
+                Some(
+                    sprout_coloc
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .collect(),
+                ),
+                self.dir,
+                self.path,
+            )?;
+            (wt, Some(dfn))
+        } else {
+            if let Some(format) = self.format.as_ref() {
+                log::debug!(
+                    "Creating new empty tree with format {}",
+                    format.get_format_description()
+                );
+            } else {
+                log::debug!("Creating new empty tree");
+            };
+
+            let tp = if let Some(path) = self.path {
+                std::fs::create_dir_all(path)?;
+                path.to_path_buf()
+            } else {
+                td = Some(if let Some(dir) = self.dir.as_ref() {
+                    tempfile::tempdir_in(dir)?
+                } else {
+                    tempfile::tempdir()?
+                });
+                td.as_ref().unwrap().path().to_path_buf()
+            };
+            (
+                breezyshim::controldir::create_standalone_workingtree(
+                    tp.as_path(),
+                    self.format
+                        .as_ref()
+                        .unwrap_or(&breezyshim::controldir::ControlDirFormat::default()),
+                )?,
+                Some(Box::new(|| -> std::io::Result<()> {
+                    if let Some(td) = td {
+                        td.close().unwrap();
+                    }
+                    Ok(())
+                })
+                    as Box<dyn FnOnce() -> Result<(), std::io::Error> + Send>),
+            )
+        };
+
+        let mut main_colo_revid = std::collections::HashMap::new();
+
+        let mut refreshed = false;
+
+        if let Some(main_branch) = self.main_branch {
+            for (from_name, _to_name) in self.additional_colocated_branches.iter() {
+                match main_branch.controldir().open_branch(Some(from_name)) {
+                    Ok(branch) => {
+                        main_colo_revid.insert(from_name.to_string(), branch.last_revision());
+                    }
+                    Err(breezyshim::branch::BranchOpenError::NotBranchError(..)) => {}
+                    Err(breezyshim::branch::BranchOpenError::NoColocatedBranchSupport) => {}
+                    Err(e) => {
+                        log::warn!("Failed to open colocated branch {}: {}", from_name, e);
+                    }
+                }
+            }
+
+            if let Some(cached_branch) = self.cached_branch {
+                let fb = self.resume_branch.or(Some(main_branch));
+                log::debug!(
+                    "Pulling in missing revisions from resume/main branch {:?}",
+                    fb.unwrap().get_user_url()
+                );
+
+                match local_tree.pull(fb.unwrap(), Some(true)) {
+                    Ok(_) => {}
+                    Err(PullError::DivergedBranches) => {
+                        unreachable!();
+                    }
+                    Err(PullError::Other(e)) => {
+                        return Err(e.into());
+                    }
+                }
+            }
+
+            // At this point, we're either on the tip of the main branch or the tip of the resume
+            // branch
+            if let Some(resume_branch) = self.resume_branch {
+                // If there's a resume branch at play, make sure it's derived from the main branch
+                // *or* reset back to the main branch.
+                log::debug!(
+                    "Pulling in missing revisions from main branch {:?}",
+                    main_branch.get_user_url()
+                );
+
+                match local_tree.pull(main_branch, Some(false)) {
+                    Err(PullError::DivergedBranches) => {
+                        log::info!("restarting branch");
+                        refreshed = true;
+                        self.resume_branch = None;
+                        self.resume_branch_additional_colocated_branches.clear();
+                        match local_tree.pull(main_branch, Some(true)) {
+                            Ok(_) => {}
+                            Err(PullError::DivergedBranches) => {
+                                unreachable!();
+                            }
+                            Err(PullError::Other(e)) => {
+                                return Err(e.into());
+                            }
+                        }
+                        fetch_colocated(
+                            &local_tree.branch().controldir(),
+                            &main_branch.controldir(),
+                            &self.additional_colocated_branches,
+                        )?;
+                    }
+                    Ok(_) => {
+                        fetch_colocated(
+                            &local_tree.branch().controldir(),
+                            &main_branch.controldir(),
+                            &self.additional_colocated_branches,
+                        )?;
+
+                        if !self.resume_branch_additional_colocated_branches.is_empty() {
+                            fetch_colocated(
+                                &local_tree.branch().controldir(),
+                                &resume_branch.controldir(),
+                                &self.resume_branch_additional_colocated_branches,
+                            )?;
+
+                            self.additional_colocated_branches
+                                .extend(self.resume_branch_additional_colocated_branches.iter());
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to pull from main branch: {}", e);
+                    }
+                }
+            } else {
+                fetch_colocated(
+                    &local_tree.branch().controldir(),
+                    &main_branch.controldir(),
+                    &self.additional_colocated_branches,
+                )?;
+            }
+        }
+
+        self.state = Some(WorkspaceState {
+            base_revid: local_tree.last_revision().unwrap(),
+            local_tree,
+            refreshed,
+            main_colo_revid,
+            destroy_fn,
+        });
+
+        Ok(())
+    }
+
+    fn state(&self) -> &WorkspaceState {
+        self.state.as_ref().unwrap()
+    }
+
+    pub fn builder() -> WorkspaceBuilder<'a> {
+        WorkspaceBuilder::default()
+    }
+
+    pub fn main_branch(&self) -> Option<&dyn Branch> {
+        self.main_branch
+    }
+
+    pub fn set_main_branch(&mut self, branch: &'a dyn Branch) -> Result<(), Error> {
+        self.main_branch = Some(branch);
+        Ok(())
+    }
+
+    pub fn local_tree(&self) -> &WorkingTree {
+        &self.state().local_tree
+    }
+
+    pub fn refreshed(&self) -> bool {
+        self.state().refreshed
+    }
+
+    pub fn resume_branch(&self) -> Option<&dyn Branch> {
+        self.resume_branch
     }
 
     pub fn path(&self) -> PathBuf {
-        Python::with_gil(|py| {
-            let path = self.0.call_method0(py, "path").unwrap();
-            path.extract(py).unwrap()
-        })
-    }
-
-    pub fn start(&self) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            self.0.call_method0(py, "__enter__")?;
-            Ok(())
-        })
+        self.local_tree()
+            .abspath(std::path::Path::new("."))
+            .unwrap()
     }
 
     pub fn changes_since_main(&self) -> bool {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "changes_since_main")
-                .unwrap()
-                .extract(py)
-                .unwrap()
-        })
+        Some(self.local_tree().branch().last_revision())
+            != self.main_branch().map(|b| b.last_revision())
     }
 
     pub fn changes_since_base(&self) -> bool {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "changes_since_base")
-                .unwrap()
-                .extract(py)
-                .unwrap()
-        })
+        Some(self.local_tree().branch().last_revision()) != self.base_revid()
     }
 
+    pub fn base_revid(&self) -> Option<RevisionId> {
+        self.state.as_ref().map(|s| s.base_revid.clone())
+    }
+
+    /// Have any branch changes at all been made?
+    ///
+    /// Includes changes that already existed in the resume branch
     pub fn any_branch_changes(&self) -> bool {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "any_branch_changes")
-                .unwrap()
-                .extract(py)
-                .unwrap()
-        })
+        self.changed_branches().iter().any(|(_, br, r)| br != r)
+    }
+
+    pub fn additional_colocated_branches(&self) -> HashMap<String, String> {
+        self.additional_colocated_branches
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     pub fn changed_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "changed_branches")
-                .unwrap()
-                .extract::<Vec<(String, Option<RevisionId>, Option<RevisionId>)>>(py)
-                .unwrap()
-        })
+        let main_branch = self.main_branch();
+        let mut branches = vec![(
+            main_branch
+                .as_ref()
+                .map_or_else(|| "".to_string(), |b| b.name().unwrap()),
+            main_branch.map(|b| b.last_revision()),
+            Some(self.local_tree().last_revision().unwrap()),
+        )];
+
+        let local_controldir = self.local_tree().controldir();
+
+        for (from_name, to_name) in self.additional_colocated_branches().iter() {
+            let to_revision = match local_controldir.open_branch(Some(to_name)) {
+                Ok(b) => Some(b.last_revision()),
+                Err(BranchOpenError::NoColocatedBranchSupport) => continue,
+                Err(BranchOpenError::NotBranchError(..)) => None,
+                Err(e) => {
+                    panic!("Unexpected error opening branch {}: {}", to_name, e);
+                }
+            };
+
+            let from_revision = self.main_colo_revid().get(from_name).cloned();
+
+            branches.push((from_name.to_string(), from_revision, to_revision));
+        }
+
+        branches
     }
 
-    pub fn base_tree(&self) -> RevisionTree {
-        Python::with_gil(|py| {
-            let tree = self.0.call_method0(py, "base_tree").unwrap();
-            RevisionTree(tree)
-        })
+    pub fn main_colo_revid(&self) -> HashMap<String, RevisionId> {
+        self.state().main_colo_revid.clone()
     }
 
-    pub fn defer_destroy(&self) {
-        Python::with_gil(|py| {
-            self.0.call_method0(py, "defer_destroy").unwrap();
-        })
+    pub fn base_tree(&self) -> Box<dyn breezyshim::tree::Tree> {
+        self.state()
+            .local_tree
+            .revision_tree(&self.state().base_revid)
+    }
+
+    pub fn defer_destroy(&mut self) {
+        self.state.as_mut().unwrap().destroy_fn = None;
     }
 
     pub fn publish_changes(
@@ -335,11 +528,10 @@ impl Workspace {
         stop_revision: Option<&RevisionId>,
     ) -> Result<PublishResult, PublishError> {
         let main_branch = self.main_branch();
-        let _target_branch = target_branch.unwrap_or_else(|| main_branch.as_ref());
         crate::publish::publish_changes(
             self.local_tree().branch().as_ref(),
-            self.main_branch().as_ref(),
-            self.resume_branch().as_deref(),
+            target_branch.or(main_branch).unwrap(),
+            self.resume_branch(),
             mode,
             name,
             get_proposal_description,
@@ -360,59 +552,128 @@ impl Workspace {
 
     pub fn propose(
         &self,
-        description: &str,
-        tags: Option<HashMap<String, RevisionId>>,
         name: &str,
+        description: &str,
+        target_branch: Option<&dyn Branch>,
+        forge: Option<Forge>,
+        existing_proposal: Option<MergeProposal>,
+        tags: Option<HashMap<String, RevisionId>>,
         labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
         commit_message: Option<&str>,
+        allow_collaboration: Option<bool>,
+        title: Option<&str>,
+        allow_empty: Option<bool>,
+        reviewers: Option<Vec<String>>,
+        owner: Option<&str>,
+        auto_merge: Option<bool>,
     ) -> Result<(MergeProposal, bool), Error> {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
-            if let Some(tags) = tags {
-                kwargs.set_item(
-                    "tags",
-                    tags.into_iter()
-                        .map(|(k, v)| (k, (&v).to_object(py)))
-                        .collect::<HashMap<_, _>>(),
-                )?;
-            }
-            if let Some(labels) = labels {
-                kwargs.set_item("labels", labels)?;
-            }
-            if let Some(commit_message) = commit_message {
-                kwargs.set_item("commit_message", commit_message)?;
-            }
-            if let Some(overwrite_existing) = overwrite_existing {
-                kwargs.set_item("overwrite_existing", overwrite_existing)?;
-            }
-            let (proposal, is_new): (PyObject, bool) = self
-                .0
-                .call_method(py, "propose", (name, description), Some(kwargs))?
-                .extract(py)?;
-            Ok((MergeProposal::from(proposal), is_new))
-        })
+        let main_branch = self.main_branch();
+        let target_branch = target_branch.or(main_branch).unwrap();
+        let forge = if let Some(forge) = forge {
+            forge
+        } else {
+            breezyshim::forge::get_forge(target_branch)?
+        };
+        crate::publish::propose_changes(
+            self.local_tree().branch().as_ref(),
+            target_branch,
+            &forge,
+            name,
+            description,
+            self.resume_branch(),
+            existing_proposal,
+            overwrite_existing,
+            labels,
+            commit_message,
+            title,
+            Some(self.inverse_additional_colocated_branches()),
+            allow_empty,
+            reviewers,
+            tags,
+            owner,
+            None,
+            allow_collaboration,
+            auto_merge,
+        )
+        .map_err(|e| e.into())
+    }
+
+    pub fn push_derived(
+        &self,
+        name: &str,
+        target_branch: Option<&dyn Branch>,
+        forge: Option<Forge>,
+        tags: Option<HashMap<String, RevisionId>>,
+        overwrite_existing: Option<bool>,
+        owner: Option<&str>,
+    ) -> Result<(Box<dyn Branch>, url::Url), Error> {
+        let main_branch = self.main_branch();
+        let target_branch = target_branch.or(main_branch).unwrap();
+        let forge = if let Some(forge) = forge {
+            forge
+        } else {
+            breezyshim::forge::get_forge(target_branch)?
+        };
+        crate::publish::push_derived_changes(
+            self.local_tree().branch().as_ref(),
+            target_branch,
+            &forge,
+            name,
+            overwrite_existing,
+            owner,
+            tags,
+            None,
+        )
+        .map_err(|e| e.into())
     }
 
     pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
-            kwargs.set_item(
-                "tags",
-                tags.into_iter()
-                    .map(|(k, v)| (k, (&v).to_object(py)))
-                    .collect::<HashMap<_, _>>(),
-            )?;
-            self.0.call_method(py, "push_tags", (), Some(kwargs))?;
-            Ok(())
-        })
+        self.push(Some(tags))
     }
 
-    pub fn push(&self) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            self.0.call_method0(py, "push")?;
-            Ok(())
-        })
+    pub fn push(&self, tags: Option<HashMap<String, RevisionId>>) -> Result<(), Error> {
+        let main_branch = self.main_branch().unwrap();
+
+        let forge = match breezyshim::forge::get_forge(main_branch) {
+            Ok(forge) => Some(forge),
+            Err(breezyshim::forge::Error::UnsupportedForge(e)) => {
+                // We can't figure out what branch to resume from when there's no forge
+                // that can tell us.
+                log::warn!(
+                    "Unsupported forge ({}), will attempt to push to {}",
+                    e,
+                    crate::vcs::full_branch_url(main_branch),
+                );
+                None
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+        };
+
+        crate::publish::push_changes(
+            self.local_tree().branch().as_ref(),
+            main_branch,
+            forge.as_ref(),
+            None,
+            Some(
+                self.inverse_additional_colocated_branches()
+                    .into_iter()
+                    .collect(),
+            ),
+            tags,
+            None,
+        )
+        .map_err(Into::into)
+    }
+
+    fn inverse_additional_colocated_branches(&self) -> Vec<(String, String)> {
+        let mut result = vec![];
+        for (k, v) in self.additional_colocated_branches().iter() {
+            result.push((v.to_string(), k.to_string()));
+        }
+        result
     }
 
     pub fn show_diff(
@@ -422,21 +683,74 @@ impl Workspace {
         new_label: Option<&str>,
     ) -> Result<(), PyErr> {
         breezyshim::diff::show_diff_trees(
-            &self.base_tree(),
+            self.base_tree().as_ref(),
             self.local_tree().basis_tree().as_ref(),
             outf,
             old_label,
             new_label,
         )
     }
+
+    pub fn destroy(&mut self) -> Result<(), Error> {
+        if let Some(state) = self.state.as_mut() {
+            if let Some(destroy_fn) = state.destroy_fn.take() {
+                destroy_fn()?;
+            }
+        }
+        self.state = None;
+        Ok(())
+    }
 }
 
-impl Drop for Workspace {
+impl Drop for Workspace<'_> {
     fn drop(&mut self) {
-        Python::with_gil(|py| {
-            self.0
-                .call_method1(py, "__exit__", (py.None(), py.None(), py.None()))
-                .unwrap();
-        })
+        if let Some(state) = self.state.as_mut() {
+            if let Some(destroy_fn) = state.destroy_fn.take() {
+                match destroy_fn() {
+                    Ok(()) => {}
+                    Err(e) => {
+                        log::error!("Error destroying workspace: {}", e);
+                    }
+                }
+            }
+        }
     }
+}
+
+#[test]
+fn test_create_workspace() {
+    let mut ws = Workspace::builder().build().unwrap();
+
+    assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
+
+    assert_eq!(
+        ws.base_revid(),
+        Some(breezyshim::revisionid::RevisionId::null())
+    );
+
+    // There are changes since the branch is created
+    assert!(ws.changes_since_main());
+    assert!(!ws.changes_since_base());
+    assert_eq!(
+        ws.changed_branches(),
+        vec![(
+            "".to_string(),
+            None,
+            Some(breezyshim::revisionid::RevisionId::null())
+        )]
+    );
+
+    let revid = ws
+        .local_tree()
+        .commit("test commit", Some(true), None, None)
+        .unwrap();
+
+    assert!(ws.changes_since_main());
+    assert!(ws.changes_since_base());
+    assert_eq!(
+        ws.changed_branches(),
+        vec![("".to_string(), None, Some(revid))]
+    );
+
+    ws.destroy().unwrap();
 }
