@@ -48,6 +48,7 @@ pub fn fetch_colocated(
 #[derive(Debug)]
 pub enum Error {
     Python(PyErr),
+    ForgeError(breezyshim::forge::Error),
 }
 
 impl From<BranchOpenError> for Error {
@@ -56,10 +57,17 @@ impl From<BranchOpenError> for Error {
     }
 }
 
+impl From<breezyshim::forge::Error> for Error {
+    fn from(e: breezyshim::forge::Error) -> Self {
+        Error::ForgeError(e)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::Python(e) => write!(f, "{}", e),
+            Error::ForgeError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -269,19 +277,18 @@ impl Workspace {
     }
 
     pub fn changes_since_main(&self) -> bool {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "changes_since_main")
-                .unwrap()
-                .extract(py)
-                .unwrap()
-        })
+        Some(self.local_tree().branch().last_revision())
+            != self.main_branch().map(|b| b.last_revision())
     }
 
     pub fn changes_since_base(&self) -> bool {
+        Some(self.local_tree().branch().last_revision()) != self.base_revid()
+    }
+
+    pub fn base_revid(&self) -> Option<RevisionId> {
         Python::with_gil(|py| {
             self.0
-                .call_method0(py, "changes_since_base")
+                .getattr(py, "base_revid")
                 .unwrap()
                 .extract(py)
                 .unwrap()
@@ -451,10 +458,47 @@ impl Workspace {
     }
 
     pub fn push(&self) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            self.0.call_method0(py, "push")?;
-            Ok(())
-        })
+        let main_branch = self.main_branch().unwrap();
+
+        let forge = match breezyshim::forge::get_forge(main_branch.as_ref()) {
+            Ok(forge) => Some(forge),
+            Err(breezyshim::forge::Error::UnsupportedForge(e)) => {
+                // We can't figure out what branch to resume from when there's no forge
+                // that can tell us.
+                log::warn!(
+                    "Unsupported forge ({}), will attempt to push to {}",
+                    e,
+                    crate::vcs::full_branch_url(main_branch.as_ref()),
+                );
+                None
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+        };
+
+        crate::publish::push_changes(
+            self.local_tree().branch().as_ref(),
+            main_branch.as_ref(),
+            forge.as_ref(),
+            None,
+            Some(
+                self.inverse_additional_colocated_branches()
+                    .into_iter()
+                    .collect(),
+            ),
+            None,
+            None,
+        )
+        .map_err(Into::into)
+    }
+
+    fn inverse_additional_colocated_branches(&self) -> Vec<(String, String)> {
+        let mut result = vec![];
+        for (k, v) in self.additional_colocated_branches().iter() {
+            result.push((v.to_string(), k.to_string()));
+        }
+        result
     }
 
     pub fn show_diff(
