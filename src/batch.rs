@@ -113,7 +113,7 @@ impl Entry {
             Err(e) => return Err(Error::Vcs(e)),
         };
 
-        let ws = Workspace::builder()
+        let mut ws = Workspace::builder()
             .main_branch(main_branch.as_ref())
             .path(basepath)
             .build()?;
