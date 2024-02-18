@@ -530,8 +530,8 @@ impl<'a> Workspace<'a> {
         let main_branch = self.main_branch();
         crate::publish::publish_changes(
             self.local_tree().branch().as_ref(),
-            target_branch.or(main_branch.as_deref()).unwrap(),
-            self.resume_branch().as_deref(),
+            target_branch.or(main_branch).unwrap(),
+            self.resume_branch(),
             mode,
             name,
             get_proposal_description,
@@ -569,7 +569,7 @@ impl<'a> Workspace<'a> {
         auto_merge: Option<bool>,
     ) -> Result<(MergeProposal, bool), Error> {
         let main_branch = self.main_branch();
-        let target_branch = target_branch.or(main_branch.as_deref()).unwrap();
+        let target_branch = target_branch.or(main_branch).unwrap();
         let forge = if let Some(forge) = forge {
             forge
         } else {
@@ -581,7 +581,7 @@ impl<'a> Workspace<'a> {
             &forge,
             name,
             description,
-            self.resume_branch().as_deref(),
+            self.resume_branch(),
             existing_proposal,
             overwrite_existing,
             labels,
@@ -605,12 +605,11 @@ impl<'a> Workspace<'a> {
         target_branch: Option<&dyn Branch>,
         forge: Option<Forge>,
         tags: Option<HashMap<String, RevisionId>>,
-        labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
         owner: Option<&str>,
     ) -> Result<(Box<dyn Branch>, url::Url), Error> {
         let main_branch = self.main_branch();
-        let target_branch = target_branch.or(main_branch.as_deref()).unwrap();
+        let target_branch = target_branch.or(main_branch).unwrap();
         let forge = if let Some(forge) = forge {
             forge
         } else {
@@ -691,6 +690,16 @@ impl<'a> Workspace<'a> {
             new_label,
         )
     }
+
+    pub fn destroy(&mut self) -> Result<(), Error> {
+        if let Some(state) = self.state.as_mut() {
+            if let Some(destroy_fn) = state.destroy_fn.take() {
+                destroy_fn()?;
+            }
+        }
+        self.state = None;
+        Ok(())
+    }
 }
 
 impl Drop for Workspace<'_> {
@@ -710,7 +719,38 @@ impl Drop for Workspace<'_> {
 
 #[test]
 fn test_create_workspace() {
-    let ws = Workspace::builder().build().unwrap();
+    let mut ws = Workspace::builder().build().unwrap();
 
     assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
+
+    assert_eq!(
+        ws.base_revid(),
+        Some(breezyshim::revisionid::RevisionId::null())
+    );
+
+    // There are changes since the branch is created
+    assert!(ws.changes_since_main());
+    assert!(!ws.changes_since_base());
+    assert_eq!(
+        ws.changed_branches(),
+        vec![(
+            "".to_string(),
+            None,
+            Some(breezyshim::revisionid::RevisionId::null())
+        )]
+    );
+
+    let revid = ws
+        .local_tree()
+        .commit("test commit", Some(true), None, None)
+        .unwrap();
+
+    assert!(ws.changes_since_main());
+    assert!(ws.changes_since_base());
+    assert_eq!(
+        ws.changed_branches(),
+        vec![("".to_string(), None, Some(revid))]
+    );
+
+    ws.destroy().unwrap();
 }
