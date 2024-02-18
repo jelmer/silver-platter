@@ -2,6 +2,8 @@
 name = "svp-client"
 version = "0.1.0"
 authors = ["Jelmer Vernooĳ <jelmer@jelmer.uk>"]
+license = "Apache-2.0"
+description = "Client for the silver-platter protocol"
 
 [lib]
 
