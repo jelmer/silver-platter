@@ -409,38 +409,51 @@ impl Workspace {
 
     pub fn propose(
         &self,
-        description: &str,
-        tags: Option<HashMap<String, RevisionId>>,
         name: &str,
+        description: &str,
+        target_branch: Option<&dyn Branch>,
+        forge: Option<Forge>,
+        existing_proposal: Option<MergeProposal>,
+        tags: Option<HashMap<String, RevisionId>>,
         labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
         commit_message: Option<&str>,
+        allow_collaboration: Option<bool>,
+        title: Option<&str>,
+        allow_empty: Option<bool>,
+        reviewers: Option<Vec<String>>,
+        owner: Option<&str>,
+        auto_merge: Option<bool>,
     ) -> Result<(MergeProposal, bool), Error> {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
-            if let Some(tags) = tags {
-                kwargs.set_item(
-                    "tags",
-                    tags.into_iter()
-                        .map(|(k, v)| (k, (&v).to_object(py)))
-                        .collect::<HashMap<_, _>>(),
-                )?;
-            }
-            if let Some(labels) = labels {
-                kwargs.set_item("labels", labels)?;
-            }
-            if let Some(commit_message) = commit_message {
-                kwargs.set_item("commit_message", commit_message)?;
-            }
-            if let Some(overwrite_existing) = overwrite_existing {
-                kwargs.set_item("overwrite_existing", overwrite_existing)?;
-            }
-            let (proposal, is_new): (PyObject, bool) = self
-                .0
-                .call_method(py, "propose", (name, description), Some(kwargs))?
-                .extract(py)?;
-            Ok((MergeProposal::from(proposal), is_new))
-        })
+        let main_branch = self.main_branch();
+        let target_branch = target_branch.or(main_branch.as_deref()).unwrap();
+        let forge = if let Some(forge) = forge {
+            forge
+        } else {
+            breezyshim::forge::get_forge(target_branch)?
+        };
+        crate::publish::propose_changes(
+            self.local_tree().branch().as_ref(),
+            target_branch,
+            &forge,
+            name,
+            description,
+            self.resume_branch().as_deref(),
+            existing_proposal,
+            overwrite_existing,
+            labels,
+            commit_message,
+            title,
+            Some(self.inverse_additional_colocated_branches()),
+            allow_empty,
+            reviewers,
+            tags,
+            owner,
+            None,
+            allow_collaboration,
+            auto_merge,
+        )
+        .map_err(|e| e.into())
     }
 
     pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
