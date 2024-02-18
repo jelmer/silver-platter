@@ -191,10 +191,13 @@ impl Workspace {
         WorkspaceBuilder::default()
     }
 
-    pub fn main_branch(&self) -> Box<dyn Branch> {
-        Python::with_gil(|py| {
+    pub fn main_branch(&self) -> Option<Box<dyn Branch>> {
+        Python::with_gil(|py| -> Option<Box<dyn Branch>> {
             let branch = self.0.getattr(py, "main_branch").unwrap();
-            Box::new(breezyshim::branch::RegularBranch::new(branch))
+            if branch.is_none(py) {
+                return None;
+            }
+            Some(Box::new(breezyshim::branch::RegularBranch::new(branch)))
         })
     }
 
@@ -292,12 +295,52 @@ impl Workspace {
         self.changed_branches().iter().any(|(_, br, r)| br != r)
     }
 
-    pub fn changed_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
+    pub fn additional_colocated_branches(&self) -> HashMap<String, String> {
         Python::with_gil(|py| {
             self.0
-                .call_method0(py, "result_branches")
+                .getattr(py, "additional_colocated_branches")
                 .unwrap()
-                .extract::<Vec<(String, Option<RevisionId>, Option<RevisionId>)>>(py)
+                .extract(py)
+                .unwrap()
+        })
+    }
+
+    pub fn changed_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
+        let main_branch = self.main_branch();
+        let mut branches = vec![(
+            main_branch
+                .as_ref()
+                .map_or_else(|| "".to_string(), |b| b.name().unwrap()),
+            main_branch.map(|b| b.last_revision()),
+            Some(self.local_tree().last_revision().unwrap()),
+        )];
+
+        let local_controldir = self.local_tree().controldir();
+
+        for (from_name, to_name) in self.additional_colocated_branches().iter() {
+            let to_revision = match local_controldir.open_branch(Some(to_name)) {
+                Ok(b) => Some(b.last_revision()),
+                Err(BranchOpenError::NoColocatedBranchSupport) => continue,
+                Err(BranchOpenError::NotBranchError(..)) => None,
+                Err(e) => {
+                    panic!("Unexpected error opening branch {}: {}", to_name, e);
+                }
+            };
+
+            let from_revision = self.main_colo_revid().get(from_name).cloned();
+
+            branches.push((from_name.to_string(), from_revision, to_revision));
+        }
+
+        branches
+    }
+
+    pub fn main_colo_revid(&self) -> HashMap<String, RevisionId> {
+        Python::with_gil(|py| {
+            self.0
+                .getattr(py, "main_colo_revid")
+                .unwrap()
+                .extract(py)
                 .unwrap()
         })
     }
@@ -335,10 +378,9 @@ impl Workspace {
         stop_revision: Option<&RevisionId>,
     ) -> Result<PublishResult, PublishError> {
         let main_branch = self.main_branch();
-        let _target_branch = target_branch.unwrap_or_else(|| main_branch.as_ref());
         crate::publish::publish_changes(
             self.local_tree().branch().as_ref(),
-            self.main_branch().as_ref(),
+            target_branch.or(main_branch.as_deref()).unwrap(),
             self.resume_branch().as_deref(),
             mode,
             name,
