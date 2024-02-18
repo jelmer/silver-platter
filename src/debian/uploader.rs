@@ -81,3 +81,30 @@ pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
         Ok(())
     }
 }
+
+pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, gpgme::Error> {
+    context.import("/usr/share/keyrings/debian-keyring.gpg")?;
+
+    let mut ids = vec![];
+
+    for key in context.keys()? {
+        if let Err(err) = key {
+            eprintln!("Error getting key: {}", err);
+            continue;
+        }
+
+        let key = key.unwrap();
+
+        if let Ok(key_id) = key.id() {
+            ids.push(key_id.to_string());
+        }
+
+        for subkey in key.subkeys() {
+            if let Ok(subkey_id) = subkey.id() {
+                ids.push(subkey_id.to_string());
+            }
+        }
+    }
+
+    Ok(ids)
+}
