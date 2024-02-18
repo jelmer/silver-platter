@@ -15,6 +15,26 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+__all__ = [
+    'create_temp_sprout',
+    'PreCheckFailed',
+    'PostCheckFailed',
+    'run_pre_check',
+    'run_post_check',
+    'TemporarySprout',
+    'open_branch',
+    'open_branch_containing',
+    'full_branch_url',
+    'get_branch_vcs_type',
+    'Branch',
+    'BranchUnavailable',
+    'BranchTemporarilyUnavailable',
+    'BranchRateLimited',
+    'BranchMissing',
+    'BranchUnsupported',
+]
+
+
 from typing import Dict, Optional
 
 from breezy.branch import Branch
@@ -22,6 +42,7 @@ from breezy.workingtree import WorkingTree
 
 from . import _svp_rs
 
+Branch = _svp_rs.Branch
 create_temp_sprout = _svp_rs.create_temp_sprout
 PreCheckFailed = _svp_rs.PreCheckFailed
 PostCheckFailed = _svp_rs.PostCheckFailed
