@@ -457,20 +457,10 @@ impl Workspace {
     }
 
     pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
-            kwargs.set_item(
-                "tags",
-                tags.into_iter()
-                    .map(|(k, v)| (k, (&v).to_object(py)))
-                    .collect::<HashMap<_, _>>(),
-            )?;
-            self.0.call_method(py, "push_tags", (), Some(kwargs))?;
-            Ok(())
-        })
+        self.push(Some(tags))
     }
 
-    pub fn push(&self) -> Result<(), Error> {
+    pub fn push(&self, tags: Option<HashMap<String, RevisionId>>) -> Result<(), Error> {
         let main_branch = self.main_branch().unwrap();
 
         let forge = match breezyshim::forge::get_forge(main_branch.as_ref()) {
@@ -500,7 +490,7 @@ impl Workspace {
                     .into_iter()
                     .collect(),
             ),
-            None,
+            tags,
             None,
         )
         .map_err(Into::into)
