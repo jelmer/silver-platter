@@ -114,7 +114,7 @@ enum Commands {
         builder: String,
 
         /// Select all packages maintained by specified maintainer.
-        #[arg(conflicts_with = "packages")]
+        #[arg(long, conflicts_with = "packages")]
         maintainer: Option<Vec<String>>,
 
         /// Use vcswatch to determine what packages need uploading.
@@ -122,6 +122,7 @@ enum Commands {
         vcswatch: bool,
 
         /// Ignore source package
+        #[arg(long)]
         exclude: Option<Vec<String>>,
 
         /// Only process packages with autopkgtest
@@ -148,6 +149,7 @@ enum Commands {
         #[arg(long, env = "APT_REPOSITORY_KEY")]
         apt_repository_key: Option<String>,
 
+        /// Packages to upload
         packages: Vec<String>,
     },
 }
@@ -797,12 +799,8 @@ fn main() {
             packages,
         } => pyo3::Python::with_gil(|py| {
             let kwargs = pyo3::types::PyDict::new(py);
-            if let Some(maintainer) = maintainer {
-                kwargs.set_item("maintainer", maintainer).unwrap();
-            }
-            if let Some(acceptable_keys) = acceptable_keys {
-                kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
-            }
+            kwargs.set_item("maintainer", maintainer).unwrap();
+            kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
             kwargs
                 .set_item("gpg_verification", gpg_verification)
                 .unwrap();
@@ -812,29 +810,19 @@ fn main() {
             kwargs
                 .set_item("autopkgtest_only", autopkgtest_only)
                 .unwrap();
-            if let Some(exclude) = exclude {
-                kwargs.set_item("exclude", exclude).unwrap();
-            }
-            if let Some(verify_command) = verify_command {
-                kwargs.set_item("verify_command", verify_command).unwrap();
-            }
+            kwargs.set_item("exclude", exclude).unwrap();
+            kwargs.set_item("verify_command", verify_command).unwrap();
             kwargs.set_item("shuffle", shuffle).unwrap();
-            if let Some(allowed_committer) = allowed_committer {
-                kwargs
-                    .set_item("allowed_committer", allowed_committer)
-                    .unwrap();
-            }
+            kwargs
+                .set_item("allowed_committer", allowed_committer)
+                .unwrap();
             kwargs.set_item("vcswatch", vcswatch).unwrap();
             kwargs.set_item("diff", diff).unwrap();
             kwargs.set_item("debug", cli.debug).unwrap();
-            if let Some(apt_repository) = apt_repository {
-                kwargs.set_item("apt_repository", apt_repository).unwrap();
-            }
-            if let Some(apt_repository_key) = apt_repository_key {
-                kwargs
-                    .set_item("apt_repository_key", apt_repository_key)
-                    .unwrap();
-            }
+            kwargs.set_item("apt_repository", apt_repository).unwrap();
+            kwargs
+                .set_item("apt_repository_key", apt_repository_key)
+                .unwrap();
             kwargs.set_item("packages", packages).unwrap();
 
             let m = py.import("silver_platter.debian.uploader").unwrap();
@@ -842,7 +830,7 @@ fn main() {
             match main.call((), Some(kwargs)) {
                 Ok(o) => o.extract().unwrap(),
                 Err(e) => {
-                    error!("Failed to open branch: {}", e);
+                    error!("Failed to upload: {}", e);
                     1
                 }
             }
