@@ -285,20 +285,17 @@ impl Workspace {
         })
     }
 
+    /// Have any branch changes at all been made?
+    ///
+    /// Includes changes that already existed in the resume branch
     pub fn any_branch_changes(&self) -> bool {
-        Python::with_gil(|py| {
-            self.0
-                .call_method0(py, "any_branch_changes")
-                .unwrap()
-                .extract(py)
-                .unwrap()
-        })
+        self.changed_branches().iter().any(|(_, br, r)| br != r)
     }
 
     pub fn changed_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
         Python::with_gil(|py| {
             self.0
-                .call_method0(py, "changed_branches")
+                .call_method0(py, "result_branches")
                 .unwrap()
                 .extract::<Vec<(String, Option<RevisionId>, Option<RevisionId>)>>(py)
                 .unwrap()
