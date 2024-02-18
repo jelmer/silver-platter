@@ -1,8 +1,6 @@
 pub use crate::proposal::DescriptionFormat;
 use crate::vcs::open_branch;
 use crate::Mode;
-use breezyshim::bazaar::tree::MutableInventoryTree;
-use breezyshim::bazaar::FileId;
 use breezyshim::branch::MemoryBranch;
 use breezyshim::controldir::{
     create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
@@ -778,6 +776,8 @@ fn test_no_op_commits() {
 
 #[test]
 fn test_indep() {
+    use breezyshim::bazaar::tree::MutableInventoryTree;
+    use breezyshim::bazaar::FileId;
     let td = tempfile::tempdir().unwrap();
     let orig = td.path().join("orig");
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();

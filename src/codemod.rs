@@ -1,6 +1,3 @@
-use breezyshim::controldir::{
-    create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
-};
 use breezyshim::tree::{CommitError, WorkingTree};
 use breezyshim::RevisionId;
 use std::collections::HashMap;
@@ -297,8 +294,9 @@ pub fn script_runner(
 
 #[cfg(test)]
 mod script_runner_tests {
-    use super::*;
     use breezyshim::tree::MutableTree;
+
+    use breezyshim::controldir::create_standalone_workingtree;
 
     fn make_executable(script_path: &std::path::Path) {
         #[cfg(unix)]
