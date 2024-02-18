@@ -140,15 +140,13 @@ pub fn apply_and_publish(
         ws_builder
     };
 
-    let ws = ws_builder.build();
-
-    match ws.start() {
-        Ok(_) => (),
+    let ws = match ws_builder.build() {
+        Ok(ws) => ws,
         Err(e) => {
             error!("Failed to start workspace: {}", e);
             return 2;
         }
-    }
+    };
 
     let result: CommandResult = match crate::debian::codemod::script_runner(
         &ws.local_tree(),

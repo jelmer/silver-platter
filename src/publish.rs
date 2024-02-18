@@ -792,7 +792,8 @@ fn test_indep() {
         .unwrap();
     tree.commit("independent", None, None, None).unwrap();
 
-    let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
+    let proposal_path = orig.join("proposal");
+    let proposal_url = url::Url::from_file_path(proposal_path.as_path()).unwrap();
 
     let proposal = tree
         .controldir()
@@ -800,7 +801,9 @@ fn test_indep() {
         .open_workingtree()
         .unwrap();
 
-    std::fs::write(td.path().join("proposal").join("b"), "b").unwrap();
+    assert!(proposal_path.exists());
+
+    std::fs::write(proposal_path.join("b"), "b").unwrap();
 
     if proposal.supports_setting_file_ids() {
         MutableInventoryTree::add(
@@ -818,6 +821,8 @@ fn test_indep() {
         check_proposal_diff_empty(proposal.branch().as_ref(), tree.branch().as_ref(), None)
             .unwrap()
     );
+
+    std::mem::drop(td);
 }
 
 #[test]

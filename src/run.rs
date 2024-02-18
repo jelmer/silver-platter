@@ -136,15 +136,13 @@ pub fn apply_and_publish(
         builder
     };
 
-    let ws = builder.build();
-
-    match ws.start() {
-        Ok(_) => (),
+    let ws = match builder.build() {
+        Ok(ws) => ws,
         Err(e) => {
             error!("Failed to start workspace: {}", e);
             return 2;
         }
-    }
+    };
 
     let result: CommandResult = match crate::codemod::script_runner(
         &ws.local_tree(),

@@ -316,7 +316,7 @@ mod script_runner_tests {
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree = create_standalone_workingtree(&d, "bzr").unwrap();
-        let script_path = d.join("script.sh");
+        let script_path = td.path().join("script.sh");
         std::fs::write(
             &script_path,
             r#"#!/bin/sh
@@ -328,6 +328,8 @@ echo Did a thing
 
         make_executable(&script_path);
 
+        std::fs::write(d.join("bar"), "bar").unwrap();
+
         tree.add(&[std::path::Path::new("bar")]).unwrap();
         let old_revid = tree.commit("initial", None, None, None).unwrap();
         let script_path_str = script_path.to_str().unwrap();
@@ -347,6 +349,8 @@ echo Did a thing
         assert_eq!(result.old_revision, old_revid);
         assert_eq!(result.new_revision, tree.last_revision().unwrap());
         assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+
+        std::mem::drop(td);
     }
 
     #[test]
@@ -354,7 +358,7 @@ echo Did a thing
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree = create_standalone_workingtree(&d, "bzr").unwrap();
-        let script_path = d.join("script.sh");
+        let script_path = td.path().join("script.sh");
         std::fs::write(
             &script_path,
             r#"#!/bin/sh
@@ -366,6 +370,8 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
 
         make_executable(&script_path);
 
+        std::fs::write(d.join("bar"), "bar").unwrap();
+
         tree.add(&[std::path::Path::new("bar")]).unwrap();
         let old_revid = tree.commit("initial", None, None, None).unwrap();
         let script_path_str = script_path.to_str().unwrap();
@@ -384,7 +390,9 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
         assert!(!tree.has_changes().unwrap());
         assert_eq!(result.old_revision, old_revid);
         assert_eq!(result.new_revision, tree.last_revision().unwrap());
-        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+        assert_eq!(result.description.as_deref().unwrap(), "Did a thing");
+
+        std::mem::drop(td);
     }
 
     #[test]
@@ -426,6 +434,8 @@ echo Did a thing
         assert_eq!(result.old_revision, old_revid);
         assert_eq!(result.new_revision, tree.last_revision().unwrap());
         assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+
+        std::mem::drop(td);
     }
 
     #[test]
@@ -435,7 +445,7 @@ echo Did a thing
         let tree =
             create_standalone_workingtree(&d, &breezyshim::controldir::ControlDirFormat::default())
                 .unwrap();
-        let script_path = d.join("script.sh");
+        let script_path = td.path().join("script.sh");
         std::fs::write(
             &script_path,
             r#"#!/bin/sh
@@ -446,7 +456,7 @@ echo Did a thing
 
         make_executable(&script_path);
 
-        tree.commit("initial", None, None, None).unwrap();
+        tree.commit("initial", Some(true), None, None).unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let err = super::script_runner(
             &tree,
@@ -462,5 +472,7 @@ echo Did a thing
 
         assert!(!tree.has_changes().unwrap());
         assert!(matches!(err, super::Error::ScriptMadeNoChanges));
+
+        std::mem::drop(td);
     }
 }
