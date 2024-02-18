@@ -19,7 +19,6 @@
 import breezy.plugins.github  # noqa: F401
 import breezy.plugins.gitlab  # noqa: F401
 import breezy.plugins.launchpad  # noqa: F401
-from breezy.branch import Branch
 from breezy.errors import PermissionDenied
 from breezy.forge import (
     ForgeLoginRequired,

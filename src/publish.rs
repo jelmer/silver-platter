@@ -96,7 +96,7 @@ fn test_push_result() {
     let td = tempfile::tempdir().unwrap();
     let target_path = td.path().join("target");
     let source_path = td.path().join("source");
-    let target_url = url::Url::from_file_path(&target_path).unwrap();
+    let target_url = url::Url::from_file_path(target_path).unwrap();
     let target = create_branch_convenience(&target_url).unwrap();
     let source = create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
     let revid = source.commit("Some change", None, None, None).unwrap();
