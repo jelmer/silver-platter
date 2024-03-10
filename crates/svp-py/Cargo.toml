@@ -23,3 +23,6 @@ serde_json = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 breezyshim = { workspace = true }
 debian-changelog = { workspace = true }
+
+[package.metadata.cargo-all-features]
+denylist = ["extension-module"]
