@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt -y update
-        sudo apt -y install devscripts bzr libapt-pkg-dev libtdb-dev libssl-dev pkg-config
+        sudo apt -y install devscripts bzr libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
         cargo install cargo-all-features
     # TODO(jelmer): Add proper test isolation so this isn't necessary
     - name: Setup bzr identity

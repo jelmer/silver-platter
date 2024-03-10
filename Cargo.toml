@@ -18,7 +18,8 @@ chrono = "0.4.30"
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
-clap = { version = "4.4.6", features = ["derive", "env"] }
+# Avoid 4.5.0 due to higher minimum rust version
+clap = { version = "4.4.11,<4.5", features = ["derive", "env"] }
 shlex = "1.3.0"
 env_logger = "0.9"
 trivialdb = { version = "0.1.4", optional = true }
@@ -28,18 +29,17 @@ lazy-regex = "3.0.2"
 libc = "0.2"
 xdg = "2.5"
 debian-analyzer = { version = ">=0.1.148", optional = true }
+gpgme = { version = "0.11.0", optional = true }
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
-default = [ "debian", "detect-update-changelog" ]
-debian = [ "dep:debversion", "dep:flate2", "dep:reqwest" ]
-last-attempt-db = [ "dep:trivialdb" ]
-detect-update-changelog = [ "dep:debian-analyzer" ]
-
-[dev-dependencies]
-pyo3 = { workspace = true, features = ["auto-initialize",] }
+default = ["debian", "detect-update-changelog"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest"]
+gpg = ["dep:gpgme"]
+last-attempt-db = ["dep:trivialdb"]
+detect-update-changelog = ["dep:debian-analyzer"]
 
 [dependencies.pyo3]
 workspace = true
@@ -79,4 +79,3 @@ name = "svp"
 [[bin]]
 name = "debian-svp"
 required-features = ["debian"]
-

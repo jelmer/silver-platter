@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt -y update
-          sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev libtdb-dev libssl-dev pkg-config
+          sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
           pip install --upgrade pip
           pip install -U pip setuptools setuptools-rust ruff mypy testtools
           pip install ".[debian,launchpad]" breezy
