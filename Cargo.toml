@@ -18,7 +18,7 @@ chrono = "0.4.30"
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
-clap = { version = "4.4.6", features = ["derive", "env"] }
+clap = { version = "4.5.2", features = ["derive", "env"] }
 shlex = "1.3.0"
 env_logger = "0.9"
 trivialdb = { version = "0.1.4", optional = true }
