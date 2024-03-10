@@ -20,7 +20,6 @@ __all__ = [
     'open_branch',
     'open_branch_containing',
     'full_branch_url',
-    'Branch',
     'BranchUnavailable',
     'BranchTemporarilyUnavailable',
     'BranchRateLimited',
@@ -30,8 +29,6 @@ __all__ = [
 
 
 from typing import Optional
-
-from breezy.branch import Branch
 
 from . import _svp_rs
 
