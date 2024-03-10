@@ -10,7 +10,7 @@ homepage = "https://github.com/jelmer/silver-platter"
 default-run = "svp"
 
 [dependencies]
-tempfile = "3.6.0"
+tempfile = "3.10.1"
 serde_yaml = "0.9.22"
 log = "0.4"
 percent-encoding = "2.3.0"
