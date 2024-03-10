@@ -36,7 +36,8 @@ members = [ "crates/*",]
 
 [features]
 default = ["debian", "detect-update-changelog"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:gpgme"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest"]
+gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["dep:debian-analyzer"]
 

@@ -84,6 +84,7 @@ pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
     }
 }
 
+#[cfg(feature = "gpg")]
 pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, gpgme::Error> {
     context.import("/usr/share/keyrings/debian-keyring.gpg")?;
 
