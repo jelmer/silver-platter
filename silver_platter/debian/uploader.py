@@ -48,6 +48,7 @@ from breezy.plugins.debian.util import (
 from breezy.revision import NULL_REVISION
 from breezy.tree import MissingNestedTree
 from breezy.workingtree import WorkingTree
+from debian.changelog import Version, get_maintainer
 from debmutate.changelog import (
     ChangelogEditor,
     ChangelogParseError,
@@ -58,7 +59,6 @@ from debmutate.control import ControlEditor
 from debmutate.reformatting import GeneratedFile
 
 import silver_platter  # noqa: F401
-from debian.changelog import Version, get_maintainer
 
 from ..probers import select_probers
 from ..utils import (
@@ -622,9 +622,7 @@ def process_package(
                 if e.returncode == 1:
                     raise PackageIgnored(
                         "verify-command-declined",
-                        "{}: Verify command {!r} declined upload".format(
-                            source_name, verify_command
-                        ),
+                        f"{source_name}: Verify command {verify_command!r} declined upload",
                     )
                 else:
                     raise PackageProcessingFailure(

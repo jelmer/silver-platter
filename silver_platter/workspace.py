@@ -130,27 +130,16 @@ class Workspace:
                 return "Workspace for %s" % full_branch_url(self.main_branch)
         else:
             if self.main_branch:
-                return "Workspace for {} at {}".format(
-                    full_branch_url(self.main_branch), self._path
-                )
+                return f"Workspace for {full_branch_url(self.main_branch)} at {self._path}"
             else:
                 return "Workspace at %s" % self._path
 
     def __repr__(self) -> str:
         return (
-            "{}({!r}, resume_branch={!r}, cached_branch={!r}, "
-            "additional_colocated_branches={!r}, "
-            "resume_branch_additional_colocated_branches={!r}, "
-            "dir={!r}, path={!r})".format(
-                type(self).__name__,
-                self.main_branch,
-                self.resume_branch,
-                self.cached_branch,
-                self.additional_colocated_branches,
-                self.resume_branch_additional_colocated_branches,
-                self._dir,
-                self._path,
-            )
+            f"{type(self).__name__}({self.main_branch!r}, resume_branch={self.resume_branch!r}, cached_branch={self.cached_branch!r}, "
+            f"additional_colocated_branches={self.additional_colocated_branches!r}, "
+            f"resume_branch_additional_colocated_branches={self.resume_branch_additional_colocated_branches!r}, "
+            f"dir={self._dir!r}, path={self._path!r})"
         )
 
     def _inverse_additional_colocated_branches(self):
