@@ -12,10 +12,11 @@ crate-type = ["cdylib"]
 
 [features]
 debian = ["silver-platter/debian"]
+extension-module = ["pyo3/extension-module"]
 
 [dependencies]
 silver-platter = { path = "../..", default-features = false }
-pyo3 = { workspace = true, features = ["extension-module"] }
+pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
 tera = { workspace = true }
 serde_json = { workspace = true }

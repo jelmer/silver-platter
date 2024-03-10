@@ -161,9 +161,10 @@ pub fn vcswatch_prescan_package(
                 }
                 Err(RevisionRejected::RecentCommits(commit_age, min_commit_age)) => {
                     log::info!(
-                        "{}: Recent commits ({} days), skipping.",
+                        "{}: Recent commits ({} days < {} days), skipping.",
                         vw.package,
                         commit_age,
+                        min_commit_age,
                     );
                     return Err(PackageResult::Ignored("recent-commits".to_string()));
                 }
@@ -242,7 +243,7 @@ fn check_git_commits(
     let mut last_commit_ts: Option<chrono::DateTime<chrono::Utc>> = None;
     let mut lines: Vec<String> = vec![];
     for line in vcslog.lines() {
-        if line == ""
+        if line.is_empty()
             && lines
                 .last()
                 .unwrap()
@@ -267,7 +268,7 @@ fn check_git_commits(
             lines.push(line.to_string());
         }
     }
-    if lines.len() > 0 {
+    if !lines.is_empty() {
         let gitrev = GitRevision::from_lines(
             lines
                 .iter()
@@ -332,7 +333,7 @@ fn check_revision(
 
         if !allowed_committers.contains(&committer_email.as_str()) {
             return Err(RevisionRejected::CommitterNotAllowed(
-                committer_email.to_string(),
+                committer_email,
                 allowed_committers.iter().map(|s| s.to_string()).collect(),
             ));
         }

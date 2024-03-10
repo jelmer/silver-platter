@@ -110,7 +110,7 @@ enum Commands {
         diff: bool,
 
         /// Build command
-        #[arg(long, default_value = format!("{} --source --source-only-changes --debbuildopt=-v$(LAST_VERSION)", silver_platter::debian::DEFAULT_BUILDER))]
+        #[arg(long, default_value_t = format!("{} --source --source-only-changes --debbuildopt=-v$(LAST_VERSION)", silver_platter::debian::DEFAULT_BUILDER))]
         builder: String,
 
         /// Select all packages maintained by specified maintainer.
