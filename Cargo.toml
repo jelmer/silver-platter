@@ -11,7 +11,7 @@ default-run = "svp"
 
 [dependencies]
 tempfile = "3.10.1"
-serde_yaml = "0.9.33"
+serde_yaml = "0.9.34"
 log = "0.4"
 percent-encoding = "2.3.0"
 chrono = "0.4.30"
