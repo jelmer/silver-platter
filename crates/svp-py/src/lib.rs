@@ -318,15 +318,23 @@ fn script_runner(
     extra_env: Option<std::collections::HashMap<String, String>>,
     stderr: Option<PyObject>,
 ) -> PyResult<PyObject> {
-    let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
+    let script = if let Ok(script) = script.extract::<Vec<String>>(py) {
         script
     } else {
-        vec!["sh", "-c", script.extract::<&str>(py)?]
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            script.extract::<String>(py)?,
+        ]
     };
 
     silver_platter::codemod::script_runner(
         &WorkingTree::from(local_tree),
-        script.as_slice(),
+        script
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .as_slice(),
         subpath
             .as_ref()
             .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
@@ -862,14 +870,17 @@ fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyRe
 fn fetch_colocated(
     controldir: PyObject,
     from_controldir: PyObject,
-    additional_colocated_branches: HashMap<&str, &str>,
+    additional_colocated_branches: HashMap<String, String>,
 ) -> PyResult<()> {
     let controldir = breezyshim::ControlDir::new(controldir);
     let from_controldir = breezyshim::ControlDir::new(from_controldir);
     silver_platter::workspace::fetch_colocated(
         &controldir,
         &from_controldir,
-        &additional_colocated_branches,
+        &additional_colocated_branches
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect::<HashMap<_, _>>(),
     )
 }
 
@@ -964,15 +975,23 @@ pub(crate) mod debian {
         stderr: Option<PyObject>,
         update_changelog: Option<bool>,
     ) -> PyResult<PyObject> {
-        let script = if let Ok(script) = script.extract::<Vec<&str>>(py) {
+        let script = if let Ok(script) = script.extract::<Vec<String>>(py) {
             script
         } else {
-            vec!["sh", "-c", script.extract::<&str>(py)?]
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                script.extract::<String>(py)?,
+            ]
         };
 
         silver_platter::debian::codemod::script_runner(
             &WorkingTree::from(local_tree),
-            script.as_slice(),
+            script
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .as_slice(),
             subpath
                 .as_ref()
                 .map_or_else(|| std::path::Path::new(""), |p| p.as_path()),
