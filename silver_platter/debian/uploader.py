@@ -773,7 +773,24 @@ def open_last_attempt_db():
         )
 
 
-def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, builder, maintainer, vcswatch, exclude, autopkgtest_only, allowed_committer, debug, shuffle, verify_command, apt_repository, apt_repository_key):
+def main(
+    packages,
+    acceptable_keys,
+    gpg_verification,
+    min_commit_age,
+    diff,
+    builder,
+    maintainer,
+    vcswatch,
+    exclude,
+    autopkgtest_only,
+    allowed_committer,
+    debug,
+    shuffle,
+    verify_command,
+    apt_repository,
+    apt_repository_key,
+):
     ret = 0
 
     if not packages and not maintainer:
@@ -789,16 +806,12 @@ def main(packages, acceptable_keys, gpg_verification, min_commit_age, diff, buil
         )
 
     if apt_repository:
-        apt_repo = RemoteApt.from_string(
-            apt_repository, apt_repository_key
-        )
+        apt_repo = RemoteApt.from_string(apt_repository, apt_repository_key)
     else:
         apt_repo = LocalApt()
 
     if maintainer:
-        packages = select_apt_packages(
-            apt_repo, packages, maintainer
-        )
+        packages = select_apt_packages(apt_repo, packages, maintainer)
 
     if not packages:
         logging.info("No packages found.")

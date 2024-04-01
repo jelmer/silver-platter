@@ -16,15 +16,15 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 __all__ = [
-    'create_temp_sprout',
-    'open_branch',
-    'open_branch_containing',
-    'full_branch_url',
-    'BranchUnavailable',
-    'BranchTemporarilyUnavailable',
-    'BranchRateLimited',
-    'BranchMissing',
-    'BranchUnsupported',
+    "create_temp_sprout",
+    "open_branch",
+    "open_branch_containing",
+    "full_branch_url",
+    "BranchUnavailable",
+    "BranchTemporarilyUnavailable",
+    "BranchRateLimited",
+    "BranchMissing",
+    "BranchUnsupported",
 ]
 
 
