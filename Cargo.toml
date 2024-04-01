@@ -18,10 +18,9 @@ chrono = "0.4.30"
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
-# Avoid 4.5.0 due to higher minimum rust version
-clap = { version = "4.4.11,<4.5", features = ["derive", "env"] }
+clap = { workspace = true, optional = true, features = ["derive", "env"] }
 shlex = "1.3.0"
-env_logger = "0.11"
+env_logger = { workspace = true, optional = true }
 trivialdb = { version = "0.1.4", optional = true }
 flate2 = { version = "1", optional = true }
 reqwest = { version = "0.12", optional = true, features = ["blocking"] }
@@ -41,6 +40,7 @@ debian = ["dep:debversion", "dep:flate2", "dep:reqwest"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["dep:debian-analyzer"]
+cli = ["dep:clap", "dep:env_logger"]
 
 [dependencies.pyo3]
 workspace = true
@@ -73,6 +73,9 @@ serde = "1.0.171"
 breezyshim = ">=0.1.79"
 url = "2.4.0"
 debian-changelog = "0.1.10"
+env_logger = ">=0.10"
+# Avoid 4.5.0 due to higher minimum rust version
+clap = "4.4.11,<4.5"
 
 [[bin]]
 name = "svp"
