@@ -18,6 +18,6 @@ setup(
             args=["--no-default-features"],
             features=features + ["extension-module"],
         ),
-        RustBin("svp", "Cargo.toml", features=features),
+        RustBin("svp", "Cargo.toml", features=features + ["cli"]),
     ],
 )
