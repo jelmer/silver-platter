@@ -28,7 +28,8 @@ jobs:
           sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
           pip install --upgrade pip
           pip install -U pip setuptools setuptools-rust ruff mypy testtools
-          pip install ".[debian,launchpad]" breezy
+          pip install ".[debian,launchpad]"
+          pip install --upgrade breezy
       - name: Build
         run: |
           python setup.py build_ext -i
