@@ -174,7 +174,7 @@ checksum = "3e5c5a5c836624d6386460aba085ba5846c3daef69c6c9d1699d750bcc0b26a6"
 dependencies = [
  "chrono",
  "ctor",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "lazy-regex 3.1.0",
  "lazy_static",
  "pyo3 0.21.0",
@@ -519,7 +519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
 dependencies = [
  "chrono",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "lazy-regex 3.1.0",
  "log",
  "rowan",
@@ -558,7 +558,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e65a0a572fa10f34b89addac251b7c8f40266606ee5847d769ab8db4d56ca11b"
 dependencies = [
  "lazy-regex 3.1.0",
- "pyo3 0.21.0",
 ]
 
 [[package]]
@@ -1229,7 +1228,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.4",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2062,7 +2061,7 @@ dependencies = [
  "clap",
  "debian-analyzer",
  "debian-changelog",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "env_logger",
  "flate2",
  "gpgme",
