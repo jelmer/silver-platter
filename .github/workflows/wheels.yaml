@@ -27,7 +27,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: stable
           override: true
       - name: Install native dependencies (MacOS)
         run: brew install swig gpgme
@@ -53,14 +53,13 @@ jobs:
           CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$PATH"'
           CIBW_BEFORE_BUILD: >
             pip install -U setuptools-rust &&
-            rustup default nightly &&
             rustup target add all &&
             rustup show
           CIBW_BEFORE_BUILD_LINUX: >
             if command -v yum; then yum -y install openssl-devel libtdb-devel clang libgpg-error-devel; fi &&
             if command -v apk; then apk add openssl-dev pkgconfig tdb-dev llvm clang gpgme-dev; fi &&
             pip install -U setuptools-rust &&
-            curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=nightly --profile=minimal -y &&
+            curl https://sh.rustup.rs -sSf | sh -s -- --profile=minimal -y &&
             rustup target add all &&
             rustup show
           CIBW_BEFORE_BUILD_MACOS: >
