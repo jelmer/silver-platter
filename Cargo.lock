@@ -168,9 +168,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.88"
+version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e5c5a5c836624d6386460aba085ba5846c3daef69c6c9d1699d750bcc0b26a6"
+checksum = "c29e6a22f6dde08f84a4121f418a9e6bed068f39e7e290284576502cc6b59251"
 dependencies = [
  "chrono",
  "ctor",
@@ -488,7 +488,7 @@ dependencies = [
 [[package]]
 name = "debian-analyzer"
 version = "0.154.0"
-source = "git+https://salsa.debian.org/jelmer/lintian-brush#d4c3f0e32416775b9ed0ce5d31fcf658bca13f1b"
+source = "git+https://salsa.debian.org/jelmer/lintian-brush#cf0e2790c8ca0416129c7fe710cbd4816622c971"
 dependencies = [
  "breezyshim",
  "chrono",
