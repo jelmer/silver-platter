@@ -17,12 +17,13 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
     "Operating System :: POSIX",
     "Topic :: Software Development :: Version Control",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.7"
 dependencies = [
     "breezy>=3.3.3",
     "dulwich>=0.20.23",
@@ -114,6 +115,8 @@ convention = "google"
 [tool.cibuildwheel]
 environment = {PATH="$HOME/.cargo/bin:$PATH"}
 before-build = "pip install -U setuptools-rust && rustup show"
+# breezyshim embeds python3, which doesn't work with pypy
+skip = "pp*"
 
 [tool.cibuildwheel.linux]
 before-build = "if command -v yum; then yum -y install openssl-devel libtdb-devel clang libgpg-error-devel; fi && if command -v apk; then apk add openssl-dev pkgconfig tdb-dev llvm clang gpgme-dev; fi && pip install -U setuptools-rust && curl https://sh.rustup.rs -sSf | sh -s -- --profile=minimal -y && rustup show"
