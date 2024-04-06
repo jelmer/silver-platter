@@ -2,7 +2,7 @@
 import sys
 
 from setuptools import setup
-from setuptools_rust import Binding, RustBin, RustExtension
+from setuptools_rust import Binding, RustExtension
 
 features = []
 
@@ -18,6 +18,5 @@ setup(
             args=["--no-default-features"],
             features=features + ["extension-module"],
         ),
-        RustBin("svp", "Cargo.toml", features=features + ["cli"]),
     ],
 )

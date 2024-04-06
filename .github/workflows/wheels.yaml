@@ -44,30 +44,6 @@ jobs:
         if: "matrix.os == 'ubuntu-latest'"
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
-        env:
-          CIBW_ARCHS_LINUX: x86_64
-          # ARM builds fail at the moment:
-          # CIBW_ARCHS_LINUX: x86_64 aarch64
-          CIBW_ARCHS_MACOS: x86_64 arm64 universal2
-          CIBW_SKIP: '*-win32 cp37-*'
-          CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$PATH"'
-          CIBW_BEFORE_BUILD: >
-            pip install -U setuptools-rust &&
-            rustup target add all &&
-            rustup show
-          CIBW_BEFORE_BUILD_LINUX: >
-            if command -v yum; then yum -y install openssl-devel libtdb-devel clang libgpg-error-devel; fi &&
-            if command -v apk; then apk add openssl-dev pkgconfig tdb-dev llvm clang gpgme-dev; fi &&
-            pip install -U setuptools-rust &&
-            curl https://sh.rustup.rs -sSf | sh -s -- --profile=minimal -y &&
-            rustup target add all &&
-            rustup show
-          CIBW_BEFORE_BUILD_MACOS: >
-            brew install openssl &&
-            rustup target add aarch64-apple-darwin &&
-            rustup show
-          CIBW_BEFORE_BUILD_WINDOWS: vcpkg install openssl
-          CIBW_ENVIRONMENT_WINDOWS: 'CMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
