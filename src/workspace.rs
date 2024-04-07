@@ -312,13 +312,12 @@ impl<'a> Workspace<'a> {
             }
 
             if let Some(cached_branch) = self.cached_branch {
-                let fb = self.resume_branch.or(Some(main_branch));
                 log::debug!(
                     "Pulling in missing revisions from resume/main branch {:?}",
-                    fb.unwrap().get_user_url()
+                    cached_branch.get_user_url()
                 );
 
-                match local_tree.pull(fb.unwrap(), Some(true)) {
+                match local_tree.pull(cached_branch, Some(true)) {
                     Ok(_) => {}
                     Err(PullError::DivergedBranches) => {
                         unreachable!();
