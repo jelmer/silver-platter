@@ -488,7 +488,7 @@ dependencies = [
 [[package]]
 name = "debian-analyzer"
 version = "0.154.0"
-source = "git+https://salsa.debian.org/jelmer/lintian-brush#cf0e2790c8ca0416129c7fe710cbd4816622c971"
+source = "git+https://salsa.debian.org/jelmer/lintian-brush#8f45eff6624264f817a28eb2d5e26239a446406d"
 dependencies = [
  "breezyshim",
  "chrono",
