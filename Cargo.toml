@@ -14,7 +14,7 @@ tempfile = "3.10.1"
 serde_yaml = "0.9.33"
 log = "0.4"
 percent-encoding = "2.3.0"
-chrono = "0.4.30"
+chrono = "0.4.38"
 regex = "1.9.5"
 debian-changelog = { workspace = true }
 tera.workspace = true
