@@ -40,7 +40,7 @@ class UnsupportedVCSProber(Prober):
 
     def probe_transport(self, transport):
         raise UnsupportedFormatError(
-            "This VCS %s is not currently supported." % self.vcs_type
+            f"This VCS {self.vcs_type} is not currently supported."
         )
 
     @classmethod

@@ -127,12 +127,12 @@ class Workspace:
             if self.main_branch is None:
                 return "Workspace"
             else:
-                return "Workspace for %s" % full_branch_url(self.main_branch)
+                return f"Workspace for {full_branch_url(self.main_branch)}"
         else:
             if self.main_branch:
                 return f"Workspace for {full_branch_url(self.main_branch)} at {self._path}"
             else:
-                return "Workspace at %s" % self._path
+                return f"Workspace at {self._path}"
 
     def __repr__(self) -> str:
         return (
@@ -309,7 +309,7 @@ class Workspace:
             branches.append((from_name, from_revision, to_revision))
         names = [name for (name, from_rev, to_rev) in branches]
         assert len(names) == len(set(names)), (
-            "Duplicate result branches: %r" % branches
+            f"Duplicate result branches: {branches!r}"
         )
         return branches
 

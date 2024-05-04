@@ -81,7 +81,7 @@ def debsign(path, keyid=None):
     (bd, changes_file) = os.path.split(path)
     args = ["debsign"]
     if keyid:
-        args.append("-k%s" % keyid)
+        args.append(f"-k{keyid}")
     args.append(changes_file)
     subprocess.check_call(args, cwd=bd)
 
@@ -104,8 +104,7 @@ class NoUnuploadedChanges(Exception):
     def __init__(self, archive_version) -> None:
         self.archive_version = archive_version
         super().__init__(
-            "nothing to upload, latest version is in archive: %s"
-            % archive_version
+            f"nothing to upload, latest version is in archive: {archive_version}"
         )
 
 
@@ -115,8 +114,7 @@ class NoUnreleasedChanges(Exception):
     def __init__(self, version) -> None:
         self.version = version
         super().__init__(
-            "nothing to upload, latest version in vcs is not unreleased: %s"
-            % version
+            f"nothing to upload, latest version in vcs is not unreleased: {version}"
         )
 
 
@@ -714,7 +712,7 @@ def vcswatch_prescan_packages(
 
     url = "https://qa.debian.org/data/vcswatch/vcswatch.json.gz"
     request = Request(
-        url, headers={"User-Agent": "silver-platter/%s" % version_string}
+        url, headers={"User-Agent": f"silver-platter/{version_string}"}
     )
     vcswatch = {
         p["package"]: p

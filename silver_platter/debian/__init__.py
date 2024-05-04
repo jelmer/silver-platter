@@ -95,9 +95,9 @@ def convert_debian_vcs_url(vcs_type: str, vcs_url: str) -> str:
     try:
         return converters[vcs_type](vcs_url)
     except KeyError:
-        raise ValueError("unknown vcs %s" % vcs_type)
+        raise ValueError(f"unknown vcs {vcs_type}")
     except InvalidURL as e:
-        raise ValueError("invalid URL: %s" % e)
+        raise ValueError(f"invalid URL: {e}")
 
 
 def open_packaging_branch(
