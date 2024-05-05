@@ -53,6 +53,9 @@ testing = [
     "python-debian",
     "brz-debian",
 ]
+dev = [
+    "ruff==0.4.3"
+]
 
 [project.scripts]
 debian-svp = "silver_platter.debian.__main__:main"
