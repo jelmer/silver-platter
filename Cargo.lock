@@ -174,7 +174,7 @@ checksum = "887d1f2ab8fe13cd15d20a55414bb4d239a30d544b7db2e919256d5b6aa0d516"
 dependencies = [
  "chrono",
  "ctor",
- "debversion 0.3.0",
+ "debversion 0.2.2",
  "lazy-regex 3.1.0",
  "lazy_static",
  "pyo3",
@@ -496,7 +496,7 @@ dependencies = [
  "debian-changelog",
  "debian-control",
  "debian-copyright",
- "debversion 0.3.0",
+ "debversion 0.3.1",
  "dep3",
  "distro-info",
  "lazy-regex 2.5.0",
@@ -519,7 +519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
 dependencies = [
  "chrono",
- "debversion 0.3.0",
+ "debversion 0.2.2",
  "lazy-regex 3.1.0",
  "log",
  "rowan",
@@ -558,13 +558,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e65a0a572fa10f34b89addac251b7c8f40266606ee5847d769ab8db4d56ca11b"
 dependencies = [
  "lazy-regex 3.1.0",
+ "pyo3",
 ]
 
 [[package]]
 name = "debversion"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6912a4e23e6853e2b09afbbe7ff88d42758cc878bc26ab17de584d9e77b381a7"
+checksum = "07366429d82d50c6393c1e9c03645ea5e2f529d4bce483b4b5a54312b86e0f25"
 dependencies = [
  "lazy-regex 3.1.0",
  "pyo3",
@@ -2026,7 +2027,7 @@ dependencies = [
  "clap",
  "debian-analyzer",
  "debian-changelog",
- "debversion 0.3.0",
+ "debversion 0.3.1",
  "env_logger",
  "flate2",
  "gpgme",
