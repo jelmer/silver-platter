@@ -174,7 +174,7 @@ checksum = "887d1f2ab8fe13cd15d20a55414bb4d239a30d544b7db2e919256d5b6aa0d516"
 dependencies = [
  "chrono",
  "ctor",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "lazy-regex 3.1.0",
  "lazy_static",
  "pyo3",
@@ -519,7 +519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
 dependencies = [
  "chrono",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "lazy-regex 3.1.0",
  "log",
  "rowan",
@@ -558,7 +558,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e65a0a572fa10f34b89addac251b7c8f40266606ee5847d769ab8db4d56ca11b"
 dependencies = [
  "lazy-regex 3.1.0",
- "pyo3",
 ]
 
 [[package]]
@@ -1958,9 +1957,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.116"
+version = "1.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e17db7126d17feb94eb3fad46bf1a96b034e8aacbc2e775fe81505f8b0b2813"
+checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
 dependencies = [
  "itoa",
  "ryu",
@@ -2027,7 +2026,7 @@ dependencies = [
  "clap",
  "debian-analyzer",
  "debian-changelog",
- "debversion 0.2.2",
+ "debversion 0.3.0",
  "env_logger",
  "flate2",
  "gpgme",

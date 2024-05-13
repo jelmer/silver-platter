@@ -10,4 +10,4 @@ description = "Client for the silver-platter protocol"
 [dependencies]
 log = "0.4.20"
 serde = { workspace = true, features = ["derive"] }
-serde_json = "1.0.116"
+serde_json = "1.0.117"
