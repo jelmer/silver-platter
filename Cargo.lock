@@ -174,7 +174,7 @@ checksum = "887d1f2ab8fe13cd15d20a55414bb4d239a30d544b7db2e919256d5b6aa0d516"
 dependencies = [
  "chrono",
  "ctor",
- "debversion 0.2.2",
+ "debversion 0.3.1",
  "lazy-regex 3.1.0",
  "lazy_static",
  "pyo3",
@@ -488,7 +488,7 @@ dependencies = [
 [[package]]
 name = "debian-analyzer"
 version = "0.154.0"
-source = "git+https://salsa.debian.org/jelmer/lintian-brush#f2c1bb481eb1e2089e56cd34811d706e64392693"
+source = "git+https://salsa.debian.org/jelmer/lintian-brush#c3f90dbe62db27e8907fcd0eb97fbcdb5614bbaf"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -519,7 +519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
 dependencies = [
  "chrono",
- "debversion 0.2.2",
+ "debversion 0.3.1",
  "lazy-regex 3.1.0",
  "log",
  "rowan",
@@ -558,7 +558,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e65a0a572fa10f34b89addac251b7c8f40266606ee5847d769ab8db4d56ca11b"
 dependencies = [
  "lazy-regex 3.1.0",
- "pyo3",
 ]
 
 [[package]]
