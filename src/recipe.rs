@@ -1,8 +1,9 @@
+use crate::proposal::DescriptionFormat;
 use crate::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct MergeRequest {
     #[serde(rename = "commit-message")]
     pub commit_message: Option<String>,
@@ -12,7 +13,7 @@ pub struct MergeRequest {
     #[serde(rename = "propose-threshold")]
     pub propose_threshold: Option<u32>,
 
-    pub description: HashMap<Option<String>, String>,
+    pub description: HashMap<Option<DescriptionFormat>, String>,
 }
 
 impl MergeRequest {
@@ -34,23 +35,22 @@ impl MergeRequest {
 
     pub fn render_description(
         &self,
-        description_format: &str,
+        description_format: DescriptionFormat,
         context: &tera::Context,
     ) -> tera::Result<Option<String>> {
         let mut tera = tera::Tera::default();
-        let template =
-            if let Some(template) = self.description.get(&Some(description_format.to_string())) {
-                template
-            } else if let Some(template) = self.description.get(&None) {
-                template
-            } else {
-                return Ok(None);
-            };
+        let template = if let Some(template) = self.description.get(&Some(description_format)) {
+            template
+        } else if let Some(template) = self.description.get(&None) {
+            template
+        } else {
+            return Ok(None);
+        };
         Ok(Some(tera.render_str(template.as_str(), context)?))
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
     pub name: Option<String>,
 
@@ -66,7 +66,7 @@ pub struct Recipe {
     pub resume: Option<bool>,
 
     #[serde(rename = "commit-pending")]
-    pub commit_pending: Option<bool>,
+    pub commit_pending: crate::CommitPending,
 }
 
 impl Recipe {
@@ -78,4 +78,46 @@ impl Recipe {
         }
         Ok(recipe)
     }
+}
+
+#[test]
+fn test_simple() {
+    let td = tempfile::tempdir().unwrap();
+    let path = td.path().join("test.yaml");
+    std::fs::write(
+        &path,
+        r#"---
+name: test
+command: ["echo", "hello"]
+mode: propose
+merge-request:
+  commit-message: "test commit message"
+  title: "test title"
+  description:
+    plain: "test description"
+"#,
+    )
+    .unwrap();
+
+    let recipe = Recipe::from_path(&path).unwrap();
+    assert_eq!(recipe.name, Some("test".to_string()));
+    assert_eq!(
+        recipe.command,
+        Some(vec!["echo".to_string(), "hello".to_string()])
+    );
+    assert_eq!(recipe.mode, Some(Mode::Propose));
+    assert_eq!(
+        recipe.merge_request,
+        Some(MergeRequest {
+            commit_message: Some("test commit message".to_string()),
+            title: Some("test title".to_string()),
+            propose_threshold: None,
+            description: vec![(
+                Some(DescriptionFormat::Plain),
+                "test description".to_string()
+            )]
+            .into_iter()
+            .collect(),
+        })
+    );
 }

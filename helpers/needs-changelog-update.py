@@ -23,8 +23,9 @@ import silver_platter  # noqa: F401
 from silver_platter.debian import _changelog_stats
 
 parser = argparse.ArgumentParser()
-parser.add_argument('location', help='Branch location to check.', type=str,
-                    default='.')
+parser.add_argument(
+    "location", help="Branch location to check.", type=str, default="."
+)
 args = parser.parse_args()
 
 branch = Branch.open(args.location)

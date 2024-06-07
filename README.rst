@@ -1,6 +1,11 @@
 Silver-Platter
 ==============
 
+.. image:: logo.png
+   :alt: Silver-Platter logo
+   :align: center
+   :width: 200px
+
 Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system
 (`codemods <https://github.com/jelmer/awesome-codemods>`_).

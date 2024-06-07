@@ -10,12 +10,19 @@ homepage = "https://github.com/jelmer/silver-platter"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+debian = ["silver-platter/debian"]
+extension-module = ["pyo3/extension-module"]
+
 [dependencies]
-silver-platter = { path = "../.." }
-pyo3 = { workspace = true, features = ["extension-module"] }
+silver-platter = { path = "../..", default-features = false }
+pyo3 = { workspace = true, features = ["abi3"] }
 pyo3-log = { workspace = true }
 tera = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-#breezyshim = { path = "../../../breezyshim/trunk" }
 breezyshim = { workspace = true }
+debian-changelog = { workspace = true }
+
+[package.metadata.cargo-all-features]
+denylist = ["extension-module"]
