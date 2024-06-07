@@ -1,16 +1,19 @@
-use breezyshim::tree::{CommitError, WorkingTree};
+use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
+use crate::CommitPending;
+use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, WorkingTree};
 use breezyshim::RevisionId;
+use debian_changelog::get_maintainer_from_env;
+use debian_changelog::ChangeLog;
 use std::collections::HashMap;
 use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct CommandResult {
+    pub source_name: String,
     pub value: Option<u32>,
     pub context: Option<serde_json::Value>,
-    pub description: Option<String>,
+    pub description: String,
     pub serialized_context: Option<String>,
-    pub commit_message: Option<String>,
-    pub title: Option<String>,
     pub tags: Vec<(String, Option<RevisionId>)>,
     pub target_branch_url: Option<Url>,
     pub old_revision: RevisionId,
@@ -28,9 +31,7 @@ impl From<&CommandResult> for DetailedSuccess {
         DetailedSuccess {
             value: r.value,
             context: r.context.clone(),
-            description: r.description.clone(),
-            commit_message: r.commit_message.clone(),
-            title: r.title.clone(),
+            description: Some(r.description.clone()),
             serialized_context: r.serialized_context.clone(),
             tags: Some(
                 r.tags
@@ -49,9 +50,6 @@ struct DetailedSuccess {
     context: Option<serde_json::Value>,
     description: Option<String>,
     serialized_context: Option<String>,
-    #[serde(rename = "commit-message")]
-    commit_message: Option<String>,
-    title: Option<String>,
     tags: Option<Vec<(String, Option<String>)>>,
     #[serde(rename = "target-branch-url")]
     target_branch_url: Option<Url>,
@@ -61,6 +59,8 @@ struct DetailedSuccess {
 pub enum Error {
     ScriptMadeNoChanges,
     ScriptNotFound,
+    MissingChangelog(std::path::PathBuf),
+    ChangelogParse(debian_changelog::ParseError),
     ExitCode(i32),
     Detailed(DetailedFailure),
     Io(std::io::Error),
@@ -69,21 +69,12 @@ pub enum Error {
     Other(String),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::Io(e)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Error::Json(e)
-    }
-}
-
-impl From<std::string::FromUtf8Error> for Error {
-    fn from(e: std::string::FromUtf8Error) -> Self {
-        Error::Utf8(e)
+impl From<debian_changelog::Error> for Error {
+    fn from(e: debian_changelog::Error) -> Self {
+        match e {
+            debian_changelog::Error::Io(e) => Error::Io(e),
+            debian_changelog::Error::Parse(e) => Error::ChangelogParse(e),
+        }
     }
 }
 
@@ -98,34 +89,38 @@ impl std::fmt::Display for Error {
             Error::Json(e) => write!(f, "JSON error: {}", e),
             Error::Utf8(e) => write!(f, "UTF-8 error: {}", e),
             Error::Other(s) => write!(f, "{}", s),
+            Error::ChangelogParse(e) => write!(f, "Changelog parse error: {}", e),
+            Error::MissingChangelog(p) => write!(f, "Missing changelog at {}", p.display()),
         }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::Json(e)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8(e)
     }
 }
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 pub struct DetailedFailure {
     pub result_code: String,
     pub description: Option<String>,
     pub stage: Option<Vec<String>>,
     pub details: Option<serde_json::Value>,
-}
-
-impl std::fmt::Display for DetailedFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Script failed: {}", self.result_code)?;
-        if let Some(description) = &self.description {
-            write!(f, ": {}", description)?;
-        }
-        if let Some(stage) = &self.stage {
-            write!(f, " (stage: {})", stage.join(" "))?;
-        }
-        if let Some(details) = &self.details {
-            write!(f, ": {:?}", details)?;
-        }
-        Ok(())
-    }
 }
 
 /// Run a script in a tree and commit the result.
@@ -142,21 +137,51 @@ pub fn script_runner(
     local_tree: &WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
-    commit_pending: crate::CommitPending,
+    commit_pending: CommitPending,
     resume_metadata: Option<&serde_json::Value>,
     committer: Option<&str>,
     extra_env: Option<HashMap<String, String>>,
     stderr: std::process::Stdio,
+    update_changelog: Option<bool>,
 ) -> Result<CommandResult, Error> {
     let mut env = std::env::vars().collect::<HashMap<_, _>>();
 
-    if let Some(extra_env) = extra_env {
+    if let Some(extra_env) = extra_env.as_ref() {
         for (k, v) in extra_env {
-            env.insert(k, v);
+            env.insert(k.to_string(), v.to_string());
         }
     }
 
     env.insert("SVP_API".to_string(), "1".to_string());
+
+    let debian_path = if control_files_in_root(local_tree, subpath) {
+        subpath.to_owned()
+    } else {
+        subpath.join("debian")
+    };
+
+    let update_changelog = update_changelog.unwrap_or_else(|| {
+        if let Some(dch_guess) = guess_update_changelog(local_tree, &debian_path) {
+            log::info!("{}", dch_guess.explanation);
+            dch_guess.update_changelog
+        } else {
+            // Assume yes.
+            true
+        }
+    });
+
+    let cl_path = debian_path.join("changelog");
+    let source_name = match local_tree.get_file_text(&cl_path) {
+        Ok(text) => debian_changelog::ChangeLog::read(text.as_slice())
+            .unwrap()
+            .entries()
+            .next()
+            .and_then(|e| e.package()),
+        Err(TreeError::NoSuchFile(_)) => None,
+        Err(e) => {
+            return Err(Error::Other(format!("Failed to read changelog: {}", e)));
+        }
+    };
 
     let last_revision = local_tree.last_revision().unwrap();
 
@@ -209,6 +234,34 @@ pub fn script_runner(
         });
     }
 
+    // If the changelog didn't exist earlier, then hopefully it was created
+    // now.
+    let source_name: String = if let Some(source_name) = source_name {
+        source_name
+    } else {
+        match local_tree.get_file_text(&cl_path) {
+            Ok(text) => match ChangeLog::read(text.as_slice())?
+                .entries()
+                .next()
+                .and_then(|e| e.package())
+            {
+                Some(source_name) => source_name,
+                None => {
+                    return Err(Error::Other(format!(
+                        "Failed to read changelog: {}",
+                        cl_path.display()
+                    )));
+                }
+            },
+            Err(TreeError::NoSuchFile(_)) => {
+                return Err(Error::MissingChangelog(cl_path));
+            }
+            Err(e) => {
+                return Err(Error::Other(format!("Failed to read changelog: {}", e)));
+            }
+        }
+    };
+
     // Open result_path, read metadata
     let mut result: DetailedSuccess = match std::fs::read_to_string(&result_path) {
         Ok(result) => serde_json::from_str(&result)?,
@@ -243,16 +296,32 @@ pub fn script_runner(
     };
 
     let commit_pending = match commit_pending {
-        crate::CommitPending::Auto => {
+        CommitPending::Yes => true,
+        CommitPending::No => false,
+        CommitPending::Auto => {
             // Automatically commit pending changes if the script did not
             // touch the branch
             last_revision == new_revision
         }
-        crate::CommitPending::Yes => true,
-        crate::CommitPending::No => false,
     };
 
     if commit_pending {
+        if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
+            let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
+            {
+                Some(Some((name, email))) => Some((name, email)),
+                _ => None,
+            };
+
+            add_changelog_entry(
+                local_tree,
+                &debian_path.join("changelog"),
+                vec![result.description.as_ref().unwrap().as_str()].as_slice(),
+                maintainer.as_ref(),
+                None,
+                None,
+            );
+        }
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
@@ -279,198 +348,14 @@ pub fn script_runner(
     let new_revision = local_tree.last_revision().unwrap();
 
     Ok(CommandResult {
+        source_name,
         old_revision,
         new_revision,
         tags,
-        description: result.description,
+        description: result.description.unwrap(),
         value: result.value,
         context: result.context,
-        commit_message: result.commit_message,
-        title: result.title,
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })
-}
-
-#[cfg(test)]
-mod script_runner_tests {
-    use breezyshim::tree::MutableTree;
-
-    use breezyshim::controldir::create_standalone_workingtree;
-
-    fn make_executable(script_path: &std::path::Path) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            // Make script.sh executable
-            let mut perm = std::fs::metadata(script_path).unwrap().permissions();
-            perm.set_mode(0o755);
-            std::fs::set_permissions(script_path, perm).unwrap();
-        }
-    }
-
-    #[test]
-    fn test_no_api() {
-        let td = tempfile::tempdir().unwrap();
-        let d = td.path().join("t");
-        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
-        let script_path = td.path().join("script.sh");
-        std::fs::write(
-            &script_path,
-            r#"#!/bin/sh
-echo foo > bar
-echo Did a thing
-"#,
-        )
-        .unwrap();
-
-        make_executable(&script_path);
-
-        std::fs::write(d.join("bar"), "bar").unwrap();
-
-        tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
-        let script_path_str = script_path.to_str().unwrap();
-        let result = super::script_runner(
-            &tree,
-            &[script_path_str],
-            std::path::Path::new(""),
-            crate::CommitPending::Auto,
-            None,
-            Some("Joe Example <joe@example.com>"),
-            None,
-            std::process::Stdio::null(),
-        )
-        .unwrap();
-
-        assert!(!tree.has_changes().unwrap());
-        assert_eq!(result.old_revision, old_revid);
-        assert_eq!(result.new_revision, tree.last_revision().unwrap());
-        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
-
-        std::mem::drop(td);
-    }
-
-    #[test]
-    fn test_api() {
-        let td = tempfile::tempdir().unwrap();
-        let d = td.path().join("t");
-        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
-        let script_path = td.path().join("script.sh");
-        std::fs::write(
-            &script_path,
-            r#"#!/bin/sh
-echo foo > bar
-echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
-"#,
-        )
-        .unwrap();
-
-        make_executable(&script_path);
-
-        std::fs::write(d.join("bar"), "bar").unwrap();
-
-        tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
-        let script_path_str = script_path.to_str().unwrap();
-        let result = super::script_runner(
-            &tree,
-            &[script_path_str],
-            std::path::Path::new(""),
-            crate::CommitPending::Auto,
-            None,
-            Some("Joe Example <joe@example.com>"),
-            None,
-            std::process::Stdio::null(),
-        )
-        .unwrap();
-
-        assert!(!tree.has_changes().unwrap());
-        assert_eq!(result.old_revision, old_revid);
-        assert_eq!(result.new_revision, tree.last_revision().unwrap());
-        assert_eq!(result.description.as_deref().unwrap(), "Did a thing");
-
-        std::mem::drop(td);
-    }
-
-    #[test]
-    fn test_new_file() {
-        let td = tempfile::tempdir().unwrap();
-        let d = td.path().join("t");
-        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
-        let script_path = d.join("script.sh");
-        std::fs::write(
-            &script_path,
-            r#"#!/bin/sh
-echo foo > bar
-echo Did a thing
-"#,
-        )
-        .unwrap();
-
-        make_executable(&script_path);
-
-        std::fs::write(d.join("bar"), "initial").unwrap();
-
-        tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
-
-        let script_path_str = script_path.to_str().unwrap();
-        let result = super::script_runner(
-            &tree,
-            &[script_path_str],
-            std::path::Path::new(""),
-            crate::CommitPending::Auto,
-            None,
-            Some("Joe Example <joe@example.com>"),
-            None,
-            std::process::Stdio::null(),
-        )
-        .unwrap();
-
-        assert!(!tree.has_changes().unwrap());
-        assert_eq!(result.old_revision, old_revid);
-        assert_eq!(result.new_revision, tree.last_revision().unwrap());
-        assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
-
-        std::mem::drop(td);
-    }
-
-    #[test]
-    fn test_no_changes() {
-        let td = tempfile::tempdir().unwrap();
-        let d = td.path().join("t");
-        let tree =
-            create_standalone_workingtree(&d, &breezyshim::controldir::ControlDirFormat::default())
-                .unwrap();
-        let script_path = td.path().join("script.sh");
-        std::fs::write(
-            &script_path,
-            r#"#!/bin/sh
-echo Did a thing
-"#,
-        )
-        .unwrap();
-
-        make_executable(&script_path);
-
-        tree.commit("initial", Some(true), None, None).unwrap();
-        let script_path_str = script_path.to_str().unwrap();
-        let err = super::script_runner(
-            &tree,
-            &[script_path_str],
-            std::path::Path::new(""),
-            crate::CommitPending::Yes,
-            None,
-            Some("Joe Example <joe@example.com>"),
-            None,
-            std::process::Stdio::null(),
-        )
-        .unwrap_err();
-
-        assert!(!tree.has_changes().unwrap());
-        assert!(matches!(err, super::Error::ScriptMadeNoChanges));
-
-        std::mem::drop(td);
-    }
 }

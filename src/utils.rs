@@ -1,10 +1,13 @@
 use breezyshim::branch::{Branch, BranchOpenError};
+use breezyshim::merge::{Error as MergeError, MergeType, Merger, MERGE_HOOKS};
 use breezyshim::tree::WorkingTree;
+use breezyshim::RevisionId;
 use pyo3::PyErr;
 use std::collections::HashMap;
 
 pub enum Error {
     Other(PyErr),
+    UnknownFormat,
 }
 
 impl From<PyErr> for Error {
@@ -13,11 +16,23 @@ impl From<PyErr> for Error {
     }
 }
 
+impl From<breezyshim::controldir::CreateError> for Error {
+    fn from(e: breezyshim::controldir::CreateError) -> Self {
+        match e {
+            breezyshim::controldir::CreateError::AlreadyExists => {
+                unreachable!("AlreadyExists")
+            }
+            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
+            breezyshim::controldir::CreateError::Python(e) => Error::Other(e.into()),
+        }
+    }
+}
+
 /// Create a temporary sprout of a branch.
 ///
 /// This attempts to fetch the least amount of history as possible.
 pub fn create_temp_sprout(
-    branch: &Branch,
+    branch: &dyn Branch,
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
@@ -51,7 +66,7 @@ pub fn create_temp_sprout(
         match controldir.open_branch(Some(from_branch_name.as_str())) {
             Ok(add_branch) => {
                 let local_add_branch = to_dir.create_branch(Some(to_branch_name.as_str()))?;
-                add_branch.push(&local_add_branch, false, None, None)?;
+                add_branch.push(local_add_branch.as_ref(), false, None, None)?;
                 assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
             }
             Err(BranchOpenError::NotBranchError(_))
@@ -77,4 +92,54 @@ pub fn create_temp_sprout(
     });
 
     Ok((wt, destroy))
+}
+
+pub fn merge_conflicts(
+    main_branch: &dyn Branch,
+    other_branch: &dyn Branch,
+    other_revision: Option<&RevisionId>,
+) -> bool {
+    let other_revision = other_revision.map_or_else(|| other_branch.last_revision(), |r| r.clone());
+    let other_repository = other_branch.repository();
+    let graph = other_repository.get_graph();
+
+    if graph.is_ancestor(&main_branch.last_revision(), &other_revision) {
+        return false;
+    }
+
+    other_repository
+        .fetch(
+            &main_branch.repository(),
+            Some(&main_branch.last_revision()),
+        )
+        .unwrap();
+
+    // Reset custom merge hooks, since they could make it harder to detect
+    // conflicted merges that would appear on the hosting site.
+    let old_file_contents_mergers = MERGE_HOOKS.get("merge_file_content").unwrap();
+    MERGE_HOOKS.clear("merge_file_contents").unwrap();
+
+    let other_tree = other_repository.revision_tree(&other_revision).unwrap();
+    let result = match Merger::from_revision_ids(
+        &other_tree,
+        other_branch,
+        &main_branch.last_revision(),
+        other_branch,
+    ) {
+        Ok(mut merger) => {
+            merger.set_merge_type(MergeType::Merge3);
+            let tree_merger = merger.make_merger().unwrap();
+            let tt = tree_merger.make_preview_transform().unwrap();
+            !tt.cooked_conflicts().unwrap().is_empty()
+        }
+        Err(MergeError::UnrelatedBranches) => {
+            // Unrelated branches don't technically *have* to lead to
+            // conflicts, but there's not a lot to be salvaged here, either.
+            true
+        }
+    };
+    for hook in old_file_contents_mergers {
+        MERGE_HOOKS.add("merge_file_content", hook).unwrap();
+    }
+    result
 }

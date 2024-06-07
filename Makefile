@@ -1,7 +1,8 @@
-all:
+all: build-inplace
 
 build-inplace:
 	python3 setup.py build_ext -i
+	python3 setup.py build_rust -i
 
 coverage: build-inplace
 	python3 -m coverage run -m unittest tests.test_suite
@@ -12,7 +13,15 @@ coverage-html:
 check:: style
 
 style:
-	flake8
+	ruff check .
+
+fix:
+	ruff check --fix .
+	cargo fmt --all
+
+format:
+	ruff format .
+	cargo fmt --all
 
 check:: typing
 

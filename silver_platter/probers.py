@@ -27,8 +27,9 @@ class UnsupportedVCSProber(Prober):
         self.vcs_type = vcs_type
 
     def __eq__(self, other):
-        return (isinstance(other, type(self))
-                and other.vcs_type == self.vcs_type)
+        return (
+            isinstance(other, type(self)) and other.vcs_type == self.vcs_type
+        )
 
     def __call__(self):
         # The prober expects to be registered as a class.
@@ -39,7 +40,7 @@ class UnsupportedVCSProber(Prober):
 
     def probe_transport(self, transport):
         raise UnsupportedFormatError(
-            "This VCS %s is not currently supported." % self.vcs_type
+            f"This VCS {self.vcs_type} is not currently supported."
         )
 
     @classmethod
@@ -98,7 +99,8 @@ def select_probers(vcs_type=None):
 
 
 def select_preferred_probers(
-        vcs_type: Optional[str] = None) -> List[Type[Prober]]:
+    vcs_type: Optional[str] = None,
+) -> List[Type[Prober]]:
     probers = list(ControlDirFormat.all_probers())
     if vcs_type:
         with suppress(KeyError):

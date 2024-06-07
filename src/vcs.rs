@@ -1,22 +1,12 @@
+use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, Branch, ControlDir, Prober,
-    Transport,
+    get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
-use pyo3::exceptions::PyException;
+use pyo3::import_exception;
 use pyo3::prelude::*;
-use pyo3::{create_exception, import_exception};
 
-create_exception!(silver_platter.utils, BranchMissing, PyException);
-create_exception!(silver_platter.utils, BranchUnsupported, PyException);
-create_exception!(silver_platter.utils, BranchUnavailable, PyException);
-create_exception!(silver_platter.utils, BranchRateLimited, PyException);
-create_exception!(
-    silver_platter.utils,
-    BranchTemporarilyUnavailable,
-    PyException
-);
-
+#[derive(Debug)]
 pub enum BranchOpenError {
     Unsupported {
         url: url::Url,
@@ -43,6 +33,43 @@ pub enum BranchOpenError {
     Other(PyErr),
 }
 
+impl std::fmt::Display for BranchOpenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BranchOpenError::Unsupported {
+                url,
+                description,
+                vcs,
+            } => write!(
+                f,
+                "Unsupported VCS for {}: {} ({})",
+                url,
+                description,
+                vcs.as_deref().unwrap_or("unknown")
+            ),
+            BranchOpenError::Missing { url, description } => {
+                write!(f, "Missing branch {}: {}", url, description)
+            }
+            BranchOpenError::RateLimited {
+                url,
+                description,
+                retry_after,
+            } => write!(
+                f,
+                "Rate limited {}: {} (retry after: {:?})",
+                url, description, retry_after
+            ),
+            BranchOpenError::Unavailable { url, description } => {
+                write!(f, "Unavailable {}: {}", url, description)
+            }
+            BranchOpenError::TemporarilyUnavailable { url, description } => {
+                write!(f, "Temporarily unavailable {}: {}", url, description)
+            }
+            BranchOpenError::Other(e) => write!(f, "Error: {}", e),
+        }
+    }
+}
+
 impl From<BranchOpenError> for PyErr {
     fn from(e: BranchOpenError) -> Self {
         match e {
@@ -50,31 +77,30 @@ impl From<BranchOpenError> for PyErr {
                 url,
                 description,
                 vcs,
-            } => BranchUnsupported::new_err(format!(
-                "Unsupported VCS for {}: {} ({})",
-                url,
-                description,
-                vcs.unwrap_or_else(|| "unknown".to_string())
-            )),
+            } => {
+                import_exception!(silver_platter.utils, BranchUnsupported);
+                BranchUnsupported::new_err((url.to_string(), description, vcs))
+            }
             BranchOpenError::Missing { url, description } => {
-                BranchMissing::new_err(format!("Missing branch {}: {}", url, description))
+                import_exception!(silver_platter.utils, BranchMissing);
+                BranchMissing::new_err((url.to_string(), description))
             }
             BranchOpenError::RateLimited {
                 url,
                 description,
                 retry_after,
-            } => BranchRateLimited::new_err(format!(
-                "Rate limited {}: {} (retry after: {:?})",
-                url, description, retry_after
-            )),
+            } => {
+                import_exception!(silver_platter.utils, BranchRateLimited);
+                BranchRateLimited::new_err((url.to_string(), description, retry_after))
+            }
             BranchOpenError::Unavailable { url, description } => {
-                BranchUnavailable::new_err(format!("Unavailable {}: {}", url, description))
+                import_exception!(silver_platter.utils, BranchUnavailable);
+                BranchUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::TemporarilyUnavailable { url, description } => {
-                BranchTemporarilyUnavailable::new_err(format!(
-                    "Temporarily unavailable {}: {}",
-                    url, description
-                ))
+                import_exception!(silver_platter.utils, BranchTemporarilyUnavailable);
+
+                BranchTemporarilyUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::Other(e) => e,
         }
@@ -261,12 +287,12 @@ impl BranchOpenError {
 }
 
 pub fn open_branch(
-    url: url::Url,
-    possible_transports: Option<Vec<Transport>>,
+    url: &url::Url,
+    possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
-) -> Result<Branch, BranchOpenError> {
-    let (url, params) = split_segment_parameters(&url);
+) -> Result<Box<dyn Branch>, BranchOpenError> {
+    let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
         Some(name.to_string())
@@ -274,11 +300,23 @@ pub fn open_branch(
         params.get("name").map(|s| s.to_string())
     };
 
-    let transport = get_transport(&url, possible_transports);
+    let transport = match get_transport(&url, possible_transports) {
+        Ok(transport) => transport,
+        Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
+    };
     Python::with_gil(|py| {
-        let dir = ControlDir::open_from_transport(&transport, probers).map_err(|e| {
-            BranchOpenError::from_py_err(py, url.clone(), &e)
-                .unwrap_or_else(|| BranchOpenError::Other(e))
+        let dir = open_from_transport(&transport, probers).map_err(|e| match e {
+            breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
+                url: url.clone(),
+                description: e,
+            },
+            breezyshim::controldir::OpenError::UnknownFormat => {
+                unreachable!("open_containing_from_transport should not return UnknownFormat")
+            }
+            breezyshim::controldir::OpenError::Python(e) => {
+                BranchOpenError::from_py_err(py, url.clone(), &e)
+                    .unwrap_or_else(|| BranchOpenError::Other(e))
+            }
         })?;
         dir.open_branch(name.as_deref())
             .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))
@@ -286,12 +324,12 @@ pub fn open_branch(
 }
 
 pub fn open_branch_containing(
-    url: url::Url,
-    possible_transports: Option<Vec<Transport>>,
+    url: &url::Url,
+    possible_transports: Option<&mut Vec<Transport>>,
     probers: Option<&[Prober]>,
     name: Option<&str>,
-) -> Result<(Branch, String), BranchOpenError> {
-    let (url, params) = split_segment_parameters(&url);
+) -> Result<(Box<dyn Branch>, String), BranchOpenError> {
+    let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
         Some(name.to_string())
@@ -299,12 +337,24 @@ pub fn open_branch_containing(
         params.get("name").map(|s| s.to_string())
     };
 
-    let transport = get_transport(&url, possible_transports);
-    Python::with_gil(|py| {
-        let (dir, subpath) = ControlDir::open_containing_from_transport(&transport, probers)
-            .map_err(|e| {
-                BranchOpenError::from_py_err(py, url.clone(), &e)
-                    .unwrap_or_else(|| BranchOpenError::Other(e))
+    Python::with_gil(move |py| {
+        let transport = match get_transport(&url, possible_transports) {
+            Ok(transport) => transport,
+            Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
+        };
+        let (dir, subpath) =
+            open_containing_from_transport(&transport, probers).map_err(|e| match e {
+                breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
+                    url: url.clone(),
+                    description: e,
+                },
+                breezyshim::controldir::OpenError::UnknownFormat => {
+                    unreachable!("open_containing_from_transport should not return UnknownFormat")
+                }
+                breezyshim::controldir::OpenError::Python(e) => {
+                    BranchOpenError::from_py_err(py, url.clone(), &e)
+                        .unwrap_or_else(|| BranchOpenError::Other(e))
+                }
             })?;
         Ok((
             dir.open_branch(name.as_deref())
@@ -319,7 +369,7 @@ pub fn open_branch_containing(
 /// Ideally this should just return Branch.user_url,
 /// but that currently exclude the branch name
 /// in some situations.
-pub fn full_branch_url(branch: &Branch) -> url::Url {
+pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
     if branch.name().is_none() {
         return branch.get_user_url();
     }
