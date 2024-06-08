@@ -494,8 +494,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.154.0"
-source = "git+https://salsa.debian.org/jelmer/lintian-brush#547c642d1d91133bf17934519fe9a1b4565319a9"
+version = "0.155.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "860f4ee0b06f34a21719ea46edd1cc20743d6e5bde9e345a1968cf30a4ca61c6"
 dependencies = [
  "breezyshim",
  "chrono",
