@@ -10,3 +10,5 @@ dist
 target
 silver_platter/_*.so
 build
+py/silver_platter.egg-info/
+py/silver_platter/_svp_rs.*.so
