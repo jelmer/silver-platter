@@ -35,15 +35,16 @@ jobs:
           python setup.py build_ext -i
       - name: Style checks
         run: |
-          ruff check .
+          ruff check py tests
       - name: Typing checks
         if: always()
         run: |
           python -m pip install types-setuptools types-PyYAML types-dataclasses types-chardet
-          python -m mypy silver_platter
+          python -m mypy py/silver_platter
       - name: Test suite run
         if: always()
         run: |
           python -m unittest tests.test_suite
         env:
           PYTHONHASHSEED: random
+          PYTHONPATH: py
