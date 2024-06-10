@@ -469,6 +469,18 @@ impl Branch {
     fn user_url(&self) -> String {
         self.0.get_user_url().to_string()
     }
+
+    #[getter]
+    fn vcs_type(&self) -> PyResult<String> {
+        Python::with_gil(|py| {
+            let p = self.0.repository().to_object(py);
+            if let Ok(vcs) = p.getattr(py, "vcs") {
+                vcs.getattr(py, "abbreviation")?.extract(py)
+            } else {
+                Ok("bzr".to_string())
+            }
+        })
+    }
 }
 
 #[pyclass]
