@@ -114,6 +114,7 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-third-party = ["debian"]
+known-first-party = ["silver_platter"]
 
 [tool.cibuildwheel]
 environment = {PATH="$HOME/.cargo/bin:$PATH"}
