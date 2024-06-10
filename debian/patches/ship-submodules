@@ -1,0 +1,13 @@
+Index: silver-platter/pyproject.toml
+===================================================================
+--- silver-platter.orig/pyproject.toml
++++ silver-platter/pyproject.toml
+@@ -65,7 +65,7 @@ include-package-data = false
+ 
+ [tool.setuptools.packages.find]
+ where = ["py"]
+-include = ["silver_platter"]
++include = ["silver_platter*"]
+ 
+ [tool.setuptools.package-data]
+ silver_platter = ["py.typed"]

@@ -2,26 +2,30 @@ Source: silver-platter
 Section: vcs
 Priority: optional
 Maintainer: Jelmer Vernooĳ <jelmer@debian.org>
-Build-Depends: dh-python,
-               brz-debian (>= 2.8.41),
+Build-Depends: brz-debian (>= 2.8.41),
+               debhelper-compat (= 13),
+               dh-python,
+               librust-breezyshim-dev (>= 0.1.22),
+               librust-gpgme-dev,
+               librust-lazy-regex-dev,
+               librust-serde-json-dev,
+               librust-serde-yaml-dev,
+               librust-tera-dev,
+               librust-trivialdb-dev,
+               lintian-brush (>= 0.70),
                python3-all,
                python3-breezy (>= 3.3.0),
                python3-breezy.tests,
                python3-distro-info,
                python3-dulwich (>= 0.19.7),
-               python3-launchpadlib,
                python3-jinja2,
+               python3-launchpadlib,
                python3-pip,
-               python3-yaml,
-               python3-testtools,
-               python3-upstream-ontologist,
-               lintian-brush (>= 0.70),
-               debhelper-compat (= 13),
                python3-setuptools,
                python3-setuptools-rust,
-               librust-breezyshim-dev (>= 0.1.22),
-               librust-tera-dev,
-               librust-serde-yaml-dev,
+               python3-testtools,
+               python3-upstream-ontologist,
+               python3-yaml
 Standards-Version: 4.6.2
 Homepage: https://www.jelmer.uk/code/silver-platter
 Rules-Requires-Root: no
@@ -30,19 +34,21 @@ Vcs-Browser: https://salsa.debian.org/jelmer/silver-platter
 
 Package: silver-platter
 Architecture: any
-Depends: devscripts,
-         brz-debian (>= 2.8.50),
+Depends: brz-debian (>= 2.8.50),
+         devscripts,
          python3-breezy (>= 3.3.0),
-         python3-dulwich (>= 0.19.7),
          python3-distro-info,
+         python3-dulwich (>= 0.19.7),
          python3-jinja2,
          python3-launchpadlib,
-         python3-yaml,
          python3-upstream-ontologist,
+         python3-yaml,
          ${misc:Depends},
-         ${python3:Depends}
+         ${python3:Depends},
+         ${shlibs:Depends}
 Conflicts: lintian-brush (<< 0.40)
-Recommends: brz, lintian-brush (>= 0.70)
+Recommends: brz,
+            lintian-brush (>= 0.70)
 Description: automatically create merge proposals
  Silver-Platter makes it possible to contribute automatable changes to source
  code in a version control system.

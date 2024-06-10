@@ -1,3 +1,5 @@
 Tests: testsuite
-Depends: @, lintian-brush, python3-breezy.tests
+Depends: lintian-brush,
+         python3-breezy.tests,
+         @
 Restrictions: allow-stderr
