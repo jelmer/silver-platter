@@ -60,9 +60,6 @@ dev = [
 [project.scripts]
 debian-svp = "silver_platter.debian.__main__:main"
 
-[tool.setuptools]
-include-package-data = false
-
 [tool.setuptools.packages.find]
 where = ["py"]
 include = ["silver_platter*"]
