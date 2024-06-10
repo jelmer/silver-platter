@@ -65,7 +65,7 @@ include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["py"]
-include = ["silver_platter"]
+include = ["silver_platter*"]
 
 [tool.setuptools.package-data]
 silver_platter = ["py.typed"]
