@@ -456,38 +456,11 @@ impl ControlDir {
 }
 
 #[pyclass]
-struct Branch(Box<dyn silver_platter::Branch>);
-
-#[pymethods]
-impl Branch {
-    #[getter]
-    fn name(&self) -> Option<String> {
-        self.0.name().map(|s| s.to_string())
-    }
-
-    #[getter]
-    fn user_url(&self) -> String {
-        self.0.get_user_url().to_string()
-    }
-
-    #[getter]
-    fn vcs_type(&self) -> PyResult<String> {
-        Python::with_gil(|py| {
-            let p = self.0.repository().to_object(py);
-            if let Ok(vcs) = p.getattr(py, "vcs") {
-                vcs.getattr(py, "abbreviation")?.extract(py)
-            } else {
-                Ok("bzr".to_string())
-            }
-        })
-    }
-}
-
-#[pyclass]
 struct Forge(silver_platter::Forge);
 
 #[pyfunction]
 fn push_derived_changes(
+    py: Python,
     local_branch: PyObject,
     main_branch: PyObject,
     forge: PyObject,
@@ -496,7 +469,7 @@ fn push_derived_changes(
     owner: Option<&str>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
-) -> PyResult<(Branch, String)> {
+) -> PyResult<(PyObject, String)> {
     let (b, u) = silver_platter::publish::push_derived_changes(
         &silver_platter::RegularBranch::new(local_branch),
         &silver_platter::RegularBranch::new(main_branch),
@@ -507,7 +480,7 @@ fn push_derived_changes(
         tags,
         stop_revision.as_ref(),
     )?;
-    Ok((Branch(b), u.to_string()))
+    Ok((b.to_object(py), u.to_string()))
 }
 
 #[pyclass]
@@ -615,30 +588,33 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
 
 #[pyfunction]
 fn open_branch(
+    py: Python,
     url: &str,
     possible_transports: Option<Vec<PyObject>>,
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
-) -> PyResult<Branch> {
+) -> PyResult<PyObject> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
         probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
-    Ok(Branch(silver_platter::vcs::open_branch(
+    Ok(silver_platter::vcs::open_branch(
         &url.parse().unwrap(),
         possible_transports.as_mut(),
         probers.as_deref(),
         name,
-    )?))
+    )?
+    .to_object(py))
 }
 
 #[pyfunction]
 fn open_branch_containing(
+    py: Python,
     url: &str,
     possible_transports: Option<Vec<PyObject>>,
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
-) -> PyResult<(Branch, String)> {
+) -> PyResult<(PyObject, String)> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     let probers: Option<Vec<silver_platter::Prober>> =
@@ -649,7 +625,7 @@ fn open_branch_containing(
         probers.as_deref(),
         name,
     )?;
-    Ok((Branch(b), u))
+    Ok((b.to_object(py), u))
 }
 
 #[pyclass]
@@ -657,13 +633,14 @@ struct MergeProposal(silver_platter::MergeProposal);
 
 #[pyfunction]
 fn find_existing_proposed(
+    py: Python,
     main_branch: PyObject,
     forge: PyObject,
     name: &str,
     overwrite_unrelated: bool,
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
-) -> PyResult<(Option<Branch>, Option<bool>, Option<Vec<MergeProposal>>)> {
+) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
     let main_branch = silver_platter::RegularBranch::new(main_branch);
     let forge = silver_platter::Forge::from(forge);
     let preferred_schemes = preferred_schemes
@@ -678,7 +655,7 @@ fn find_existing_proposed(
         preferred_schemes.as_deref(),
     )?;
     Ok((
-        b.map(Branch),
+        b.map(|x| x.to_object(py)),
         o,
         p.map(|p| p.into_iter().map(MergeProposal).collect()),
     ))
@@ -686,12 +663,12 @@ fn find_existing_proposed(
 
 #[pyfunction]
 fn propose_changes(
-    local_branch: &Branch,
-    main_branch: &Branch,
+    local_branch: PyObject,
+    main_branch: PyObject,
     forge: &Forge,
     name: &str,
     mp_description: &str,
-    resume_branch: Option<&Branch>,
+    resume_branch: Option<PyObject>,
     resume_proposal: Option<&MergeProposal>,
     overwrite_existing: Option<bool>,
     labels: Option<Vec<String>>,
@@ -706,13 +683,16 @@ fn propose_changes(
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
+    let resume_branch = resume_branch.map(|b| breezyshim::branch::RegularBranch::new(b));
     silver_platter::publish::propose_changes(
-        local_branch.0.as_ref(),
-        main_branch.0.as_ref(),
+        &breezyshim::branch::RegularBranch::new(local_branch),
+        &breezyshim::branch::RegularBranch::new(main_branch),
         &forge.0,
         name,
         mp_description,
-        resume_branch.map(|b| b.0.as_ref()),
+        resume_branch
+            .as_ref()
+            .map(|b| b as &dyn silver_platter::Branch),
         resume_proposal.as_ref().map(|p| p.0.clone()),
         overwrite_existing,
         labels,
@@ -743,12 +723,12 @@ impl PublishResult {
 
 #[pyfunction]
 fn publish_changes(
-    local_branch: &Branch,
-    main_branch: &Branch,
+    local_branch: PyObject,
+    main_branch: PyObject,
     mode: Mode,
     name: &str,
     get_proposal_description: PyObject,
-    resume_branch: Option<&Branch>,
+    resume_branch: Option<PyObject>,
     get_proposal_commit_message: Option<PyObject>,
     get_proposal_title: Option<PyObject>,
     forge: Option<&Forge>,
@@ -790,10 +770,13 @@ fn publish_changes(
             })
         }
     });
+    let resume_branch = resume_branch.map(|b| breezyshim::branch::RegularBranch::new(b));
     Ok(PublishResult(silver_platter::publish::publish_changes(
-        local_branch.0.as_ref(),
-        main_branch.0.as_ref(),
-        resume_branch.map(|b| b.0.as_ref()),
+        &breezyshim::branch::RegularBranch::new(local_branch),
+        &breezyshim::branch::RegularBranch::new(main_branch),
+        resume_branch
+            .as_ref()
+            .map(|b| b as &dyn silver_platter::Branch),
         mode,
         name,
         get_proposal_description,
@@ -1177,7 +1160,6 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
-    m.add_class::<Branch>()?;
     m.add_class::<Forge>()?;
     m.add_class::<CandidateList>()?;
     m.add_class::<Candidate>()?;

@@ -32,7 +32,6 @@ from typing import Optional
 
 from . import _svp_rs
 
-Branch = _svp_rs.Branch
 create_temp_sprout = _svp_rs.create_temp_sprout
 
 
