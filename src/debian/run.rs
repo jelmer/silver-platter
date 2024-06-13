@@ -149,7 +149,7 @@ pub fn apply_and_publish(
     };
 
     let result: CommandResult = match crate::debian::codemod::script_runner(
-        &ws.local_tree(),
+        ws.local_tree(),
         command,
         subpath,
         commit_pending,
@@ -179,7 +179,7 @@ pub fn apply_and_publish(
         }
 
         crate::debian::build(
-            &ws.local_tree(),
+            ws.local_tree(),
             subpath,
             builder.as_deref(),
             build_target_dir.as_deref(),
@@ -273,7 +273,7 @@ pub fn apply_and_publish(
 
     if install {
         crate::debian::install_built_package(
-            &ws.local_tree(),
+            ws.local_tree(),
             subpath,
             build_target_dir.as_ref().unwrap(),
         )

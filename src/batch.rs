@@ -121,7 +121,7 @@ impl Entry {
         log::info!("Making changes to {}", main_branch.get_user_url());
 
         let result = match script_runner(
-            &ws.local_tree(),
+            ws.local_tree(),
             recipe
                 .command
                 .as_ref()

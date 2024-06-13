@@ -145,7 +145,7 @@ pub fn apply_and_publish(
     };
 
     let result: CommandResult = match crate::codemod::script_runner(
-        &ws.local_tree(),
+        ws.local_tree(),
         command,
         subpath,
         commit_pending,
