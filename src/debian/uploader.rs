@@ -118,7 +118,7 @@ pub enum PackageResult {
 }
 
 pub fn vcswatch_prescan_package(
-    package: &str,
+    _package: &str,
     vw: &VcswatchEntry,
     exclude: Option<&[&str]>,
     min_commit_age: Option<i64>,

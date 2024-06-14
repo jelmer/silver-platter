@@ -2,9 +2,7 @@ pub use crate::proposal::DescriptionFormat;
 use crate::vcs::open_branch;
 use crate::Mode;
 use breezyshim::branch::MemoryBranch;
-use breezyshim::controldir::{
-    create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
-};
+
 use breezyshim::forge::Error as ForgeError;
 use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
@@ -91,6 +89,9 @@ pub fn push_result(
 
 #[test]
 fn test_push_result() {
+    use breezyshim::controldir::create_branch_convenience;
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::controldir::ControlDirFormat;
     let td = tempfile::tempdir().unwrap();
     let target_path = td.path().join("target");
     let source_path = td.path().join("source");
@@ -729,6 +730,8 @@ pub fn check_proposal_diff_empty(
 
 #[test]
 fn test_no_new_commits() {
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::controldir::ControlDirFormat;
     let td = tempfile::tempdir().unwrap();
     let orig = td.path().join("orig");
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
@@ -749,6 +752,8 @@ fn test_no_new_commits() {
 
 #[test]
 fn test_no_op_commits() {
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::controldir::ControlDirFormat;
     let td = tempfile::tempdir().unwrap();
     let orig = td.path().join("orig");
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
@@ -778,6 +783,8 @@ fn test_no_op_commits() {
 fn test_indep() {
     use breezyshim::bazaar::tree::MutableInventoryTree;
     use breezyshim::bazaar::FileId;
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::controldir::ControlDirFormat;
     let td = tempfile::tempdir().unwrap();
     let orig = td.path().join("orig");
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
@@ -827,6 +834,8 @@ fn test_indep() {
 
 #[test]
 fn test_changes() {
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::controldir::ControlDirFormat;
     let td = tempfile::tempdir().unwrap();
     let orig = td.path().join("orig");
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();

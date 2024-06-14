@@ -23,7 +23,7 @@ impl From<breezyshim::controldir::CreateError> for Error {
                 unreachable!("AlreadyExists")
             }
             breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
-            breezyshim::controldir::CreateError::Python(e) => Error::Other(e.into()),
+            breezyshim::controldir::CreateError::Python(e) => Error::Other(e),
         }
     }
 }

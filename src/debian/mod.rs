@@ -545,7 +545,7 @@ pub fn install_built_package(
         .unwrap()
         .join("debian/changelog");
 
-    let cl = ChangeLog::read_path(&abspath)?;
+    let cl = ChangeLog::read_path(abspath)?;
 
     let first_entry = cl.entries().next().unwrap();
 
