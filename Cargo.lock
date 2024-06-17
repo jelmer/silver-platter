@@ -175,13 +175,13 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.92"
+version = "0.1.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "887d1f2ab8fe13cd15d20a55414bb4d239a30d544b7db2e919256d5b6aa0d516"
+checksum = "dce02bb0046f95f0ecb478d1842811ac8ecb895f1151eadba8ad3791373c3e06"
 dependencies = [
  "chrono",
  "ctor",
- "debversion 0.3.1",
+ "debversion 0.2.2",
  "lazy-regex 3.1.0",
  "lazy_static",
  "pyo3",
@@ -527,7 +527,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
 dependencies = [
  "chrono",
- "debversion 0.3.1",
+ "debversion 0.2.2",
  "lazy-regex 3.1.0",
  "log",
  "rowan",
@@ -566,6 +566,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e65a0a572fa10f34b89addac251b7c8f40266606ee5847d769ab8db4d56ca11b"
 dependencies = [
  "lazy-regex 3.1.0",
+ "pyo3",
 ]
 
 [[package]]
@@ -1363,7 +1364,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2185,7 +2186,7 @@ dependencies = [
  "clap",
  "debian-analyzer",
  "debian-changelog",
- "debversion 0.3.1",
+ "debversion 0.2.2",
  "env_logger",
  "flate2",
  "gpgme",
