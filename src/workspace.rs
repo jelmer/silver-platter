@@ -47,14 +47,14 @@ pub enum Error {
     Python(PyErr),
     ForgeError(breezyshim::forge::Error),
     IOError(std::io::Error),
-    UnknownFormat,
+    UnknownFormat(String),
 }
 
 impl From<breezyshim::controldir::CreateError> for Error {
     fn from(e: breezyshim::controldir::CreateError) -> Self {
         match e {
             breezyshim::controldir::CreateError::Python(e) => Error::Python(e),
-            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
+            breezyshim::controldir::CreateError::UnknownFormat(n) => Error::UnknownFormat(n),
             breezyshim::controldir::CreateError::AlreadyExists => unreachable!(),
         }
     }
@@ -64,7 +64,7 @@ impl From<crate::utils::Error> for Error {
     fn from(e: crate::utils::Error) -> Self {
         match e {
             crate::utils::Error::Other(e) => Error::Python(e),
-            crate::utils::Error::UnknownFormat => Error::UnknownFormat,
+            crate::utils::Error::UnknownFormat(n) => Error::UnknownFormat(n),
         }
     }
 }
@@ -93,7 +93,7 @@ impl std::fmt::Display for Error {
             Error::Python(e) => write!(f, "{}", e),
             Error::ForgeError(e) => write!(f, "{}", e),
             Error::IOError(e) => write!(f, "{}", e),
-            Error::UnknownFormat => write!(f, "Unknown format"),
+            Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
         }
     }
 }
@@ -501,6 +501,7 @@ impl<'a> Workspace<'a> {
         self.state()
             .local_tree
             .revision_tree(&self.state().base_revid)
+            .unwrap()
     }
 
     pub fn defer_destroy(&mut self) {
@@ -683,7 +684,7 @@ impl<'a> Workspace<'a> {
     ) -> Result<(), PyErr> {
         breezyshim::diff::show_diff_trees(
             self.base_tree().as_ref(),
-            self.local_tree().basis_tree().as_ref(),
+            &self.local_tree().basis_tree(),
             outf,
             old_label,
             new_label,

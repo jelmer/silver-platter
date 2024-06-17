@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 pub enum Error {
     Other(PyErr),
-    UnknownFormat,
+    UnknownFormat(String),
 }
 
 impl From<PyErr> for Error {
@@ -22,7 +22,7 @@ impl From<breezyshim::controldir::CreateError> for Error {
             breezyshim::controldir::CreateError::AlreadyExists => {
                 unreachable!("AlreadyExists")
             }
-            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
+            breezyshim::controldir::CreateError::UnknownFormat(name) => Error::UnknownFormat(name),
             breezyshim::controldir::CreateError::Python(e) => Error::Other(e),
         }
     }
@@ -57,9 +57,10 @@ pub fn create_temp_sprout(
     let to_url: url::Url = url::Url::from_directory_path(path).unwrap();
 
     // preserve whatever source format we have.
-    let to_dir = branch
-        .controldir()
-        .sprout(to_url, Some(branch), Some(true), Some(use_stacking));
+    let to_dir =
+        branch
+            .controldir()
+            .sprout(to_url, Some(branch), Some(true), Some(use_stacking), None);
     // TODO(jelmer): Fetch these during the initial clone
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
         let controldir = branch.controldir();
