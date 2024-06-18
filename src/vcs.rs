@@ -310,7 +310,7 @@ pub fn open_branch(
                 url: url.clone(),
                 description: e,
             },
-            breezyshim::controldir::OpenError::UnknownFormat => {
+            breezyshim::controldir::OpenError::UnknownFormat(_) => {
                 unreachable!("open_containing_from_transport should not return UnknownFormat")
             }
             breezyshim::controldir::OpenError::Python(e) => {
@@ -348,7 +348,7 @@ pub fn open_branch_containing(
                     url: url.clone(),
                     description: e,
                 },
-                breezyshim::controldir::OpenError::UnknownFormat => {
+                breezyshim::controldir::OpenError::UnknownFormat(_) => {
                     unreachable!("open_containing_from_transport should not return UnknownFormat")
                 }
                 breezyshim::controldir::OpenError::Python(e) => {

@@ -567,7 +567,7 @@ fn main() {
 
             check_clean_tree(
                 &local_tree,
-                local_tree.basis_tree().as_ref(),
+                &local_tree.basis_tree(),
                 subpath.as_path(),
             )
             .unwrap();
@@ -618,8 +618,8 @@ fn main() {
             }
 
             if *diff {
-                let old_tree = local_tree.revision_tree(&result.old_revision);
-                let new_tree = local_tree.revision_tree(&result.new_revision);
+                let old_tree = local_tree.revision_tree(&result.old_revision).unwrap();
+                let new_tree = local_tree.revision_tree(&result.new_revision).unwrap();
                 breezyshim::diff::show_diff_trees(
                     old_tree.as_ref(),
                     new_tree.as_ref(),

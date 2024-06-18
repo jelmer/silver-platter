@@ -412,11 +412,9 @@ impl ControlDir {
                 pyo3::import_exception!(breezy.errors, NotBranchError);
                 return Err(NotBranchError::new_err(e));
             }
-            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
+            Err(breezyshim::controldir::OpenError::UnknownFormat(n)) => {
                 pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err(
-                    "Unknown format (not a Breezy branch)",
-                ));
+                return Err(UnknownFormatError::new_err((n,)));
             }
         };
         Ok(ControlDir(control_dir))
@@ -444,11 +442,9 @@ impl ControlDir {
                 pyo3::import_exception!(breezy.errors, NotBranchError);
                 return Err(NotBranchError::new_err(e));
             }
-            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
+            Err(breezyshim::controldir::OpenError::UnknownFormat(n)) => {
                 pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err(
-                    "Unknown format (not a Breezy branch)",
-                ));
+                return Err(UnknownFormatError::new_err((n,)));
             }
         };
         Ok((ControlDir(control_dir), subpath))
@@ -825,7 +821,7 @@ fn create_temp_sprout(
     )
     .map_err(|e| match e {
         silver_platter::utils::Error::Other(e) => e,
-        silver_platter::utils::Error::UnknownFormat => UnknownFormat::new_err(()),
+        silver_platter::utils::Error::UnknownFormat(n) => UnknownFormat::new_err((n,)),
     })
     .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
 }
