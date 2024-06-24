@@ -489,9 +489,9 @@ checksum = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
 
 [[package]]
 name = "deb822-lossless"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fe9012f622afa2aa6604e346d3ad1396c20c1c8bc36fb99b2c10bc078def7a0"
+checksum = "a64fca313d8f31d56e53a9ecc400d88141e474a29aa8e36f46ab53f3db4a709e"
 dependencies = [
  "regex",
  "rowan",
@@ -544,9 +544,9 @@ dependencies = [
 
 [[package]]
 name = "debian-control"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "328887ddee774f324a55c695dc452ea6c43e8d99adc4f6e2d391aaaa8c12eca2"
+checksum = "04937eee5d376dddb9def09bbbb67533dbc7740e43168c8fecbd797583d33209"
 dependencies = [
  "deb822-lossless",
  "debversion",
@@ -557,9 +557,9 @@ dependencies = [
 
 [[package]]
 name = "debian-copyright"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb88ae04e93949a01731d785077b35b7b2fe1d7089ce66e6d56495244a95cac7"
+checksum = "7a432d19eb472c475423e49a9f62fedc41aa5ed658f8d5e60e0c6f0f515f95be"
 dependencies = [
  "deb822-lossless",
  "debversion",
@@ -579,9 +579,9 @@ dependencies = [
 
 [[package]]
 name = "dep3"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f21305e8555e107596d2f457f521f1dc887f68568bf0844dd7f43b8334322a52"
+checksum = "d6b6be003d8182114330d55adc9fc36b340cf1da16b7663306fe066770a8b2e3"
 dependencies = [
  "chrono",
  "deb822-lossless",
@@ -2309,9 +2309,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "subtle"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d0208408ba0c3df17ed26eb06992cb1a1268d41b2c0e12e65203fbe3972cee5"
+checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "svp-client"
