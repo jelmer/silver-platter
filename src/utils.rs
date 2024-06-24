@@ -16,6 +16,15 @@ impl From<PyErr> for Error {
     }
 }
 
+impl From<breezyshim::error::Error> for Error {
+    fn from(e: breezyshim::error::Error) -> Self {
+        match e {
+            breezyshim::error::Error::Other(e) => Self::Other(e),
+            breezyshim::error::Error::UnknownFormat(n) => Self::UnknownFormat(n)
+        }
+    }
+}
+
 impl From<breezyshim::controldir::CreateError> for Error {
     fn from(e: breezyshim::controldir::CreateError) -> Self {
         match e {
