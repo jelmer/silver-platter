@@ -69,8 +69,8 @@ impl std::str::FromStr for Mode {
 
 impl pyo3::FromPyObject<'_> for Mode {
     fn extract(ob: &pyo3::PyAny) -> pyo3::PyResult<Self> {
-        let s: &str = ob.extract()?;
-        match s {
+        let s: std::borrow::Cow<str> = ob.extract()?;
+        match s.as_ref() {
             "push" => Ok(Mode::Push),
             "propose" => Ok(Mode::Propose),
             "attempt-push" => Ok(Mode::AttemptPush),

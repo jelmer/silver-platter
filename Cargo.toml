@@ -23,8 +23,8 @@ shlex = "1.3.0"
 env_logger = { workspace = true, optional = true }
 trivialdb = { version = "0.1.4", optional = true }
 flate2 = { version = "1", optional = true }
-reqwest = { version = "0.12", optional = true, features = ["blocking"] }
-lazy-regex = "3.0.2"
+reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
+lazy-regex = ">=2"
 libc = "0.2"
 xdg = "2.5"
 debian-analyzer = { version = ">=0.155", optional = true }
@@ -65,7 +65,7 @@ features = [ "serde",]
 
 [workspace.dependencies]
 pyo3 = ">=0.20"
-pyo3-log = "0.9"
+pyo3-log = ">=0.9"
 serde_json = "1"
 tera = "1"
 serde = "1.0.203"
