@@ -151,21 +151,18 @@ impl BranchOpenError {
                 url,
                 description: format!("Socket error: {}", e),
             });
-        }
-        if e.is_instance_of::<NotBranchError>(py) {
+        } else if e.is_instance_of::<NotBranchError>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: format!("Branch does not exist: {}", e),
             });
-        }
-        if e.is_instance_of::<UnsupportedProtocol>(py) {
+        } else if e.is_instance_of::<UnsupportedProtocol>(py) {
             return Some(Self::Unsupported {
                 url,
                 description: e.to_string(),
                 vcs: None,
             });
-        }
-        if e.is_instance_of::<ConnectionError>(py) {
+        } else if e.is_instance_of::<ConnectionError>(py) {
             if e.to_string()
                 .contains("Temporary failure in name resolution")
             {
@@ -179,22 +176,20 @@ impl BranchOpenError {
                     description: e.to_string(),
                 });
             }
-        }
-        if e.is_instance_of::<PermissionDenied>(py) {
+        } else if e.is_instance_of::<PermissionDenied>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<InvalidURL>(py) {
+        } else if e.is_instance_of::<InvalidURL>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<InvalidHttpResponse>(py) {
+        } else if e.is_instance_of::<InvalidHttpResponse>(py) {
             if e.to_string().contains("Unexpected HTTP status 429") {
-                let headers = e.value(py).getattr("headers").unwrap();
+                let value = e.value_bound(py);
+                let headers = value.getattr("headers").unwrap();
                 if let Ok(retry_after) = headers.get_item("Retry-After") {
                     let retry_after = retry_after.extract::<String>().unwrap();
                     match retry_after.parse::<f64>() {
@@ -225,64 +220,57 @@ impl BranchOpenError {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<TransportError>(py) {
+        } else if e.is_instance_of::<TransportError>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<UnusableRedirect>(py) {
+        } else if e.is_instance_of::<UnusableRedirect>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<UnsupportedVcs>(py) {
+        } else if e.is_instance_of::<UnsupportedVcs>(py) {
             return Some(Self::Unsupported {
                 url,
                 description: e.to_string(),
                 vcs: e
-                    .value(py)
+                    .value_bound(py)
                     .getattr("vcs")
                     .unwrap()
                     .extract::<Option<String>>()
                     .unwrap(),
             });
-        }
-        if e.is_instance_of::<UnsupportedFormatError>(py) {
+        } else if e.is_instance_of::<UnsupportedFormatError>(py) {
             return Some(Self::Unsupported {
                 url,
                 description: e.to_string(),
                 vcs: None,
             });
-        }
-        if e.is_instance_of::<UnknownFormatError>(py) {
+        } else if e.is_instance_of::<UnknownFormatError>(py) {
             return Some(Self::Unsupported {
                 url,
                 description: e.to_string(),
                 vcs: None,
             });
-        }
-        if e.is_instance_of::<RemoteGitError>(py) {
+        } else if e.is_instance_of::<RemoteGitError>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<LineEndingError>(py) {
+        } else if e.is_instance_of::<LineEndingError>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
-        }
-        if e.is_instance_of::<IncompleteRead>(py) {
+        } else if e.is_instance_of::<IncompleteRead>(py) {
             return Some(Self::Unavailable {
                 url,
                 description: e.to_string(),
             });
+        } else {
+            None
         }
-        None
     }
 }
 

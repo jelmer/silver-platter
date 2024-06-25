@@ -66,12 +66,18 @@ import_exception!(breezy.errors, DivergedBranches);
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
 
-fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
+fn json_to_py<'a, 'b, 'py>(py: Python<'py>, value: &'b serde_json::Value) -> Bound<'a, PyAny>
+where
+    'py: 'a,
+{
     match value {
-        serde_json::Value::Null => py.None(),
-        serde_json::Value::Bool(b) => pyo3::types::PyBool::new(py, *b).into(),
+        serde_json::Value::Null => py.None().into_bound(py),
+        serde_json::Value::Bool(b) => {
+            let o = pyo3::types::PyBool::new_bound(py, *b).into_py(py);
+            o.into_bound(py)
+        }
         serde_json::Value::Number(n) => {
-            if let Some(n) = n.as_u64() {
+            let n: PyObject = if let Some(n) = n.as_u64() {
                 n.into_py(py)
             } else if let Some(n) = n.as_i64() {
                 n.into_py(py)
@@ -79,27 +85,28 @@ fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
                 n.into_py(py)
             } else {
                 unreachable!()
-            }
+            };
+            n.into_bound(py)
         }
-        serde_json::Value::String(s) => pyo3::types::PyString::new(py, s.as_str()).into(),
+        serde_json::Value::String(s) => pyo3::types::PyString::new_bound(py, s.as_str()).into_any(),
         serde_json::Value::Array(a) => {
-            let list = pyo3::types::PyList::empty(py);
+            let list = pyo3::types::PyList::empty_bound(py);
             for v in a {
                 list.append(json_to_py(py, v)).unwrap();
             }
-            list.into_py(py)
+            list.into_any()
         }
         serde_json::Value::Object(o) => {
-            let dict = pyo3::types::PyDict::new(py);
+            let dict = pyo3::types::PyDict::new_bound(py);
             for (k, v) in o {
                 dict.set_item(k, json_to_py(py, v)).unwrap();
             }
-            dict.into_py(py)
+            dict.into_any()
         }
     }
 }
 
-fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
+fn py_to_json(obj: &Bound<PyAny>) -> PyResult<serde_json::Value> {
     if obj.is_none() {
         Ok(serde_json::Value::Null)
     } else if let Ok(b) = obj.downcast::<pyo3::types::PyBool>() {
@@ -112,13 +119,15 @@ fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
         Ok(serde_json::Value::String(s.to_string_lossy().to_string()))
     } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
         Ok(serde_json::Value::Array(
-            l.iter().map(py_to_json).collect::<PyResult<Vec<_>>>()?,
+            l.iter()
+                .map(|x| py_to_json(&x))
+                .collect::<PyResult<Vec<_>>>()?,
         ))
     } else if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
         let mut ret = serde_json::Map::new();
         for (k, v) in d.iter() {
             let k = k.extract::<String>()?;
-            let v = py_to_json(v)?;
+            let v = py_to_json(&v)?;
             ret.insert(k, v);
         }
         Ok(serde_json::Value::Object(ret))
@@ -130,7 +139,7 @@ fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
 #[pymethods]
 impl Recipe {
     #[classmethod]
-    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
         let recipe = silver_platter::recipe::Recipe::from_path(path.as_path())?;
         Ok(Recipe(recipe))
     }
@@ -172,7 +181,7 @@ impl Recipe {
         self.0.mode.as_ref().map(|m| m.to_string())
     }
 
-    fn render_merge_request_title(&self, context: &PyAny) -> PyResult<Option<String>> {
+    fn render_merge_request_title(&self, context: &Bound<PyAny>) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
         } else {
@@ -184,7 +193,10 @@ impl Recipe {
         })
     }
 
-    fn render_merge_request_commit_message(&self, context: &PyAny) -> PyResult<Option<String>> {
+    fn render_merge_request_commit_message(
+        &self,
+        context: &Bound<PyAny>,
+    ) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
         } else {
@@ -202,7 +214,7 @@ impl Recipe {
     fn render_merge_request_description(
         &self,
         format: &str,
-        context: &PyAny,
+        context: &Bound<PyAny>,
     ) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
@@ -232,7 +244,7 @@ impl Recipe {
     }
 }
 
-fn py_dict_to_tera_context(py_dict: &PyAny) -> PyResult<tera::Context> {
+fn py_dict_to_tera_context(py_dict: &Bound<PyAny>) -> PyResult<tera::Context> {
     let mut context = tera::Context::new();
     if py_dict.is_none() {
         return Ok(context);
@@ -301,7 +313,10 @@ impl CommandResult {
     }
 
     #[getter]
-    fn context(&self, py: Python) -> Option<PyObject> {
+    fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
+    where
+        'py: 'a,
+    {
         self.0.context.as_ref().map(|c| json_to_py(py, c))
     }
 }
@@ -344,7 +359,7 @@ fn script_runner(
             Some(false) => CommitPending::No,
         },
         resume_metadata
-            .map(|m| py_to_json(m.as_ref(py)).unwrap())
+            .map(|m| py_to_json(m.bind(py)).unwrap())
             .as_ref(),
         committer,
         extra_env,
@@ -392,7 +407,7 @@ struct ControlDir(silver_platter::ControlDir);
 impl ControlDir {
     #[classmethod]
     fn open_from_transport(
-        _cls: &PyType,
+        _cls: &Bound<PyType>,
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<Self> {
@@ -422,7 +437,7 @@ impl ControlDir {
 
     #[classmethod]
     fn open_containing_from_transport(
-        _cls: &PyType,
+        _cls: &Bound<PyType>,
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<(Self, String)> {
@@ -485,7 +500,7 @@ struct CandidateList(silver_platter::candidates::Candidates);
 #[pymethods]
 impl CandidateList {
     #[classmethod]
-    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
         Ok(Self(silver_platter::candidates::Candidates::from_path(
             path.as_path(),
         )?))
@@ -948,7 +963,10 @@ pub(crate) mod debian {
         }
 
         #[getter]
-        fn context(&self, py: Python) -> Option<PyObject> {
+        fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
+        where
+            'py: 'a,
+        {
             self.0.context.as_ref().map(|c| json_to_py(py, c))
         }
     }
@@ -992,7 +1010,7 @@ pub(crate) mod debian {
                 None => CommitPending::Auto,
             },
             resume_metadata
-                .map(|m| py_to_json(m.as_ref(py)).unwrap())
+                .map(|m| py_to_json(m.bind(py)).unwrap())
                 .as_ref(),
             committer,
             extra_env,
@@ -1140,18 +1158,21 @@ fn merge_conflicts(
 }
 
 #[pymodule]
-fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
+fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(derived_branch_name, m)?)?;
     m.add_function(wrap_pyfunction!(script_runner, m)?)?;
-    m.add("ScriptMadeNoChanges", py.get_type::<ScriptMadeNoChanges>())?;
-    m.add("ScriptFailed", py.get_type::<ScriptFailed>())?;
-    m.add("ScriptNotFound", py.get_type::<ScriptNotFound>())?;
-    m.add("DetailedFailure", py.get_type::<DetailedFailure>())?;
-    m.add("MissingChangelog", py.get_type::<MissingChangelog>())?;
+    m.add(
+        "ScriptMadeNoChanges",
+        py.get_type_bound::<ScriptMadeNoChanges>(),
+    )?;
+    m.add("ScriptFailed", py.get_type_bound::<ScriptFailed>())?;
+    m.add("ScriptNotFound", py.get_type_bound::<ScriptNotFound>())?;
+    m.add("DetailedFailure", py.get_type_bound::<DetailedFailure>())?;
+    m.add("MissingChangelog", py.get_type_bound::<MissingChangelog>())?;
     m.add(
         "ResultFileFormatError",
-        py.get_type::<ResultFileFormatError>(),
+        py.get_type_bound::<ResultFileFormatError>(),
     )?;
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
@@ -1187,16 +1208,19 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PublishResult>()?;
     m.add(
         "InsufficientChangesForNewProposal",
-        py.get_type::<InsufficientChangesForNewProposal>(),
+        py.get_type_bound::<InsufficientChangesForNewProposal>(),
     )?;
     m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
     m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
-    m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
-    m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
-    m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
+    m.add("PostCheckFailed", py.get_type_bound::<PostCheckFailed>())?;
+    m.add("PreCheckFailed", py.get_type_bound::<PreCheckFailed>())?;
+    m.add(
+        "EmptyMergeProposal",
+        py.get_type_bound::<EmptyMergeProposal>(),
+    )?;
 
     Ok(())
 }
