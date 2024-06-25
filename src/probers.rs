@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 
 pub fn select_probers(vcs_type: &str) -> Vec<Prober> {
     pyo3::Python::with_gil(|py| {
-        let probersm = py.import("silver_platter.probers").unwrap();
+        let probersm = py.import_bound("silver_platter.probers").unwrap();
         let select_probers = probersm.getattr("select_probers").unwrap();
         select_probers
             .call1((vcs_type,))
@@ -16,7 +16,7 @@ pub fn select_probers(vcs_type: &str) -> Vec<Prober> {
 
 pub fn select_preferred_probers(vcs_type: &str) -> Vec<Prober> {
     pyo3::Python::with_gil(|py| {
-        let probersm = py.import("silver_platter.probers").unwrap();
+        let probersm = py.import_bound("silver_platter.probers").unwrap();
         let select_preferred_probers = probersm.getattr("select_preferred_probers").unwrap();
         select_preferred_probers
             .call1((vcs_type,))
