@@ -12,7 +12,6 @@ keywords = ["git bzr vcs github gitlab launchpad"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: GNU General Public License (GPL)",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -23,7 +22,7 @@ classifiers = [
     "Operating System :: POSIX",
     "Topic :: Software Development :: Version Control",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
     "breezy>=3.3.3",
     "dulwich>=0.20.23",
