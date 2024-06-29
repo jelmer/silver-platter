@@ -70,8 +70,7 @@ breezyshim = ">=0.1.105"
 url = "2"
 debian-changelog = ">=0.1.10"
 env_logger = ">=0.10"
-# Avoid 4.5.0 due to higher minimum rust version
-clap = "4.4.11,<4.5"
+clap = "4"
 
 [[bin]]
 name = "svp"
