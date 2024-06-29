@@ -236,7 +236,7 @@ impl BranchOpenError {
                 url,
                 description: msg.to_string(),
             },
-            BrzError::IncompleteRead => Self::Unavailable {
+            BrzError::IncompleteRead(_partial, _expected) => Self::Unavailable {
                 url,
                 description: e.to_string(),
             },
