@@ -1,7 +1,8 @@
 use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
-use breezyshim::branch::{Branch, BranchOpenError};
+use breezyshim::branch::Branch;
+use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{Forge, MergeProposal};
-use breezyshim::tree::{PullError, WorkingTree};
+use breezyshim::tree::WorkingTree;
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use log::info;
@@ -30,8 +31,7 @@ pub fn fetch_colocated(
                     None,
                 )?;
             }
-            Err(BranchOpenError::NotBranchError(_))
-            | Err(BranchOpenError::NoColocatedBranchSupport) => {
+            Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
                 continue;
             }
             Err(e) => {
@@ -45,33 +45,20 @@ pub fn fetch_colocated(
 #[derive(Debug)]
 pub enum Error {
     Python(PyErr),
+    BrzError(BrzError),
     ForgeError(breezyshim::forge::Error),
     IOError(std::io::Error),
     UnknownFormat(String),
 }
 
-impl From<breezyshim::controldir::CreateError> for Error {
-    fn from(e: breezyshim::controldir::CreateError) -> Self {
+impl From<BrzError> for Error {
+    fn from(e: BrzError) -> Self {
         match e {
-            breezyshim::controldir::CreateError::Python(e) => Error::Python(e),
-            breezyshim::controldir::CreateError::UnknownFormat(n) => Error::UnknownFormat(n),
-            breezyshim::controldir::CreateError::AlreadyExists => unreachable!(),
+            BrzError::Other(e) => Error::Python(e),
+            BrzError::UnknownFormat(n) => Error::UnknownFormat(n),
+            BrzError::AlreadyExists => unreachable!(),
+            e => Error::BrzError(e),
         }
-    }
-}
-
-impl From<crate::utils::Error> for Error {
-    fn from(e: crate::utils::Error) -> Self {
-        match e {
-            crate::utils::Error::Other(e) => Error::Python(e),
-            crate::utils::Error::UnknownFormat(n) => Error::UnknownFormat(n),
-        }
-    }
-}
-
-impl From<BranchOpenError> for Error {
-    fn from(e: BranchOpenError) -> Self {
-        Error::Python(e.into())
     }
 }
 
@@ -94,6 +81,7 @@ impl std::fmt::Display for Error {
             Error::ForgeError(e) => write!(f, "{}", e),
             Error::IOError(e) => write!(f, "{}", e),
             Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
+            Error::BrzError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -303,8 +291,8 @@ impl<'a> Workspace<'a> {
                     Ok(branch) => {
                         main_colo_revid.insert(from_name.to_string(), branch.last_revision());
                     }
-                    Err(breezyshim::branch::BranchOpenError::NotBranchError(..)) => {}
-                    Err(breezyshim::branch::BranchOpenError::NoColocatedBranchSupport) => {}
+                    Err(BrzError::NotBranchError(..)) => {}
+                    Err(BrzError::NoColocatedBranchSupport) => {}
                     Err(e) => {
                         log::warn!("Failed to open colocated branch {}: {}", from_name, e);
                     }
@@ -319,10 +307,10 @@ impl<'a> Workspace<'a> {
 
                 match local_tree.pull(cached_branch, Some(true)) {
                     Ok(_) => {}
-                    Err(PullError::DivergedBranches) => {
+                    Err(BrzError::DivergedBranches) => {
                         unreachable!();
                     }
-                    Err(PullError::Other(e)) => {
+                    Err(e) => {
                         return Err(e.into());
                     }
                 }
@@ -339,17 +327,17 @@ impl<'a> Workspace<'a> {
                 );
 
                 match local_tree.pull(main_branch, Some(false)) {
-                    Err(PullError::DivergedBranches) => {
+                    Err(BrzError::DivergedBranches) => {
                         log::info!("restarting branch");
                         refreshed = true;
                         self.resume_branch = None;
                         self.resume_branch_additional_colocated_branches.clear();
                         match local_tree.pull(main_branch, Some(true)) {
                             Ok(_) => {}
-                            Err(PullError::DivergedBranches) => {
+                            Err(BrzError::DivergedBranches) => {
                                 unreachable!();
                             }
-                            Err(PullError::Other(e)) => {
+                            Err(e) => {
                                 return Err(e.into());
                             }
                         }
@@ -478,8 +466,8 @@ impl<'a> Workspace<'a> {
         for (from_name, to_name) in self.additional_colocated_branches().iter() {
             let to_revision = match local_controldir.open_branch(Some(to_name)) {
                 Ok(b) => Some(b.last_revision()),
-                Err(BranchOpenError::NoColocatedBranchSupport) => continue,
-                Err(BranchOpenError::NotBranchError(..)) => None,
+                Err(BrzError::NoColocatedBranchSupport) => continue,
+                Err(BrzError::NotBranchError(..)) => None,
                 Err(e) => {
                     panic!("Unexpected error opening branch {}: {}", to_name, e);
                 }

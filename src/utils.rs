@@ -1,41 +1,9 @@
-use breezyshim::branch::{Branch, BranchOpenError};
+use breezyshim::branch::Branch;
+use breezyshim::error::Error as BrzError;
 use breezyshim::merge::{Error as MergeError, MergeType, Merger, MERGE_HOOKS};
 use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
-use pyo3::PyErr;
 use std::collections::HashMap;
-
-pub enum Error {
-    Other(PyErr),
-    UnknownFormat(String),
-}
-
-impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
-        Error::Other(e)
-    }
-}
-
-impl From<breezyshim::error::Error> for Error {
-    fn from(e: breezyshim::error::Error) -> Self {
-        match e {
-            breezyshim::error::Error::Other(e) => Self::Other(e),
-            breezyshim::error::Error::UnknownFormat(n) => Self::UnknownFormat(n)
-        }
-    }
-}
-
-impl From<breezyshim::controldir::CreateError> for Error {
-    fn from(e: breezyshim::controldir::CreateError) -> Self {
-        match e {
-            breezyshim::controldir::CreateError::AlreadyExists => {
-                unreachable!("AlreadyExists")
-            }
-            breezyshim::controldir::CreateError::UnknownFormat(name) => Error::UnknownFormat(name),
-            breezyshim::controldir::CreateError::Python(e) => Error::Other(e),
-        }
-    }
-}
 
 /// Create a temporary sprout of a branch.
 ///
@@ -45,7 +13,7 @@ pub fn create_temp_sprout(
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
-) -> Result<(WorkingTree, Box<dyn FnOnce() -> std::io::Result<()> + Send>), Error> {
+) -> Result<(WorkingTree, Box<dyn FnOnce() -> std::io::Result<()> + Send>), BrzError> {
     let (td, path) = if let Some(path) = path {
         std::fs::create_dir(path).unwrap();
         (None, path.to_path_buf())
@@ -79,15 +47,14 @@ pub fn create_temp_sprout(
                 add_branch.push(local_add_branch.as_ref(), false, None, None)?;
                 assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
             }
-            Err(BranchOpenError::NotBranchError(_))
-            | Err(BranchOpenError::NoColocatedBranchSupport) => {
+            Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
                 // Ignore branches that don't exist or don't support colocated branches.
             }
-            Err(BranchOpenError::DependencyNotPresent(e, d)) => {
+            Err(BrzError::DependencyNotPresent(e, d)) => {
                 panic!("Need dependency to sprout branch: {} {}", e, d);
             }
-            Err(BranchOpenError::Other(err)) => {
-                return Err(err.into());
+            Err(err) => {
+                return Err(err);
             }
         }
     }
