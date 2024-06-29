@@ -1,6 +1,7 @@
 use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
 use crate::CommitPending;
-use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, WorkingTree};
+use breezyshim::error::Error as BrzError;
+use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use breezyshim::RevisionId;
 use debian_changelog::get_maintainer_from_env;
 use debian_changelog::ChangeLog;
@@ -177,7 +178,7 @@ pub fn script_runner(
             .entries()
             .next()
             .and_then(|e| e.package()),
-        Err(TreeError::NoSuchFile(_)) => None,
+        Err(BrzError::NoSuchFile(_)) => None,
         Err(e) => {
             return Err(Error::Other(format!("Failed to read changelog: {}", e)));
         }
@@ -253,7 +254,7 @@ pub fn script_runner(
                     )));
                 }
             },
-            Err(TreeError::NoSuchFile(_)) => {
+            Err(BrzError::NoSuchFile(_)) => {
                 return Err(Error::MissingChangelog(cl_path));
             }
             Err(e) => {
@@ -332,7 +333,7 @@ pub fn script_runner(
             None,
         ) {
             Ok(rev) => rev,
-            Err(CommitError::PointlessCommit) => {
+            Err(BrzError::PointlessCommit) => {
                 // No changes
                 last_revision.clone()
             }

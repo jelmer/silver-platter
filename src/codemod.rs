@@ -1,4 +1,5 @@
-use breezyshim::tree::{CommitError, WorkingTree};
+use breezyshim::error::Error as BrzError;
+use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
 use url::Url;
@@ -263,7 +264,7 @@ pub fn script_runner(
             None,
         ) {
             Ok(rev) => rev,
-            Err(CommitError::PointlessCommit) => {
+            Err(BrzError::PointlessCommit) => {
                 // No changes
                 last_revision.clone()
             }

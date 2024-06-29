@@ -40,7 +40,7 @@ pub use debian_analyzer::detect_gbp_dch::ChangelogBehaviour;
 
 #[cfg(not(feature = "detect-update-changelog"))]
 impl FromPyObject<'_> for ChangelogBehaviour {
-    fn extract(obj: &PyAny) -> PyResult<Self> {
+    fn extract_bound(obj: &Bound<PyAny>) -> PyResult<Self> {
         let update_changelog = obj.getattr("update_changelog")?.extract()?;
         let explanation = obj.getattr("explanation")?.extract()?;
         Ok(ChangelogBehaviour {

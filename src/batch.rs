@@ -9,6 +9,7 @@ use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
+use breezyshim::error::Error as BrzError;
 use breezyshim::forge::Error as ForgeError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -217,9 +218,7 @@ impl Entry {
         }
     }
 
-    pub fn working_tree(
-        &self,
-    ) -> Result<breezyshim::tree::WorkingTree, breezyshim::tree::WorkingTreeOpenError> {
+    pub fn working_tree(&self) -> Result<breezyshim::tree::WorkingTree, BrzError> {
         breezyshim::tree::WorkingTree::open(&self.local_path)
     }
 

@@ -3,6 +3,7 @@ use crate::vcs::open_branch;
 use crate::Mode;
 use breezyshim::branch::MemoryBranch;
 
+use breezyshim::error::Error as BrzError;
 use breezyshim::forge::Error as ForgeError;
 use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
@@ -80,7 +81,7 @@ pub fn push_result(
                     Some(tag_selector),
                 )?;
             }
-            Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
+            Err(BrzError::NotBranchError(..)) => {}
             Err(e) => return Err(e.into()),
         };
     }
@@ -312,7 +313,7 @@ pub fn propose_changes(
                         }),
                     )?;
                 }
-                Err(breezyshim::branch::BranchOpenError::NotBranchError(_)) => {}
+                Err(BrzError::NotBranchError(..)) => {}
                 Err(e) => return Err(e.into()),
             }
         }

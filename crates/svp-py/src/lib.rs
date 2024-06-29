@@ -249,7 +249,7 @@ fn py_dict_to_tera_context(py_dict: &Bound<PyAny>) -> PyResult<tera::Context> {
     if py_dict.is_none() {
         return Ok(context);
     }
-    let py_dict = py_dict.extract::<&PyDict>()?;
+    let py_dict = py_dict.extract::<Bound<PyDict>>()?;
     for (key, value) in py_dict.iter() {
         let key = key.extract::<String>()?;
         if let Ok(value) = value.extract::<String>() {
@@ -417,21 +417,10 @@ impl ControlDir {
                 .map(silver_platter::Prober::new)
                 .collect()
         });
-        let control_dir = match breezyshim::controldir::open_from_transport(
+        let control_dir = breezyshim::controldir::open_from_transport(
             &silver_platter::Transport::new(transport),
             probers.as_deref(),
-        ) {
-            Ok(control_dir) => control_dir,
-            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
-            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
-                pyo3::import_exception!(breezy.errors, NotBranchError);
-                return Err(NotBranchError::new_err(e));
-            }
-            Err(breezyshim::controldir::OpenError::UnknownFormat(n)) => {
-                pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err((n,)));
-            }
-        };
+        )?;
         Ok(ControlDir(control_dir))
     }
 
@@ -447,21 +436,10 @@ impl ControlDir {
                 .map(silver_platter::Prober::new)
                 .collect()
         });
-        let (control_dir, subpath) = match breezyshim::controldir::open_containing_from_transport(
+        let (control_dir, subpath) = breezyshim::controldir::open_containing_from_transport(
             &silver_platter::Transport::new(transport),
             probers.as_deref(),
-        ) {
-            Ok(control_dir) => control_dir,
-            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
-            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
-                pyo3::import_exception!(breezy.errors, NotBranchError);
-                return Err(NotBranchError::new_err(e));
-            }
-            Err(breezyshim::controldir::OpenError::UnknownFormat(n)) => {
-                pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err((n,)));
-            }
-        };
+        )?;
         Ok((ControlDir(control_dir), subpath))
     }
 }
@@ -781,7 +759,7 @@ fn publish_changes(
             })
         }
     });
-    let resume_branch = resume_branch.map(|b| breezyshim::branch::RegularBranch::new(b));
+    let resume_branch = resume_branch.map(breezyshim::branch::RegularBranch::new);
     Ok(PublishResult(silver_platter::publish::publish_changes(
         &breezyshim::branch::RegularBranch::new(local_branch),
         &breezyshim::branch::RegularBranch::new(main_branch),
@@ -828,17 +806,14 @@ fn create_temp_sprout(
     path: Option<std::path::PathBuf>,
 ) -> PyResult<(PyObject, DestroyFn)> {
     import_exception!(breezy.errors, UnknownFormat);
-    silver_platter::utils::create_temp_sprout(
+    let (wt, cb) = silver_platter::utils::create_temp_sprout(
         &breezyshim::branch::RegularBranch::new(branch),
         additional_colocated_branches,
         dir.as_deref(),
         path.as_deref(),
-    )
-    .map_err(|e| match e {
-        silver_platter::utils::Error::Other(e) => e,
-        silver_platter::utils::Error::UnknownFormat(n) => UnknownFormat::new_err((n,)),
-    })
-    .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
+    )?;
+
+    Ok((wt.0, DestroyFn(Some(cb))))
 }
 
 /// Run a script before making any changes to a tree.

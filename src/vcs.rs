@@ -1,8 +1,10 @@
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
+use breezyshim::error::Error as BrzError;
 use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::import_exception;
 use pyo3::prelude::*;
 
@@ -30,7 +32,7 @@ pub enum BranchOpenError {
         url: url::Url,
         description: String,
     },
-    Other(PyErr),
+    Other(String),
 }
 
 impl std::fmt::Display for BranchOpenError {
@@ -102,174 +104,143 @@ impl From<BranchOpenError> for PyErr {
 
                 BranchTemporarilyUnavailable::new_err((url.to_string(), description))
             }
-            BranchOpenError::Other(e) => e,
+            BranchOpenError::Other(e) => PyRuntimeError::new_err((e,)),
         }
     }
 }
 
-import_exception!(socket, error);
-import_exception!(breezy.errors, NotBranchError);
-import_exception!(breezy.transport, UnsupportedProtocol);
-import_exception!(breezy.transport, UnusableRedirect);
-import_exception!(breezy.errors, ConnectionError);
-import_exception!(breezy.errors, PermissionDenied);
-import_exception!(breezy.urlutils, InvalidURL);
-import_exception!(breezy.errors, TransportError);
-import_exception!(breezy.errors, UnsupportedFormatError);
-import_exception!(breezy.errors, UnknownFormatError);
-import_exception!(breezy.errors, UnsupportedVcs);
-import_exception!(breezy.git.remote, RemoteGitError);
-import_exception!(http.client, IncompleteRead);
-import_exception!(breezy.bzr, LineEndingError);
-import_exception!(breezy.errors, InvalidHttpResponse);
-
 impl BranchOpenError {
-    pub fn from_err(py: Python, url: url::Url, e: &breezyshim::branch::BranchOpenError) -> Self {
+    pub fn from_err(url: url::Url, e: &BrzError) -> Self {
         match e {
-            breezyshim::branch::BranchOpenError::Other(e) => {
-                Self::from_py_err(py, url, e).unwrap_or_else(|| Self::Other(e.clone_ref(py)))
+            BrzError::NotBranchError(e, reason) => {
+                let description = if let Some(reason) = reason {
+                    format!("{}: {}", e, reason)
+                } else {
+                    e.to_string()
+                };
+                Self::Missing { url, description }
             }
-            breezyshim::branch::BranchOpenError::NotBranchError(e) => Self::Unavailable {
-                url,
-                description: e.clone(),
-            },
-            breezyshim::branch::BranchOpenError::DependencyNotPresent(l, e) => Self::Unavailable {
+            BrzError::DependencyNotPresent(l, e) => Self::Unavailable {
                 url,
                 description: format!("missing {}: {}", l, e),
             },
-            breezyshim::branch::BranchOpenError::NoColocatedBranchSupport => Self::Unsupported {
+            BrzError::NoColocatedBranchSupport => Self::Unsupported {
                 url,
                 description: "no colocated branch support".to_string(),
                 vcs: None,
             },
-        }
-    }
-
-    pub fn from_py_err(py: Python, url: url::Url, e: &PyErr) -> Option<Self> {
-        if e.is_instance_of::<error>(py) {
-            return Some(Self::Unavailable {
+            BrzError::Socket(e) => Self::Unavailable {
                 url,
                 description: format!("Socket error: {}", e),
-            });
-        } else if e.is_instance_of::<NotBranchError>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: format!("Branch does not exist: {}", e),
-            });
-        } else if e.is_instance_of::<UnsupportedProtocol>(py) {
-            return Some(Self::Unsupported {
-                url,
-                description: e.to_string(),
+            },
+            BrzError::UnsupportedProtocol(url, extra) => Self::Unsupported {
+                url: url.parse().unwrap(),
+                description: if let Some(extra) = extra {
+                    format!("Unsupported protocol: {}", extra)
+                } else {
+                    "Unsupported protocol".to_string()
+                },
                 vcs: None,
-            });
-        } else if e.is_instance_of::<ConnectionError>(py) {
-            if e.to_string()
-                .contains("Temporary failure in name resolution")
-            {
-                return Some(Self::TemporarilyUnavailable {
-                    url,
-                    description: e.to_string(),
-                });
-            } else {
-                return Some(Self::Unavailable {
-                    url,
-                    description: e.to_string(),
-                });
-            }
-        } else if e.is_instance_of::<PermissionDenied>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else if e.is_instance_of::<InvalidURL>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else if e.is_instance_of::<InvalidHttpResponse>(py) {
-            if e.to_string().contains("Unexpected HTTP status 429") {
-                let value = e.value_bound(py);
-                let headers = value.getattr("headers").unwrap();
-                if let Ok(retry_after) = headers.get_item("Retry-After") {
-                    let retry_after = retry_after.extract::<String>().unwrap();
-                    match retry_after.parse::<f64>() {
-                        Ok(retry_after) => {
-                            return Some(Self::RateLimited {
-                                url,
-                                description: e.to_string(),
-                                retry_after: Some(retry_after),
-                            });
-                        }
-                        Err(e) => {
-                            log::warn!("Unable to parse retry-after header: {}", retry_after);
-                            return Some(Self::RateLimited {
-                                url,
-                                description: e.to_string(),
-                                retry_after: None,
-                            });
-                        }
+            },
+            BrzError::ConnectionError(msg) => {
+                if e.to_string()
+                    .contains("Temporary failure in name resolution")
+                {
+                    Self::TemporarilyUnavailable {
+                        url,
+                        description: msg.to_string(),
+                    }
+                } else {
+                    Self::Unavailable {
+                        url,
+                        description: msg.to_string(),
                     }
                 }
-                return Some(Self::RateLimited {
-                    url,
-                    description: e.to_string(),
-                    retry_after: None,
-                });
             }
-            return Some(Self::Unavailable {
+            BrzError::PermissionDenied(path, extra) => Self::Unavailable {
+                url,
+                description: format!(
+                    "Permission denied: {}: {}",
+                    path.to_string_lossy(),
+                    extra.as_deref().unwrap_or("")
+                ),
+            },
+            BrzError::InvalidURL(url, extra) => Self::Unavailable {
+                url: url.parse().unwrap(),
+                description: extra
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("Invalid URL: {}", url)),
+            },
+            BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
+                if msg.to_string().contains("Unexpected HTTP status 429") {
+                    if let Some(retry_after) = headers.get("Retry-After") {
+                        match retry_after.parse::<f64>() {
+                            Ok(retry_after) => {
+                                return Self::RateLimited {
+                                    url,
+                                    description: e.to_string(),
+                                    retry_after: Some(retry_after),
+                                };
+                            }
+                            Err(e) => {
+                                log::warn!("Unable to parse retry-after header: {}", retry_after);
+                                return Self::RateLimited {
+                                    url,
+                                    description: e.to_string(),
+                                    retry_after: None,
+                                };
+                            }
+                        }
+                    }
+                    Self::RateLimited {
+                        url,
+                        description: e.to_string(),
+                        retry_after: None,
+                    }
+                } else {
+                    Self::Unavailable {
+                        url,
+                        description: e.to_string(),
+                    }
+                }
+            }
+            BrzError::TransportError(message) => Self::Unavailable {
+                url,
+                description: message.to_string(),
+            },
+            BrzError::UnusableRedirect(source, target, reason) => Self::Unavailable {
+                url,
+                description: format!("Unusable redirect: {} -> {}: {}", source, target, reason),
+            },
+            BrzError::UnsupportedVcs(vcs) => Self::Unsupported {
                 url,
                 description: e.to_string(),
-            });
-        } else if e.is_instance_of::<TransportError>(py) {
-            return Some(Self::Unavailable {
+                vcs: Some(vcs.clone()),
+            },
+            BrzError::UnsupportedFormat(format) => Self::Unsupported {
                 url,
                 description: e.to_string(),
-            });
-        } else if e.is_instance_of::<UnusableRedirect>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else if e.is_instance_of::<UnsupportedVcs>(py) {
-            return Some(Self::Unsupported {
-                url,
-                description: e.to_string(),
-                vcs: e
-                    .value_bound(py)
-                    .getattr("vcs")
-                    .unwrap()
-                    .extract::<Option<String>>()
-                    .unwrap(),
-            });
-        } else if e.is_instance_of::<UnsupportedFormatError>(py) {
-            return Some(Self::Unsupported {
+                vcs: Some(format.clone()),
+            },
+            BrzError::UnknownFormat(_format) => Self::Unsupported {
                 url,
                 description: e.to_string(),
                 vcs: None,
-            });
-        } else if e.is_instance_of::<UnknownFormatError>(py) {
-            return Some(Self::Unsupported {
+            },
+            BrzError::RemoteGitError(msg) => Self::Unavailable {
+                url,
+                description: msg.to_string(),
+            },
+            BrzError::LineEndingError(msg) => Self::Unavailable {
+                url,
+                description: msg.to_string(),
+            },
+            BrzError::IncompleteRead => Self::Unavailable {
                 url,
                 description: e.to_string(),
-                vcs: None,
-            });
-        } else if e.is_instance_of::<RemoteGitError>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else if e.is_instance_of::<LineEndingError>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else if e.is_instance_of::<IncompleteRead>(py) {
-            return Some(Self::Unavailable {
-                url,
-                description: e.to_string(),
-            });
-        } else {
-            None
+            },
+            _ => Self::Other(e.to_string()),
         }
     }
 }
@@ -288,27 +259,12 @@ pub fn open_branch(
         params.get("name").map(|s| s.to_string())
     };
 
-    let transport = match get_transport(&url, possible_transports) {
-        Ok(transport) => transport,
-        Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
-    };
-    Python::with_gil(|py| {
-        let dir = open_from_transport(&transport, probers).map_err(|e| match e {
-            breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
-                url: url.clone(),
-                description: e,
-            },
-            breezyshim::controldir::OpenError::UnknownFormat(_) => {
-                unreachable!("open_containing_from_transport should not return UnknownFormat")
-            }
-            breezyshim::controldir::OpenError::Python(e) => {
-                BranchOpenError::from_py_err(py, url.clone(), &e)
-                    .unwrap_or_else(|| BranchOpenError::Other(e))
-            }
-        })?;
-        dir.open_branch(name.as_deref())
-            .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))
-    })
+    let transport = get_transport(&url, possible_transports)
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e.into()))?;
+    let dir = open_from_transport(&transport, probers)
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
+    dir.open_branch(name.as_deref())
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))
 }
 
 pub fn open_branch_containing(
@@ -325,31 +281,22 @@ pub fn open_branch_containing(
         params.get("name").map(|s| s.to_string())
     };
 
-    Python::with_gil(move |py| {
-        let transport = match get_transport(&url, possible_transports) {
-            Ok(transport) => transport,
-            Err(breezyshim::transport::Error::Python(e)) => return Err(BranchOpenError::Other(e)),
-        };
-        let (dir, subpath) =
-            open_containing_from_transport(&transport, probers).map_err(|e| match e {
-                breezyshim::controldir::OpenError::NotFound(e) => BranchOpenError::Missing {
-                    url: url.clone(),
-                    description: e,
-                },
-                breezyshim::controldir::OpenError::UnknownFormat(_) => {
-                    unreachable!("open_containing_from_transport should not return UnknownFormat")
-                }
-                breezyshim::controldir::OpenError::Python(e) => {
-                    BranchOpenError::from_py_err(py, url.clone(), &e)
-                        .unwrap_or_else(|| BranchOpenError::Other(e))
-                }
-            })?;
-        Ok((
-            dir.open_branch(name.as_deref())
-                .map_err(|e| BranchOpenError::from_err(py, url.clone(), &e))?,
-            subpath,
-        ))
-    })
+    let transport = match get_transport(&url, possible_transports) {
+        Ok(transport) => transport,
+        Err(e) => return Err(BranchOpenError::from_err(url.clone(), &e.into())),
+    };
+    let (dir, subpath) =
+        open_containing_from_transport(&transport, probers).map_err(|e| match e {
+            BrzError::UnknownFormat(_) => {
+                unreachable!("open_containing_from_transport should not return UnknownFormat")
+            }
+            e => BranchOpenError::from_err(url.clone(), &e),
+        })?;
+    Ok((
+        dir.open_branch(name.as_deref())
+            .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?,
+        subpath,
+    ))
 }
 
 /// Get the full URL for a branch.
