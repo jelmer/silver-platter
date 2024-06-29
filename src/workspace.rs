@@ -56,7 +56,7 @@ impl From<BrzError> for Error {
         match e {
             BrzError::Other(e) => Error::Python(e),
             BrzError::UnknownFormat(n) => Error::UnknownFormat(n),
-            BrzError::AlreadyExists => unreachable!(),
+            BrzError::AlreadyControlDir(_) => unreachable!(),
             e => Error::BrzError(e),
         }
     }
