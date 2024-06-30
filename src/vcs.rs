@@ -4,8 +4,6 @@ use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
-use pyo3::exceptions::PyRuntimeError;
-use pyo3::import_exception;
 use pyo3::prelude::*;
 
 #[derive(Debug)]
@@ -74,6 +72,8 @@ impl std::fmt::Display for BranchOpenError {
 
 impl From<BranchOpenError> for PyErr {
     fn from(e: BranchOpenError) -> Self {
+        use pyo3::exceptions::PyRuntimeError;
+        use pyo3::import_exception;
         match e {
             BranchOpenError::Unsupported {
                 url,

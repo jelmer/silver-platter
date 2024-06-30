@@ -528,8 +528,9 @@ pub fn batch_publish(
 }
 
 fn login(url: &url::Url) -> i32 {
+    use pyo3::prelude::*;
     pyo3::Python::with_gil(|py| {
-        let m = py.import("launchpadlib").unwrap();
+        let m = py.import_bound("launchpadlib").unwrap();
         let lp_uris = match m.getattr("uris") {
             Ok(lp_uris) => lp_uris
                 .getattr("web_roots")
@@ -557,7 +558,7 @@ fn login(url: &url::Url) -> i32 {
 
         match forge {
             "gitlab" => {
-                let m = py.import("breezy.plugins.gitlab.cmds").unwrap();
+                let m = py.import_bound("breezy.plugins.gitlab.cmds").unwrap();
                 let cmd = m.getattr("cmd_gitlab_login").unwrap();
 
                 let cmd_gl = cmd.call0().unwrap();
@@ -566,7 +567,7 @@ fn login(url: &url::Url) -> i32 {
                 cmd_gl.call_method1("run", (url.as_str(),)).unwrap();
             }
             "github" => {
-                let m = py.import("breezy.plugins.github.cmds").unwrap();
+                let m = py.import_bound("breezy.plugins.github.cmds").unwrap();
                 let cmd = m.getattr("cmd_github_login").unwrap();
 
                 let cmd_gl = cmd.call0().unwrap();
@@ -575,7 +576,7 @@ fn login(url: &url::Url) -> i32 {
                 cmd_gl.call_method0("run").unwrap();
             }
             "launchpad" => {
-                let m = py.import("breezy.plugins.launchpad.cmds").unwrap();
+                let m = py.import_bound("breezy.plugins.launchpad.cmds").unwrap();
                 let cmd = m.getattr("cmd_launchpad_login").unwrap();
 
                 let cmd_lp = cmd.call0().unwrap();
@@ -583,7 +584,7 @@ fn login(url: &url::Url) -> i32 {
 
                 cmd_lp.call_method1("run", (url.as_str(),)).unwrap();
 
-                let lp_api = py.import("breezy.plugins.launchpad.lp_api").unwrap();
+                let lp_api = py.import_bound("breezy.plugins.launchpad.lp_api").unwrap();
 
                 let lp_service_root = lp_uris
                     .iter()
@@ -593,10 +594,10 @@ fn login(url: &url::Url) -> i32 {
                     })
                     .unwrap()
                     .1;
-                let kwargs = pyo3::types::PyDict::new(py);
+                let kwargs = pyo3::types::PyDict::new_bound(py);
                 kwargs.set_item("version", "devel").unwrap();
                 lp_api
-                    .call_method("connect_launchpad", (lp_service_root,), Some(kwargs))
+                    .call_method("connect_launchpad", (lp_service_root,), Some(&kwargs))
                     .unwrap();
             }
             _ => {
@@ -610,6 +611,7 @@ fn login(url: &url::Url) -> i32 {
 
 fn main() {
     pyo3::prepare_freethreaded_python();
+    use pyo3::prelude::*;
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -627,7 +629,7 @@ fn main() {
     breezyshim::init().unwrap();
 
     pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
-        let m = py.import("breezy.plugin").unwrap();
+        let m = py.import_bound("breezy.plugin").unwrap();
         let load_plugins = m.getattr("load_plugins").unwrap();
         load_plugins.call0().unwrap();
         Ok(())
@@ -690,12 +692,7 @@ fn main() {
 
             let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
 
-            check_clean_tree(
-                &local_tree,
-                &local_tree.basis_tree(),
-                subpath.as_path(),
-            )
-            .unwrap();
+            check_clean_tree(&local_tree, &local_tree.basis_tree(), subpath.as_path()).unwrap();
 
             let update_changelog = if *update_changelog {
                 Some(true)
@@ -798,7 +795,7 @@ fn main() {
             apt_repository_key,
             packages,
         } => pyo3::Python::with_gil(|py| {
-            let kwargs = pyo3::types::PyDict::new(py);
+            let kwargs = pyo3::types::PyDict::new_bound(py);
             kwargs.set_item("maintainer", maintainer).unwrap();
             kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
             kwargs
@@ -825,9 +822,9 @@ fn main() {
                 .unwrap();
             kwargs.set_item("packages", packages).unwrap();
 
-            let m = py.import("silver_platter.debian.uploader").unwrap();
+            let m = py.import_bound("silver_platter.debian.uploader").unwrap();
             let main = m.getattr("main").unwrap();
-            match main.call((), Some(kwargs)) {
+            match main.call((), Some(&kwargs)) {
                 Ok(o) => o.extract().unwrap(),
                 Err(e) => {
                     error!("Failed to upload: {}", e);

@@ -6,24 +6,7 @@ use breezyshim::branch::MemoryBranch;
 use breezyshim::error::Error as BrzError;
 use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
-use pyo3::create_exception;
-use pyo3::exceptions::PyException;
-use pyo3::import_exception;
-use pyo3::prelude::*;
 use std::collections::HashMap;
-
-import_exception!(breezy.errors, NotBranchError);
-import_exception!(breezy.errors, UnsupportedOperation);
-import_exception!(breezy.errors, MergeProposalExists);
-import_exception!(breezy.errors, PermissionDenied);
-import_exception!(breezy.errors, DivergedBranches);
-import_exception!(breezy.forge, UnsupportedForge);
-import_exception!(breezy.forge, ForgeLoginRequired);
-
-create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
-import_exception!(silver_platter, UnrelatedBranchExists);
-
-import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
 
 fn _tag_selector_from_tags(
     tags: std::collections::HashMap<String, RevisionId>,
@@ -454,8 +437,23 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<Error> for PyErr {
+impl From<Error> for pyo3::PyErr {
     fn from(e: Error) -> Self {
+        use pyo3::exceptions::PyException;
+        use pyo3::prelude::*;
+        use pyo3::{create_exception, import_exception};
+        import_exception!(breezy.errors, NotBranchError);
+        import_exception!(breezy.errors, UnsupportedOperation);
+        import_exception!(breezy.errors, MergeProposalExists);
+        import_exception!(breezy.errors, PermissionDenied);
+        import_exception!(breezy.errors, DivergedBranches);
+        import_exception!(breezy.forge, UnsupportedForge);
+        import_exception!(breezy.forge, ForgeLoginRequired);
+        create_exception!(silver_platter.utils, EmptyMergeProposal, PyException);
+        import_exception!(silver_platter, UnrelatedBranchExists);
+
+        import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
+
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
             Error::Other(e) => e.into(),
