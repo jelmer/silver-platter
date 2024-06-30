@@ -4,7 +4,6 @@ use crate::Mode;
 use breezyshim::branch::MemoryBranch;
 
 use breezyshim::error::Error as BrzError;
-use breezyshim::forge::Error as ForgeError;
 use breezyshim::merge::{MergeType, Merger};
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use pyo3::create_exception;
@@ -41,7 +40,7 @@ pub fn push_derived_changes(
     owner: Option<&str>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
-) -> PyResult<(Box<dyn Branch>, url::Url)> {
+) -> Result<(Box<dyn Branch>, url::Url), BrzError> {
     let tags = tags.unwrap_or_default();
     let (remote_branch, public_branch_url) = forge.publish_derived(
         local_branch,
@@ -61,7 +60,7 @@ pub fn push_result(
     additional_colocated_branches: Option<Vec<(String, String)>>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
-) -> PyResult<()> {
+) -> Result<(), BrzError> {
     let tag_selector = Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
     local_branch.push(remote_branch, false, stop_revision, Some(tag_selector))?;
 
@@ -112,7 +111,7 @@ pub fn push_changes(
     additional_colocated_branches: Option<Vec<(String, String)>>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
-) -> PyResult<()> {
+) -> Result<(), Error> {
     let push_url = if let Some(forge) = forge {
         forge.get_push_url(main_branch)
     } else {
@@ -127,6 +126,7 @@ pub fn push_changes(
         tags,
         stop_revision,
     )
+    .map_err(Into::into)
 }
 
 /// Find an existing derived branch with the specified name, and proposal.
@@ -151,60 +151,61 @@ pub fn find_existing_proposed(
     overwrite_unrelated: bool,
     owner: Option<&str>,
     preferred_schemes: Option<&[&str]>,
-) -> PyResult<(
-    Option<Box<dyn Branch>>,
-    Option<bool>,
-    Option<Vec<MergeProposal>>,
-)> {
-    Python::with_gil(|py| {
-        let existing_branch =
-            match forge.get_derived_branch(main_branch, name, owner, preferred_schemes) {
-                Ok(branch) => branch,
-                Err(e) if e.is_instance_of::<NotBranchError>(py) => {
-                    return Ok((None, None, None));
-                }
-                Err(e) => return Err(e),
-            };
-
-        log::info!(
-            "Branch {} already exists (branch at {})",
-            name,
-            crate::vcs::full_branch_url(existing_branch.as_ref())
-        );
-
-        let mut open_proposals = vec![];
-        // If there is an open or rejected merge proposal, resume that.
-        let mut merged_proposals = vec![];
-        for mp in forge.iter_proposals(
-            existing_branch.as_ref(),
-            main_branch,
-            breezyshim::MergeProposalStatus::All,
-        )? {
-            if !mp.is_closed()? && !mp.is_merged()? {
-                open_proposals.push(mp);
-            } else {
-                merged_proposals.push(mp);
+) -> Result<
+    (
+        Option<Box<dyn Branch>>,
+        Option<bool>,
+        Option<Vec<MergeProposal>>,
+    ),
+    Error,
+> {
+    let existing_branch =
+        match forge.get_derived_branch(main_branch, name, owner, preferred_schemes) {
+            Ok(branch) => branch,
+            Err(BrzError::NotBranchError(..)) => {
+                return Ok((None, None, None));
             }
+            Err(e) => return Err(e.into()),
+        };
+
+    log::info!(
+        "Branch {} already exists (branch at {})",
+        name,
+        crate::vcs::full_branch_url(existing_branch.as_ref())
+    );
+
+    let mut open_proposals = vec![];
+    // If there is an open or rejected merge proposal, resume that.
+    let mut merged_proposals = vec![];
+    for mp in forge.iter_proposals(
+        existing_branch.as_ref(),
+        main_branch,
+        breezyshim::MergeProposalStatus::All,
+    )? {
+        if !mp.is_closed()? && !mp.is_merged()? {
+            open_proposals.push(mp);
+        } else {
+            merged_proposals.push(mp);
         }
-        if !open_proposals.is_empty() {
-            Ok((Some(existing_branch), Some(false), Some(open_proposals)))
-        } else if let Some(first_proposal) = merged_proposals.first() {
-            log::info!(
-                "There is a proposal that has already been merged at {}.",
-                first_proposal.url()?
-            );
+    }
+    if !open_proposals.is_empty() {
+        Ok((Some(existing_branch), Some(false), Some(open_proposals)))
+    } else if let Some(first_proposal) = merged_proposals.first() {
+        log::info!(
+            "There is a proposal that has already been merged at {}.",
+            first_proposal.url()?
+        );
+        Ok((None, Some(true), None))
+    } else {
+        // No related merge proposals found, but there is an existing
+        // branch (perhaps for a different target branch?)
+        if overwrite_unrelated {
             Ok((None, Some(true), None))
         } else {
-            // No related merge proposals found, but there is an existing
-            // branch (perhaps for a different target branch?)
-            if overwrite_unrelated {
-                Ok((None, Some(true), None))
-            } else {
-                //TODO(jelmer): What to do in this case?
-                Ok((None, Some(false), None))
-            }
+            //TODO(jelmer): What to do in this case?
+            Ok((None, Some(false), None))
         }
-    })
+    }
 }
 
 /// Create or update a merge proposal.
@@ -254,192 +255,184 @@ pub fn propose_changes(
     stop_revision: Option<&RevisionId>,
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
-) -> PyResult<(MergeProposal, bool)> {
+) -> Result<(MergeProposal, bool), Error> {
     let mut ref_resume_branch = None;
-    Python::with_gil(|py| {
-        if !allow_empty.unwrap_or(false)
-            && check_proposal_diff_empty(local_branch, main_branch, stop_revision)?
-        {
-            return Err(EmptyMergeProposal::new_err((
-                "Proposal is empty",
-                local_branch.to_object(py),
-                main_branch.to_object(py),
-            )));
-        }
-        let overwrite_existing = overwrite_existing.unwrap_or(true);
-        let remote_branch = if let Some(resume_branch) = resume_branch {
-            local_branch.push(
-                resume_branch,
-                overwrite_existing,
-                stop_revision,
-                tags.as_ref().map(|ts| {
-                    Box::new(_tag_selector_from_tags(ts.clone())) as Box<dyn Fn(String) -> bool>
-                }),
-            )?;
-            resume_branch
-        } else {
-            ref_resume_branch = Some(
-                forge
-                    .publish_derived(
-                        local_branch,
-                        main_branch,
-                        name,
-                        Some(overwrite_existing),
-                        owner,
-                        stop_revision,
-                        tags.clone().map(|ts| {
-                            Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
-                        }),
-                    )?
-                    .0,
-            );
+    if !allow_empty.unwrap_or(false)
+        && check_proposal_diff_empty(local_branch, main_branch, stop_revision)?
+    {
+        return Err(Error::EmptyMergeProposal);
+    }
+    let overwrite_existing = overwrite_existing.unwrap_or(true);
+    let remote_branch = if let Some(resume_branch) = resume_branch {
+        local_branch.push(
+            resume_branch,
+            overwrite_existing,
+            stop_revision,
+            tags.as_ref().map(|ts| {
+                Box::new(_tag_selector_from_tags(ts.clone())) as Box<dyn Fn(String) -> bool>
+            }),
+        )?;
+        resume_branch
+    } else {
+        ref_resume_branch = Some(
+            forge
+                .publish_derived(
+                    local_branch,
+                    main_branch,
+                    name,
+                    Some(overwrite_existing),
+                    owner,
+                    stop_revision,
+                    tags.clone().map(|ts| {
+                        Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
+                    }),
+                )?
+                .0,
+        );
 
-            ref_resume_branch.as_ref().unwrap().as_ref()
-        };
-        for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default()
+        ref_resume_branch.as_ref().unwrap().as_ref()
+    };
+    for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
+        match local_branch
+            .controldir()
+            .open_branch(Some(from_branch_name.as_str()))
         {
-            match local_branch
-                .controldir()
-                .open_branch(Some(from_branch_name.as_str()))
-            {
-                Ok(b) => {
-                    remote_branch.controldir().push_branch(
-                        b.as_ref(),
-                        Some(to_branch_name.as_str()),
-                        None,
-                        Some(overwrite_existing),
-                        tags.clone().map(|ts| {
-                            Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
-                        }),
-                    )?;
+            Ok(b) => {
+                remote_branch.controldir().push_branch(
+                    b.as_ref(),
+                    Some(to_branch_name.as_str()),
+                    None,
+                    Some(overwrite_existing),
+                    tags.clone().map(|ts| {
+                        Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
+                    }),
+                )?;
+            }
+            Err(BrzError::NotBranchError(..)) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    if let Some(mp) = resume_proposal.as_ref() {
+        if mp.is_closed()? {
+            match mp.reopen() {
+                Ok(_) => {}
+                Err(e) => {
+                    log::info!(
+                        "Reopening existing proposal failed ({}). Creating new proposal.",
+                        e
+                    );
+                    resume_proposal = None;
                 }
-                Err(BrzError::NotBranchError(..)) => {}
+            }
+        }
+    }
+    if let Some(resume_proposal) = resume_proposal.take() {
+        // Check that the proposal doesn't already has this description.
+        // Setting the description (regardless of whether it changes)
+        // causes Launchpad to send emails.
+        if resume_proposal.get_description()?.as_deref() != Some(mp_description) {
+            match resume_proposal.set_description(Some(mp_description)) {
+                Ok(_) => (),
+                Err(BrzError::UnsupportedOperation(..)) => (),
                 Err(e) => return Err(e.into()),
             }
         }
-        if let Some(mp) = resume_proposal.as_ref() {
-            if mp.is_closed()? {
-                match mp.reopen() {
-                    Ok(_) => {}
-                    Err(e) => {
-                        log::info!(
-                            "Reopening existing proposal failed ({}). Creating new proposal.",
-                            e
-                        );
-                        resume_proposal = None;
-                    }
-                }
+        if resume_proposal.get_commit_message()?.as_deref() != commit_message {
+            match resume_proposal.set_commit_message(commit_message) {
+                Ok(_) => (),
+                Err(BrzError::UnsupportedOperation(..)) => (),
+                Err(e) => return Err(e.into()),
             }
         }
-        if let Some(resume_proposal) = resume_proposal.take() {
-            // Check that the proposal doesn't already has this description.
-            // Setting the description (regardless of whether it changes)
-            // causes Launchpad to send emails.
-            if resume_proposal.get_description()?.as_deref() != Some(mp_description) {
-                match resume_proposal.set_description(Some(mp_description)) {
-                    Ok(_) => (),
-                    Err(e) if e.is_instance_of::<UnsupportedOperation>(py) => (),
-                    Err(e) => return Err(e),
-                }
+        if resume_proposal.get_title()?.as_deref() != title {
+            match resume_proposal.set_title(title) {
+                Ok(_) => (),
+                Err(BrzError::UnsupportedOperation(..)) => (),
+                Err(e) => return Err(e.into()),
             }
-            if resume_proposal.get_commit_message()?.as_deref() != commit_message {
-                match resume_proposal.set_commit_message(commit_message) {
-                    Ok(_) => (),
-                    Err(e) if e.is_instance_of::<UnsupportedOperation>(py) => (),
-                    Err(e) => return Err(e),
-                }
-            }
-            if resume_proposal.get_title()?.as_deref() != title {
-                match resume_proposal.set_title(title) {
-                    Ok(_) => (),
-                    Err(e) if e.is_instance_of::<UnsupportedOperation>(py) => (),
-                    Err(e) => return Err(e),
-                }
-            }
-            Ok((resume_proposal, false))
-        } else {
-            let mut proposal_builder = forge.get_proposer(remote_branch, main_branch)?;
-            if forge.supports_merge_proposal_commit_message() {
-                if let Some(commit_message) = commit_message {
-                    proposal_builder = proposal_builder.commit_message(commit_message);
-                }
-            }
-            if forge.supports_merge_proposal_title() {
-                if let Some(title) = title {
-                    proposal_builder = proposal_builder.title(title);
-                }
-            }
-            if let Some(allow_collaboration) = allow_collaboration {
-                proposal_builder = proposal_builder.allow_collaboration(allow_collaboration);
-            }
-            proposal_builder = proposal_builder.description(mp_description);
-            if let Some(labels) = labels {
-                proposal_builder = proposal_builder.labels(
-                    labels
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                );
-            }
-            if let Some(reviewers) = reviewers {
-                proposal_builder = proposal_builder.reviewers(
-                    reviewers
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                );
-            }
-            let mp: MergeProposal = match proposal_builder.build() {
-                Ok(mp) => mp,
-                Err(e) if e.is_instance_of::<MergeProposalExists>(py) => {
-                    let proposal = e.value_bound(py).getattr("existing_proposal")?;
-                    if !proposal.is_none() {
-                        MergeProposal::from(proposal.to_object(py))
-                    } else {
-                        return Err(e);
-                    }
-                }
-                Err(e) if e.is_instance_of::<PermissionDenied>(py) => {
-                    log::info!("Permission denied while trying to create proposal.");
-                    return Err(e);
-                }
-                Err(e) => return Err(e),
-            };
-            if auto_merge.unwrap_or(false) {
-                mp.merge(true)?;
-            }
-            Ok((mp, true))
         }
-    })
+        Ok((resume_proposal, false))
+    } else {
+        let mut proposal_builder = forge.get_proposer(remote_branch, main_branch)?;
+        if forge.supports_merge_proposal_commit_message() {
+            if let Some(commit_message) = commit_message {
+                proposal_builder = proposal_builder.commit_message(commit_message);
+            }
+        }
+        if forge.supports_merge_proposal_title() {
+            if let Some(title) = title {
+                proposal_builder = proposal_builder.title(title);
+            }
+        }
+        if let Some(allow_collaboration) = allow_collaboration {
+            proposal_builder = proposal_builder.allow_collaboration(allow_collaboration);
+        }
+        proposal_builder = proposal_builder.description(mp_description);
+        if let Some(labels) = labels {
+            proposal_builder = proposal_builder.labels(
+                labels
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+        }
+        if let Some(reviewers) = reviewers {
+            proposal_builder = proposal_builder.reviewers(
+                reviewers
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+        }
+        let mp: MergeProposal = match proposal_builder.build() {
+            Ok(mp) => mp,
+            Err(BrzError::MergeProposalExists(_url, Some(existing_proposal_url))) => {
+                MergeProposal::from_url(&existing_proposal_url)?
+            }
+            Err(e @ BrzError::PermissionDenied(..)) => {
+                log::info!("Permission denied while trying to create proposal.");
+                return Err(e.into());
+            }
+            Err(e) => return Err(e.into()),
+        };
+        if auto_merge.unwrap_or(false) {
+            mp.merge(true)?;
+        }
+        Ok((mp, true))
+    }
 }
 
 #[derive(Debug)]
 pub enum Error {
     DivergedBranches(),
     UnrelatedBranchExists,
-    Other(PyErr),
+    Other(BrzError),
     UnsupportedForge(url::Url),
     ForgeLoginRequired,
     InsufficientChangesForNewProposal,
     BranchOpenError(crate::vcs::BranchOpenError),
     EmptyMergeProposal,
+    PermissionDenied,
+}
+
+impl From<BrzError> for Error {
+    fn from(e: BrzError) -> Self {
+        match e {
+            BrzError::DivergedBranches => Error::DivergedBranches(),
+            BrzError::NotBranchError(..) => Error::UnrelatedBranchExists,
+            BrzError::PermissionDenied(..) => Error::PermissionDenied,
+            BrzError::UnsupportedForge(s) => Error::UnsupportedForge(s),
+            BrzError::ForgeLoginRequired => Error::ForgeLoginRequired,
+            _ => Error::Other(e),
+        }
+    }
 }
 
 impl From<crate::vcs::BranchOpenError> for Error {
     fn from(e: crate::vcs::BranchOpenError) -> Self {
         Error::BranchOpenError(e)
-    }
-}
-
-impl From<ForgeError> for Error {
-    fn from(e: ForgeError) -> Self {
-        match e {
-            ForgeError::UnsupportedForge(s) => Error::UnsupportedForge(s),
-            ForgeError::LoginRequired => Error::ForgeLoginRequired,
-            _ => panic!("Unexpected ForgeError: {:?}", e),
-        }
     }
 }
 
@@ -452,6 +445,7 @@ impl std::fmt::Display for Error {
             Error::ForgeLoginRequired => write!(f, "Forge login required"),
             Error::BranchOpenError(e) => write!(f, "{}", e),
             Error::EmptyMergeProposal => write!(f, "Empty merge proposal"),
+            Error::PermissionDenied => write!(f, "Permission denied"),
             Error::UnrelatedBranchExists => write!(f, "Unrelated branch exists"),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
@@ -460,23 +454,18 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
-        Error::Other(e)
-    }
-}
-
 impl From<Error> for PyErr {
     fn from(e: Error) -> Self {
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
-            Error::Other(e) => e,
+            Error::Other(e) => e.into(),
             Error::BranchOpenError(e) => e.into(),
             Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
             Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
             Error::UnrelatedBranchExists => {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
+            Error::PermissionDenied => PyErr::new::<PermissionDenied, _>("PermissionDenied"),
             Error::EmptyMergeProposal => PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal"),
             Error::InsufficientChangesForNewProposal => {
                 PyErr::new::<InsufficientChangesForNewProposal, _>(
@@ -527,167 +516,163 @@ pub fn publish_changes(
     allow_collaboration: Option<bool>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<PublishResult, Error> {
-    Python::with_gil(|py| {
-        let stop_revision =
-            stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
-        let allow_create_proposal = allow_create_proposal.unwrap_or(true);
+    let stop_revision = stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
+    let allow_create_proposal = allow_create_proposal.unwrap_or(true);
 
-        let forge = match forge {
-            Some(forge) => forge.clone(),
-            None => breezyshim::forge::get_forge(main_branch)?,
-        };
+    let forge = match forge {
+        Some(forge) => forge.clone(),
+        None => breezyshim::forge::get_forge(main_branch)?,
+    };
 
-        if stop_revision == main_branch.last_revision() {
-            if let Some(existing_proposal) = existing_proposal.as_ref() {
-                log::info!("closing existing merge proposal - no new revisions");
-                existing_proposal.close()?;
-            }
+    if stop_revision == main_branch.last_revision() {
+        if let Some(existing_proposal) = existing_proposal.as_ref() {
+            log::info!("closing existing merge proposal - no new revisions");
+            existing_proposal.close()?;
+        }
+        return Ok(PublishResult {
+            mode,
+            target_branch: main_branch.get_user_url(),
+            forge,
+            proposal: existing_proposal,
+            is_new: Some(false),
+        });
+    }
+
+    if let Some(resume_branch) = resume_branch {
+        if resume_branch.last_revision() == stop_revision {
+            // No new revisions added on this iteration, but changes since main
+            // branch. We may not have gotten round to updating/creating the
+            // merge proposal last time.
+            log::info!("No changes added; making sure merge proposal is up to date.");
+        }
+    }
+    match mode {
+        Mode::PushDerived => {
+            let (_remote_branch, _public_url) = push_derived_changes(
+                local_branch,
+                main_branch,
+                &forge,
+                name,
+                overwrite_existing,
+                derived_owner,
+                tags,
+                Some(&stop_revision),
+            )?;
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
-                forge,
-                proposal: existing_proposal,
-                is_new: Some(false),
+                forge: forge.clone(),
+                proposal: None,
+                is_new: None,
             });
         }
-
-        if let Some(resume_branch) = resume_branch {
-            if resume_branch.last_revision() == stop_revision {
-                // No new revisions added on this iteration, but changes since main
-                // branch. We may not have gotten round to updating/creating the
-                // merge proposal last time.
-                log::info!("No changes added; making sure merge proposal is up to date.");
+        Mode::Push | Mode::AttemptPush => {
+            let read_lock = local_branch.lock_read()?;
+            // breezy would do this check too, but we want to be *really* sure.
+            let graph = local_branch.repository().get_graph();
+            if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision) {
+                return Err(Error::DivergedBranches());
             }
-        }
-        match mode {
-            Mode::PushDerived => {
-                let (_remote_branch, _public_url) = push_derived_changes(
-                    local_branch,
-                    main_branch,
-                    &forge,
-                    name,
-                    overwrite_existing,
-                    derived_owner,
-                    tags,
-                    Some(&stop_revision),
-                )?;
-                return Ok(PublishResult {
-                    mode,
-                    target_branch: main_branch.get_user_url(),
-                    forge: forge.clone(),
-                    proposal: None,
-                    is_new: None,
-                });
-            }
-            Mode::Push | Mode::AttemptPush => {
-                let read_lock = local_branch.lock_read()?;
-                // breezy would do this check too, but we want to be *really* sure.
-                let graph = local_branch.repository().get_graph();
-                if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision) {
-                    return Err(Error::DivergedBranches());
-                }
-                std::mem::drop(read_lock);
-                match push_changes(
-                    local_branch,
-                    main_branch,
-                    Some(&forge),
-                    None,
-                    None,
-                    tags.clone(),
-                    Some(&stop_revision),
-                ) {
-                    Err(e) if e.is_instance_of::<PermissionDenied>(py) => {
-                        if mode == Mode::AttemptPush {
-                            log::info!("push access denied, falling back to propose");
-                            mode = Mode::Propose;
-                        } else {
-                            log::info!("permission denied during push");
-                            return Err(e.into());
-                        }
-                    }
-                    Ok(_) => {
-                        return Ok(PublishResult {
-                            proposal: None,
-                            mode,
-                            target_branch: main_branch.get_user_url(),
-                            forge: forge.clone(),
-                            is_new: None,
-                        });
-                    }
-                    Err(e) => {
+            std::mem::drop(read_lock);
+            match push_changes(
+                local_branch,
+                main_branch,
+                Some(&forge),
+                None,
+                None,
+                tags.clone(),
+                Some(&stop_revision),
+            ) {
+                Err(e @ Error::PermissionDenied) => {
+                    if mode == Mode::AttemptPush {
+                        log::info!("push access denied, falling back to propose");
+                        mode = Mode::Propose;
+                    } else {
+                        log::info!("permission denied during push");
                         return Err(e.into());
                     }
                 }
-            }
-            Mode::Bts => {
-                unimplemented!();
-            }
-            Mode::Propose => { // Handled below
+                Ok(_) => {
+                    return Ok(PublishResult {
+                        proposal: None,
+                        mode,
+                        target_branch: main_branch.get_user_url(),
+                        forge: forge.clone(),
+                        is_new: None,
+                    });
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
             }
         }
-
-        assert_eq!(mode, Mode::Propose);
-        if resume_branch.is_none() && !allow_create_proposal {
-            return Err(Error::InsufficientChangesForNewProposal);
+        Mode::Bts => {
+            unimplemented!();
         }
+        Mode::Propose => { // Handled below
+        }
+    }
 
-        let mp_description = get_proposal_description(
-            forge.merge_proposal_description_format().parse().unwrap(),
-            if resume_branch.is_some() {
-                existing_proposal.as_ref()
-            } else {
-                None
-            },
-        );
-        let commit_message = if let Some(get_proposal_commit_message) = get_proposal_commit_message
-        {
-            get_proposal_commit_message(if resume_branch.is_some() {
-                existing_proposal.as_ref()
-            } else {
-                None
-            })
+    assert_eq!(mode, Mode::Propose);
+    if resume_branch.is_none() && !allow_create_proposal {
+        return Err(Error::InsufficientChangesForNewProposal);
+    }
+
+    let mp_description = get_proposal_description(
+        forge.merge_proposal_description_format().parse().unwrap(),
+        if resume_branch.is_some() {
+            existing_proposal.as_ref()
         } else {
             None
-        };
-        let title = if let Some(get_proposal_title) = get_proposal_title {
-            get_proposal_title(if resume_branch.is_some() {
-                existing_proposal.as_ref()
-            } else {
-                None
-            })
+        },
+    );
+    let commit_message = if let Some(get_proposal_commit_message) = get_proposal_commit_message {
+        get_proposal_commit_message(if resume_branch.is_some() {
+            existing_proposal.as_ref()
         } else {
             None
-        };
-        let title =
-            title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
-        let (proposal, is_new) = propose_changes(
-            local_branch,
-            main_branch,
-            &forge,
-            name,
-            mp_description.as_str(),
-            resume_branch,
-            existing_proposal,
-            overwrite_existing,
-            labels,
-            commit_message.as_deref(),
-            Some(title.as_str()),
-            None,
-            None,
-            reviewers,
-            tags,
-            derived_owner,
-            Some(&stop_revision),
-            allow_collaboration,
-            None,
-        )?;
-        Ok(PublishResult {
-            mode,
-            proposal: Some(proposal),
-            is_new: Some(is_new),
-            target_branch: main_branch.get_user_url(),
-            forge,
         })
+    } else {
+        None
+    };
+    let title = if let Some(get_proposal_title) = get_proposal_title {
+        get_proposal_title(if resume_branch.is_some() {
+            existing_proposal.as_ref()
+        } else {
+            None
+        })
+    } else {
+        None
+    };
+    let title =
+        title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
+    let (proposal, is_new) = propose_changes(
+        local_branch,
+        main_branch,
+        &forge,
+        name,
+        mp_description.as_str(),
+        resume_branch,
+        existing_proposal,
+        overwrite_existing,
+        labels,
+        commit_message.as_deref(),
+        Some(title.as_str()),
+        None,
+        None,
+        reviewers,
+        tags,
+        derived_owner,
+        Some(&stop_revision),
+        allow_collaboration,
+        None,
+    )?;
+    Ok(PublishResult {
+        mode,
+        proposal: Some(proposal),
+        is_new: Some(is_new),
+        target_branch: main_branch.get_user_url(),
+        forge,
     })
 }
 
@@ -703,7 +688,7 @@ pub fn check_proposal_diff_empty(
     other_branch: &dyn Branch,
     main_branch: &dyn Branch,
     stop_revision: Option<&RevisionId>,
-) -> PyResult<bool> {
+) -> Result<bool, BrzError> {
     let stop_revision = match stop_revision {
         Some(rev) => rev.clone(),
         None => other_branch.last_revision(),
@@ -715,7 +700,7 @@ pub fn check_proposal_diff_empty(
     let lock = other_branch.lock_read();
     let main_tree = other_repository.revision_tree(&main_revid)?;
     let revision_graph = other_repository.get_graph();
-    let tree_branch = MemoryBranch::new(&other_repository, None, &main_revid)?;
+    let tree_branch = MemoryBranch::new(&other_repository, None, &main_revid);
     let mut merger = Merger::new(&tree_branch, &main_tree, &revision_graph);
     merger.set_other_revision(&stop_revision, other_branch)?;
     if merger.find_base()?.is_none() {
@@ -864,13 +849,8 @@ fn test_changes() {
     .unwrap());
 }
 
-pub fn enable_tag_pushing(branch: &dyn Branch) -> PyResult<()> {
-    Python::with_gil(|py| {
-        let branch = branch.to_object(py);
-        let config = branch.call_method0(py, "get_config").unwrap();
-        config
-            .call_method1(py, "set_user_option", ("branch.fetch_tags", true))
-            .unwrap();
-        Ok(())
-    })
+pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
+    let config = branch.get_config();
+    config.set_user_option("branch.fetch_tags", &true)?;
+    Ok(())
 }

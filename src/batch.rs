@@ -10,7 +10,6 @@ use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
-use breezyshim::forge::Error as ForgeError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -417,9 +416,9 @@ pub fn publish_one(
                 };
                 (Some(f), existing_proposal, resume_branch)
             }
-            Err(ForgeError::UnsupportedForge(e)) => {
+            Err(BrzError::UnsupportedForge(e)) => {
                 if mode != Mode::Push {
-                    return Err(ForgeError::UnsupportedForge(e).into());
+                    return Err(BrzError::UnsupportedForge(e).into());
                 }
 
                 // We can't figure out what branch to resume from when there's no forge
