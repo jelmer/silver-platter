@@ -6,7 +6,6 @@ use breezyshim::tree::WorkingTree;
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use log::info;
-use pyo3::PyErr;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -14,7 +13,7 @@ pub fn fetch_colocated(
     controldir: &ControlDir,
     from_controldir: &ControlDir,
     additional_colocated_branches: &HashMap<&str, &str>,
-) -> Result<(), PyErr> {
+) -> Result<(), BrzError> {
     info!(
         "Fetching colocated branches: {:?}",
         additional_colocated_branches
@@ -44,27 +43,19 @@ pub fn fetch_colocated(
 
 #[derive(Debug)]
 pub enum Error {
-    Python(PyErr),
     BrzError(BrzError),
-    ForgeError(breezyshim::forge::Error),
     IOError(std::io::Error),
     UnknownFormat(String),
+    Other(String),
 }
 
 impl From<BrzError> for Error {
     fn from(e: BrzError) -> Self {
         match e {
-            BrzError::Other(e) => Error::Python(e),
             BrzError::UnknownFormat(n) => Error::UnknownFormat(n),
             BrzError::AlreadyControlDir(_) => unreachable!(),
             e => Error::BrzError(e),
         }
-    }
-}
-
-impl From<breezyshim::forge::Error> for Error {
-    fn from(e: breezyshim::forge::Error) -> Self {
-        Error::ForgeError(e)
     }
 }
 
@@ -74,21 +65,23 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::Python(e) => write!(f, "{}", e),
-            Error::ForgeError(e) => write!(f, "{}", e),
-            Error::IOError(e) => write!(f, "{}", e),
-            Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
-            Error::BrzError(e) => write!(f, "{}", e),
+impl From<PublishError> for Error {
+    fn from(e: PublishError) -> Self {
+        match e {
+            PublishError::Other(e) => Error::BrzError(e),
+            e => Error::Other(format!("{:?}", e)),
         }
     }
 }
 
-impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
-        Error::Python(e)
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::IOError(e) => write!(f, "{}", e),
+            Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
+            Error::BrzError(e) => write!(f, "{}", e),
+            Error::Other(e) => write!(f, "{}", e),
+        }
     }
 }
 
@@ -625,7 +618,7 @@ impl<'a> Workspace<'a> {
 
         let forge = match breezyshim::forge::get_forge(main_branch) {
             Ok(forge) => Some(forge),
-            Err(breezyshim::forge::Error::UnsupportedForge(e)) => {
+            Err(breezyshim::error::Error::UnsupportedForge(e)) => {
                 // We can't figure out what branch to resume from when there's no forge
                 // that can tell us.
                 log::warn!(
@@ -669,7 +662,7 @@ impl<'a> Workspace<'a> {
         outf: Box<dyn std::io::Write + Send>,
         old_label: Option<&str>,
         new_label: Option<&str>,
-    ) -> Result<(), PyErr> {
+    ) -> Result<(), BrzError> {
         breezyshim::diff::show_diff_trees(
             self.base_tree().as_ref(),
             &self.local_tree().basis_tree(),

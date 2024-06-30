@@ -697,6 +697,7 @@ fn propose_changes(
         auto_merge,
     )
     .map(|(p, b)| (MergeProposal(p), b))
+    .map_err(Into::into)
 }
 
 #[pyclass]
@@ -863,6 +864,7 @@ fn fetch_colocated(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect::<HashMap<_, _>>(),
     )
+    .map_err(Into::into)
 }
 
 #[pyfunction]

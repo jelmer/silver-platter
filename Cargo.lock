@@ -175,9 +175,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.108"
+version = "0.1.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce4dc748ec27a3e7ebbb742dfcb2310b16592789d55f032dbca6a9a207d8eed9"
+checksum = "1224dc3dcaa414549d35e776fce00d699b7874558793a535593d2a2fb18f0b91"
 dependencies = [
  "chrono",
  "ctor",
@@ -221,9 +221,9 @@ checksum = "514de17de45fdb8dc022b1a7975556c53c86f9f0aa5f534b98977b171857c2c9"
 
 [[package]]
 name = "cc"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "779e6b7d17797c0b42023d417228c02889300190e700cb074c3438d9c541d332"
+checksum = "2755ff20a1d93490d26ba33a6f092a38a508398a5320df5d4b3014fcccce9410"
 
 [[package]]
 name = "cexpr"
@@ -494,9 +494,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.157.3"
+version = "0.157.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1df5ff106e5bdef2bea85ad145f8a3f5917fbcc6f13d383764a50277c756b06d"
+checksum = "c67cd0f3d339b96e1ea8354d7bebac61772e2002a902177aa20e0ab4f4dd565b"
 dependencies = [
  "breezyshim",
  "chrono",
