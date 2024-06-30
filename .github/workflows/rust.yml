@@ -23,6 +23,8 @@ jobs:
         sudo apt -y update
         sudo apt -y install devscripts libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
         cargo install cargo-all-features
+    - name: Upgrade pip
+      run: python -m pip install --upgrade pip setuptools_rust setuptools
     - name: Install breezy
       run: python -m pip install --upgrade breezy
     # TODO(jelmer): Add proper test isolation so this isn't necessary
