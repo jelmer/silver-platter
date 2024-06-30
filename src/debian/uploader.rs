@@ -1,3 +1,6 @@
+use breezyshim::branch::Branch;
+use breezyshim::revisionid::RevisionId;
+use debversion::Version;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -419,4 +422,17 @@ pub fn vcswatch_prescan_packages(
         .collect::<Vec<_>>();
 
     Ok((packages, failures, vcswatch))
+}
+
+pub fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> RevisionId {
+    use pyo3::prelude::*;
+    pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
+        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
+        let dbc = m.getattr("DistributionBranch")?;
+        let dbc = dbc.call1((branch.to_object(py), py.None()))?;
+
+        dbc.call_method1("revid_of_version", (version.to_object(py),))?
+            .extract::<RevisionId>()
+    })
+    .unwrap()
 }
