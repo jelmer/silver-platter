@@ -496,7 +496,6 @@ fn login(url: &url::Url) -> i32 {
 
 fn main() {
     pyo3::prepare_freethreaded_python();
-    use pyo3::prelude::*;
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -513,13 +512,7 @@ fn main() {
 
     breezyshim::init().unwrap();
 
-    pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
-        let m = py.import_bound("breezy.plugin").unwrap();
-        let load_plugins = m.getattr("load_plugins").unwrap();
-        load_plugins.call0().unwrap();
-        Ok(())
-    })
-    .unwrap();
+    breezyshim::plugin::load_plugins();
 
     std::process::exit(match &cli.command {
         Commands::Forges {} => {

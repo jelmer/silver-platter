@@ -628,13 +628,7 @@ fn main() {
 
     breezyshim::init().unwrap();
 
-    pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
-        let m = py.import_bound("breezy.plugin").unwrap();
-        let load_plugins = m.getattr("load_plugins").unwrap();
-        load_plugins.call0().unwrap();
-        Ok(())
-    })
-    .unwrap();
+    breezyshim::plugin::load_plugins();
 
     std::process::exit(match &cli.command {
         Commands::Forges {} => {
