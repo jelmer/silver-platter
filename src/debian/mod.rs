@@ -127,7 +127,7 @@ mod tests {
     use std::path::Path;
 
     pub fn make_branch_and_tree(path: &std::path::Path) -> WorkingTree {
-        breezyshim::init().unwrap();
+        breezyshim::init();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
         let branch = create_branch_convenience(&url).unwrap();
