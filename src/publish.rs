@@ -64,7 +64,7 @@ pub fn push_result(
                 )?;
             }
             Err(BrzError::NotBranchError(..)) => {}
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         };
     }
     Ok(())
@@ -587,7 +587,7 @@ pub fn publish_changes(
                         mode = Mode::Propose;
                     } else {
                         log::info!("permission denied during push");
-                        return Err(e.into());
+                        return Err(e);
                     }
                 }
                 Ok(_) => {
@@ -600,7 +600,7 @@ pub fn publish_changes(
                     });
                 }
                 Err(e) => {
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         }
