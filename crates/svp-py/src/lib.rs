@@ -322,6 +322,7 @@ impl CommandResult {
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_tree, script, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None))]
 fn script_runner(
     py: Python,
     local_tree: PyObject,
@@ -406,6 +407,7 @@ struct ControlDir(silver_platter::ControlDir);
 #[pymethods]
 impl ControlDir {
     #[classmethod]
+    #[pyo3(signature = (transport, probers=None))]
     fn open_from_transport(
         _cls: &Bound<PyType>,
         transport: PyObject,
@@ -425,6 +427,7 @@ impl ControlDir {
     }
 
     #[classmethod]
+    #[pyo3(signature = (transport, probers=None))]
     fn open_containing_from_transport(
         _cls: &Bound<PyType>,
         transport: PyObject,
@@ -448,6 +451,7 @@ impl ControlDir {
 struct Forge(silver_platter::Forge);
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge, name, overwrite_existing=None, owner=None, tags=None, stop_revision=None))]
 fn push_derived_changes(
     py: Python,
     local_branch: PyObject,
@@ -526,6 +530,7 @@ impl Candidate {
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge=None, possible_transports=None, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -550,6 +555,7 @@ fn push_changes(
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, remote_branch, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_result(
     local_branch: PyObject,
     remote_branch: PyObject,
@@ -576,6 +582,7 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
 fn open_branch(
     py: Python,
     url: &str,
@@ -597,6 +604,7 @@ fn open_branch(
 }
 
 #[pyfunction]
+#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
 fn open_branch_containing(
     py: Python,
     url: &str,
@@ -621,6 +629,7 @@ fn open_branch_containing(
 struct MergeProposal(silver_platter::MergeProposal);
 
 #[pyfunction]
+#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated, owner=None, preferred_schemes=None))]
 fn find_existing_proposed(
     py: Python,
     main_branch: PyObject,
@@ -651,6 +660,7 @@ fn find_existing_proposed(
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge, name, mp_description, resume_branch=None, resume_proposal=None, overwrite_existing=None, labels=None, commit_message=None, title=None, additional_colocated_branches=None, allow_empty=None, reviewers=None, tags=None, owner=None, stop_revision=None, allow_collaboration=None, auto_merge=None))]
 fn propose_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -712,6 +722,7 @@ impl PublishResult {
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, mode, name, get_proposal_description, resume_branch=None, get_proposal_commit_message=None, get_proposal_title=None, forge=None, allow_create_proposal=None, labels=None, overwrite_existing=None, existing_proposal=None, reviewers=None, tags=None, derived_owner=None, allow_collaboration=None, stop_revision=None))]
 fn publish_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -800,6 +811,7 @@ impl DestroyFn {
 }
 
 #[pyfunction]
+#[pyo3(signature = (branch, additional_colocated_branches=None, dir=None, path=None))]
 fn create_temp_sprout(
     branch: PyObject,
     additional_colocated_branches: Option<std::collections::HashMap<String, String>>,
@@ -868,6 +880,7 @@ fn fetch_colocated(
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, target_branch, stop_revision=None))]
 fn check_proposal_diff(
     local_branch: PyObject,
     target_branch: PyObject,
@@ -1122,6 +1135,7 @@ pub(crate) mod debian {
 /// Returns:
 ///   boolean indicating whether the merge would result in conflicts
 #[pyfunction]
+#[pyo3(signature = (main_branch, other_branch, other_revision=None))]
 fn merge_conflicts(
     main_branch: PyObject,
     other_branch: PyObject,
