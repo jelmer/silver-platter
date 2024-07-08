@@ -175,9 +175,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.112"
+version = "0.1.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0199be7ae13c2f3fd3412681c25c18f3f6c94ff0a85c55104c4e73bd8f7e84c7"
+checksum = "cf233d7367d5dba8b89425b16ebd306cb6c10ecd7519f6d877e768aa443d0a4c"
 dependencies = [
  "chrono",
  "ctor",
@@ -185,6 +185,7 @@ dependencies = [
  "lazy-regex",
  "lazy_static",
  "log",
+ "patchkit",
  "pyo3",
  "pyo3-filelike",
  "serde",
@@ -1207,7 +1208,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
