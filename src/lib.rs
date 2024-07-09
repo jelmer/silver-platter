@@ -67,6 +67,7 @@ impl std::str::FromStr for Mode {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl pyo3::FromPyObject<'_> for Mode {
     fn extract_bound(ob: &pyo3::Bound<pyo3::PyAny>) -> pyo3::PyResult<Self> {
         use pyo3::prelude::*;
@@ -85,6 +86,7 @@ impl pyo3::FromPyObject<'_> for Mode {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl pyo3::ToPyObject for Mode {
     fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
         self.to_string().to_object(py)

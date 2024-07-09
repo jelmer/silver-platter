@@ -16,7 +16,7 @@ debian = ["silver-platter/debian"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-silver-platter = { path = "../..", default-features = false }
+silver-platter = { path = "../..", default-features = false, features = ["pyo3"] }
 pyo3 = { workspace = true, features = ["abi3"] }
 pyo3-log = { workspace = true }
 tera = { workspace = true }
