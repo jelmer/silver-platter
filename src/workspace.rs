@@ -34,7 +34,7 @@ pub fn fetch_colocated(
                 continue;
             }
             Err(e) => {
-                return Err(e.into());
+                return Err(e);
             }
         }
     }

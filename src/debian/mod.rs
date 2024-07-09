@@ -119,6 +119,146 @@ pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
     tree.has_filename(&control_path)
 }
 
+pub fn install_built_package(
+    local_tree: &WorkingTree,
+    subpath: &Path,
+    build_target_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let abspath = local_tree
+        .abspath(subpath)
+        .unwrap()
+        .join("debian/changelog");
+
+    let cl = ChangeLog::read_path(abspath)?;
+
+    let first_entry = cl.entries().next().unwrap();
+
+    let package = first_entry.package().unwrap();
+    let version = first_entry.version().unwrap();
+
+    let mut non_epoch_version = version.upstream_version.clone();
+    if let Some(debian_version) = &version.debian_revision {
+        non_epoch_version.push_str(&format!("-{}", debian_version));
+    }
+
+    let re_pattern = format!(
+        "{}_{}_.*\\.changes",
+        regex::escape(&package),
+        regex::escape(&non_epoch_version)
+    );
+    let c = regex::Regex::new(&re_pattern)?;
+
+    for entry in std::fs::read_dir(build_target_dir)? {
+        let entry = entry?;
+        let file_name = entry.file_name().into_string().unwrap_or_default();
+        if !c.is_match(&file_name) {
+            continue;
+        }
+
+        let path = entry.path();
+        let contents = std::fs::read(&path)?;
+
+        let binary: Option<String> = Python::with_gil(|py| {
+            let m = py.import_bound("debian.deb822")?;
+            let changes = m.getattr("Changes")?.call1((contents,))?;
+
+            changes.call_method1("get", ("Binary",))?.extract()
+        })?;
+
+        if binary.is_some() {
+            std::process::Command::new("debi")
+                .arg(entry.path())
+                .status()?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Build a debian package in a directory.
+///
+/// # Arguments
+/// * `tree` - Working tree
+/// * `subpath` - Subpath to build in
+/// * `builder` - Builder command (e.g. 'sbuild', 'debuild')
+/// * `result_dir` - Directory to copy results to
+pub fn build(
+    tree: &WorkingTree,
+    subpath: &Path,
+    builder: Option<&str>,
+    result_dir: Option<&Path>,
+) -> PyResult<()> {
+    let builder = builder.unwrap_or(DEFAULT_BUILDER);
+
+    let path = tree.abspath(subpath).unwrap();
+
+    // TODO(jelmer): Refactor brz-debian so it's not necessary
+    // to call out to cmd_builddeb, but to lower-level
+    // functions instead.
+    Python::with_gil(|py| {
+        let m = py.import_bound("breezy.plugins.debian.cmds")?;
+        let cmd_builddeb = m.getattr("cmd_builddeb")?;
+        let kwargs = PyDict::new_bound(py);
+        kwargs.set_item("builder", builder)?;
+        kwargs.set_item("result_dir", result_dir)?;
+        cmd_builddeb.call((path,), Some(&kwargs))?;
+        Ok(())
+    })
+}
+
+pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
+    let mut cmd = std::process::Command::new("gbp");
+    cmd.arg("dch").arg("--ignore-branch");
+    cmd.current_dir(path);
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("gbp dch failed: {}", status),
+        ));
+    }
+    Ok(())
+}
+
+pub fn find_last_release_revid(
+    branch: &dyn breezyshim::branch::Branch,
+    version: debversion::Version,
+) -> PyResult<breezyshim::revisionid::RevisionId> {
+    Python::with_gil(|py| {
+        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
+        let db = m
+            .getattr("DistributionBranch")?
+            .call1((branch.to_object(py), py.None()))?;
+        db.call_method1("revid_of_version", (version,))?.extract()
+    })
+}
+
+pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<String, String> {
+    let mut ret: HashMap<String, String> = vec![
+        ("pristine-tar", "pristine-tar"),
+        ("pristine-lfs", "pristine-lfs"),
+        ("upstream", "upstream"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+
+    if let Some(name) = main_branch.name() {
+        ret.insert(format!("patch-queue/{}", name), "patch-queue".to_string());
+
+        if name.starts_with("debian/") {
+            let mut parts = name.split('/').collect::<Vec<_>>();
+            parts[0] = "upstream";
+            ret.insert(parts.join("/"), "upstream".to_string());
+        }
+    }
+    let existing_branch_names = main_branch.controldir().branch_names().unwrap();
+
+    ret.into_iter()
+        .filter(|(k, _)| existing_branch_names.contains(k))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,144 +673,4 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
-}
-
-pub fn install_built_package(
-    local_tree: &WorkingTree,
-    subpath: &Path,
-    build_target_dir: &Path,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let abspath = local_tree
-        .abspath(subpath)
-        .unwrap()
-        .join("debian/changelog");
-
-    let cl = ChangeLog::read_path(abspath)?;
-
-    let first_entry = cl.entries().next().unwrap();
-
-    let package = first_entry.package().unwrap();
-    let version = first_entry.version().unwrap();
-
-    let mut non_epoch_version = version.upstream_version.clone();
-    if let Some(debian_version) = &version.debian_revision {
-        non_epoch_version.push_str(&format!("-{}", debian_version));
-    }
-
-    let re_pattern = format!(
-        "{}_{}_.*\\.changes",
-        regex::escape(&package),
-        regex::escape(&non_epoch_version)
-    );
-    let c = regex::Regex::new(&re_pattern)?;
-
-    for entry in std::fs::read_dir(build_target_dir)? {
-        let entry = entry?;
-        let file_name = entry.file_name().into_string().unwrap_or_default();
-        if !c.is_match(&file_name) {
-            continue;
-        }
-
-        let path = entry.path();
-        let contents = std::fs::read(&path)?;
-
-        let binary: Option<String> = Python::with_gil(|py| {
-            let m = py.import_bound("debian.deb822")?;
-            let changes = m.getattr("Changes")?.call1((contents,))?;
-
-            changes.call_method1("get", ("Binary",))?.extract()
-        })?;
-
-        if binary.is_some() {
-            std::process::Command::new("debi")
-                .arg(entry.path())
-                .status()?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Build a debian package in a directory.
-///
-/// # Arguments
-/// * `tree` - Working tree
-/// * `subpath` - Subpath to build in
-/// * `builder` - Builder command (e.g. 'sbuild', 'debuild')
-/// * `result_dir` - Directory to copy results to
-pub fn build(
-    tree: &WorkingTree,
-    subpath: &Path,
-    builder: Option<&str>,
-    result_dir: Option<&Path>,
-) -> PyResult<()> {
-    let builder = builder.unwrap_or(DEFAULT_BUILDER);
-
-    let path = tree.abspath(subpath).unwrap();
-
-    // TODO(jelmer): Refactor brz-debian so it's not necessary
-    // to call out to cmd_builddeb, but to lower-level
-    // functions instead.
-    Python::with_gil(|py| {
-        let m = py.import_bound("breezy.plugins.debian.cmds")?;
-        let cmd_builddeb = m.getattr("cmd_builddeb")?;
-        let kwargs = PyDict::new_bound(py);
-        kwargs.set_item("builder", builder)?;
-        kwargs.set_item("result_dir", result_dir)?;
-        cmd_builddeb.call((path,), Some(&kwargs))?;
-        Ok(())
-    })
-}
-
-pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
-    let mut cmd = std::process::Command::new("gbp");
-    cmd.arg("dch").arg("--ignore-branch");
-    cmd.current_dir(path);
-    let status = cmd.status()?;
-    if !status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("gbp dch failed: {}", status),
-        ));
-    }
-    Ok(())
-}
-
-pub fn find_last_release_revid(
-    branch: &dyn breezyshim::branch::Branch,
-    version: debversion::Version,
-) -> PyResult<breezyshim::revisionid::RevisionId> {
-    Python::with_gil(|py| {
-        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
-        let db = m
-            .getattr("DistributionBranch")?
-            .call1((branch.to_object(py), py.None()))?;
-        db.call_method1("revid_of_version", (version,))?.extract()
-    })
-}
-
-pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<String, String> {
-    let mut ret: HashMap<String, String> = vec![
-        ("pristine-tar", "pristine-tar"),
-        ("pristine-lfs", "pristine-lfs"),
-        ("upstream", "upstream"),
-    ]
-    .into_iter()
-    .map(|(k, v)| (k.to_string(), v.to_string()))
-    .collect();
-
-    if let Some(name) = main_branch.name() {
-        ret.insert(format!("patch-queue/{}", name), "patch-queue".to_string());
-
-        if name.starts_with("debian/") {
-            let mut parts = name.split('/').collect::<Vec<_>>();
-            parts[0] = "upstream";
-            ret.insert(parts.join("/"), "upstream".to_string());
-        }
-    }
-    let existing_branch_names = main_branch.controldir().branch_names().unwrap();
-
-    ret.into_iter()
-        .filter(|(k, _)| existing_branch_names.contains(k))
-        .collect()
 }
