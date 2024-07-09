@@ -399,10 +399,15 @@ fn script_runner(
 struct Transport(silver_platter::Transport);
 
 #[pyclass]
-struct Prober(silver_platter::Prober);
-
-#[pyclass]
 struct ControlDir(silver_platter::ControlDir);
+
+struct PyProber(PyObject);
+impl ToPyObject for PyProber {
+    fn to_object(&self, py: Python) -> PyObject {
+        self.0.clone_ref(py)
+    }
+}
+impl breezyshim::controldir::Prober for PyProber {}
 
 #[pymethods]
 impl ControlDir {
@@ -413,15 +418,16 @@ impl ControlDir {
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<Self> {
-        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
-            probers
-                .into_iter()
-                .map(silver_platter::Prober::new)
-                .collect()
+        let pyprobers =
+            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+            ps.iter()
+                .map(|p| p as &dyn breezyshim::controldir::Prober)
+                .collect::<Vec<_>>()
         });
         let control_dir = breezyshim::controldir::open_from_transport(
             &silver_platter::Transport::new(transport),
-            probers.as_deref(),
+            ref_pyprobers.as_deref(),
         )?;
         Ok(ControlDir(control_dir))
     }
@@ -433,15 +439,16 @@ impl ControlDir {
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<(Self, String)> {
-        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
-            probers
-                .into_iter()
-                .map(silver_platter::Prober::new)
-                .collect()
+        let pyprobers =
+            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+            ps.iter()
+                .map(|p| p as &dyn breezyshim::controldir::Prober)
+                .collect::<Vec<_>>()
         });
         let (control_dir, subpath) = breezyshim::controldir::open_containing_from_transport(
             &silver_platter::Transport::new(transport),
-            probers.as_deref(),
+            ref_pyprobers.as_deref(),
         )?;
         Ok((ControlDir(control_dir), subpath))
     }
@@ -592,12 +599,17 @@ fn open_branch(
 ) -> PyResult<PyObject> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let probers: Option<Vec<silver_platter::Prober>> =
-        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
+    let pyprobers =
+        probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+        ps.iter()
+            .map(|p| p as &dyn breezyshim::controldir::Prober)
+            .collect::<Vec<_>>()
+    });
     Ok(silver_platter::vcs::open_branch(
         &url.parse().unwrap(),
         possible_transports.as_mut(),
-        probers.as_deref(),
+        ref_pyprobers.as_deref(),
         name,
     )?
     .to_object(py))
@@ -614,12 +626,17 @@ fn open_branch_containing(
 ) -> PyResult<(PyObject, String)> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let probers: Option<Vec<silver_platter::Prober>> =
-        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
+    let pyprobers =
+        probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+        ps.iter()
+            .map(|p| p as &dyn breezyshim::controldir::Prober)
+            .collect::<Vec<_>>()
+    });
     let (b, u) = silver_platter::vcs::open_branch_containing(
         &url.parse().unwrap(),
         possible_transports.as_mut(),
-        probers.as_deref(),
+        ref_pyprobers.as_deref(),
         name,
     )?;
     Ok((b.to_object(py), u))
