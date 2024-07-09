@@ -437,6 +437,7 @@ impl std::fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl From<Error> for pyo3::PyErr {
     fn from(e: Error) -> Self {
         use pyo3::exceptions::PyException;

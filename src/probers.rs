@@ -1,28 +1,45 @@
-use breezyshim::Prober;
-use pyo3::prelude::*;
+use breezyshim::controldir::Prober;
 
-pub fn select_probers(vcs_type: &str) -> Vec<Prober> {
-    pyo3::Python::with_gil(|py| {
-        let probersm = py.import_bound("silver_platter.probers").unwrap();
-        let select_probers = probersm.getattr("select_probers").unwrap();
-        select_probers
-            .call1((vcs_type,))
-            .unwrap()
-            .extract::<Vec<PyObject>>()
-            .map(|probers| probers.into_iter().map(Prober::new).collect::<Vec<_>>())
-            .unwrap()
-    })
+pub fn get_prober(vcs_type: &str) -> Option<Box<dyn Prober>> {
+    match vcs_type {
+        "bzr" => breezyshim::bazaar::RemoteBzrProber::new()
+            .map(|prober| Box::new(prober) as Box<dyn Prober>),
+        "git" => breezyshim::git::RemoteGitProber::new()
+            .map(|prober| Box::new(prober) as Box<dyn Prober>),
+        "hg" => breezyshim::mercurial::SmartHgProber::new()
+            .map(|prober| Box::new(prober) as Box<dyn Prober>),
+        "svn" => breezyshim::subversion::SvnRepositoryProber::new()
+            .map(|prober| Box::new(prober) as Box<dyn Prober>),
+        "fossil" => breezyshim::fossil::RemoteFossilProber::new()
+            .map(|prober| Box::new(prober) as Box<dyn Prober>),
+        "darcs" => {
+            breezyshim::darcs::DarcsProber::new().map(|prober| Box::new(prober) as Box<dyn Prober>)
+        }
+        "cvs" => {
+            breezyshim::cvs::CVSProber::new().map(|prober| Box::new(prober) as Box<dyn Prober>)
+        }
+
+        _ => None,
+    }
 }
 
-pub fn select_preferred_probers(vcs_type: &str) -> Vec<Prober> {
-    pyo3::Python::with_gil(|py| {
-        let probersm = py.import_bound("silver_platter.probers").unwrap();
-        let select_preferred_probers = probersm.getattr("select_preferred_probers").unwrap();
-        select_preferred_probers
-            .call1((vcs_type,))
-            .unwrap()
-            .extract::<Vec<PyObject>>()
-            .map(|probers| probers.into_iter().map(Prober::new).collect::<Vec<_>>())
-            .unwrap()
-    })
+pub fn select_probers(vcs_type: Option<&str>) -> Vec<Box<dyn Prober>> {
+    if let Some(vcs_type) = vcs_type {
+        if let Some(prober) = get_prober(vcs_type) {
+            return vec![prober];
+        }
+        return vec![];
+    } else {
+        return breezyshim::controldir::all_probers();
+    }
+}
+
+pub fn select_preferred_probers(vcs_type: Option<&str>) -> Vec<Box<dyn Prober>> {
+    let mut probers = breezyshim::controldir::all_probers();
+    if let Some(vcs_type) = vcs_type {
+        if let Some(prober) = get_prober(&vcs_type.to_lowercase()) {
+            probers.insert(0, prober);
+        }
+    }
+    probers
 }

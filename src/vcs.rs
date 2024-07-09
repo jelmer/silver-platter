@@ -4,7 +4,6 @@ use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
-use pyo3::prelude::*;
 
 #[derive(Debug)]
 pub enum BranchOpenError {
@@ -70,7 +69,8 @@ impl std::fmt::Display for BranchOpenError {
     }
 }
 
-impl From<BranchOpenError> for PyErr {
+#[cfg(feature = "pyo3")]
+impl From<BranchOpenError> for pyo3::PyErr {
     fn from(e: BranchOpenError) -> Self {
         use pyo3::exceptions::PyRuntimeError;
         use pyo3::import_exception;
@@ -248,7 +248,7 @@ impl BranchOpenError {
 pub fn open_branch(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
-    probers: Option<&[Prober]>,
+    probers: Option<&[&dyn Prober]>,
     name: Option<&str>,
 ) -> Result<Box<dyn Branch>, BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
@@ -270,7 +270,7 @@ pub fn open_branch(
 pub fn open_branch_containing(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
-    probers: Option<&[Prober]>,
+    probers: Option<&[&dyn Prober]>,
     name: Option<&str>,
 ) -> Result<(Box<dyn Branch>, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
