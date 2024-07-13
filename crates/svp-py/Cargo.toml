@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 [features]
 debian = ["silver-platter/debian"]
 extension-module = ["pyo3/extension-module"]
+default = ["debian"]
 
 [dependencies]
 silver-platter = { path = "../..", default-features = false, features = ["pyo3"] }
