@@ -979,6 +979,7 @@ pub(crate) mod debian {
     }
 
     #[pyfunction]
+    #[pyo3(signature = (local_tree, script, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None, update_changelog=None))]
     pub(crate) fn debian_script_runner(
         py: Python,
         local_tree: PyObject,
@@ -1115,6 +1116,7 @@ pub(crate) mod debian {
     }
 
     #[pyfunction]
+    #[pyo3(signature = (tree, subpath, builder=None, result_dir=None))]
     pub(crate) fn build(
         tree: PyObject,
         subpath: PathBuf,
