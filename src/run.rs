@@ -133,10 +133,10 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let mut builder = Workspace::builder().main_branch(main_branch.as_ref());
+    let mut builder = Workspace::builder().main_branch(main_branch);
 
-    builder = if let Some(resume_branch) = resume_branch.as_ref() {
-        builder.resume_branch(resume_branch.as_ref())
+    builder = if let Some(resume_branch) = resume_branch.take() {
+        builder.resume_branch(resume_branch)
     } else {
         builder
     };
@@ -231,7 +231,7 @@ pub fn apply_and_publish(
         Err(PublishError::UnsupportedForge(_)) => {
             error!(
                 "No known supported forge for {}. Run 'svp login'?",
-                crate::vcs::full_branch_url(main_branch.as_ref()),
+                crate::vcs::full_branch_url(ws.main_branch().unwrap()),
             );
             return 2;
         }
