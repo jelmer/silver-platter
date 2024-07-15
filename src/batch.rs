@@ -114,11 +114,14 @@ impl Entry {
         };
 
         let mut ws = Workspace::builder()
-            .main_branch(main_branch.as_ref())
-            .path(basepath)
+            .main_branch(main_branch)
+            .path(basepath.to_path_buf())
             .build()?;
 
-        log::info!("Making changes to {}", main_branch.get_user_url());
+        log::info!(
+            "Making changes to {}",
+            ws.main_branch().unwrap().get_user_url()
+        );
 
         let result = match script_runner(
             ws.local_tree(),

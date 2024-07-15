@@ -86,36 +86,36 @@ impl std::fmt::Display for Error {
 }
 
 #[derive(Default)]
-pub struct WorkspaceBuilder<'a> {
-    main_branch: Option<&'a dyn Branch>,
-    resume_branch: Option<&'a dyn Branch>,
-    cached_branch: Option<&'a dyn Branch>,
-    additional_colocated_branches: HashMap<&'a str, &'a str>,
-    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-    dir: Option<&'a Path>,
-    path: Option<&'a Path>,
-    format: Option<&'a str>,
+pub struct WorkspaceBuilder {
+    main_branch: Option<Box<dyn Branch>>,
+    resume_branch: Option<Box<dyn Branch>>,
+    cached_branch: Option<Box<dyn Branch>>,
+    additional_colocated_branches: HashMap<String, String>,
+    resume_branch_additional_colocated_branches: HashMap<String, String>,
+    dir: Option<PathBuf>,
+    path: Option<PathBuf>,
+    format: Option<String>,
 }
 
-impl<'a> WorkspaceBuilder<'a> {
-    pub fn main_branch(mut self, main_branch: &'a dyn Branch) -> Self {
+impl WorkspaceBuilder {
+    pub fn main_branch(mut self, main_branch: Box<dyn Branch>) -> Self {
         self.main_branch = Some(main_branch);
         self
     }
 
-    pub fn resume_branch(mut self, resume_branch: &'a dyn Branch) -> Self {
+    pub fn resume_branch(mut self, resume_branch: Box<dyn Branch>) -> Self {
         self.resume_branch = Some(resume_branch);
         self
     }
 
-    pub fn cached_branch(mut self, cached_branch: &'a dyn Branch) -> Self {
+    pub fn cached_branch(mut self, cached_branch: Box<dyn Branch>) -> Self {
         self.cached_branch = Some(cached_branch);
         self
     }
 
     pub fn additional_colocated_branches(
         mut self,
-        additional_colocated_branches: HashMap<&'a str, &'a str>,
+        additional_colocated_branches: HashMap<String, String>,
     ) -> Self {
         self.additional_colocated_branches = additional_colocated_branches;
         self
@@ -123,39 +123,49 @@ impl<'a> WorkspaceBuilder<'a> {
 
     pub fn resume_branch_additional_colocated_branches(
         mut self,
-        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+        resume_branch_additional_colocated_branches: HashMap<String, String>,
     ) -> Self {
         self.resume_branch_additional_colocated_branches =
             resume_branch_additional_colocated_branches;
         self
     }
 
-    pub fn dir(mut self, dir: &'a Path) -> Self {
+    pub fn dir(mut self, dir: PathBuf) -> Self {
         self.dir = Some(dir);
         self
     }
 
-    pub fn path(mut self, path: &'a Path) -> Self {
+    pub fn path(mut self, path: PathBuf) -> Self {
         self.path = Some(path);
         self
     }
 
-    pub fn format(mut self, format: &'a str) -> Self {
+    /// Set the control dir format to use.
+    ///
+    /// This defaults to the format of the remote branch.
+    pub fn format(mut self, format: String) -> Self {
         self.format = Some(format);
         self
     }
 
-    pub fn build(self) -> Result<Workspace<'a>, Error> {
-        let mut ws = Workspace::new(
-            self.main_branch,
-            self.resume_branch,
-            self.cached_branch,
-            self.additional_colocated_branches,
-            self.resume_branch_additional_colocated_branches,
-            self.dir,
-            self.path,
-            self.format,
-        );
+    pub fn build(self) -> Result<Workspace, Error> {
+        use breezyshim::controldir::AsFormat;
+        let mut ws = Workspace {
+            main_branch: self.main_branch,
+            resume_branch: self.resume_branch,
+            cached_branch: self.cached_branch,
+            additional_colocated_branches: self.additional_colocated_branches,
+            resume_branch_additional_colocated_branches: self
+                .resume_branch_additional_colocated_branches,
+            path: self.path,
+            dir: self.dir,
+            format: self
+                .format
+                .as_deref()
+                .map(|f| f.as_format())
+                .unwrap_or_default(),
+            state: None,
+        };
 
         ws.start()?;
         Ok(ws)
@@ -170,70 +180,87 @@ struct WorkspaceState {
     main_colo_revid: HashMap<String, RevisionId>,
 }
 
-pub struct Workspace<'a> {
-    main_branch: Option<&'a dyn Branch>,
-    cached_branch: Option<&'a dyn Branch>,
-    resume_branch: Option<&'a dyn Branch>,
-    additional_colocated_branches: HashMap<&'a str, &'a str>,
-    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-    dir: Option<&'a Path>,
-    path: Option<&'a Path>,
+pub struct Workspace {
+    main_branch: Option<Box<dyn Branch>>,
+    cached_branch: Option<Box<dyn Branch>>,
+    resume_branch: Option<Box<dyn Branch>>,
+    additional_colocated_branches: HashMap<String, String>,
+    resume_branch_additional_colocated_branches: HashMap<String, String>,
+    dir: Option<PathBuf>,
+    path: Option<PathBuf>,
     state: Option<WorkspaceState>,
     format: Option<breezyshim::controldir::ControlDirFormat>,
 }
 
-impl<'a> Workspace<'a> {
+impl Workspace {
+    #[deprecated(since = "0.1.0", note = "Use WorkspaceBuilder instead")]
     pub fn new(
-        main_branch: Option<&'a dyn Branch>,
-        resume_branch: Option<&'a dyn Branch>,
-        cached_branch: Option<&'a dyn Branch>,
-        additional_colocated_branches: HashMap<&'a str, &'a str>,
-        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-        dir: Option<&'a Path>,
-        path: Option<&'a Path>,
+        main_branch: Option<Box<dyn Branch>>,
+        resume_branch: Option<Box<dyn Branch>>,
+        cached_branch: Option<Box<dyn Branch>>,
+        additional_colocated_branches: HashMap<&str, &str>,
+        resume_branch_additional_colocated_branches: HashMap<&str, &str>,
+        dir: Option<&Path>,
+        path: Option<&Path>,
         format: Option<impl breezyshim::controldir::AsFormat>,
     ) -> Self {
         Self {
             main_branch,
             resume_branch,
             cached_branch,
-            additional_colocated_branches,
-            resume_branch_additional_colocated_branches,
-            path,
-            dir,
+            additional_colocated_branches: additional_colocated_branches
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            resume_branch_additional_colocated_branches:
+                resume_branch_additional_colocated_branches
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            path: path.map(|p| p.to_path_buf()),
+            dir: dir.map(|p| p.to_path_buf()),
             format: format.and_then(|f| f.as_format()),
             state: None,
         }
     }
 
-    pub fn start(&mut self) -> Result<(), Error> {
+    pub fn temporary() -> Result<Self, Error> {
+        let td = tempfile::tempdir().unwrap();
+        Self::builder().dir(td.into_path()).build()
+    }
+
+    /// Start this workspace
+    fn start(&mut self) -> Result<(), Error> {
         let mut td: Option<tempfile::TempDir> = None;
-        let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch {
+        let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch.as_ref() {
             (
                 Some(cache_branch),
                 self.additional_colocated_branches.clone(),
             )
-        } else if let Some(resume_branch) = self.resume_branch {
+        } else if let Some(resume_branch) = self.resume_branch.as_ref() {
             (
                 Some(resume_branch),
                 self.resume_branch_additional_colocated_branches.clone(),
             )
         } else {
-            (self.main_branch, self.additional_colocated_branches.clone())
+            (
+                self.main_branch.as_ref(),
+                self.additional_colocated_branches.clone(),
+            )
         };
 
         let (local_tree, destroy_fn) = if let Some(sprout_base) = sprout_base {
             log::debug!("Creating sprout from {:?}", sprout_base.get_user_url());
             let (wt, dfn) = crate::utils::create_temp_sprout(
-                sprout_base,
+                sprout_base.as_ref(),
                 Some(
                     sprout_coloc
                         .iter()
                         .map(|(k, v)| (k.to_string(), v.to_string()))
                         .collect(),
                 ),
-                self.dir,
-                self.path,
+                self.dir.as_deref(),
+                self.path.as_deref(),
             )?;
             (wt, Some(dfn))
         } else {
@@ -246,7 +273,7 @@ impl<'a> Workspace<'a> {
                 log::debug!("Creating new empty tree");
             };
 
-            let tp = if let Some(path) = self.path {
+            let tp = if let Some(path) = self.path.as_deref() {
                 std::fs::create_dir_all(path)?;
                 path.to_path_buf()
             } else {
@@ -278,7 +305,7 @@ impl<'a> Workspace<'a> {
 
         let mut refreshed = false;
 
-        if let Some(main_branch) = self.main_branch {
+        if let Some(main_branch) = self.main_branch.as_ref() {
             for (from_name, _to_name) in self.additional_colocated_branches.iter() {
                 match main_branch.controldir().open_branch(Some(from_name)) {
                     Ok(branch) => {
@@ -292,13 +319,13 @@ impl<'a> Workspace<'a> {
                 }
             }
 
-            if let Some(cached_branch) = self.cached_branch {
+            if let Some(cached_branch) = self.cached_branch.as_ref() {
                 log::debug!(
                     "Pulling in missing revisions from resume/main branch {:?}",
                     cached_branch.get_user_url()
                 );
 
-                match local_tree.pull(cached_branch, Some(true)) {
+                match local_tree.pull(cached_branch.as_ref(), Some(true)) {
                     Ok(_) => {}
                     Err(BrzError::DivergedBranches) => {
                         unreachable!();
@@ -311,7 +338,7 @@ impl<'a> Workspace<'a> {
 
             // At this point, we're either on the tip of the main branch or the tip of the resume
             // branch
-            if let Some(resume_branch) = self.resume_branch {
+            if let Some(resume_branch) = self.resume_branch.as_ref() {
                 // If there's a resume branch at play, make sure it's derived from the main branch
                 // *or* reset back to the main branch.
                 log::debug!(
@@ -319,13 +346,13 @@ impl<'a> Workspace<'a> {
                     main_branch.get_user_url()
                 );
 
-                match local_tree.pull(main_branch, Some(false)) {
+                match local_tree.pull(main_branch.as_ref(), Some(false)) {
                     Err(BrzError::DivergedBranches) => {
                         log::info!("restarting branch");
                         refreshed = true;
                         self.resume_branch = None;
                         self.resume_branch_additional_colocated_branches.clear();
-                        match local_tree.pull(main_branch, Some(true)) {
+                        match local_tree.pull(main_branch.as_ref(), Some(true)) {
                             Ok(_) => {}
                             Err(BrzError::DivergedBranches) => {
                                 unreachable!();
@@ -337,25 +364,37 @@ impl<'a> Workspace<'a> {
                         fetch_colocated(
                             &local_tree.branch().controldir(),
                             &main_branch.controldir(),
-                            &self.additional_colocated_branches,
+                            &self
+                                .additional_colocated_branches
+                                .iter()
+                                .map(|(k, v)| (k.as_str(), v.as_str()))
+                                .collect(),
                         )?;
                     }
                     Ok(_) => {
                         fetch_colocated(
                             &local_tree.branch().controldir(),
                             &main_branch.controldir(),
-                            &self.additional_colocated_branches,
+                            &self
+                                .additional_colocated_branches
+                                .iter()
+                                .map(|(k, v)| (k.as_str(), v.as_str()))
+                                .collect(),
                         )?;
 
                         if !self.resume_branch_additional_colocated_branches.is_empty() {
                             fetch_colocated(
                                 &local_tree.branch().controldir(),
                                 &resume_branch.controldir(),
-                                &self.resume_branch_additional_colocated_branches,
+                                &self
+                                    .resume_branch_additional_colocated_branches
+                                    .iter()
+                                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                                    .collect(),
                             )?;
 
                             self.additional_colocated_branches
-                                .extend(self.resume_branch_additional_colocated_branches.iter());
+                                .extend(self.resume_branch_additional_colocated_branches.clone());
                         }
                     }
                     Err(e) => {
@@ -366,7 +405,11 @@ impl<'a> Workspace<'a> {
                 fetch_colocated(
                     &local_tree.branch().controldir(),
                     &main_branch.controldir(),
-                    &self.additional_colocated_branches,
+                    &self
+                        .additional_colocated_branches
+                        .iter()
+                        .map(|(k, v)| (k.as_str(), v.as_str()))
+                        .collect(),
                 )?;
             }
         }
@@ -386,15 +429,15 @@ impl<'a> Workspace<'a> {
         self.state.as_ref().unwrap()
     }
 
-    pub fn builder() -> WorkspaceBuilder<'a> {
+    pub fn builder() -> WorkspaceBuilder {
         WorkspaceBuilder::default()
     }
 
     pub fn main_branch(&self) -> Option<&dyn Branch> {
-        self.main_branch
+        self.main_branch.as_deref()
     }
 
-    pub fn set_main_branch(&mut self, branch: &'a dyn Branch) -> Result<(), Error> {
+    pub fn set_main_branch(&mut self, branch: Box<dyn Branch>) -> Result<(), Error> {
         self.main_branch = Some(branch);
         Ok(())
     }
@@ -408,7 +451,7 @@ impl<'a> Workspace<'a> {
     }
 
     pub fn resume_branch(&self) -> Option<&dyn Branch> {
-        self.resume_branch
+        self.resume_branch.as_deref()
     }
 
     pub fn path(&self) -> PathBuf {
@@ -683,7 +726,7 @@ impl<'a> Workspace<'a> {
     }
 }
 
-impl Drop for Workspace<'_> {
+impl Drop for Workspace {
     fn drop(&mut self) {
         if let Some(state) = self.state.as_mut() {
             if let Some(destroy_fn) = state.destroy_fn.take() {
@@ -734,4 +777,28 @@ fn test_create_workspace() {
     );
 
     ws.destroy().unwrap();
+}
+
+#[test]
+fn test_temporary() {
+    let ws = Workspace::temporary().unwrap();
+
+    assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
+
+    assert_eq!(
+        ws.base_revid(),
+        Some(breezyshim::revisionid::RevisionId::null())
+    );
+
+    // There are changes since the branch is created
+    assert!(ws.changes_since_main());
+    assert!(!ws.changes_since_base());
+    assert_eq!(
+        ws.changed_branches(),
+        vec![(
+            "".to_string(),
+            None,
+            Some(breezyshim::revisionid::RevisionId::null())
+        )]
+    );
 }
