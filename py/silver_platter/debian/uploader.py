@@ -23,7 +23,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 from contextlib import suppress
 from email.utils import parseaddr
 from typing import Callable, List, Optional, Tuple
@@ -32,7 +31,7 @@ from breezy import gpg  # type: ignore
 from breezy.commit import NullCommitReporter, PointlessCommit
 from breezy.config import NoEmailInUsername, extract_email_address
 from breezy.errors import NoSuchTag, PermissionDenied
-from breezy.plugins.debian.apt_repo import Apt, LocalApt, RemoteApt
+from breezy.plugins.debian.apt_repo import Apt
 from breezy.plugins.debian.builder import BuildFailedError
 from breezy.plugins.debian.cmds import _build_helper
 from breezy.plugins.debian.import_dsc import DistributionBranch
@@ -48,7 +47,7 @@ from breezy.plugins.debian.util import (
 from breezy.revision import NULL_REVISION
 from breezy.tree import MissingNestedTree
 from breezy.workingtree import WorkingTree
-from debian.changelog import Version, get_maintainer
+from debian.changelog import Version
 from debmutate.changelog import (
     ChangelogEditor,
     ChangelogParseError,
@@ -750,151 +749,3 @@ def vcswatch_prescan_packages(
         failures,
         vcswatch,
     )
-
-
-def open_last_attempt_db():
-    try:
-        import tdb
-        from xdg.BaseDirectory import xdg_data_home
-    except ModuleNotFoundError:
-        return None
-    else:
-        last_attempt_path = os.path.join(
-            xdg_data_home, "silver-platter", "last-upload-attempt.tdb"
-        )
-        os.makedirs(os.path.dirname(last_attempt_path), exist_ok=True)
-        return tdb.open(
-            last_attempt_path,
-            tdb_flags=tdb.DEFAULT,
-            flags=os.O_RDWR | os.O_CREAT,
-            mode=0o600,
-        )
-
-
-def main(
-    packages,
-    acceptable_keys,
-    gpg_verification,
-    min_commit_age,
-    diff,
-    builder,
-    maintainer,
-    vcswatch,
-    exclude,
-    autopkgtest_only,
-    allowed_committer,
-    debug,
-    shuffle,
-    verify_command,
-    apt_repository,
-    apt_repository_key,
-):
-    ret = 0
-
-    if not packages and not maintainer:
-        (name, email) = get_maintainer()
-        if email:
-            logging.info("Processing packages maintained by %s", email)
-            maintainer = [email]
-
-    if not vcswatch:
-        logging.info(
-            "Use --vcswatch to only process packages for which "
-            "vcswatch found pending commits."
-        )
-
-    if apt_repository:
-        apt_repo = RemoteApt.from_string(apt_repository, apt_repository_key)
-    else:
-        apt_repo = LocalApt()
-
-    if maintainer:
-        packages = select_apt_packages(apt_repo, packages, maintainer)
-
-    if not packages:
-        logging.info("No packages found.")
-        return 1
-
-    if shuffle:
-        import random
-
-        random.shuffle(packages)
-
-    stats = {}
-
-    def inc_stats(result):
-        stats.setdefault(result, 0)
-        stats[result] += 1
-
-    if vcswatch:
-        packages, failures, extra_data = vcswatch_prescan_packages(
-            packages,
-            inc_stats,
-            exclude=exclude,
-            min_commit_age=min_commit_age,
-            allowed_committers=allowed_committer,
-        )
-        if failures > 0:
-            ret = 1
-    else:
-        extra_data = {}
-
-    if len(packages) > 1:
-        logging.info(
-            "Uploading %d packages: %s", len(packages), ", ".join(packages)
-        )
-
-    last_attempt = open_last_attempt_db()
-
-    if last_attempt:
-        orig_packages = list(packages)
-
-        def last_attempt_key(p):
-            try:
-                t = int(last_attempt[p.encode("utf-8")])
-            except KeyError:
-                t = 0
-            return (t, orig_packages.index(p))
-
-        packages.sort(key=last_attempt_key)
-
-    for package in packages:
-        vcs_type = extra_data.get(package, {}).get("vcs_type")
-        vcs_url = extra_data.get(package, {}).get("vcs_url")
-        archive_version = extra_data.get(package, {}).get("archive_version")
-        source_name = extra_data.get(package, {}).get("package")
-
-        try:
-            process_package(
-                apt_repo,
-                package,
-                builder=builder,
-                exclude=exclude,
-                autopkgtest_only=autopkgtest_only,
-                gpg_verification=gpg_verification,
-                acceptable_keys=acceptable_keys,
-                debug=debug,
-                diff=diff,
-                min_commit_age=min_commit_age,
-                allowed_committers=allowed_committer,
-                vcs_type=vcs_type,
-                vcs_url=vcs_url,
-                archive_version=archive_version,
-                source_name=source_name,
-                verify_command=verify_command,
-            )
-        except PackageProcessingFailure as e:
-            inc_stats(e.reason)
-            ret = 1
-        except PackageIgnored as e:
-            inc_stats(e.reason)
-
-        if last_attempt:
-            last_attempt[package.encode("utf-8")] = b"%d" % (time.time())
-
-    if len(packages) > 1:
-        logging.info("Results:")
-        for error, c in stats.items():
-            logging.info("  %s: %d", error, c)
-
-    return ret

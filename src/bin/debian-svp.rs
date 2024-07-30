@@ -147,7 +147,7 @@ enum Commands {
 
         /// APT repository key to use for validation, if --apt-repository is set.
         #[arg(long, env = "APT_REPOSITORY_KEY")]
-        apt_repository_key: Option<String>,
+        apt_repository_key: Option<std::path::PathBuf>,
 
         /// Packages to upload
         packages: Vec<String>,
@@ -559,8 +559,6 @@ fn login(url: &url::Url) -> i32 {
 }
 
 fn main() {
-    pyo3::prepare_freethreaded_python();
-    use pyo3::prelude::*;
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -737,44 +735,24 @@ fn main() {
             apt_repository,
             apt_repository_key,
             packages,
-        } => pyo3::Python::with_gil(|py| {
-            let kwargs = pyo3::types::PyDict::new_bound(py);
-            kwargs.set_item("maintainer", maintainer).unwrap();
-            kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
-            kwargs
-                .set_item("gpg_verification", gpg_verification)
-                .unwrap();
-            kwargs.set_item("min_commit_age", min_commit_age).unwrap();
-            kwargs.set_item("diff", diff).unwrap();
-            kwargs.set_item("builder", builder).unwrap();
-            kwargs
-                .set_item("autopkgtest_only", autopkgtest_only)
-                .unwrap();
-            kwargs.set_item("exclude", exclude).unwrap();
-            kwargs.set_item("verify_command", verify_command).unwrap();
-            kwargs.set_item("shuffle", shuffle).unwrap();
-            kwargs
-                .set_item("allowed_committer", allowed_committer)
-                .unwrap();
-            kwargs.set_item("vcswatch", vcswatch).unwrap();
-            kwargs.set_item("diff", diff).unwrap();
-            kwargs.set_item("debug", cli.debug).unwrap();
-            kwargs.set_item("apt_repository", apt_repository).unwrap();
-            kwargs
-                .set_item("apt_repository_key", apt_repository_key)
-                .unwrap();
-            kwargs.set_item("packages", packages).unwrap();
-
-            let m = py.import_bound("silver_platter.debian.uploader").unwrap();
-            let main = m.getattr("main").unwrap();
-            match main.call((), Some(&kwargs)) {
-                Ok(o) => o.extract().unwrap(),
-                Err(e) => {
-                    error!("Failed to upload: {}", e);
-                    1
-                }
-            }
-        }),
+        } => silver_platter::debian::uploader::main(
+            packages.clone(),
+            acceptable_keys.clone(),
+            *gpg_verification,
+            *min_commit_age,
+            *diff,
+            builder.clone(),
+            maintainer.clone(),
+            *vcswatch,
+            exclude.clone(),
+            *autopkgtest_only,
+            allowed_committer.clone(),
+            cli.debug,
+            *shuffle,
+            verify_command.clone(),
+            apt_repository.clone(),
+            apt_repository_key.clone(),
+        ),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,

@@ -31,13 +31,15 @@ debian-analyzer = { version = ">=0.158.1", optional = true }
 gpgme = { version = "0.11.0", optional = true }
 pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
+debian-control = { version = "0.1", optional = true }
+rand = "0.8.5"
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
 default = ["debian", "detect-update-changelog"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["dep:debian-analyzer"]
@@ -56,7 +58,7 @@ workspace = true
 
 [dependencies.debversion]
 version = ">=0.1"
-features = ["python-debian"]
+features = ["python-debian", "serde"]
 optional = true
 
 [dependencies.url]
