@@ -58,7 +58,7 @@ workspace = true
 
 [dependencies.debversion]
 version = ">=0.1"
-features = ["python-debian"]
+features = ["python-debian", "serde"]
 optional = true
 
 [dependencies.url]
