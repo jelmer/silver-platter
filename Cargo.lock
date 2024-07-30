@@ -175,12 +175,14 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.134"
+version = "0.1.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f2e440d83499a65e86c14cb0fc3a33c855efe09aa6e180f519a9ba63d5e06e9"
+checksum = "8449b0fc2a4ab63113cb041a2fbea8b82f3655f85082851af424a14f2c864562"
 dependencies = [
  "chrono",
  "ctor",
+ "debian-control",
+ "debversion",
  "dirty-tracker",
  "lazy-regex",
  "lazy_static",
@@ -214,6 +216,12 @@ name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
+
+[[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
@@ -498,6 +506,7 @@ version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9086252eef3fadf8ba2090c0dff8da6ff7bbfd04baf15b094f55cc12f1c9fc5"
 dependencies = [
+ "pyo3",
  "regex",
  "rowan",
  "serde",
@@ -534,9 +543,9 @@ dependencies = [
 
 [[package]]
 name = "debian-changelog"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71be2258e81c0c1f83f5e87340a11bf5c2336b3424fb2a7c7aa1be5a00c32577"
+checksum = "9608e140c8637c6e33acc349ba20872ec6184e516957506a51d1a48146ea3e34"
 dependencies = [
  "chrono",
  "debversion",
@@ -555,6 +564,7 @@ checksum = "8c24d781770afb3bbfc9de716ec9a5ebbb3c03efd41056845706b99582ac7d04"
 dependencies = [
  "deb822-lossless",
  "debversion",
+ "pyo3",
  "regex",
  "rowan",
  "url",
@@ -1671,9 +1681,12 @@ checksum = "da544ee218f0d287a911e9c99a39a8c9bc8fcad3cb8db5959940044ecfc67265"
 
 [[package]]
 name = "ppv-lite86"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
+checksum = "dee4364d9f3b902ef14fab8a1ddffb783a1cb6b4bba3bfc1fa3922732c7de97f"
+dependencies = [
+ "zerocopy",
+]
 
 [[package]]
 name = "prettyplease"
@@ -2131,6 +2144,7 @@ dependencies = [
  "clap",
  "debian-analyzer",
  "debian-changelog",
+ "debian-control",
  "debversion",
  "env_logger",
  "flate2",
@@ -2141,6 +2155,7 @@ dependencies = [
  "log",
  "percent-encoding",
  "pyo3",
+ "rand",
  "regex",
  "reqwest",
  "serde",
@@ -3058,6 +3073,27 @@ name = "xdg"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213b7324336b53d2414b2db8537e56544d981803139155afa84f76eeebb7a546"
+
+[[package]]
+name = "zerocopy"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "854e949ac82d619ee9a14c66a1b674ac730422372ccb759ce0c39cabcf2bf8e6"
+dependencies = [
+ "byteorder",
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "125139de3f6b9d625c39e2efdd73d41bdac468ccd556556440e322be0e1bbd91"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.72",
+]
 
 [[package]]
 name = "zeroize"

@@ -1,4 +1,5 @@
 use breezyshim::branch::Branch;
+use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
 use breezyshim::revisionid::RevisionId;
 use debversion::Version;
 use std::collections::HashMap;
@@ -39,6 +40,10 @@ impl LastAttemptDatabase {
         let key = package.to_string().into_bytes();
         let value = value.to_rfc3339();
         self.db.store(&key, value.as_bytes(), None).unwrap();
+    }
+
+    pub fn refresh(&mut self, package: &str) {
+        self.set(package, chrono::Utc::now().into());
     }
 }
 
@@ -116,37 +121,48 @@ pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, 
     Ok(ids)
 }
 
+#[derive(Clone, Debug)]
 pub enum PackageResult {
-    Ignored(String),
-    ProcessingFailure(String),
+    Ignored(String, Option<String>),
+    ProcessingFailure(String, Option<String>),
 }
 
 pub fn vcswatch_prescan_package(
     _package: &str,
     vw: &VcswatchEntry,
-    exclude: Option<&[&str]>,
+    exclude: Option<&[String]>,
     min_commit_age: Option<i64>,
-    allowed_committers: Option<&[&str]>,
+    allowed_committers: Option<&[String]>,
 ) -> Result<Option<chrono::DateTime<chrono::Utc>>, PackageResult> {
     if let Some(exclude) = exclude {
-        if exclude.contains(&vw.package.as_str()) {
-            return Err(PackageResult::Ignored("excluded".to_string()));
+        if exclude.contains(&vw.package) {
+            return Err(PackageResult::Ignored(
+                "excluded".to_string(),
+                Some(format!("Excluded")),
+            ));
         }
     }
     if vw.url.is_none() || vw.vcs.is_none() {
-        return Err(PackageResult::ProcessingFailure("not-in-vcs".to_string()));
+        return Err(PackageResult::ProcessingFailure(
+            "not-in-vcs".to_string(),
+            Some(format!("Not in VCS")),
+        ));
     }
     // TODO(jelmer): check autopkgtest_only ?
     // from debian.deb822 import Deb822
     // pkg_source = Deb822(vw.controlfile)
     // has_testsuite = "Testsuite" in pkg_source
     if vw.commits == 0 {
-        return Err(PackageResult::Ignored("no-unuploaded-changes".to_string()));
+        return Err(PackageResult::Ignored(
+            "no-unuploaded-changes".to_string(),
+            Some(format!("No unuploaded changes")),
+        ));
     }
     if vw.status.as_deref() == Some("ERROR") {
         log::warn!("vcswatch: unable to access {}: {:?}", vw.package, vw.error);
         return Err(PackageResult::ProcessingFailure(
             "vcs-inaccessible".to_string(),
+            Some(format!("Unable to access vcs: {:?}", vw.error)),
         ));
     }
     if let Some(last_scan) = vw.last_scan.as_ref() {
@@ -162,7 +178,13 @@ pub fn vcswatch_prescan_package(
                         committer,
                         allowed_committers,
                     );
-                    return Err(PackageResult::Ignored("committer-not-allowed".to_string()));
+                    return Err(PackageResult::Ignored(
+                        "committer-not-allowed".to_string(),
+                        Some(format!(
+                            "committer {} not in allowed list: {:?}",
+                            committer, allowed_committers
+                        )),
+                    ));
                 }
                 Err(RevisionRejected::RecentCommits(commit_age, min_commit_age)) => {
                     log::info!(
@@ -171,7 +193,13 @@ pub fn vcswatch_prescan_package(
                         commit_age,
                         min_commit_age,
                     );
-                    return Err(PackageResult::Ignored("recent-commits".to_string()));
+                    return Err(PackageResult::Ignored(
+                        "recent-commits".to_string(),
+                        Some(format!(
+                            "Recent commits ({} days < {} days)",
+                            commit_age, min_commit_age
+                        )),
+                    ));
                 }
                 Ok(ts) => {
                     return Ok(Some(ts));
@@ -185,7 +213,7 @@ pub fn vcswatch_prescan_package(
 fn check_git_commits(
     vcslog: &str,
     min_commit_age: Option<i64>,
-    allowed_committers: Option<&[&str]>,
+    allowed_committers: Option<&[String]>,
 ) -> Result<chrono::DateTime<chrono::Utc>, RevisionRejected> {
     pub struct GitRevision {
         commit_id: String,
@@ -308,7 +336,7 @@ pub enum RevisionRejected {
 fn check_revision(
     rev: &dyn Revision,
     min_commit_age: Option<i64>,
-    allowed_committers: Option<&[&str]>,
+    allowed_committers: Option<&[String]>,
 ) -> Result<(), RevisionRejected> {
     // TODO(jelmer): deal with timezone
     if let Some(min_commit_age) = min_commit_age {
@@ -336,7 +364,7 @@ fn check_revision(
             }
         };
 
-        if !allowed_committers.contains(&committer_email.as_str()) {
+        if !allowed_committers.contains(&committer_email) {
             return Err(RevisionRejected::CommitterNotAllowed(
                 committer_email,
                 allowed_committers.iter().map(|s| s.to_string()).collect(),
@@ -357,14 +385,15 @@ pub struct VcswatchEntry {
     status: Option<String>,
     error: Option<String>,
     vcs: Option<String>,
+    archive_version: Option<debversion::Version>,
 }
 
 pub fn vcswatch_prescan_packages(
-    packages: &[&str],
+    packages: &[String],
     inc_stats: &mut dyn FnMut(&str),
-    exclude: Option<&[&str]>,
+    exclude: Option<&[String]>,
     min_commit_age: Option<i64>,
-    allowed_committers: Option<&[&str]>,
+    allowed_committers: Option<&[String]>,
 ) -> Result<(Vec<String>, usize, HashMap<String, VcswatchEntry>), Box<dyn std::error::Error>> {
     log::info!("Using vcswatch to prescan {} packages", packages.len());
 
@@ -396,17 +425,17 @@ pub fn vcswatch_prescan_packages(
     let mut by_ts = HashMap::new();
     let mut failures = 0;
     for package in packages.iter() {
-        let vw = if let Some(p) = vcswatch.get(*package) {
+        let vw = if let Some(p) = vcswatch.get(package) {
             p
         } else {
             continue;
         };
         match vcswatch_prescan_package(package, vw, exclude, min_commit_age, allowed_committers) {
-            Err(PackageResult::ProcessingFailure(reason)) => {
+            Err(PackageResult::ProcessingFailure(reason, _description)) => {
                 inc_stats(reason.as_str());
                 failures += 1;
             }
-            Err(PackageResult::Ignored(reason)) => {
+            Err(PackageResult::Ignored(reason, _description)) => {
                 inc_stats(reason.as_str());
             }
             Ok(ts) => {
@@ -436,4 +465,265 @@ pub fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> Revisi
             .extract::<RevisionId>()
     })
     .unwrap()
+}
+
+pub fn process_package(
+    apt_repo: &dyn Apt,
+    package: &str,
+    builder: &str,
+    exclude: Option<&[String]>,
+    autopkgtest_only: bool,
+    gpg_verification: bool,
+    acceptable_keys: Option<&[String]>,
+    debug: bool,
+    diff: bool,
+    min_commit_age: usize,
+    allowed_committers: Option<&[String]>,
+    vcs_type: Option<&str>,
+    vcs_url: Option<&str>,
+    source_name: Option<&str>,
+    archive_version: Option<&debversion::Version>,
+    verify_command: Option<&str>,
+) -> Result<(), PackageResult> {
+    use pyo3::prelude::*;
+    pyo3::import_exception!(silver_platter.debian.uploader, PackageIgnored);
+    pyo3::import_exception!(silver_platter.debian.uploader, PackageProcessingFailure);
+    Python::with_gil(|py| {
+        let m = py.import_bound("silver_platter.debian.uploader").unwrap();
+        let process_package = m.getattr("process_package").unwrap();
+        let kwargs = pyo3::types::PyDict::new_bound(py);
+        kwargs.set_item("debug", debug).unwrap();
+        kwargs.set_item("diff", diff).unwrap();
+        kwargs.set_item("verify_command", verify_command).unwrap();
+        kwargs.set_item("source_name", source_name).unwrap();
+        kwargs.set_item("archive_version", archive_version).unwrap();
+        kwargs.set_item("vcs_url", vcs_url).unwrap();
+        kwargs.set_item("vcs_type", vcs_type).unwrap();
+        kwargs
+            .set_item("allowed_committers", allowed_committers)
+            .unwrap();
+        kwargs.set_item("min_commit_age", min_commit_age).unwrap();
+        kwargs
+            .set_item("autopkgtest_only", autopkgtest_only)
+            .unwrap();
+        kwargs.set_item("exclude", exclude).unwrap();
+        kwargs.set_item("builder", builder).unwrap();
+        kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
+        kwargs
+            .set_item("gpg_verification", gpg_verification)
+            .unwrap();
+        kwargs.set_item("apt_repo", apt_repo.to_object(py)).unwrap();
+        kwargs.set_item("package", package).unwrap();
+        match process_package.call((), Some(&kwargs)) {
+            Ok(_) => Ok(()),
+            Err(e) if e.is_instance_of::<PackageIgnored>(py) => {
+                let value = e.value_bound(py);
+                let reason = value
+                    .getattr("reason")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap();
+                let description: Option<String> =
+                    value.getattr("description").unwrap().extract().unwrap();
+
+                Err(PackageResult::Ignored(reason, description))
+            }
+            Err(e) if e.is_instance_of::<PackageProcessingFailure>(py) => {
+                let value = e.value_bound(py);
+                let reason = value
+                    .getattr("reason")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap();
+                let description: Option<String> =
+                    value.getattr("description").unwrap().extract().unwrap();
+
+                Err(PackageResult::ProcessingFailure(reason, description))
+            }
+            Err(e) => Err(PackageResult::ProcessingFailure(
+                "unknown".to_string(),
+                Some(format!("{:?}", e)),
+            )),
+        }
+    })
+}
+
+pub fn select_apt_packages(
+    apt_repo: &dyn Apt,
+    package_names: Option<&[String]>,
+    maintainer: Option<&[String]>,
+) -> Vec<String> {
+    let mut packages = vec![];
+
+    for source in apt_repo.iter_sources() {
+        if let Some(maintainer) = maintainer {
+            let m = source.maintainer().unwrap();
+            let (_fullname, email) = debian_changelog::parseaddr(&m);
+            if !maintainer.contains(&email.to_string()) {
+                continue;
+            }
+        }
+
+        if let Some(package_names) = package_names {
+            if !package_names.contains(&source.package().unwrap()) {
+                continue;
+            }
+        }
+
+        packages.push(source.package().unwrap());
+    }
+
+    packages
+}
+
+pub fn main(
+    mut packages: Vec<String>,
+    acceptable_keys: Option<Vec<String>>,
+    gpg_verification: bool,
+    min_commit_age: usize,
+    diff: bool,
+    builder: String,
+    mut maintainer: Option<Vec<String>>,
+    vcswatch: bool,
+    exclude: Option<Vec<String>>,
+    autopkgtest_only: bool,
+    allowed_committers: Option<Vec<String>>,
+    debug: bool,
+    shuffle: bool,
+    verify_command: Option<String>,
+    apt_repository: Option<String>,
+    apt_repository_key: Option<std::path::PathBuf>,
+) -> i32 {
+    let mut ret = 0;
+
+    if packages.is_empty() && maintainer.is_none() {
+        if let Some((_name, email)) = debian_changelog::get_maintainer() {
+            log::info!("Processing packages maintained by {}", email);
+            maintainer = Some(vec![email]);
+        }
+    }
+
+    if !vcswatch {
+        log::info!(
+            "Use --vcswatch to only process packages for which vcswatch found pending commits."
+        )
+    }
+
+    let apt_repo: Box<dyn Apt> = if let Some(apt_repository) = apt_repository.as_ref() {
+        Box::new(RemoteApt::from_string(apt_repository, apt_repository_key.as_deref()).unwrap())
+            as _
+    } else {
+        Box::new(LocalApt::new(None).unwrap()) as _
+    };
+
+    if let Some(maintainer) = maintainer.as_ref() {
+        packages = select_apt_packages(
+            apt_repo.as_ref(),
+            Some(packages.as_slice()),
+            Some(maintainer),
+        );
+    }
+
+    if packages.is_empty() {
+        log::info!("No packages found.");
+        return 1;
+    }
+
+    if shuffle {
+        use rand::seq::SliceRandom;
+        // Shuffle packages vec
+        let mut rng = rand::thread_rng();
+        packages.shuffle(&mut rng);
+    }
+
+    let mut stats = HashMap::new();
+
+    let mut inc_stats = |result: &str| {
+        *stats.entry(result.to_string()).or_insert(0) += 1;
+    };
+
+    let mut extra_data: Option<HashMap<String, VcswatchEntry>> = None;
+
+    if vcswatch {
+        let (new_packages, failures, new_extra_data) = vcswatch_prescan_packages(
+            packages.as_slice(),
+            &mut |reason| inc_stats(reason),
+            exclude.as_deref(),
+            Some(min_commit_age as i64),
+            allowed_committers.as_deref(),
+        )
+        .unwrap();
+        packages = new_packages;
+        extra_data = Some(new_extra_data);
+        if failures > 0 {
+            ret = 1
+        }
+    };
+
+    if packages.len() > 1 {
+        log::info!(
+            "Uploading {} packages: {}",
+            packages.len(),
+            packages.join(", ")
+        );
+    }
+
+    #[cfg(feature = "last-attempt-db")]
+    let last_attempt = LastAttemptDatabase::default();
+
+    #[cfg(feature = "last-attempt-db")]
+    {
+        let orig_packages = packages.clone();
+
+        let last_attempt_key = |p| {
+            let t = last_attempt.get(p).unwrap_or(0);
+            (t, orig_packages.index(p))
+        };
+
+        packages.sort_by_key(last_attempt_key);
+    }
+
+    for package in packages.iter() {
+        let extra_package = extra_data.as_ref().and_then(|d| d.get(package));
+
+        match process_package(
+            apt_repo.as_ref(),
+            &package,
+            &builder,
+            exclude.as_deref(),
+            autopkgtest_only,
+            gpg_verification,
+            acceptable_keys.as_deref(),
+            debug,
+            diff,
+            min_commit_age,
+            allowed_committers.as_deref(),
+            extra_package.map(|p| p.vcs.as_deref()).flatten(),
+            extra_package.map(|p| p.url.as_deref()).flatten(),
+            extra_package.map(|p| p.package.as_str()),
+            extra_package.and_then(|p| p.archive_version.as_ref()),
+            verify_command.as_deref(),
+        ) {
+            Err(PackageResult::ProcessingFailure(reason, _description)) => {
+                inc_stats(reason.as_str());
+                ret = 1;
+            }
+            Err(PackageResult::Ignored(reason, _description)) => inc_stats(reason.as_str()),
+            Ok(_) => {
+                inc_stats("success");
+            }
+        }
+
+        #[cfg(feature = "last-attempt-db")]
+        last_attempt.refresh(package);
+    }
+
+    if packages.len() > 1 {
+        log::info!("Results:");
+        for (error, c) in stats.iter() {
+            log::info!("  {}: {}", error, c);
+        }
+    }
+
+    ret
 }
