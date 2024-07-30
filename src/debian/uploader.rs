@@ -138,14 +138,14 @@ pub fn vcswatch_prescan_package(
         if exclude.contains(&vw.package) {
             return Err(PackageResult::Ignored(
                 "excluded".to_string(),
-                Some(format!("Excluded")),
+                Some("Excluded".to_string()),
             ));
         }
     }
     if vw.url.is_none() || vw.vcs.is_none() {
         return Err(PackageResult::ProcessingFailure(
             "not-in-vcs".to_string(),
-            Some(format!("Not in VCS")),
+            Some("Not in VCS".to_string()),
         ));
     }
     // TODO(jelmer): check autopkgtest_only ?
@@ -155,7 +155,7 @@ pub fn vcswatch_prescan_package(
     if vw.commits == 0 {
         return Err(PackageResult::Ignored(
             "no-unuploaded-changes".to_string(),
-            Some(format!("No unuploaded changes")),
+            Some("No unuploaded changes".to_string()),
         ));
     }
     if vw.status.as_deref() == Some("ERROR") {
@@ -647,7 +647,7 @@ pub fn main(
     if vcswatch {
         let (new_packages, failures, new_extra_data) = vcswatch_prescan_packages(
             packages.as_slice(),
-            &mut |reason| inc_stats(reason),
+            &mut &mut inc_stats,
             exclude.as_deref(),
             Some(min_commit_age as i64),
             allowed_committers.as_deref(),
@@ -669,15 +669,15 @@ pub fn main(
     }
 
     #[cfg(feature = "last-attempt-db")]
-    let last_attempt = LastAttemptDatabase::default();
+    let mut last_attempt = LastAttemptDatabase::default();
 
     #[cfg(feature = "last-attempt-db")]
     {
         let orig_packages = packages.clone();
 
-        let last_attempt_key = |p| {
-            let t = last_attempt.get(p).unwrap_or(0);
-            (t, orig_packages.index(p))
+        let last_attempt_key = |p: &String| -> (chrono::DateTime<chrono::FixedOffset>, usize) {
+            let t = last_attempt.get(p).unwrap_or(chrono::Utc::now().into());
+            (t, orig_packages.iter().position(|i| i == p).unwrap())
         };
 
         packages.sort_by_key(last_attempt_key);
@@ -688,7 +688,7 @@ pub fn main(
 
         match process_package(
             apt_repo.as_ref(),
-            &package,
+            package,
             &builder,
             exclude.as_deref(),
             autopkgtest_only,
@@ -698,8 +698,8 @@ pub fn main(
             diff,
             min_commit_age,
             allowed_committers.as_deref(),
-            extra_package.map(|p| p.vcs.as_deref()).flatten(),
-            extra_package.map(|p| p.url.as_deref()).flatten(),
+            extra_package.and_then(|p| p.vcs.as_deref()),
+            extra_package.and_then(|p| p.url.as_deref()),
             extra_package.map(|p| p.package.as_str()),
             extra_package.and_then(|p| p.archive_version.as_ref()),
             verify_command.as_deref(),

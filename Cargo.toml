@@ -38,7 +38,7 @@ rand = "0.8.5"
 members = [ "crates/*",]
 
 [features]
-default = ["debian", "detect-update-changelog", "cli"]
+default = ["debian", "detect-update-changelog"]
 debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
