@@ -1,4 +1,5 @@
 use breezyshim::branch::Branch;
+use breezyshim::debian::apt::Apt;
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::{ChangeLog, Urgency};
 use std::collections::HashMap;
@@ -673,4 +674,29 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
+}
+
+/// Get source package metadata.
+///
+/// # Arguments
+/// * `apt_repo` - A `Apt` object
+/// * `name` - Name of the source package
+pub fn apt_get_source_package(
+    apt_repo: &dyn Apt,
+    name: &str,
+) -> Option<debian_control::apt::Source> {
+    let mut by_version = HashMap::new();
+
+    for source in apt_repo.iter_source_by_name(name) {
+        by_version.insert(source.version().unwrap(), source);
+    }
+
+    if by_version.is_empty() {
+        return None;
+    }
+
+    // Try the latest version
+    let latest_version = by_version.keys().max().unwrap().clone();
+
+    by_version.remove(&latest_version)
 }
