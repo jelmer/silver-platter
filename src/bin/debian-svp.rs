@@ -559,8 +559,6 @@ fn login(url: &url::Url) -> i32 {
 }
 
 fn main() {
-    pyo3::prepare_freethreaded_python();
-    use pyo3::prelude::*;
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -737,24 +735,22 @@ fn main() {
             apt_repository,
             apt_repository_key,
             packages,
-        } => pyo3::Python::with_gil(|py| {
-            silver_platter::debian::uploader::main(
-                packages,
-                acceptable_keys,
-                gpg_verification,
-                min_commit_age,
-                diff,
-                builder,
-                maintainer,
-                vcswatch,
-                shuffle,
-                exclude,
-                verify_command,
-                allowed_committer,
-                apt_repository,
-                apt_repository_key,
-            )
-        }),
+        } => silver_platter::debian::uploader::main(
+            packages,
+            acceptable_keys,
+            gpg_verification,
+            min_commit_age,
+            diff,
+            builder,
+            maintainer,
+            vcswatch,
+            shuffle,
+            exclude,
+            verify_command,
+            allowed_committer,
+            apt_repository,
+            apt_repository_key,
+        ),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,
