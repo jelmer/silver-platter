@@ -147,7 +147,7 @@ enum Commands {
 
         /// APT repository key to use for validation, if --apt-repository is set.
         #[arg(long, env = "APT_REPOSITORY_KEY")]
-        apt_repository_key: Option<String>,
+        apt_repository_key: Option<std::path::PathBuf>,
 
         /// Packages to upload
         packages: Vec<String>,
@@ -736,20 +736,22 @@ fn main() {
             apt_repository_key,
             packages,
         } => silver_platter::debian::uploader::main(
-            packages,
-            acceptable_keys,
-            gpg_verification,
-            min_commit_age,
-            diff,
-            builder,
-            maintainer,
-            vcswatch,
-            shuffle,
-            exclude,
-            verify_command,
-            allowed_committer,
-            apt_repository,
-            apt_repository_key,
+            packages.clone(),
+            acceptable_keys.clone(),
+            *gpg_verification,
+            *min_commit_age,
+            *diff,
+            builder.clone(),
+            maintainer.clone(),
+            *vcswatch,
+            exclude.clone(),
+            *autopkgtest_only,
+            allowed_committer.clone(),
+            cli.debug,
+            *shuffle,
+            verify_command.clone(),
+            apt_repository.clone(),
+            apt_repository_key.clone(),
         ),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
