@@ -21,6 +21,7 @@ impl LastAttemptDatabase {
                 None,
                 tdb::Flags::empty(),
                 libc::O_RDWR | libc::O_CREAT,
+                0o755,
             )
             .unwrap(),
         }
