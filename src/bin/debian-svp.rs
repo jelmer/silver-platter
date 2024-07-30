@@ -738,7 +738,7 @@ fn main() {
             apt_repository_key,
             packages,
         } => pyo3::Python::with_gil(|py| {
-            crate::debian::uploader::main(
+            silver_platter::debian::uploader::main(
                 packages,
                 acceptable_keys,
                 gpg_verification,
