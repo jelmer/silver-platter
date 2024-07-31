@@ -525,7 +525,7 @@ fn main() {
                 Ok(result) => result,
                 Err(err) => {
                     error!("Failed: {}", err);
-                    reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                    reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                     std::process::exit(1);
                 }
             };
@@ -542,12 +542,12 @@ fn main() {
                     Ok(status) if status.success() => {}
                     Ok(status) => {
                         error!("Verify command failed: {}", status);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                        reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                         std::process::exit(1);
                     }
                     Err(err) => {
                         error!("Verify command failed: {}", err);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                        reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                         std::process::exit(1);
                     }
                 }
