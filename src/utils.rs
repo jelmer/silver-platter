@@ -37,7 +37,7 @@ pub fn create_temp_sprout(
     let to_dir =
         branch
             .controldir()
-            .sprout(to_url, Some(branch), Some(true), Some(use_stacking), None);
+            .sprout(to_url, Some(branch), Some(true), Some(use_stacking), None)?;
     // TODO(jelmer): Fetch these during the initial clone
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
         let controldir = branch.controldir();

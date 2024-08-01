@@ -80,7 +80,7 @@ class WorkspaceTests(TestCaseWithTransport):
         cid = b.commit("some change")
         with Workspace(b.branch, dir=self.test_dir) as ws:
             ws.local_tree.commit("blah")
-            self.assertEqual(cid, ws.base_tree().get_revision_id())
+            self.assertEqual(cid, ws.base_tree.get_revision_id())
 
     def test_show_diff(self):
         b = self.make_branch_and_tree("target")

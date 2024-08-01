@@ -506,7 +506,12 @@ fn main() {
 
             let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
 
-            check_clean_tree(&local_tree, &local_tree.basis_tree(), subpath.as_path()).unwrap();
+            check_clean_tree(
+                &local_tree,
+                &local_tree.basis_tree().unwrap(),
+                subpath.as_path(),
+            )
+            .unwrap();
 
             let result = match script_runner(
                 &local_tree,

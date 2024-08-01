@@ -8,6 +8,7 @@ use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
+use url::Url;
 
 create_exception!(
     silver_platter.utils,
@@ -1167,6 +1168,227 @@ fn merge_conflicts(
     ))
 }
 
+fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
+    import_exception!(breezy.errors, UnknownFormat);
+    match e {
+        silver_platter::workspace::Error::BrzError(e) => e.into(),
+        silver_platter::workspace::Error::IOError(e) => e.into(),
+        silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
+        silver_platter::workspace::Error::UnknownFormat(format) => {
+            UnknownFormat::new_err((format,))
+        }
+    }
+}
+
+#[pyclass(subclass)]
+struct Workspace(silver_platter::workspace::Workspace);
+
+#[pymethods]
+impl Workspace {
+    /// Create a workspace from a URL.
+    ///
+    /// # Arguments
+    /// * `url` - The URL to create the workspace from
+    #[classmethod]
+    fn from_url(_cls: &Bound<PyType>, url: &str) -> PyResult<Self> {
+        Ok(Self(
+            silver_platter::workspace::Workspace::from_url(
+                &url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?,
+            )
+            .map_err(workspace_error_to_py_err)?,
+        ))
+    }
+
+    #[getter]
+    fn path(&self) -> std::path::PathBuf {
+        self.0.path()
+    }
+
+    #[getter]
+    fn base_revid(&self) -> Option<RevisionId> {
+        self.0.base_revid()
+    }
+
+    #[new]
+    #[pyo3(signature = (main_branch=None, resume_branch=None, cached_branch=None, dir=None, path=None, additional_colocated_branches=None, resume_branch_additional_colocated_branches=None, format=None))]
+    fn new(
+        py: Python,
+        main_branch: Option<PyObject>,
+        resume_branch: Option<PyObject>,
+        cached_branch: Option<PyObject>,
+        dir: Option<std::path::PathBuf>,
+        path: Option<std::path::PathBuf>,
+        additional_colocated_branches: Option<PyObject>,
+        resume_branch_additional_colocated_branches: Option<PyObject>,
+        format: Option<PyObject>,
+    ) -> PyResult<Self> {
+        let mut builder = silver_platter::workspace::Workspace::builder();
+
+        if let Some(main_branch) = main_branch {
+            builder = builder.main_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                main_branch,
+            )));
+        }
+
+        if let Some(resume_branch) = resume_branch {
+            builder = builder.resume_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                resume_branch,
+            )));
+        }
+
+        if let Some(cached_branch) = cached_branch {
+            builder = builder.cached_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                cached_branch,
+            )));
+        }
+
+        if let Some(additional_colocated_branches) = additional_colocated_branches {
+            if let Ok(additional_colocated_branches) =
+                additional_colocated_branches.extract::<HashMap<String, String>>(py)
+            {
+                builder = builder.additional_colocated_branches(additional_colocated_branches);
+            } else if let Ok(additional_colocated_branches) =
+                additional_colocated_branches.extract::<Vec<String>>(py)
+            {
+                builder = builder.additional_colocated_branches(
+                    additional_colocated_branches
+                        .into_iter()
+                        .map(|x| (x.clone(), x))
+                        .collect(),
+                );
+            } else {
+                return Err(PyTypeError::new_err(
+                    "additional_colocated_branches must be a dict or a list of tuples",
+                ));
+            }
+        }
+
+        if let Some(resume_branch_additional_colocated_branches) =
+            resume_branch_additional_colocated_branches
+        {
+            if let Ok(resume_branch_additional_colocated_branches) =
+                resume_branch_additional_colocated_branches.extract::<HashMap<String, String>>(py)
+            {
+                builder = builder.resume_branch_additional_colocated_branches(
+                    resume_branch_additional_colocated_branches,
+                );
+            } else if let Ok(resume_branch_additional_colocated_branches) =
+                resume_branch_additional_colocated_branches.extract::<Vec<String>>(py)
+            {
+                builder = builder.resume_branch_additional_colocated_branches(
+                    resume_branch_additional_colocated_branches
+                        .into_iter()
+                        .map(|x| (x.clone(), x))
+                        .collect(),
+                );
+            } else {
+                return Err(PyTypeError::new_err(
+                    "resume_branch_additional_colocated_branches must be a dict or a list of tuples",
+                ));
+            }
+        }
+
+        if let Some(path) = path {
+            builder = builder.path(path);
+        }
+
+        if let Some(dir) = dir {
+            builder = builder.dir(dir);
+        }
+
+        if let Some(format) = format {
+            if let Ok(format) = format.extract::<String>(py) {
+                builder = builder.format(format.as_str());
+            } else if format.bind(py).hasattr("get_format_description")? {
+                builder = builder.format(&breezyshim::controldir::ControlDirFormat::from(format));
+            } else {
+                return Err(PyTypeError::new_err("format must be a string"));
+            }
+        }
+
+        Ok(Self(builder.build().map_err(workspace_error_to_py_err)?))
+    }
+
+    #[getter]
+    fn base_tree(&self, py: Python) -> PyResult<PyObject> {
+        Ok(self.0.base_tree()?.to_object(py))
+    }
+
+    #[getter]
+    fn local_tree(&self, py: Python) -> PyObject {
+        self.0.local_tree().to_object(py)
+    }
+
+    #[getter]
+    fn main_branch(&self, py: Python) -> PyObject {
+        self.0.main_branch().to_object(py)
+    }
+
+    #[getter]
+    fn resume_branch(&self, py: Python) -> Option<PyObject> {
+        self.0.resume_branch().map(|b| b.to_object(py))
+    }
+
+    fn any_branch_changes(&self) -> bool {
+        self.0.any_branch_changes()
+    }
+
+    fn changes_since_main(&self) -> bool {
+        self.0.changes_since_main()
+    }
+
+    fn changes_since_base(&self) -> bool {
+        self.0.changes_since_base()
+    }
+
+    #[getter]
+    fn main_branch_revid(&self) -> RevisionId {
+        self.0.main_branch().unwrap().last_revision()
+    }
+
+    #[getter]
+    fn refreshed(&self) -> bool {
+        self.0.refreshed()
+    }
+
+    fn result_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
+        self.0.changed_branches()
+    }
+
+    fn __enter__(slf: Bound<Self>) -> Bound<Self> {
+        slf.clone()
+    }
+
+    #[pyo3(signature = (_exc_type, _exc_value, _traceback))]
+    fn __exit__(
+        slf: Bound<Self>,
+        _exc_type: Option<PyObject>,
+        _exc_value: Option<PyObject>,
+        _traceback: Option<PyObject>,
+    ) -> PyResult<bool> {
+        slf.borrow_mut()
+            .0
+            .destroy()
+            .map_err(workspace_error_to_py_err)?;
+        Ok(false)
+    }
+
+    #[pyo3(signature = (outf, old_label=None, new_label=None))]
+    fn show_diff(
+        &self,
+        outf: PyObject,
+        old_label: Option<&str>,
+        new_label: Option<&str>,
+    ) -> PyResult<()> {
+        let outf = Box::new(pyo3_filelike::PyBinaryFile::from(outf));
+
+        self.0.show_diff(outf, old_label, new_label)?;
+
+        Ok(())
+    }
+}
+
 #[pymodule]
 fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
@@ -1188,6 +1410,7 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
     m.add_class::<Forge>()?;
+    m.add_class::<Workspace>()?;
     m.add_class::<CandidateList>()?;
     m.add_class::<Candidate>()?;
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
