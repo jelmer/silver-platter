@@ -4,7 +4,7 @@ use breezyshim::RevisionId;
 use std::collections::HashMap;
 use url::Url;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CommandResult {
     pub value: Option<u32>,
     pub context: Option<serde_json::Value>,
