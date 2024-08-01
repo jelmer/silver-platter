@@ -730,6 +730,7 @@ fn test_no_new_commits() {
     let proposal = tree
         .controldir()
         .sprout(proposal_url, None, None, None, None)
+        .unwrap()
         .open_branch(None)
         .unwrap();
     assert!(check_proposal_diff_empty(proposal.as_ref(), tree.branch().as_ref(), None).unwrap());
@@ -752,6 +753,7 @@ fn test_no_op_commits() {
     let proposal = tree
         .controldir()
         .sprout(proposal_url, None, None, None, None)
+        .unwrap()
         .open_workingtree()
         .unwrap();
     proposal
@@ -790,6 +792,7 @@ fn test_indep() {
     let proposal = tree
         .controldir()
         .sprout(proposal_url, None, None, None, None)
+        .unwrap()
         .open_workingtree()
         .unwrap();
 
@@ -832,6 +835,7 @@ fn test_changes() {
     let proposal_tree = tree
         .controldir()
         .sprout(proposal_url, None, None, None, None)
+        .unwrap()
         .open_workingtree()
         .unwrap();
     std::fs::write(proposal_tree.basedir().join("b"), "b").unwrap();
