@@ -47,6 +47,7 @@ pub enum Error {
     BrzError(BrzError),
     IOError(std::io::Error),
     UnknownFormat(String),
+    PermissionDenied(Option<String>),
     Other(String),
 }
 
@@ -55,6 +56,7 @@ impl From<BrzError> for Error {
         match e {
             BrzError::UnknownFormat(n) => Error::UnknownFormat(n),
             BrzError::AlreadyControlDir(_) => unreachable!(),
+            BrzError::PermissionDenied(_, m) => Error::PermissionDenied(m),
             e => Error::BrzError(e),
         }
     }
@@ -81,6 +83,7 @@ impl std::fmt::Display for Error {
             Error::IOError(e) => write!(f, "{}", e),
             Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
             Error::BrzError(e) => write!(f, "{}", e),
+            Error::PermissionDenied(m) => write!(f, "Permission denied: {:?}", m),
             Error::Other(e) => write!(f, "{}", e),
         }
     }
@@ -998,7 +1001,7 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        origin.commit("first commit", None, None, None).unwrap();
 
         let cached = origin
             .branch()
@@ -1166,7 +1169,7 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        origin.commit("first commit", None, None, None).unwrap();
 
         let resume = origin
             .branch()
@@ -1286,7 +1289,7 @@ mod tests {
         )
         .unwrap();
 
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        origin.commit("first commit", None, None, None).unwrap();
 
         let colo_revid1 = commit_on_colo(
             &origin.branch().controldir(),

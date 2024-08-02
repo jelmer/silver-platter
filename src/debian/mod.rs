@@ -260,6 +260,108 @@ pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<S
         .collect()
 }
 
+/// Get source package metadata.
+///
+/// # Arguments
+/// * `apt_repo` - A `Apt` object
+/// * `name` - Name of the source package
+pub fn apt_get_source_package(
+    apt_repo: &dyn Apt,
+    name: &str,
+) -> Option<debian_control::apt::Source> {
+    let mut by_version = HashMap::new();
+
+    for source in apt_repo.iter_source_by_name(name) {
+        by_version.insert(source.version().unwrap(), source);
+    }
+
+    if by_version.is_empty() {
+        return None;
+    }
+
+    // Try the latest version
+    let latest_version = by_version.keys().max().unwrap().clone();
+
+    by_version.remove(&latest_version)
+}
+
+/// Open a packaging branch from a location string.
+///
+/// location can either be a package name or a full URL
+pub fn open_packaging_branch(
+    location: &str,
+    possible_transports: Option<&mut Vec<breezyshim::transport::Transport>>,
+    vcs_type: Option<&str>,
+    apt_repo: Option<&dyn Apt>,
+) -> Result<(Box<dyn Branch>, std::path::PathBuf), crate::vcs::BranchOpenError> {
+    let mut vcs_type = vcs_type.map(|s| s.to_string());
+    let (url, branch_name, subpath) = if !location.contains('/') && !location.contains(':') {
+        let pkg_source = if apt_repo.is_none() {
+            apt_get_source_package(
+                &breezyshim::debian::apt::LocalApt::new(None).unwrap(),
+                location,
+            )
+        } else {
+            apt_get_source_package(apt_repo.unwrap(), location)
+        };
+
+        let pkg_source = match pkg_source {
+            Some(pkg_source) => pkg_source,
+            None => {
+                return Err(crate::vcs::BranchOpenError::Missing {
+                    url: location.parse().unwrap(),
+                    description: format!("Package {} not found in apt", location),
+                })
+            }
+        };
+
+        match debian_analyzer::vcs::vcs_field(&pkg_source) {
+            Some((new_vcs_type, vcs_url)) => {
+                vcs_type = Some(new_vcs_type);
+                let parsed_vcs: debian_control::vcs::ParsedVcs = vcs_url.parse().unwrap();
+                (
+                    parsed_vcs.repo_url.parse().unwrap(),
+                    parsed_vcs.branch,
+                    Some(std::path::PathBuf::from("")),
+                )
+            }
+            None => {
+                return Err(crate::vcs::BranchOpenError::Missing {
+                    url: location.parse().unwrap(),
+                    description: format!("Package {} does not have VCS information", location),
+                })
+            }
+        }
+    } else {
+        let (url, params) =
+            breezyshim::urlutils::split_segment_parameters(&location.parse().unwrap());
+        let branch_name = params.get("branch").map(|b| {
+            percent_encoding::percent_decode_str(b)
+                .decode_utf8()
+                .unwrap()
+                .into_owned()
+        });
+        (url, branch_name, None)
+    };
+    let probers = crate::probers::select_probers(vcs_type.as_deref());
+    let branch = crate::vcs::open_branch(
+        &url,
+        possible_transports,
+        Some(
+            probers
+                .iter()
+                .map(|p| p.as_ref())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        ),
+        branch_name.as_deref(),
+    )?;
+    Ok((
+        branch,
+        subpath.unwrap_or_else(|| std::path::PathBuf::from("")),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,29 +776,4 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
     }
-}
-
-/// Get source package metadata.
-///
-/// # Arguments
-/// * `apt_repo` - A `Apt` object
-/// * `name` - Name of the source package
-pub fn apt_get_source_package(
-    apt_repo: &dyn Apt,
-    name: &str,
-) -> Option<debian_control::apt::Source> {
-    let mut by_version = HashMap::new();
-
-    for source in apt_repo.iter_source_by_name(name) {
-        by_version.insert(source.version().unwrap(), source);
-    }
-
-    if by_version.is_empty() {
-        return None;
-    }
-
-    // Try the latest version
-    let latest_version = by_version.keys().max().unwrap().clone();
-
-    by_version.remove(&latest_version)
 }
