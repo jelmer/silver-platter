@@ -175,9 +175,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.142"
+version = "0.1.146"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e35963780018930c1ff989236ddc44b3327d95ce7e6ea315d9ec76a1c0879c0"
+checksum = "a39692ec39e969cf050c426ae7411c90295077e755f96ba16660fa1d969cad69"
 dependencies = [
  "chrono",
  "ctor",
@@ -225,9 +225,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fca2be1d5c43812bae364ee3f30b3afcb7877cf59f4aeb94c66f313a41d2fac9"
+checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 
 [[package]]
 name = "cc"
@@ -502,9 +502,9 @@ checksum = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
 
 [[package]]
 name = "deb822-lossless"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9086252eef3fadf8ba2090c0dff8da6ff7bbfd04baf15b094f55cc12f1c9fc5"
+checksum = "11973bdcad319fa3957d75f85c1f85b26b4a5c9f4cf1db350e2dbf58be392e80"
 dependencies = [
  "pyo3",
  "regex",
@@ -514,9 +514,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.158.4"
+version = "0.158.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7c3e2c8f1a3ae451eb20404f2f107a9a3a8df2a1c96e8ab2f178bcc0614d582"
+checksum = "d9e1a293def727c819af5616cd60603dc69191d3e0323860395051936dd6325b"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -558,9 +558,9 @@ dependencies = [
 
 [[package]]
 name = "debian-control"
-version = "0.1.13"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c24d781770afb3bbfc9de716ec9a5ebbb3c03efd41056845706b99582ac7d04"
+checksum = "b974e83275b391be6019b97b9b334663308c925d86c03e3d27e0e9a64294fe57"
 dependencies = [
  "deb822-lossless",
  "debversion",
@@ -2075,9 +2075,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.121"
+version = "1.0.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ab380d7d9f22ef3f21ad3e6c1ebe8e4fc7a2000ccba2e4d71fc96f15b2cb609"
+checksum = "784b6203951c57ff748476b126ccb5e8e2959a5c19e5c617ab1956be3dbc68da"
 dependencies = [
  "itoa",
  "memchr",

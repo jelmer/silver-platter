@@ -137,7 +137,13 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let mut ws_builder = Workspace::builder().main_branch(main_branch);
+    let mut ws_builder = Workspace::builder();
+
+    ws_builder = ws_builder.additional_colocated_branches(
+        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+    );
+
+    ws_builder = ws_builder.main_branch(main_branch);
 
     ws_builder = if let Some(resume_branch) = resume_branch.take() {
         ws_builder.resume_branch(resume_branch)

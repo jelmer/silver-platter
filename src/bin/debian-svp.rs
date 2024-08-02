@@ -102,8 +102,8 @@ enum Commands {
         gpg_verification: bool,
 
         /// Minimum age of the last commit, in days
-        #[arg(long, default_value_t = 0)]
-        min_commit_age: usize,
+        #[arg(long)]
+        min_commit_age: Option<i64>,
 
         /// Show diff
         #[arg(long)]
@@ -633,7 +633,12 @@ fn main() {
 
             let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
 
-            check_clean_tree(&local_tree, &local_tree.basis_tree().unwrap(), subpath.as_path()).unwrap();
+            check_clean_tree(
+                &local_tree,
+                &local_tree.basis_tree().unwrap(),
+                subpath.as_path(),
+            )
+            .unwrap();
 
             let update_changelog = if *update_changelog {
                 Some(true)

@@ -1,9 +1,14 @@
+use crate::vcs::{open_branch, BranchOpenError};
 use breezyshim::branch::Branch;
 use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
+use breezyshim::error::Error as BrzError;
+use breezyshim::gpg::VerificationResult;
 use breezyshim::revisionid::RevisionId;
+use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debversion::Version;
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
 #[cfg(feature = "last-attempt-db")]
 use trivialdb as tdb;
@@ -322,6 +327,16 @@ trait Revision {
     fn timestamp(&self) -> chrono::DateTime<chrono::Utc>;
 }
 
+impl Revision for breezyshim::repository::Revision {
+    fn committer(&self) -> Option<&str> {
+        Some(self.committer.as_str())
+    }
+
+    fn timestamp(&self) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(self.timestamp as i64, 0).unwrap()
+    }
+}
+
 pub enum RevisionRejected {
     CommitterNotAllowed(String, Vec<String>),
     RecentCommits(i64, i64),
@@ -454,7 +469,10 @@ pub fn vcswatch_prescan_packages(
     Ok((packages, failures, vcswatch))
 }
 
-pub fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> RevisionId {
+pub fn find_last_release_revid(
+    branch: &dyn Branch,
+    version: &Version,
+) -> Result<RevisionId, BrzError> {
     use pyo3::prelude::*;
     pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
         let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
@@ -464,88 +482,7 @@ pub fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> Revisi
         dbc.call_method1("revid_of_version", (version.to_object(py),))?
             .extract::<RevisionId>()
     })
-    .unwrap()
-}
-
-pub fn process_package(
-    apt_repo: &dyn Apt,
-    package: &str,
-    builder: &str,
-    exclude: Option<&[String]>,
-    autopkgtest_only: bool,
-    gpg_verification: bool,
-    acceptable_keys: Option<&[String]>,
-    debug: bool,
-    diff: bool,
-    min_commit_age: usize,
-    allowed_committers: Option<&[String]>,
-    vcs_type: Option<&str>,
-    vcs_url: Option<&str>,
-    source_name: Option<&str>,
-    archive_version: Option<&debversion::Version>,
-    verify_command: Option<&str>,
-) -> Result<(), PackageResult> {
-    use pyo3::prelude::*;
-    pyo3::import_exception!(silver_platter.debian.uploader, PackageIgnored);
-    pyo3::import_exception!(silver_platter.debian.uploader, PackageProcessingFailure);
-    Python::with_gil(|py| {
-        let m = py.import_bound("silver_platter.debian.uploader").unwrap();
-        let process_package = m.getattr("process_package").unwrap();
-        let kwargs = pyo3::types::PyDict::new_bound(py);
-        kwargs.set_item("debug", debug).unwrap();
-        kwargs.set_item("diff", diff).unwrap();
-        kwargs.set_item("verify_command", verify_command).unwrap();
-        kwargs.set_item("source_name", source_name).unwrap();
-        kwargs.set_item("archive_version", archive_version).unwrap();
-        kwargs.set_item("vcs_url", vcs_url).unwrap();
-        kwargs.set_item("vcs_type", vcs_type).unwrap();
-        kwargs
-            .set_item("allowed_committers", allowed_committers)
-            .unwrap();
-        kwargs.set_item("min_commit_age", min_commit_age).unwrap();
-        kwargs
-            .set_item("autopkgtest_only", autopkgtest_only)
-            .unwrap();
-        kwargs.set_item("exclude", exclude).unwrap();
-        kwargs.set_item("builder", builder).unwrap();
-        kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
-        kwargs
-            .set_item("gpg_verification", gpg_verification)
-            .unwrap();
-        kwargs.set_item("apt_repo", apt_repo.to_object(py)).unwrap();
-        kwargs.set_item("package", package).unwrap();
-        match process_package.call((), Some(&kwargs)) {
-            Ok(_) => Ok(()),
-            Err(e) if e.is_instance_of::<PackageIgnored>(py) => {
-                let value = e.value_bound(py);
-                let reason = value
-                    .getattr("reason")
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap();
-                let description: Option<String> =
-                    value.getattr("description").unwrap().extract().unwrap();
-
-                Err(PackageResult::Ignored(reason, description))
-            }
-            Err(e) if e.is_instance_of::<PackageProcessingFailure>(py) => {
-                let value = e.value_bound(py);
-                let reason = value
-                    .getattr("reason")
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap();
-                let description: Option<String> =
-                    value.getattr("description").unwrap().extract().unwrap();
-
-                Err(PackageResult::ProcessingFailure(reason, description))
-            }
-            Err(e) => Err(PackageResult::ProcessingFailure(
-                "unknown".to_string(),
-                Some(format!("{:?}", e)),
-            )),
-        }
-    })
+    .map_err(|e| BrzError::from(e))
 }
 
 pub fn select_apt_packages(
@@ -580,7 +517,7 @@ pub fn main(
     mut packages: Vec<String>,
     acceptable_keys: Option<Vec<String>>,
     gpg_verification: bool,
-    min_commit_age: usize,
+    min_commit_age: Option<i64>,
     diff: bool,
     builder: String,
     mut maintainer: Option<Vec<String>>,
@@ -649,7 +586,7 @@ pub fn main(
             packages.as_slice(),
             &mut &mut inc_stats,
             exclude.as_deref(),
-            Some(min_commit_age as i64),
+            min_commit_age,
             allowed_committers.as_deref(),
         )
         .unwrap();
@@ -726,4 +663,769 @@ pub fn main(
     }
 
     ret
+}
+
+pub enum PrepareUploadError {
+    /// Failed to run gbp dch
+    GbpDchFailed,
+
+    /// No unuploaded changes since the last upload
+    NoUnuploadedChanges(Version),
+
+    /// The last upload was more recent than the previous upload
+    LastUploadMoreRecent(Version, Version),
+
+    /// The last release revision was not found
+    LastReleaseRevisionNotFound(String, Version),
+
+    /// No unreleased changes
+    NoUnreleasedChanges(Version),
+
+    /// Generated changelog file
+    GeneratedChangelogFile,
+
+    /// No valid GPG signature
+    NoValidGpgSignature(RevisionId, VerificationResult),
+
+    /// Revision rejected
+    Rejected(RevisionRejected),
+
+    /// Build failed
+    BuildFailed,
+
+    /// Missing upstream tarball
+    MissingUpstreamTarball(String, Version),
+
+    /// Package version not present
+    PackageVersionNotPresent(String, Version),
+
+    MissingChangelog,
+
+    ChangelogParseError(String),
+
+    BrzError(BrzError),
+
+    MissingNestedTree(std::path::PathBuf),
+
+    /// Other error
+    Other(String),
+}
+
+impl From<BrzError> for PrepareUploadError {
+    fn from(e: BrzError) -> Self {
+        match e {
+            BrzError::MissingNestedTree(p) => PrepareUploadError::MissingNestedTree(p),
+            e => PrepareUploadError::BrzError(e),
+        }
+    }
+}
+
+pub fn prepare_upload_package(
+    local_tree: &WorkingTree,
+    subpath: &std::path::Path,
+    pkg: &str,
+    last_uploaded_version: Option<&debversion::Version>,
+    builder: &str,
+    gpg_strategy: Option<breezyshim::gpg::GPGStrategy>,
+    min_commit_age: Option<i64>,
+    allowed_committers: Option<&[String]>,
+    apt: Option<&dyn Apt>,
+) -> Result<(std::path::PathBuf, Option<String>), PrepareUploadError> {
+    let mut builder = builder.to_string();
+    let debian_path = subpath.join("debian");
+    #[cfg(feature = "detect-update-changelog")]
+    let run_gbp_dch = {
+        let cl_behaviour = debian_analyzer::detect_gbp_dch::guess_update_changelog(
+            local_tree,
+            debian_path.as_path(),
+            None,
+        );
+        match cl_behaviour {
+            Some(cl_behaviour) => cl_behaviour.update_changelog,
+            None => true,
+        }
+    };
+    #[cfg(not(feature = "detect-update-changelog"))]
+    let run_gbp_dch = false;
+    if run_gbp_dch {
+        match crate::debian::gbp_dch(local_tree.abspath(subpath).unwrap().as_path()) {
+            Ok(_) => {}
+            Err(_) => {
+                // TODO(jelmer): gbp dch sometimes fails when there is no existing
+                // open changelog entry; it fails invoking
+                // "dpkg --lt None <old-version>"
+                return Err(PrepareUploadError::GbpDchFailed);
+            }
+        }
+        local_tree
+            .commit(
+                "update changelog\n\nGbp-Dch: Ignore",
+                None,
+                None,
+                Some(&[&debian_path.join("changelog")]),
+            )
+            .unwrap();
+    }
+    let (cl, _top_level) = debian_analyzer::changelog::find_changelog(
+        local_tree,
+        std::path::Path::new(""),
+        Some(false),
+    )
+    .map_err(|e| match e {
+        debian_analyzer::changelog::FindChangelogError::MissingChangelog(..) => {
+            PrepareUploadError::MissingChangelog
+        }
+        debian_analyzer::changelog::FindChangelogError::AddChangelog(..) => {
+            panic!("changelog not versioned - should never happen");
+        }
+        debian_analyzer::changelog::FindChangelogError::ChangelogParseError(reason) => {
+            PrepareUploadError::ChangelogParseError(reason)
+        }
+        debian_analyzer::changelog::FindChangelogError::BrzError(o) => {
+            PrepareUploadError::Other(o.to_string())
+        }
+    })?;
+
+    let first_block = match cl.entries().next() {
+        Some(e) => e,
+        None => {
+            return Err(PrepareUploadError::NoUnuploadedChanges(
+                last_uploaded_version.unwrap().clone(),
+            ));
+        }
+    };
+    if let Some(last_uploaded_version) = last_uploaded_version {
+        if let Some(first_version) = first_block.version() {
+            if first_version == *last_uploaded_version {
+                return Err(PrepareUploadError::NoUnuploadedChanges(first_version));
+            }
+        }
+
+        if let Some(previous_version_in_branch) =
+            debian_analyzer::changelog::find_previous_upload(&cl)
+        {
+            if *last_uploaded_version > previous_version_in_branch {
+                return Err(PrepareUploadError::LastUploadMoreRecent(
+                    last_uploaded_version.clone(),
+                    previous_version_in_branch,
+                ));
+            }
+        }
+    }
+
+    if let Some(last_uploaded_version) = last_uploaded_version {
+        log::info!("Checking revisions since {}", last_uploaded_version);
+    }
+    let lock = local_tree.lock_read();
+    let last_release_revid: RevisionId = if let Some(last_uploaded_version) = last_uploaded_version
+    {
+        match find_last_release_revid(local_tree.branch().as_ref(), &last_uploaded_version) {
+            Ok(revid) => revid,
+            Err(BrzError::NoSuchTag(..)) => {
+                return Err(PrepareUploadError::LastReleaseRevisionNotFound(
+                    pkg.to_string(),
+                    last_uploaded_version.clone(),
+                ));
+            }
+            Err(e) => {
+                panic!("Unexpected error: {:?}", e);
+            }
+        }
+    } else {
+        breezyshim::revisionid::RevisionId::null()
+    };
+    let graph = local_tree.branch().repository().get_graph();
+    let revids = graph
+        .iter_lefthand_ancestry(
+            &local_tree.branch().last_revision(),
+            Some(&[last_release_revid]),
+        )
+        .collect::<Result<Vec<RevisionId>, _>>()
+        .unwrap();
+    if revids.is_empty() {
+        log::info!("No pending changes");
+        return Err(PrepareUploadError::NoUnuploadedChanges(
+            first_block.version().unwrap(),
+        ));
+    }
+    if let Some(gpg_strategy) = gpg_strategy {
+        log::info!("Verifying GPG signatures...");
+        let result = breezyshim::gpg::bulk_verify_signatures(
+            &local_tree.branch().repository(),
+            revids.iter().collect::<Vec<_>>().as_slice(),
+            &gpg_strategy,
+        )
+        .unwrap();
+        for (revid, result) in result {
+            if !result.is_valid() {
+                return Err(PrepareUploadError::NoValidGpgSignature(revid, result));
+            }
+        }
+    }
+    for (_revid, rev) in local_tree.branch().repository().iter_revisions(revids) {
+        if let Some(rev) = rev {
+            check_revision(&rev, min_commit_age, allowed_committers)
+                .map_err(|e| PrepareUploadError::Rejected(e))?;
+        }
+    }
+
+    if first_block.is_unreleased().unwrap_or(false) {
+        return Err(PrepareUploadError::NoUnreleasedChanges(
+            first_block.version().unwrap(),
+        ));
+    }
+    std::mem::drop(lock);
+    let mut qa_upload = false;
+    let mut team_upload = false;
+    let control_path = local_tree
+        .abspath(debian_path.join("control").as_path())
+        .unwrap();
+    let mut f = local_tree.get_file_text(control_path.as_path()).unwrap();
+    let control =
+        debian_control::Control::from_str(std::str::from_utf8_mut(f.as_mut_slice()).unwrap())
+            .unwrap();
+    let source = control.source().unwrap();
+    let maintainer = source.get("Maintainer").unwrap();
+    let (_, e) = debian_changelog::parseaddr(&maintainer);
+    if e == "packages@qa.debian.org" {
+        qa_upload = true;
+        // TODO(jelmer): Check whether this is a team upload
+        // TODO(jelmer): determine whether this is a NMU upload
+    }
+    if qa_upload || team_upload {
+        let changelog_path = local_tree.abspath(&debian_path.join("changelog")).unwrap();
+        let f = local_tree.get_file(changelog_path.as_path()).unwrap();
+        let cl = debian_changelog::ChangeLog::read_relaxed(f).unwrap();
+        let message = if qa_upload {
+            Some("QA Upload.")
+        } else if team_upload {
+            Some("Team Upload.")
+        } else {
+            None
+        };
+        if let Some(message) = message {
+            cl.entries()
+                .next()
+                .unwrap()
+                .ensure_first_line("Team upload.");
+            local_tree
+                .put_file_bytes_non_atomic(changelog_path.as_path(), cl.to_string().as_bytes())
+                .unwrap();
+            // TODO: Use NullCommitReporter
+            local_tree
+                .commit(
+                    &format!("Mention {}", message),
+                    Some(true),
+                    None,
+                    Some(&[debian_path.join("changelog").as_path()]),
+                )
+                .unwrap();
+        }
+    }
+    let tag_name = match breezyshim::debian::release::release(local_tree, subpath) {
+        Ok(tag_name) => tag_name,
+        Err(breezyshim::debian::release::ReleaseError::GeneratedFile) => {
+            return Err(PrepareUploadError::GeneratedChangelogFile);
+        }
+        Err(e) => {
+            panic!("Unexpected error: {:?}", e);
+        }
+    };
+    let target_dir = tempfile::tempdir().unwrap();
+    if let Some(last_uploaded_version) = last_uploaded_version {
+        builder = builder.replace(
+            "${LAST_VERSION}",
+            last_uploaded_version.to_string().as_str(),
+        );
+    }
+    let target_changes = breezyshim::debian::build_helper(
+        local_tree,
+        subpath,
+        local_tree.branch().as_ref(),
+        target_dir.path(),
+        builder.as_str(),
+        false,
+        apt,
+    )
+    .map_err(|e| match e {
+        breezyshim::debian::BuildError::Other(o) => PrepareUploadError::Other(o.to_string()),
+        breezyshim::debian::BuildError::MissingUpstreamTarball(package, version) => {
+            PrepareUploadError::MissingUpstreamTarball(package, version)
+        }
+        breezyshim::debian::BuildError::PackageVersionNotPresent(package, version) => {
+            PrepareUploadError::PackageVersionNotPresent(package, version)
+        }
+        breezyshim::debian::BuildError::BuildFailed => PrepareUploadError::BuildFailed,
+    })?;
+    let source = target_changes.get("source").unwrap();
+    debsign(std::path::Path::new(&source), None).unwrap();
+    Ok((source.into(), Some(tag_name)))
+}
+
+pub fn process_package(
+    apt_repo: &dyn Apt,
+    package: &str,
+    builder: &str,
+    exclude: Option<&[String]>,
+    autopkgtest_only: bool,
+    gpg_verification: bool,
+    acceptable_keys: Option<&[String]>,
+    _debug: bool,
+    diff: bool,
+    min_commit_age: Option<i64>,
+    allowed_committers: Option<&[String]>,
+    vcs_type: Option<&str>,
+    vcs_url: Option<&str>,
+    source_name: Option<&str>,
+    archive_version: Option<&debversion::Version>,
+    verify_command: Option<&str>,
+) -> Result<(), PackageResult> {
+    let mut archive_version = archive_version.cloned();
+    let mut source_name = source_name.map(|s| s.to_string());
+    let mut vcs_type = vcs_type.map(|s| s.to_string());
+    let mut vcs_url = vcs_url.map(|s| s.to_string());
+    let exclude = exclude.unwrap_or(&[]);
+    log::info!("Processing {}", package);
+    // Can't use open_packaging_branch here, since we want to use pkg_source later on.
+    let mut has_testsuite;
+    if !package.contains('/') {
+        let pkg_source = match crate::debian::apt_get_source_package(apt_repo, package) {
+            Some(pkg_source) => pkg_source,
+            None => {
+                log::info!("{}: package not found in apt", package);
+                return Err(PackageResult::ProcessingFailure(
+                    "not-in-apt".to_string(),
+                    Some("Package not found in apt".to_string()),
+                ));
+            }
+        };
+        if vcs_type.is_none() || vcs_url.is_none() {
+            (vcs_type, vcs_url) = match debian_analyzer::vcs::vcs_field(&pkg_source) {
+                Some((t, u)) => (Some(t), Some(u)),
+                None => {
+                    log::info!(
+                        "{}: no declared vcs location, skipping",
+                        pkg_source.package().unwrap()
+                    );
+                    return Err(PackageResult::ProcessingFailure(
+                        "not-in-vcs".to_string(),
+                        Some("No declared vcs location".to_string()),
+                    ));
+                }
+            };
+        }
+        source_name = Some(source_name.unwrap_or_else(|| pkg_source.package().unwrap()));
+        if exclude.contains(source_name.as_ref().unwrap()) {
+            return Err(PackageResult::Ignored("excluded".to_string(), None));
+        }
+        archive_version = Some(archive_version.unwrap_or_else(|| pkg_source.version().unwrap()));
+        has_testsuite = Some(pkg_source.testsuite().is_some());
+    } else {
+        vcs_url = Some(vcs_url.unwrap_or(package.to_owned()));
+        has_testsuite = None;
+    }
+    let parsed_vcs: debian_control::vcs::ParsedVcs = vcs_url.as_ref().unwrap().parse().unwrap();
+    let location: url::Url = parsed_vcs.repo_url.parse().unwrap();
+    let branch_name = parsed_vcs.branch;
+    let subpath = std::path::PathBuf::from(parsed_vcs.subpath.unwrap_or("".to_string()));
+    let probers = crate::probers::select_probers(vcs_type.as_deref());
+    let main_branch = match open_branch(
+        &location,
+        None,
+        Some(
+            probers
+                .iter()
+                .map(|p| p.as_ref())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        ),
+        branch_name.as_deref(),
+    ) {
+        Ok(b) => b,
+        Err(
+            BranchOpenError::Unavailable { description, .. }
+            | BranchOpenError::TemporarilyUnavailable { description, .. },
+        ) => {
+            log::info!(
+                "{}: branch unavailable: {}",
+                vcs_url.as_ref().unwrap(),
+                description
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-inaccessible".to_string(),
+                Some(format!("Unable to access vcs: {:?}", description)),
+            ));
+        }
+        Err(BranchOpenError::RateLimited {
+            url: _,
+            description: _,
+            retry_after,
+        }) => {
+            log::info!(
+                "{}: rate limited by server (retrying after {})",
+                vcs_url.unwrap(),
+                retry_after.map_or("unknown".to_string(), |i| i.to_string())
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "rate-limited".to_string(),
+                Some(format!(
+                    "Rate limited by server (retrying after {})",
+                    retry_after.map_or("unknown".to_string(), |i| i.to_string())
+                )),
+            ));
+        }
+        Err(BranchOpenError::Missing { description, .. }) => {
+            log::info!("{}: branch not found: {}", vcs_url.unwrap(), description);
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-inaccessible".to_string(),
+                Some(format!("Unable to access vcs: {:?}", description)),
+            ));
+        }
+        Err(BranchOpenError::Other(description)) => {
+            log::info!(
+                "{}: error opening branch: {}",
+                vcs_url.unwrap(),
+                description
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-error".to_string(),
+                Some(format!("Unable to access vcs: {:?}", description)),
+            ));
+        }
+        Err(BranchOpenError::Unsupported { description, .. }) => {
+            log::info!("{}: branch not found: {}", vcs_url.unwrap(), description);
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-unsupported".to_string(),
+                Some(format!("Unable to access vcs: {:?}", description)),
+            ));
+        }
+    };
+    let mut ws_builder = crate::workspace::Workspace::builder();
+    ws_builder = ws_builder.additional_colocated_branches(
+        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+    );
+    let ws = ws_builder.main_branch(main_branch).build().unwrap();
+    if source_name.is_none() {
+        let control_path = subpath.join("debian/control");
+        let control_text = ws
+            .local_tree()
+            .get_file_text(control_path.as_path())
+            .unwrap();
+        let control = debian_control::Control::from_str(
+            std::str::from_utf8(control_text.as_slice()).unwrap(),
+        )
+        .unwrap();
+        let source_name = control.source().unwrap().name().unwrap();
+        let pkg_source = match crate::debian::apt_get_source_package(apt_repo, &source_name) {
+            Some(p) => p,
+            None => {
+                log::info!("{}: package not found in apt", package);
+                return Err(PackageResult::ProcessingFailure(
+                    "not-in-apt".to_owned(),
+                    Some("Package not found in apt".to_owned()),
+                ));
+            }
+        };
+        archive_version = pkg_source.version();
+        has_testsuite = Some(control.source().unwrap().testsuite().is_some());
+    }
+    let has_testsuite = has_testsuite.unwrap();
+    let source_name = source_name.unwrap();
+    if exclude.contains(&source_name) {
+        return Err(PackageResult::Ignored("excluded".to_string(), None));
+    }
+    if autopkgtest_only
+        && !has_testsuite
+        && !ws
+            .local_tree()
+            .has_filename(&subpath.join("debian/tests/control"))
+    {
+        log::info!("{}: Skipping, package has no autopkgtest.", source_name);
+        return Err(PackageResult::Ignored("no-autopkgtest".to_owned(), None));
+    }
+    let branch_config = ws.local_tree().branch().get_config();
+    let gpg_strategy = if gpg_verification {
+        let gpg_strategy = breezyshim::gpg::GPGStrategy::new(&branch_config);
+        let acceptable_keys = if let Some(acceptable_keys) = acceptable_keys {
+            acceptable_keys.iter().map(|s| s.to_string()).collect()
+        } else {
+            #[cfg(feature = "gpg")]
+            {
+                let mut context = gpgme::Context::from_protocol(gpgme::Protocol::OpenPgp).unwrap();
+                get_maintainer_keys(&mut context).unwrap()
+            }
+            #[cfg(not(feature = "gpg"))]
+            {
+                vec![]
+            }
+        };
+        gpg_strategy.set_acceptable_keys(acceptable_keys.as_slice());
+        Some(gpg_strategy)
+    } else {
+        None
+    };
+
+    let (target_changes, tag_name) = match prepare_upload_package(
+        ws.local_tree(),
+        std::path::Path::new(&subpath),
+        &source_name,
+        archive_version.as_ref(),
+        builder,
+        gpg_strategy,
+        min_commit_age,
+        allowed_committers,
+        Some(apt_repo),
+    ) {
+        Ok(r) => r,
+        Err(PrepareUploadError::GbpDchFailed) => {
+            log::warn!("{}: 'gbp dch' failed to run", source_name);
+            return Err(PackageResult::ProcessingFailure(
+                "gbp-dch-failed".to_string(),
+                None,
+            ));
+        }
+        Err(PrepareUploadError::MissingUpstreamTarball(package, version)) => {
+            log::warn!(
+                "{}: missing upstream tarball: {} {}",
+                source_name,
+                package,
+                version
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "missing-upstream-tarball".to_string(),
+                Some(format!("Missing upstream tarball: {} {}", package, version)),
+            ));
+        }
+        Err(PrepareUploadError::Rejected(RevisionRejected::CommitterNotAllowed(
+            committer,
+            allowed_committers,
+        ))) => {
+            log::warn!(
+                "{}: committer {} not in allowed list: {:?}",
+                source_name,
+                committer,
+                allowed_committers,
+            );
+            return Err(PackageResult::Ignored(
+                "committer-not-allowed".to_string(),
+                Some(format!(
+                    "committer {} not in allowed list: {:?}",
+                    committer, allowed_committers
+                )),
+            ));
+        }
+        Err(PrepareUploadError::BuildFailed) => {
+            log::warn!("{}: package failed to build", source_name);
+            return Err(PackageResult::ProcessingFailure(
+                "build-failed".to_string(),
+                None,
+            ));
+        }
+        Err(PrepareUploadError::LastReleaseRevisionNotFound(source_name, version)) => {
+            log::warn!(
+                "{}: Unable to find revision matching last release {}, skipping.",
+                source_name,
+                version,
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "last-release-missing".to_string(),
+                Some(format!(
+                    "Unable to find revision matching last release {}",
+                    version
+                )),
+            ));
+        }
+        Err(PrepareUploadError::LastUploadMoreRecent(archive_version, vcs_version)) => {
+            log::warn!(
+                "{}: Last upload ({}) was more recent than VCS ({})",
+                source_name,
+                archive_version,
+                vcs_version,
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "last-upload-not-in-vcs".to_string(),
+                Some(format!(
+                    "Last upload ({}) was more recent than VCS ({})",
+                    archive_version, vcs_version
+                )),
+            ));
+        }
+        Err(PrepareUploadError::ChangelogParseError(reason)) => {
+            log::info!("{}: Error parsing changelog: {}", source_name, reason);
+            return Err(PackageResult::ProcessingFailure(
+                "changelog-parse-error".to_string(),
+                Some(reason),
+            ));
+        }
+        Err(PrepareUploadError::MissingChangelog) => {
+            log::info!("{}: No changelog found, skipping.", source_name);
+            return Err(PackageResult::ProcessingFailure(
+                "missing-changelog".to_string(),
+                None,
+            ));
+        }
+        Err(PrepareUploadError::GeneratedChangelogFile) => {
+            log::info!(
+                "{}: Changelog is generated and unable to update, skipping.",
+                source_name,
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "generated-changelog".to_string(),
+                None,
+            ));
+        }
+        Err(PrepareUploadError::Rejected(RevisionRejected::RecentCommits(
+            commit_age,
+            _max_commit_age,
+        ))) => {
+            log::info!(
+                "{}: Recent commits ({} days), skipping.",
+                source_name,
+                commit_age,
+            );
+            return Err(PackageResult::Ignored(
+                "recent-commits".to_string(),
+                Some(format!("Recent commits ({} days)", commit_age)),
+            ));
+        }
+        Err(PrepareUploadError::NoUnuploadedChanges(_version)) => {
+            log::info!("{}: No unuploaded changes, skipping.", source_name,);
+            return Err(PackageResult::Ignored(
+                "no-unuploaded-changes".to_string(),
+                Some("No unuploaded changes".to_string()),
+            ));
+        }
+        Err(PrepareUploadError::NoUnreleasedChanges(_version)) => {
+            log::info!("{}: No unreleased changes, skipping.", source_name,);
+            return Err(PackageResult::Ignored(
+                "no-unreleased-changes".to_string(),
+                Some("No unreleased changes".to_string()),
+            ));
+        }
+        Err(PrepareUploadError::MissingNestedTree(_)) => {
+            log::error!("{}: missing nested tree", source_name);
+            return Err(PackageResult::ProcessingFailure(
+                "missing-nested-tree".to_string(),
+                None,
+            ));
+        }
+        Err(PrepareUploadError::BrzError(e)) => {
+            log::error!("{}: error: {:?}", source_name, e);
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-error".to_string(),
+                Some(format!("{:?}", e)),
+            ));
+        }
+        Err(PrepareUploadError::NoValidGpgSignature(revid, _code)) => {
+            log::info!(
+                "{}: No valid GPG signature for revision {}",
+                source_name,
+                revid
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "no-valid-gpg-signature".to_string(),
+                Some(format!("No valid GPG signature for revision {}", revid)),
+            ));
+        }
+        Err(PrepareUploadError::Other(e)) => {
+            log::error!("{}: error: {}", source_name, e);
+            return Err(PackageResult::ProcessingFailure(
+                "other-error".to_string(),
+                Some(e),
+            ));
+        }
+        Err(PrepareUploadError::PackageVersionNotPresent(package, version)) => {
+            log::warn!(
+                "{}: package version {} not present in repository",
+                package,
+                version
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "package-version-not-present".to_string(),
+                Some(format!(
+                    "Package version {} not present in repository",
+                    version
+                )),
+            ));
+        }
+    };
+
+    if let Some(verify_command) = verify_command {
+        match std::process::Command::new(verify_command)
+            .arg(&target_changes)
+            .status()
+        {
+            Ok(o) => {
+                if o.code() == Some(1) {
+                    return Err(PackageResult::Ignored(
+                        "verify-command-declined".to_string(),
+                        Some(format!(
+                            "{}: Verify command {} declined upload",
+                            source_name, verify_command
+                        )),
+                    ));
+                } else if o.code() != Some(0) {
+                    return Err(PackageResult::ProcessingFailure(
+                        "verify-command-error".to_string(),
+                        Some(format!(
+                            "{}: Error running verify command {}: returncode {}",
+                            source_name,
+                            verify_command,
+                            o.code().unwrap()
+                        )),
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(PackageResult::ProcessingFailure(
+                    "verify-command-error".to_string(),
+                    Some(format!(
+                        "{}: Error running verify command {}: {}",
+                        source_name, verify_command, e
+                    )),
+                ));
+            }
+        }
+    }
+
+    let mut tags = HashMap::new();
+    if let Some(tag_name) = tag_name.as_ref() {
+        log::info!("Pushing tag {}", tag_name);
+        tags.insert(
+            tag_name.to_string(),
+            ws.local_tree()
+                .branch()
+                .tags()
+                .unwrap()
+                .lookup_tag(tag_name)
+                .unwrap(),
+        );
+    }
+    match ws.push(Some(tags)) {
+        Ok(_) => {}
+        Err(crate::workspace::Error::PermissionDenied(..)) => {
+            log::info!(
+                "{}: Permission denied pushing to branch, skipping.",
+                source_name,
+            );
+            return Err(PackageResult::ProcessingFailure(
+                "vcs-permission-denied".to_string(),
+                None,
+            ));
+        }
+        Err(e) => {
+            log::error!("{}: Error pushing: {}", source_name, e);
+            return Err(PackageResult::ProcessingFailure(
+                "push-error".to_string(),
+                Some(format!("{:?}", e)),
+            ));
+        }
+    }
+    dput_changes(&target_changes).unwrap();
+    if diff {
+        ws.show_diff(Box::new(std::io::stdout()), None, None)
+            .unwrap();
+    }
+    std::mem::drop(ws);
+    Ok(())
 }

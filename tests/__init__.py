@@ -20,7 +20,6 @@ import unittest
 
 def test_suite():
     names = [
-        "debian",
         "probers",
         "proposal",
         "workspace",

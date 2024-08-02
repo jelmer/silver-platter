@@ -39,10 +39,10 @@ members = [ "crates/*",]
 
 [features]
 default = ["debian", "detect-update-changelog"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
-detect-update-changelog = ["dep:debian-analyzer"]
+detect-update-changelog = []
 cli = ["dep:clap", "dep:env_logger"]
 pyo3 = ["dep:pyo3"]
 

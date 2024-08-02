@@ -1170,10 +1170,12 @@ fn merge_conflicts(
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
     import_exception!(breezy.errors, UnknownFormat);
+    import_exception!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
         silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
+        silver_platter::workspace::Error::PermissionDenied(e) => PermissionDenied::new_err((e,)),
         silver_platter::workspace::Error::UnknownFormat(format) => {
             UnknownFormat::new_err((format,))
         }
