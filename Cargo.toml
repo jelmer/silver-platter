@@ -27,11 +27,12 @@ reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
 lazy-regex = ">=2"
 libc = "0.2"
 xdg = "2.5"
-debian-analyzer = { version = ">=0.158.1", optional = true }
+debian-analyzer = { version = ">=0.158.8", optional = true }
+#debian-analyzer = { path = "../lintian-brush/analyzer", optional = true }
 gpgme = { version = "0.11.0", optional = true }
 pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
-debian-control = { version = "0.1", optional = true }
+debian-control = { version = ">=0.1", optional = true }
 rand = "0.8.5"
 
 [workspace]
@@ -71,7 +72,8 @@ pyo3-log = ">=0.11"
 serde_json = "1"
 tera = "1"
 serde = "1"
-breezyshim = ">=0.1.105"
+breezyshim = ">=0.1.160"
+#breezyshim = { path = "../breezyshim/trunk" }
 url = "2"
 debian-changelog = ">=0.1.10"
 env_logger = ">=0.10"
