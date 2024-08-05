@@ -59,6 +59,6 @@ mod tests {
         let _ = super::select_preferred_probers(None);
 
         let ps = super::select_preferred_probers(Some("bzr"));
-        assert_eq!(ps.len(), 1);
+        assert!(ps.len() > 1);
     }
 }
