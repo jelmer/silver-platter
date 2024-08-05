@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018-2020 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,13 +15,14 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from . import _svp_rs
-
-__all__ = [
-    "Workspace",
-    "fetch_colocated",
-]
+import unittest
 
 
-Workspace = _svp_rs.Workspace
-fetch_colocated = _svp_rs.fetch_colocated
+def test_suite():
+    names = [
+        "proposal",
+        "workspace",
+    ]
+    module_names = [__name__ + ".test_" + name for name in names]
+    loader = unittest.TestLoader()
+    return loader.loadTestsFromNames(module_names)
