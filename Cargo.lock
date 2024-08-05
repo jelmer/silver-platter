@@ -558,9 +558,9 @@ dependencies = [
 
 [[package]]
 name = "debian-control"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b974e83275b391be6019b97b9b334663308c925d86c03e3d27e0e9a64294fe57"
+checksum = "ce8a0b4ae16c79a9320638edbf142b395c967b19773c0c5c4f263d4f523836bc"
 dependencies = [
  "deb822-lossless",
  "debversion",
@@ -2138,7 +2138,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "silver-platter"
-version = "0.5.27"
+version = "0.5.28"
 dependencies = [
  "breezyshim",
  "chrono",
