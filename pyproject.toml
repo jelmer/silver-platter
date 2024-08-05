@@ -30,7 +30,7 @@ dependencies = [
     "pyyaml",
     "ruamel.yaml",
 ]
-dynamic = ["version"]
+version = "0.5.28"
 
 [project.urls]
 Homepage = "https://jelmer.uk/code/silver-platter"
@@ -65,9 +65,6 @@ include = ["silver_platter*"]
 
 [tool.setuptools.package-data]
 silver_platter = ["py.typed"]
-
-[tool.setuptools.dynamic]
-version = {attr = "silver_platter.__version__"}
 
 [tool.mypy]
 ignore_missing_imports = true
