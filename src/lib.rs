@@ -149,6 +149,14 @@ impl<'de> Deserialize<'de> for CommitPending {
 pub trait CodemodResult {
     fn context(&self) -> serde_json::Value;
 
+    fn value(&self) -> Option<u32>;
+
+    fn target_branch_url(&self) -> Option<url::Url>;
+
+    fn description(&self) -> Option<String>;
+
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)>;
+
     fn tera_context(&self) -> tera::Context {
         tera::Context::from_value(self.context()).unwrap()
     }
