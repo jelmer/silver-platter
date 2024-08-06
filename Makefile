@@ -16,14 +16,14 @@ style:
 	PYTHONPATH=$(shell pwd)/py ruff check py
 
 fix:
-	ruff check --fix .
+	ruff check --fix py
 	cargo fmt --all
 
 format:
-	ruff format .
+	ruff format py
 	cargo fmt --all
 
 check:: testsuite
 
 testsuite: build-inplace
-	python3 setup.py test
+	PYTHONPATH=$(shell pwd)/py python3 -m unittest tests.test_suite

@@ -35,7 +35,7 @@ jobs:
           python setup.py build_ext -i
       - name: Style checks
         run: |
-          ruff check py tests
+          ruff check py
       - name: Test suite run
         if: always()
         run: |
