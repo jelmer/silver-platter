@@ -25,6 +25,22 @@ impl crate::CodemodResult for CommandResult {
     fn context(&self) -> serde_json::Value {
         self.context.clone().unwrap_or_default()
     }
+
+    fn value(&self) -> Option<u32> {
+        self.value
+    }
+
+    fn target_branch_url(&self) -> Option<Url> {
+        self.target_branch_url.clone()
+    }
+
+    fn description(&self) -> Option<String> {
+        Some(self.description.clone())
+    }
+
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
+        self.tags.clone()
+    }
 }
 
 impl From<&CommandResult> for DetailedSuccess {
