@@ -1391,7 +1391,7 @@ impl Workspace {
     }
 }
 
-#[pymodule]
+#[pymodule(name = "silver_platter")]
 fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(derived_branch_name, m)?)?;
@@ -1456,6 +1456,20 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "EmptyMergeProposal",
         py.get_type_bound::<EmptyMergeProposal>(),
     )?;
+
+    m.add("MODE_PUSH", "push")?;
+    m.add("MODE_ATTEMPT_PUSH", "attempt-push")?;
+    m.add("MODE_PROPOSE", "propose")?;
+    m.add("MODE_PUSH_DERIVED", "push-derived")?;
+    m.add("SUPPORTED_MODES", vec![
+        "push",
+        "attempt-push",
+        "propose",
+        "push-derived",
+    ])?;
+    let items = silver_platter::VERSION.split('.').collect::<Vec<_>>();
+    let tuple = items.iter().map(|i| i.parse::<i32>().unwrap()).collect::<Vec<_>>();
+    m.add("__version__", pyo3::types::PyTuple::new_bound(py, tuple))?;
 
     Ok(())
 }

@@ -21,7 +21,7 @@ import shutil
 from breezy.revision import NULL_REVISION
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter.workspace import Workspace
+from silver_platter import Workspace
 
 
 class TestWorkspace(TestCaseWithTransport):

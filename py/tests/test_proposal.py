@@ -20,7 +20,7 @@ from io import BytesIO
 
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter.workspace import Workspace
+from silver_platter import Workspace
 
 
 class WorkspaceTests(TestCaseWithTransport):

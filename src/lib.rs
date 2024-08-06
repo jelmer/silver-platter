@@ -161,3 +161,5 @@ pub trait CodemodResult {
         tera::Context::from_value(self.context()).unwrap()
     }
 }
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
