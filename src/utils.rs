@@ -1,9 +1,68 @@
 use breezyshim::branch::Branch;
+use breezyshim::controldir::ControlDir;
 use breezyshim::error::Error as BrzError;
 use breezyshim::merge::{Error as MergeError, MergeType, Merger, MERGE_HOOKS};
 use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
+
+pub struct TempSprout {
+    pub workingtree: WorkingTree,
+    pub destroy: Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>,
+}
+
+impl TempSprout {
+    pub fn new(
+        branch: &dyn Branch,
+        additional_colocated_branches: Option<HashMap<String, String>>) -> Result<Self, BrzError> {
+        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, None, None)?;
+        Ok(Self {
+            workingtree: wt,
+            destroy: Some(destroy),
+        })
+    }
+
+    pub fn new_in(
+        branch: &dyn Branch,
+        additional_colocated_branches: Option<HashMap<String, String>>,
+        dir: Option<&std::path::Path>) -> Result<Self, BrzError> {
+        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, dir, None)?;
+        Ok(Self {
+            workingtree: wt,
+            destroy: Some(destroy),
+        })
+    }
+
+    pub fn new_in_path(
+        branch: &dyn Branch,
+        additional_colocated_branches: Option<HashMap<String, String>>,
+        path: &std::path::Path) -> Result<Self, BrzError> {
+        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, None, Some(path))?;
+        Ok(Self {
+            workingtree: wt,
+            destroy: Some(destroy),
+        })
+    }
+}
+
+impl std::ops::Deref for TempSprout {
+    type Target = WorkingTree;
+
+    fn deref(&self) -> &Self::Target {
+        &self.workingtree
+    }
+}
+
+impl Drop for TempSprout {
+    fn drop(&mut self) {
+        if let Some(destroy) = self.destroy.take() {
+            match (destroy)() {
+                Ok(_) => (),
+                Err(e) => log::debug!("Error destroying TempSprout: {:?}", e),
+            }
+        }
+    }
+}
 
 /// Create a temporary sprout of a branch.
 ///
@@ -14,6 +73,22 @@ pub fn create_temp_sprout(
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
 ) -> Result<(WorkingTree, Box<dyn FnOnce() -> std::io::Result<()> + Send>), BrzError> {
+    let (to_dir, destroy) = create_temp_sprout_cd(branch, additional_colocated_branches, dir, path)?;
+
+    let wt = to_dir.open_workingtree()?;
+
+    Ok((wt, destroy))
+}
+
+/// Create a temporary sprout of a branch.
+///
+/// This attempts to fetch the least amount of history as possible.
+fn create_temp_sprout_cd(
+    branch: &dyn Branch,
+    additional_colocated_branches: Option<HashMap<String, String>>,
+    dir: Option<&std::path::Path>,
+    path: Option<&std::path::Path>,
+) -> Result<(ControlDir, Box<dyn FnOnce() -> std::io::Result<()> + Send>), BrzError> {
     let (td, path) = if let Some(path) = path {
         std::fs::create_dir(path).unwrap();
         (None, path.to_path_buf())
@@ -58,7 +133,6 @@ pub fn create_temp_sprout(
             }
         }
     }
-    let wt = to_dir.open_workingtree()?;
 
     let destroy = Box::new(|| {
         if let Some(td) = td {
@@ -68,7 +142,7 @@ pub fn create_temp_sprout(
         }
     });
 
-    Ok((wt, destroy))
+    Ok((to_dir, destroy))
 }
 
 pub fn merge_conflicts(
@@ -119,4 +193,20 @@ pub fn merge_conflicts(
         MERGE_HOOKS.add("merge_file_content", hook).unwrap();
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sprout() {
+        let base = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(base.path(), &breezyshim::controldir::ControlDirFormat::default()).unwrap();
+        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+
+        let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), revid);
+    }
 }
