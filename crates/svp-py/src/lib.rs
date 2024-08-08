@@ -1165,7 +1165,7 @@ fn merge_conflicts(
         &breezyshim::branch::RegularBranch::new(main_branch),
         &breezyshim::branch::RegularBranch::new(other_branch),
         other_revision.as_ref(),
-    ))
+    )?)
 }
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {

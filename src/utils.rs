@@ -75,13 +75,13 @@ pub fn merge_conflicts(
     main_branch: &dyn Branch,
     other_branch: &dyn Branch,
     other_revision: Option<&RevisionId>,
-) -> bool {
+) -> Result<bool, BrzError> {
     let other_revision = other_revision.map_or_else(|| other_branch.last_revision(), |r| r.clone());
     let other_repository = other_branch.repository();
     let graph = other_repository.get_graph();
 
     if graph.is_ancestor(&main_branch.last_revision(), &other_revision) {
-        return false;
+        return Ok(false);
     }
 
     other_repository
@@ -89,7 +89,7 @@ pub fn merge_conflicts(
             &main_branch.repository(),
             Some(&main_branch.last_revision()),
         )
-        .unwrap();
+        ?;
 
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
@@ -118,5 +118,5 @@ pub fn merge_conflicts(
     for hook in old_file_contents_mergers {
         MERGE_HOOKS.add("merge_file_content", hook).unwrap();
     }
-    result
+    Ok(result)
 }
