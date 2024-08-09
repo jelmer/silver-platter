@@ -175,9 +175,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.165"
+version = "0.1.166"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77af2174eddd785e30a1368ee7c31dae8ad32e680b8f19f6face174d485be5b5"
+checksum = "6a4a2cf02e5039c0dbb651b3419fe972fdd96db82ffa32e88915d49227f99f64"
 dependencies = [
  "chrono",
  "ctor",
@@ -2138,7 +2138,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "silver-platter"
-version = "0.5.31"
+version = "0.5.32"
 dependencies = [
  "breezyshim",
  "chrono",
