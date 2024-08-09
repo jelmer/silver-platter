@@ -72,19 +72,25 @@ impl std::fmt::Display for BranchOpenError {
 #[cfg(feature = "pyo3")]
 impl From<BranchOpenError> for pyo3::PyErr {
     fn from(e: BranchOpenError) -> Self {
+        use pyo3::create_exception;
+        use pyo3::exceptions::PyException;
+        create_exception!(silver_platter, BranchUnsupported, PyException, "Unsupported");
+        create_exception!(silver_platter, BranchTemporarilyUnavailable, PyException, "TemporarilyUnavailable");
+        create_exception!(silver_platter, BranchUnavailable, PyException, "Unavailable");
+        create_exception!(silver_platter, BranchRateLimited, PyException, "RateLimited");
+        create_exception!(silver_platter, BranchMissing, PyException, "Missing");
+
+
         use pyo3::exceptions::PyRuntimeError;
-        use pyo3::import_exception;
         match e {
             BranchOpenError::Unsupported {
                 url,
                 description,
                 vcs,
             } => {
-                import_exception!(silver_platter.utils, BranchUnsupported);
                 BranchUnsupported::new_err((url.to_string(), description, vcs))
             }
             BranchOpenError::Missing { url, description } => {
-                import_exception!(silver_platter.utils, BranchMissing);
                 BranchMissing::new_err((url.to_string(), description))
             }
             BranchOpenError::RateLimited {
@@ -92,15 +98,12 @@ impl From<BranchOpenError> for pyo3::PyErr {
                 description,
                 retry_after,
             } => {
-                import_exception!(silver_platter.utils, BranchRateLimited);
                 BranchRateLimited::new_err((url.to_string(), description, retry_after))
             }
             BranchOpenError::Unavailable { url, description } => {
-                import_exception!(silver_platter.utils, BranchUnavailable);
                 BranchUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::TemporarilyUnavailable { url, description } => {
-                import_exception!(silver_platter.utils, BranchTemporarilyUnavailable);
 
                 BranchTemporarilyUnavailable::new_err((url.to_string(), description))
             }
