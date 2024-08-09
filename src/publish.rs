@@ -140,7 +140,7 @@ pub fn find_existing_proposed(
         Option<bool>,
         Option<Vec<MergeProposal>>,
     ),
-    Error,
+    BrzError,
 > {
     let existing_branch =
         match forge.get_derived_branch(main_branch, name, owner, preferred_schemes) {
