@@ -9,7 +9,11 @@ use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
 
-create_exception!(silver_platter, UnrelatedBranchExists, pyo3::exceptions::PyException);
+create_exception!(
+    silver_platter,
+    UnrelatedBranchExists,
+    pyo3::exceptions::PyException
+);
 
 create_exception!(
     silver_platter,
@@ -28,11 +32,7 @@ create_exception!(
     ScriptMadeNoChanges,
     pyo3::exceptions::PyException
 );
-create_exception!(
-    silver_platter,
-    ScriptFailed,
-    pyo3::exceptions::PyException
-);
+create_exception!(silver_platter, ScriptFailed, pyo3::exceptions::PyException);
 create_exception!(
     silver_platter,
     ScriptNotFound,
