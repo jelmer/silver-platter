@@ -72,14 +72,12 @@ impl std::fmt::Display for BranchOpenError {
 #[cfg(feature = "pyo3")]
 impl From<BranchOpenError> for pyo3::PyErr {
     fn from(e: BranchOpenError) -> Self {
-        use pyo3::create_exception;
-        use pyo3::exceptions::PyException;
-        create_exception!(silver_platter, BranchUnsupported, PyException, "Unsupported");
-        create_exception!(silver_platter, BranchTemporarilyUnavailable, PyException, "TemporarilyUnavailable");
-        create_exception!(silver_platter, BranchUnavailable, PyException, "Unavailable");
-        create_exception!(silver_platter, BranchRateLimited, PyException, "RateLimited");
-        create_exception!(silver_platter, BranchMissing, PyException, "Missing");
-
+        use pyo3::import_exception;
+        import_exception!(silver_platter, BranchUnsupported);
+        import_exception!(silver_platter, BranchTemporarilyUnavailable);
+        import_exception!(silver_platter, BranchUnavailable);
+        import_exception!(silver_platter, BranchRateLimited);
+        import_exception!(silver_platter, BranchMissing);
 
         use pyo3::exceptions::PyRuntimeError;
         match e {
@@ -87,9 +85,7 @@ impl From<BranchOpenError> for pyo3::PyErr {
                 url,
                 description,
                 vcs,
-            } => {
-                BranchUnsupported::new_err((url.to_string(), description, vcs))
-            }
+            } => BranchUnsupported::new_err((url.to_string(), description, vcs)),
             BranchOpenError::Missing { url, description } => {
                 BranchMissing::new_err((url.to_string(), description))
             }
@@ -97,14 +93,11 @@ impl From<BranchOpenError> for pyo3::PyErr {
                 url,
                 description,
                 retry_after,
-            } => {
-                BranchRateLimited::new_err((url.to_string(), description, retry_after))
-            }
+            } => BranchRateLimited::new_err((url.to_string(), description, retry_after)),
             BranchOpenError::Unavailable { url, description } => {
                 BranchUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::TemporarilyUnavailable { url, description } => {
-
                 BranchTemporarilyUnavailable::new_err((url.to_string(), description))
             }
             BranchOpenError::Other(e) => PyRuntimeError::new_err((e,)),
@@ -263,7 +256,7 @@ pub fn open_branch(
     };
 
     let transport = get_transport(&url, possible_transports)
-        .map_err(|e| BranchOpenError::from_err(url.clone(), &e.into()))?;
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let dir = open_from_transport(&transport, probers)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     dir.open_branch(name.as_deref())
@@ -286,7 +279,7 @@ pub fn open_branch_containing(
 
     let transport = match get_transport(&url, possible_transports) {
         Ok(transport) => transport,
-        Err(e) => return Err(BranchOpenError::from_err(url.clone(), &e.into())),
+        Err(e) => return Err(BranchOpenError::from_err(url.clone(), &e)),
     };
     let (dir, subpath) =
         open_containing_from_transport(&transport, probers).map_err(|e| match e {
