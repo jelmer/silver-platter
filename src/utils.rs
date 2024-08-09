@@ -43,6 +43,10 @@ impl TempSprout {
             destroy: Some(destroy),
         })
     }
+
+    pub fn tree(&self) -> &WorkingTree {
+        &self.workingtree
+    }
 }
 
 impl std::ops::Deref for TempSprout {
@@ -208,5 +212,8 @@ mod tests {
         let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
+        let tree = sprout.tree();
+        assert_eq!(tree.last_revision().unwrap(), revid);
+        std::mem::drop(sprout);
     }
 }
