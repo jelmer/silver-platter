@@ -738,6 +738,10 @@ impl PublishResult {
     fn is_new(&self) -> Option<bool> {
         self.0.is_new
     }
+    #[getter]
+    fn forge(&self, py: Python) -> Option<PyObject> {
+        Some(self.0.forge.to_object(py))
+    }
 }
 
 #[pyfunction]
@@ -1392,11 +1396,27 @@ impl Workspace {
     }
 }
 
+#[pyfunction]
+#[pyo3(signature = (vcs_type=None))]
+fn select_preferred_probers(py: Python, vcs_type: Option<&str>) -> Vec<PyObject> {
+    let probers = silver_platter::probers::select_preferred_probers(vcs_type);
+    probers.into_iter().map(|p| p.to_object(py)).collect()
+}
+
+#[pyfunction]
+#[pyo3(signature = (vcs_type=None))]
+fn select_probers(py: Python, vcs_type: Option<&str>) -> Vec<PyObject> {
+    let probers = silver_platter::probers::select_probers(vcs_type);
+    probers.into_iter().map(|p| p.to_object(py)).collect()
+}
+
 #[pymodule(name = "silver_platter")]
 fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(derived_branch_name, m)?)?;
     m.add_function(wrap_pyfunction!(script_runner, m)?)?;
+    m.add_function(wrap_pyfunction!(select_preferred_probers, m)?)?;
+    m.add_function(wrap_pyfunction!(select_probers, m)?)?;
     m.add(
         "ScriptMadeNoChanges",
         py.get_type_bound::<ScriptMadeNoChanges>(),
@@ -1466,14 +1486,15 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("MODE_ATTEMPT_PUSH", "attempt-push")?;
     m.add("MODE_PROPOSE", "propose")?;
     m.add("MODE_PUSH_DERIVED", "push-derived")?;
-    m.add("SUPPORTED_MODES", vec![
-        "push",
-        "attempt-push",
-        "propose",
-        "push-derived",
-    ])?;
+    m.add(
+        "SUPPORTED_MODES",
+        vec!["push", "attempt-push", "propose", "push-derived"],
+    )?;
     let items = silver_platter::VERSION.split('.').collect::<Vec<_>>();
-    let tuple = items.iter().map(|i| i.parse::<i32>().unwrap()).collect::<Vec<_>>();
+    let tuple = items
+        .iter()
+        .map(|i| i.parse::<i32>().unwrap())
+        .collect::<Vec<_>>();
     m.add("__version__", pyo3::types::PyTuple::new_bound(py, tuple))?;
 
     Ok(())
