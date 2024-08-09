@@ -8,57 +8,58 @@ use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
-use url::Url;
+
+create_exception!(silver_platter, UnrelatedBranchExists, pyo3::exceptions::PyException);
 
 create_exception!(
-    silver_platter.utils,
+    silver_platter,
     PreCheckFailed,
     pyo3::exceptions::PyException
 );
 
 create_exception!(
-    silver_platter.utils,
+    silver_platter,
     PostCheckFailed,
     pyo3::exceptions::PyException
 );
 
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ScriptMadeNoChanges,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ScriptFailed,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ScriptNotFound,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     DetailedFailure,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ResultFileFormatError,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     InsufficientChangesForNewProposal,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     EmptyMergeProposal,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     MissingChangelog,
     pyo3::exceptions::PyException
 );
@@ -1444,6 +1445,10 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add(
         "InsufficientChangesForNewProposal",
         py.get_type_bound::<InsufficientChangesForNewProposal>(),
+    )?;
+    m.add(
+        "UnrelatedBranchExists",
+        py.get_type_bound::<UnrelatedBranchExists>(),
     )?;
     m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
