@@ -1,4 +1,4 @@
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
@@ -9,7 +9,37 @@ use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
 
-create_exception!(silver_platter, UnrelatedBranchExists, pyo3::exceptions::PyException);
+create_exception!(
+    silver_platter,
+    BranchUnsupported,
+    PyException,
+    "Unsupported"
+);
+create_exception!(
+    silver_platter,
+    BranchTemporarilyUnavailable,
+    PyException,
+    "TemporarilyUnavailable"
+);
+create_exception!(
+    silver_platter,
+    BranchUnavailable,
+    PyException,
+    "Unavailable"
+);
+create_exception!(
+    silver_platter,
+    BranchRateLimited,
+    PyException,
+    "RateLimited"
+);
+create_exception!(silver_platter, BranchMissing, PyException, "Missing");
+
+create_exception!(
+    silver_platter,
+    UnrelatedBranchExists,
+    pyo3::exceptions::PyException
+);
 
 create_exception!(
     silver_platter,
@@ -28,11 +58,7 @@ create_exception!(
     ScriptMadeNoChanges,
     pyo3::exceptions::PyException
 );
-create_exception!(
-    silver_platter,
-    ScriptFailed,
-    pyo3::exceptions::PyException
-);
+create_exception!(silver_platter, ScriptFailed, pyo3::exceptions::PyException);
 create_exception!(
     silver_platter,
     ScriptNotFound,
@@ -601,8 +627,7 @@ fn open_branch(
 ) -> PyResult<PyObject> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let pyprobers =
-        probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+    let pyprobers = probers.map(|probers| probers.into_iter().map(PyProber).collect::<Vec<_>>());
     let ref_pyprobers = pyprobers.as_deref().map(|ps| {
         ps.iter()
             .map(|p| p as &dyn breezyshim::controldir::Prober)
@@ -1429,6 +1454,24 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "ResultFileFormatError",
         py.get_type_bound::<ResultFileFormatError>(),
     )?;
+    m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
+    m.add(
+        "BranchUnavailable",
+        py.get_type_bound::<BranchUnavailable>(),
+    )?;
+    m.add(
+        "BranchTemporarilyUnavailable",
+        py.get_type_bound::<BranchTemporarilyUnavailable>(),
+    )?;
+    m.add(
+        "BranchUnsupported",
+        py.get_type_bound::<BranchUnsupported>(),
+    )?;
+    m.add(
+        "BranchRateLimited",
+        py.get_type_bound::<BranchRateLimited>(),
+    )?;
+
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
