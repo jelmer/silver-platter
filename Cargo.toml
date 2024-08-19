@@ -21,7 +21,7 @@ tera.workspace = true
 clap = { workspace = true, optional = true, features = ["derive", "env"] }
 shlex = "1"
 env_logger = { workspace = true, optional = true }
-trivialdb = { version = "0.1.4", optional = true }
+trivialdb = { version = "0.1.7", optional = true }
 flate2 = { version = "1", optional = true }
 reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
 lazy-regex = ">=2"
