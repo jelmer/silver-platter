@@ -1,6 +1,7 @@
 use crate::vcs::{open_branch, BranchOpenError};
 use breezyshim::branch::Branch;
 use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
+use breezyshim::debian::error::Error as DebianError;
 use breezyshim::error::Error as BrzError;
 use breezyshim::gpg::VerificationResult;
 use breezyshim::revisionid::RevisionId;
@@ -694,10 +695,10 @@ pub enum PrepareUploadError {
     BuildFailed,
 
     /// Missing upstream tarball
-    MissingUpstreamTarball(String, Version),
+    MissingUpstreamTarball(String, String),
 
     /// Package version not present
-    PackageVersionNotPresent(String, Version),
+    PackageVersionNotPresent(String, String),
 
     MissingChangelog,
 
@@ -705,10 +706,9 @@ pub enum PrepareUploadError {
 
     BrzError(BrzError),
 
-    MissingNestedTree(std::path::PathBuf),
+    DebianError(DebianError),
 
-    /// Other error
-    Other(String),
+    MissingNestedTree(std::path::PathBuf),
 }
 
 impl From<BrzError> for PrepareUploadError {
@@ -782,7 +782,7 @@ pub fn prepare_upload_package(
             PrepareUploadError::ChangelogParseError(reason)
         }
         debian_analyzer::changelog::FindChangelogError::BrzError(o) => {
-            PrepareUploadError::Other(o.to_string())
+            PrepareUploadError::BrzError(o)
         }
     })?;
 
@@ -885,7 +885,7 @@ pub fn prepare_upload_package(
         debian_control::Control::from_str(std::str::from_utf8_mut(f.as_mut_slice()).unwrap())
             .unwrap();
     let source = control.source().unwrap();
-    let maintainer = source.get("Maintainer").unwrap();
+    let maintainer = source.maintainer().unwrap();
     let (_, e) = debian_changelog::parseaddr(&maintainer);
     if e == "packages@qa.debian.org" {
         qa_upload = true;
@@ -948,14 +948,15 @@ pub fn prepare_upload_package(
         apt,
     )
     .map_err(|e| match e {
-        breezyshim::debian::BuildError::Other(o) => PrepareUploadError::Other(o.to_string()),
-        breezyshim::debian::BuildError::MissingUpstreamTarball(package, version) => {
+        DebianError::BrzError(o) => PrepareUploadError::BrzError(o),
+        DebianError::MissingUpstreamTarball { package, version } => {
             PrepareUploadError::MissingUpstreamTarball(package, version)
         }
-        breezyshim::debian::BuildError::PackageVersionNotPresent(package, version) => {
+        DebianError::PackageVersionNotPresent { package, version } => {
             PrepareUploadError::PackageVersionNotPresent(package, version)
         }
-        breezyshim::debian::BuildError::BuildFailed => PrepareUploadError::BuildFailed,
+        DebianError::BuildFailed => PrepareUploadError::BuildFailed,
+        e => PrepareUploadError::DebianError(e),
     })?;
     let source = target_changes.get("source").unwrap();
     debsign(std::path::Path::new(&source), None).unwrap();
@@ -1316,6 +1317,13 @@ pub fn process_package(
                 Some(format!("{:?}", e)),
             ));
         }
+        Err(PrepareUploadError::DebianError(e)) => {
+            log::error!("{}: error: {:?}", source_name, e);
+            return Err(PackageResult::ProcessingFailure(
+                "debian-error".to_string(),
+                Some(format!("{:?}", e)),
+            ));
+        }
         Err(PrepareUploadError::NoValidGpgSignature(revid, _code)) => {
             log::info!(
                 "{}: No valid GPG signature for revision {}",
@@ -1325,13 +1333,6 @@ pub fn process_package(
             return Err(PackageResult::ProcessingFailure(
                 "no-valid-gpg-signature".to_string(),
                 Some(format!("No valid GPG signature for revision {}", revid)),
-            ));
-        }
-        Err(PrepareUploadError::Other(e)) => {
-            log::error!("{}: error: {}", source_name, e);
-            return Err(PackageResult::ProcessingFailure(
-                "other-error".to_string(),
-                Some(e),
             ));
         }
         Err(PrepareUploadError::PackageVersionNotPresent(package, version)) => {
