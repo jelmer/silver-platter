@@ -221,7 +221,7 @@ impl Entry {
     }
 
     pub fn working_tree(&self) -> Result<breezyshim::tree::WorkingTree, BrzError> {
-        breezyshim::tree::WorkingTree::open(&self.local_path)
+        breezyshim::workingtree::open(&self.local_path)
     }
 
     pub fn target_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {

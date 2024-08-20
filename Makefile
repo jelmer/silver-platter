@@ -25,5 +25,8 @@ format:
 
 check:: testsuite
 
-testsuite: build-inplace
+testsuite:: build-inplace
 	PYTHONPATH=$(shell pwd)/py python3 -m unittest tests.test_suite
+
+testsuite::
+	cargo test-all-features
