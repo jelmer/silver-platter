@@ -178,14 +178,16 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.176"
+version = "0.1.179"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b305ea4987af0fb1add06b1001907e4925b95d9abf7d7f2b4abf39241aa3464"
+checksum = "1339b3c3450245f4fd885cebdb9974bd7b745143b000df2b4b27e3ef0da02935"
 dependencies = [
  "chrono",
  "ctor",
+ "debian-changelog",
  "debian-control",
  "debversion",
+ "difflib",
  "dirty-tracker",
  "lazy-regex",
  "lazy_static",
@@ -624,6 +626,12 @@ name = "deunicode"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "339544cc9e2c4dc3fc7149fd630c5f22263a4fdf18a98afd0075784968b5cf00"
+
+[[package]]
+name = "difflib"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
 
 [[package]]
 name = "digest"
