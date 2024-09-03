@@ -8,39 +8,44 @@ use std::collections::HashMap;
 
 pub struct TempSprout {
     pub workingtree: WorkingTree,
-    pub destroy: Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>,
+    pub tempdir: Option<tempfile::TempDir>,
 }
 
 impl TempSprout {
     pub fn new(
         branch: &dyn Branch,
-        additional_colocated_branches: Option<HashMap<String, String>>) -> Result<Self, BrzError> {
-        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, None, None)?;
+        additional_colocated_branches: Option<HashMap<String, String>>,
+    ) -> Result<Self, BrzError> {
+        let (wt, td) = create_temp_sprout(branch, additional_colocated_branches, None, None)?;
         Ok(Self {
             workingtree: wt,
-            destroy: Some(destroy),
+            tempdir: td,
         })
     }
 
     pub fn new_in(
         branch: &dyn Branch,
         additional_colocated_branches: Option<HashMap<String, String>>,
-        dir: Option<&std::path::Path>) -> Result<Self, BrzError> {
-        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, dir, None)?;
+        dir: &std::path::Path,
+    ) -> Result<Self, BrzError> {
+        let (wt, tempdir) =
+            create_temp_sprout(branch, additional_colocated_branches, Some(dir), None)?;
         Ok(Self {
             workingtree: wt,
-            destroy: Some(destroy),
+            tempdir,
         })
     }
 
     pub fn new_in_path(
         branch: &dyn Branch,
         additional_colocated_branches: Option<HashMap<String, String>>,
-        path: &std::path::Path) -> Result<Self, BrzError> {
-        let (wt, destroy) = create_temp_sprout(branch, additional_colocated_branches, None, Some(path))?;
+        path: &std::path::Path,
+    ) -> Result<Self, BrzError> {
+        let (wt, tempdir) =
+            create_temp_sprout(branch, additional_colocated_branches, None, Some(path))?;
         Ok(Self {
             workingtree: wt,
-            destroy: Some(destroy),
+            tempdir,
         })
     }
 
@@ -57,17 +62,6 @@ impl std::ops::Deref for TempSprout {
     }
 }
 
-impl Drop for TempSprout {
-    fn drop(&mut self) {
-        if let Some(destroy) = self.destroy.take() {
-            match (destroy)() {
-                Ok(_) => (),
-                Err(e) => log::debug!("Error destroying TempSprout: {:?}", e),
-            }
-        }
-    }
-}
-
 /// Create a temporary sprout of a branch.
 ///
 /// This attempts to fetch the least amount of history as possible.
@@ -76,12 +70,12 @@ pub fn create_temp_sprout(
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
-) -> Result<(WorkingTree, Box<dyn FnOnce() -> std::io::Result<()> + Send>), BrzError> {
-    let (to_dir, destroy) = create_temp_sprout_cd(branch, additional_colocated_branches, dir, path)?;
+) -> Result<(WorkingTree, Option<tempfile::TempDir>), BrzError> {
+    let (to_dir, td) = create_temp_sprout_cd(branch, additional_colocated_branches, dir, path)?;
 
     let wt = to_dir.open_workingtree()?;
 
-    Ok((wt, destroy))
+    Ok((wt, td))
 }
 
 /// Create a temporary sprout of a branch.
@@ -92,9 +86,8 @@ fn create_temp_sprout_cd(
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
-) -> Result<(ControlDir, Box<dyn FnOnce() -> std::io::Result<()> + Send>), BrzError> {
+) -> Result<(ControlDir, Option<tempfile::TempDir>), BrzError> {
     let (td, path) = if let Some(path) = path {
-        std::fs::create_dir(path).unwrap();
         (None, path.to_path_buf())
     } else {
         let td = if let Some(dir) = dir {
@@ -138,15 +131,7 @@ fn create_temp_sprout_cd(
         }
     }
 
-    let destroy = Box::new(|| {
-        if let Some(td) = td {
-            td.close()
-        } else {
-            Ok(())
-        }
-    });
-
-    Ok((to_dir, destroy))
+    Ok((to_dir, td))
 }
 
 pub fn merge_conflicts(
@@ -162,12 +147,10 @@ pub fn merge_conflicts(
         return Ok(false);
     }
 
-    other_repository
-        .fetch(
-            &main_branch.repository(),
-            Some(&main_branch.last_revision()),
-        )
-        ?;
+    other_repository.fetch(
+        &main_branch.repository(),
+        Some(&main_branch.last_revision()),
+    )?;
 
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
@@ -206,10 +189,51 @@ mod tests {
     #[test]
     fn test_sprout() {
         let base = tempfile::tempdir().unwrap();
-        let wt = breezyshim::controldir::create_standalone_workingtree(base.path(), &breezyshim::controldir::ControlDirFormat::default()).unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(
+            base.path(),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
         let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
 
         let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), revid);
+        let tree = sprout.tree();
+        assert_eq!(tree.last_revision().unwrap(), revid);
+        std::mem::drop(sprout);
+    }
+
+    #[test]
+    fn test_sprout_in() {
+        let base = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(
+            base.path(),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+
+        let sprout = TempSprout::new_in(wt.branch().as_ref(), None, base.path()).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), revid);
+        let tree = sprout.tree();
+        assert_eq!(tree.last_revision().unwrap(), revid);
+        std::mem::drop(sprout);
+    }
+
+    #[test]
+    fn test_sprout_in_path() {
+        let base = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(
+            base.path(),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+
+        let sprout = TempSprout::new_in_path(wt.branch().as_ref(), None, target.path()).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
         let tree = sprout.tree();

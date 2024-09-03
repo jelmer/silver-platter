@@ -858,25 +858,6 @@ impl DestroyFn {
     }
 }
 
-#[pyfunction]
-#[pyo3(signature = (branch, additional_colocated_branches=None, dir=None, path=None))]
-fn create_temp_sprout(
-    branch: PyObject,
-    additional_colocated_branches: Option<std::collections::HashMap<String, String>>,
-    dir: Option<std::path::PathBuf>,
-    path: Option<std::path::PathBuf>,
-) -> PyResult<(PyObject, DestroyFn)> {
-    import_exception!(breezy.errors, UnknownFormat);
-    let (wt, cb) = silver_platter::utils::create_temp_sprout(
-        &breezyshim::branch::RegularBranch::new(branch),
-        additional_colocated_branches,
-        dir.as_deref(),
-        path.as_deref(),
-    )?;
-
-    Ok((wt.0, DestroyFn(Some(cb))))
-}
-
 /// Run a script before making any changes to a tree.
 ///
 /// Args:
@@ -1513,7 +1494,6 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "UnrelatedBranchExists",
         py.get_type_bound::<UnrelatedBranchExists>(),
     )?;
-    m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
