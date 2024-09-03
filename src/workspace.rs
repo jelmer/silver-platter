@@ -258,7 +258,7 @@ impl Workspace {
         };
 
         let (local_tree, td) = if let Some(sprout_base) = sprout_base {
-            log::debug!("Creating sprout from {:?}", sprout_base.get_user_url());
+            log::debug!("Creating sprout from {}", sprout_base.get_user_url());
             let (wt, td) = crate::utils::create_temp_sprout(
                 sprout_base.as_ref(),
                 Some(
