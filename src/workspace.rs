@@ -175,7 +175,7 @@ struct WorkspaceState {
     base_revid: RevisionId,
     local_tree: WorkingTree,
     refreshed: bool,
-    destroy_fn: Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>,
+    tempdir: Option<tempfile::TempDir>,
     main_colo_revid: HashMap<String, RevisionId>,
 }
 
@@ -257,9 +257,9 @@ impl Workspace {
             )
         };
 
-        let (local_tree, destroy_fn) = if let Some(sprout_base) = sprout_base {
+        let (local_tree, td) = if let Some(sprout_base) = sprout_base {
             log::debug!("Creating sprout from {:?}", sprout_base.get_user_url());
-            let (wt, dfn) = crate::utils::create_temp_sprout(
+            let (wt, td) = crate::utils::create_temp_sprout(
                 sprout_base.as_ref(),
                 Some(
                     sprout_coloc
@@ -270,7 +270,7 @@ impl Workspace {
                 self.dir.as_deref(),
                 self.path.as_deref(),
             )?;
-            (wt, Some(dfn))
+            (wt, td)
         } else {
             if let Some(format) = self.format.as_ref() {
                 log::debug!(
@@ -299,13 +299,7 @@ impl Workspace {
                         .as_ref()
                         .unwrap_or(&breezyshim::controldir::ControlDirFormat::default()),
                 )?,
-                Some(Box::new(|| -> std::io::Result<()> {
-                    if let Some(td) = td {
-                        td.close().unwrap();
-                    }
-                    Ok(())
-                })
-                    as Box<dyn FnOnce() -> Result<(), std::io::Error> + Send>),
+                td,
             )
         };
 
@@ -439,7 +433,7 @@ impl Workspace {
             local_tree,
             refreshed,
             main_colo_revid,
-            destroy_fn,
+            tempdir: td,
         });
 
         Ok(())
@@ -556,7 +550,7 @@ impl Workspace {
     }
 
     pub fn defer_destroy(&mut self) {
-        self.state.as_mut().unwrap().destroy_fn = None;
+        self.state.as_mut().unwrap().tempdir = None;
     }
 
     pub fn publish_changes(
@@ -743,28 +737,8 @@ impl Workspace {
     }
 
     pub fn destroy(&mut self) -> Result<(), Error> {
-        if let Some(state) = self.state.as_mut() {
-            if let Some(destroy_fn) = state.destroy_fn.take() {
-                destroy_fn()?;
-            }
-        }
         self.state = None;
         Ok(())
-    }
-}
-
-impl Drop for Workspace {
-    fn drop(&mut self) {
-        if let Some(state) = self.state.as_mut() {
-            if let Some(destroy_fn) = state.destroy_fn.take() {
-                match destroy_fn() {
-                    Ok(()) => {}
-                    Err(e) => {
-                        log::error!("Error destroying workspace: {}", e);
-                    }
-                }
-            }
-        }
     }
 }
 
