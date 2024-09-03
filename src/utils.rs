@@ -88,7 +88,6 @@ fn create_temp_sprout_cd(
     path: Option<&std::path::Path>,
 ) -> Result<(ControlDir, Option<tempfile::TempDir>), BrzError> {
     let (td, path) = if let Some(path) = path {
-        std::fs::create_dir(path).unwrap();
         (None, path.to_path_buf())
     } else {
         let td = if let Some(dir) = dir {
@@ -198,6 +197,43 @@ mod tests {
         let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
 
         let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), revid);
+        let tree = sprout.tree();
+        assert_eq!(tree.last_revision().unwrap(), revid);
+        std::mem::drop(sprout);
+    }
+
+    #[test]
+    fn test_sprout_in() {
+        let base = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(
+            base.path(),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+
+        let sprout = TempSprout::new_in(wt.branch().as_ref(), None, base.path()).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), revid);
+        let tree = sprout.tree();
+        assert_eq!(tree.last_revision().unwrap(), revid);
+        std::mem::drop(sprout);
+    }
+
+    #[test]
+    fn test_sprout_in_path() {
+        let base = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(
+            base.path(),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+
+        let sprout = TempSprout::new_in_path(wt.branch().as_ref(), None, target.path()).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
         let tree = sprout.tree();
