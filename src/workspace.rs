@@ -773,7 +773,10 @@ mod tests {
 
         let revid = ws
             .local_tree()
-            .commit("test commit", Some(true), None, None)
+            .build_commit()
+            .message("test commit")
+            .allow_pointless(true)
+            .commit()
             .unwrap();
 
         assert!(ws.changes_since_main());
@@ -832,7 +835,9 @@ mod tests {
         assert!(!ws.any_branch_changes());
         assert!(!ws.changes_since_base());
         ws.local_tree()
-            .commit("A change", None, None, None)
+            .build_commit()
+            .message("A change")
+            .commit()
             .unwrap();
 
         assert_eq!(ws.path(), ws.local_tree().basedir().join("."));
@@ -865,7 +870,9 @@ mod tests {
         assert!(ws.any_branch_changes());
         assert!(!ws.changes_since_base());
         ws.local_tree()
-            .commit("A change", None, None, None)
+            .build_commit()
+            .message("A change")
+            .commit()
             .unwrap();
         assert!(ws.changes_since_main());
         assert!(ws.changes_since_base());
@@ -892,7 +899,11 @@ mod tests {
         )
         .unwrap();
 
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
@@ -908,7 +919,9 @@ mod tests {
         assert!(!ws.changes_since_base());
 
         ws.local_tree()
-            .commit("A change", None, None, None)
+            .build_commit()
+            .message("A change")
+            .commit()
             .unwrap();
 
         assert!(ws.changes_since_main());
@@ -934,7 +947,11 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let cached = origin
             .branch()
@@ -975,7 +992,11 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        origin.commit("first commit", None, None, None).unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let cached = origin
             .branch()
@@ -989,7 +1010,11 @@ mod tests {
             )
             .unwrap();
 
-        let revid2 = origin.commit("second commit", None, None, None).unwrap();
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
@@ -1017,7 +1042,11 @@ mod tests {
         let colo_branch = controldir.create_branch(Some("colo")).unwrap();
         let colo_checkout = colo_branch.create_checkout(to_location).unwrap();
 
-        colo_checkout.commit(message, None, None, None).unwrap()
+        colo_checkout
+            .build_commit()
+            .message(message)
+            .commit()
+            .unwrap()
     }
 
     #[test]
@@ -1029,7 +1058,7 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        let revid1 = origin.commit("main", None, None, None).unwrap();
+        let revid1 = origin.build_commit().message("main").commit().unwrap();
 
         let colo_revid1 = commit_on_colo(
             &origin.branch().controldir(),
@@ -1058,7 +1087,9 @@ mod tests {
         assert!(!ws.changes_since_base());
 
         ws.local_tree()
-            .commit("A change", None, None, None)
+            .build_commit()
+            .message("A change")
+            .commit()
             .unwrap();
 
         assert!(ws.changes_since_main());
@@ -1092,7 +1123,11 @@ mod tests {
         )
         .unwrap();
 
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let resume = origin
             .branch()
@@ -1108,7 +1143,11 @@ mod tests {
 
         let resume_tree = resume.open_workingtree().unwrap();
 
-        let resume_revid1 = resume_tree.commit("resume", None, None, None).unwrap();
+        let resume_revid1 = resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
@@ -1143,7 +1182,11 @@ mod tests {
             &ControlDirFormat::default(),
         )
         .unwrap();
-        origin.commit("first commit", None, None, None).unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let resume = origin
             .branch()
@@ -1156,10 +1199,18 @@ mod tests {
                 None,
             )
             .unwrap();
-        let revid2 = origin.commit("second commit", None, None, None).unwrap();
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
 
         let resume_tree = resume.open_workingtree().unwrap();
-        resume_tree.commit("resume", None, None, None).unwrap();
+        resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
@@ -1195,7 +1246,11 @@ mod tests {
         )
         .unwrap();
 
-        let revid1 = origin.commit("first commit", None, None, None).unwrap();
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let colo_revid1 = commit_on_colo(
             &origin.branch().controldir(),
@@ -1217,7 +1272,11 @@ mod tests {
 
         let resume_tree = resume.open_workingtree().unwrap();
 
-        let resume_revid1 = resume_tree.commit("resume", None, None, None).unwrap();
+        let resume_revid1 = resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
@@ -1263,7 +1322,11 @@ mod tests {
         )
         .unwrap();
 
-        origin.commit("first commit", None, None, None).unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
 
         let colo_revid1 = commit_on_colo(
             &origin.branch().controldir(),
@@ -1289,9 +1352,17 @@ mod tests {
             "First colo on resume",
         );
 
-        let revid2 = origin.commit("second commit", None, None, None).unwrap();
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
         let resume_tree = resume.open_workingtree().unwrap();
-        resume_tree.commit("resume", None, None, None).unwrap();
+        resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
 
         let ws_dir = td.path().join("ws");
         std::fs::create_dir(&ws_dir).unwrap();
