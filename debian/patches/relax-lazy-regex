@@ -1,0 +1,13 @@
+Index: silver-platter/Cargo.toml
+===================================================================
+--- silver-platter.orig/Cargo.toml
++++ silver-platter/Cargo.toml
+@@ -24,7 +24,7 @@ env_logger = { workspace = true, optiona
+ trivialdb = { version = "0.1.4", optional = true }
+ flate2 = { version = "1", optional = true }
+ reqwest = { version = "0.12", optional = true, features = ["blocking"] }
+-lazy-regex = "3.0.2"
++lazy-regex = "2"
+ libc = "0.2"
+ xdg = "2.5"
+ debian-analyzer = { version = ">=0.155", optional = true }

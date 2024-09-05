@@ -13,7 +13,7 @@ coverage-html:
 check:: style
 
 style:
-	ruff check .
+	PYTHONPATH=$(shell pwd)/py ruff check py/silver_platter/
 
 fix:
 	ruff check --fix .
@@ -26,7 +26,7 @@ format:
 check:: typing
 
 typing: build-inplace
-	mypy silver_platter/
+	mypy py/
 
 check:: testsuite
 

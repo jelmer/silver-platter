@@ -61,11 +61,11 @@ dev = [
 debian-svp = "silver_platter.debian.__main__:main"
 
 [tool.setuptools]
-packages = [
-    "silver_platter",
-    "silver_platter.debian",
-]
 include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["py"]
+include = ["silver_platter"]
 
 [tool.setuptools.package-data]
 silver_platter = ["py.typed"]
@@ -114,6 +114,9 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.isort]
+known-third-party = ["debian"]
 
 [tool.cibuildwheel]
 environment = {PATH="$HOME/.cargo/bin:$PATH"}
