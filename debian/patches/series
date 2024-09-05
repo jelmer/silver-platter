@@ -2,3 +2,5 @@ relax-serde-json
 relax-lazy-regex
 relax-reqwest
 ship-submodules
+older-pyo3-log
+older-clap
