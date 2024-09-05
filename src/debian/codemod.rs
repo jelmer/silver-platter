@@ -342,12 +342,14 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
-        new_revision = match local_tree.commit(
-            result.description.as_ref().unwrap(),
-            Some(false),
-            committer,
-            None,
-        ) {
+        let mut builder = local_tree
+            .build_commit()
+            .message(result.description.as_ref().unwrap())
+            .allow_pointless(false);
+        if let Some(committer) = committer {
+            builder = builder.committer(committer);
+        }
+        new_revision = match builder.commit() {
             Ok(rev) => rev,
             Err(BrzError::PointlessCommit) => {
                 // No changes

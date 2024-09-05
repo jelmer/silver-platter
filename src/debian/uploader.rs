@@ -758,12 +758,10 @@ pub fn prepare_upload_package(
             }
         }
         local_tree
-            .commit(
-                "update changelog\n\nGbp-Dch: Ignore",
-                None,
-                None,
-                Some(&[&debian_path.join("changelog")]),
-            )
+            .build_commit()
+            .message("update changelog\n\nGbp-Dch: Ignore")
+            .specific_files(&[&debian_path.join("changelog")])
+            .commit()
             .unwrap();
     }
     let (cl, _top_level) = debian_analyzer::changelog::find_changelog(
@@ -913,12 +911,11 @@ pub fn prepare_upload_package(
                 .unwrap();
             // TODO: Use NullCommitReporter
             local_tree
-                .commit(
-                    &format!("Mention {}", message),
-                    Some(true),
-                    None,
-                    Some(&[debian_path.join("changelog").as_path()]),
-                )
+                .build_commit()
+                .message(&format!("Mention {}", message))
+                .allow_pointless(true)
+                .specific_files(&[debian_path.join("changelog").as_path()])
+                .commit()
                 .unwrap();
         }
     }

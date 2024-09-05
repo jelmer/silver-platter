@@ -273,12 +273,14 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
-        new_revision = match local_tree.commit(
-            result.description.as_ref().unwrap(),
-            Some(false),
-            committer,
-            None,
-        ) {
+        let mut builder = local_tree
+            .build_commit()
+            .message(result.description.as_ref().unwrap())
+            .allow_pointless(false);
+        if let Some(committer) = committer {
+            builder = builder.committer(committer);
+        }
+        new_revision = match builder.commit() {
             Ok(rev) => rev,
             Err(BrzError::PointlessCommit) => {
                 // No changes
@@ -346,7 +348,7 @@ echo Did a thing
         std::fs::write(d.join("bar"), "bar").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
             &tree,
@@ -388,7 +390,7 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
         std::fs::write(d.join("bar"), "bar").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
             &tree,
@@ -430,7 +432,7 @@ echo Did a thing
         std::fs::write(d.join("bar"), "initial").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
 
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
@@ -471,7 +473,11 @@ echo Did a thing
 
         make_executable(&script_path);
 
-        tree.commit("initial", Some(true), None, None).unwrap();
+        tree.build_commit()
+            .message("initial")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let err = super::script_runner(
             &tree,

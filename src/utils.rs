@@ -194,7 +194,12 @@ mod tests {
             &breezyshim::controldir::ControlDirFormat::default(),
         )
         .unwrap();
-        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+        let revid = wt
+            .build_commit()
+            .message("Initial commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
 
         let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
 
@@ -212,7 +217,12 @@ mod tests {
             &breezyshim::controldir::ControlDirFormat::default(),
         )
         .unwrap();
-        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+        let revid = wt
+            .build_commit()
+            .message("Initial commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
 
         let sprout = TempSprout::new_in(wt.branch().as_ref(), None, base.path()).unwrap();
 
@@ -231,7 +241,12 @@ mod tests {
             &breezyshim::controldir::ControlDirFormat::default(),
         )
         .unwrap();
-        let revid = wt.commit("Initial commit", Some(true), None, None).unwrap();
+        let revid = wt
+            .build_commit()
+            .message("Initial commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
 
         let sprout = TempSprout::new_in_path(wt.branch().as_ref(), None, target.path()).unwrap();
 

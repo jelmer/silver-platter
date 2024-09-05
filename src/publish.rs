@@ -79,9 +79,13 @@ fn test_push_result() {
     let target_path = td.path().join("target");
     let source_path = td.path().join("source");
     let target_url = url::Url::from_file_path(target_path).unwrap();
-    let target = create_branch_convenience(&target_url).unwrap();
+    let target = create_branch_convenience(&target_url, None).unwrap();
     let source = create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
-    let revid = source.commit("Some change", None, None, None).unwrap();
+    let revid = source
+        .build_commit()
+        .message("Some change")
+        .commit()
+        .unwrap();
     push_result(source.branch().as_ref(), target.as_ref(), None, None, None).unwrap();
     assert_eq!(target.last_revision(), revid);
 }
@@ -440,8 +444,8 @@ impl std::fmt::Display for Error {
 #[cfg(feature = "pyo3")]
 impl From<Error> for pyo3::PyErr {
     fn from(e: Error) -> Self {
-        use pyo3::prelude::*;
         use pyo3::import_exception;
+        use pyo3::prelude::*;
         import_exception!(breezy.errors, NotBranchError);
         import_exception!(breezy.errors, UnsupportedOperation);
         import_exception!(breezy.errors, MergeProposalExists);
@@ -721,7 +725,7 @@ fn test_no_new_commits() {
 
     std::fs::write(orig.join("a"), "a").unwrap();
     tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.commit("blah", None, None, None).unwrap();
+    tree.build_commit().message("blah").commit().unwrap();
 
     let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
 
@@ -744,7 +748,7 @@ fn test_no_op_commits() {
 
     std::fs::write(orig.join("a"), "a").unwrap();
     tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.commit("blah", None, None, None).unwrap();
+    tree.build_commit().message("blah").commit().unwrap();
 
     let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
 
@@ -755,7 +759,9 @@ fn test_no_op_commits() {
         .open_workingtree()
         .unwrap();
     proposal
-        .commit("another commit that is pointless", None, None, None)
+        .build_commit()
+        .message("another commit that is pointless")
+        .commit()
         .unwrap();
 
     assert!(
@@ -776,13 +782,13 @@ fn test_indep() {
 
     std::fs::write(orig.join("a"), "a").unwrap();
     tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.commit("blah", None, None, None).unwrap();
+    tree.build_commit().message("blah").commit().unwrap();
 
     std::fs::write(orig.join("b"), "b").unwrap();
     std::fs::write(orig.join("c"), "c").unwrap();
     tree.add(&[std::path::Path::new("b"), std::path::Path::new("c")])
         .unwrap();
-    tree.commit("independent", None, None, None).unwrap();
+    tree.build_commit().message("independent").commit().unwrap();
 
     let proposal_path = orig.join("proposal");
     let proposal_url = url::Url::from_file_path(proposal_path.as_path()).unwrap();
@@ -808,7 +814,11 @@ fn test_indep() {
     } else {
         proposal.add(&[std::path::Path::new("b")]).unwrap();
     }
-    proposal.commit("not pointless", None, None, None).unwrap();
+    proposal
+        .build_commit()
+        .message("not pointless")
+        .commit()
+        .unwrap();
 
     assert!(
         check_proposal_diff_empty(proposal.branch().as_ref(), tree.branch().as_ref(), None)
@@ -827,7 +837,7 @@ fn test_changes() {
     let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
     std::fs::write(orig.join("a"), "a").unwrap();
     tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.commit("blah", None, None, None).unwrap();
+    tree.build_commit().message("blah").commit().unwrap();
 
     let proposal_url = url::Url::from_file_path(td.path().join("proposal")).unwrap();
     let proposal_tree = tree
@@ -839,7 +849,9 @@ fn test_changes() {
     std::fs::write(proposal_tree.basedir().join("b"), "b").unwrap();
     proposal_tree.add(&[std::path::Path::new("b")]).unwrap();
     proposal_tree
-        .commit("not pointless", None, None, None)
+        .build_commit()
+        .message("not pointless")
+        .commit()
         .unwrap();
 
     assert!(!check_proposal_diff_empty(

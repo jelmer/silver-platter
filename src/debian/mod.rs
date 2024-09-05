@@ -373,7 +373,7 @@ mod tests {
         breezyshim::init();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
-        let branch = create_branch_convenience(&url).unwrap();
+        let branch = create_branch_convenience(&url, None).unwrap();
         branch.controldir().open_workingtree().unwrap()
     }
 
