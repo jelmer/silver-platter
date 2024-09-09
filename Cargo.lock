@@ -538,9 +538,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.158.10"
+version = "0.158.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5916717056158dc390ac698110360378bca4c1b234e042425e60fc7f5fc85f5c"
+checksum = "9b8b2849c3ba8cf97d9a00b85d6ad4cf4142a2d7fd33af291bcf540c8469169b"
 dependencies = [
  "breezyshim",
  "chrono",
