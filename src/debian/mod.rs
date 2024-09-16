@@ -365,7 +365,7 @@ pub fn open_packaging_branch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use breezyshim::controldir::create_branch_convenience;
+    use breezyshim::controldir::{create_branch_convenience, ControlDirFormat};
     use breezyshim::tree::WorkingTree;
     use std::path::Path;
 
@@ -373,7 +373,7 @@ mod tests {
         breezyshim::init();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();
-        let branch = create_branch_convenience(&url, None).unwrap();
+        let branch = create_branch_convenience(&url, None, &ControlDirFormat::default()).unwrap();
         branch.controldir().open_workingtree().unwrap()
     }
 
