@@ -334,7 +334,7 @@ impl Workspace {
                     main_branch.as_ref()
                 };
 
-                match local_tree.pull(from_branch, Some(true)) {
+                match local_tree.pull(from_branch, Some(true), None, None) {
                     Ok(_) => {}
                     Err(BrzError::DivergedBranches) => {
                         unreachable!();
@@ -360,13 +360,13 @@ impl Workspace {
                     main_branch.get_user_url()
                 );
 
-                match local_tree.pull(main_branch.as_ref(), Some(false)) {
+                match local_tree.pull(main_branch.as_ref(), Some(false), None, None) {
                     Err(BrzError::DivergedBranches) => {
                         log::info!("restarting branch");
                         refreshed = true;
                         self.resume_branch = None;
                         self.resume_branch_additional_colocated_branches.clear();
-                        match local_tree.pull(main_branch.as_ref(), Some(true)) {
+                        match local_tree.pull(main_branch.as_ref(), Some(true), None, None) {
                             Ok(_) => {}
                             Err(BrzError::DivergedBranches) => {
                                 unreachable!();

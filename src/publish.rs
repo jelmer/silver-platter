@@ -72,14 +72,15 @@ pub fn push_result(
 
 #[test]
 fn test_push_result() {
-    use breezyshim::controldir::create_branch_convenience;
-    use breezyshim::controldir::create_standalone_workingtree;
-    use breezyshim::controldir::ControlDirFormat;
+    use breezyshim::controldir::{
+        create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
+    };
     let td = tempfile::tempdir().unwrap();
     let target_path = td.path().join("target");
     let source_path = td.path().join("source");
     let target_url = url::Url::from_file_path(target_path).unwrap();
-    let target = create_branch_convenience(&target_url, None).unwrap();
+    let target =
+        create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
     let source = create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
     let revid = source
         .build_commit()
@@ -864,6 +865,6 @@ fn test_changes() {
 
 pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
     let config = branch.get_config();
-    config.set_user_option("branch.fetch_tags", &true)?;
+    config.set_user_option("branch.fetch_tags", true)?;
     Ok(())
 }
