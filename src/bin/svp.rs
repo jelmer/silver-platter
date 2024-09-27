@@ -504,7 +504,8 @@ fn main() {
                 std::process::exit(1);
             };
 
-            let (local_tree, subpath) = breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
+            let (local_tree, subpath) =
+                breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
 
             check_clean_tree(
                 &local_tree,
