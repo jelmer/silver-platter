@@ -1,6 +1,3 @@
-relax-serde-json
-relax-lazy-regex
+relax-lazy-static
 relax-reqwest
-ship-submodules
-older-pyo3-log
-older-clap
+fix-bin

@@ -1,0 +1,35 @@
+Index: silver-platter/pyproject.toml
+===================================================================
+--- silver-platter.orig/pyproject.toml
++++ silver-platter/pyproject.toml
+@@ -56,9 +56,6 @@ dev = [
+     "ruff==0.6.7"
+ ]
+ 
+-[project.scripts]
+-debian-svp = "silver_platter.debian.__main__:main"
+-
+ [tool.setuptools.packages.find]
+ where = ["py"]
+ include = ["silver_platter*"]
+Index: silver-platter/setup.py
+===================================================================
+--- silver-platter.orig/setup.py
++++ silver-platter/setup.py
+@@ -2,7 +2,7 @@
+ import sys
+ 
+ from setuptools import setup
+-from setuptools_rust import Binding, RustExtension
++from setuptools_rust import Binding, RustExtension, RustBin
+ 
+ features = []
+ 
+@@ -18,5 +18,7 @@ setup(
+             args=["--no-default-features"],
+             features=features + ["extension-module"],
+         ),
++        RustBin("svp", "Cargo.toml", features=["cli"]),
++        RustBin("debian-svp", "Cargo.toml", features=["cli"]),
+     ],
+ )
