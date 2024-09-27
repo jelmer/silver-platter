@@ -1,11 +1,12 @@
 use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
-use breezyshim::branch::{Branch, BranchOpenError};
+use breezyshim::branch::Branch;
+use breezyshim::controldir::ControlDirFormat;
+use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{Forge, MergeProposal};
-use breezyshim::tree::{PullError, WorkingTree};
+use breezyshim::tree::WorkingTree;
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use log::info;
-use pyo3::PyErr;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -13,7 +14,7 @@ pub fn fetch_colocated(
     controldir: &ControlDir,
     from_controldir: &ControlDir,
     additional_colocated_branches: &HashMap<&str, &str>,
-) -> Result<(), PyErr> {
+) -> Result<(), BrzError> {
     info!(
         "Fetching colocated branches: {:?}",
         additional_colocated_branches
@@ -30,12 +31,11 @@ pub fn fetch_colocated(
                     None,
                 )?;
             }
-            Err(BranchOpenError::NotBranchError(_))
-            | Err(BranchOpenError::NoColocatedBranchSupport) => {
+            Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
                 continue;
             }
             Err(e) => {
-                return Err(e.into());
+                return Err(e);
             }
         }
     }
@@ -44,40 +44,21 @@ pub fn fetch_colocated(
 
 #[derive(Debug)]
 pub enum Error {
-    Python(PyErr),
-    ForgeError(breezyshim::forge::Error),
+    BrzError(BrzError),
     IOError(std::io::Error),
-    UnknownFormat,
+    UnknownFormat(String),
+    PermissionDenied(Option<String>),
+    Other(String),
 }
 
-impl From<breezyshim::controldir::CreateError> for Error {
-    fn from(e: breezyshim::controldir::CreateError) -> Self {
+impl From<BrzError> for Error {
+    fn from(e: BrzError) -> Self {
         match e {
-            breezyshim::controldir::CreateError::Python(e) => Error::Python(e),
-            breezyshim::controldir::CreateError::UnknownFormat => Error::UnknownFormat,
-            breezyshim::controldir::CreateError::AlreadyExists => unreachable!(),
+            BrzError::UnknownFormat(n) => Error::UnknownFormat(n),
+            BrzError::AlreadyControlDir(_) => unreachable!(),
+            BrzError::PermissionDenied(_, m) => Error::PermissionDenied(m),
+            e => Error::BrzError(e),
         }
-    }
-}
-
-impl From<crate::utils::Error> for Error {
-    fn from(e: crate::utils::Error) -> Self {
-        match e {
-            crate::utils::Error::Other(e) => Error::Python(e),
-            crate::utils::Error::UnknownFormat => Error::UnknownFormat,
-        }
-    }
-}
-
-impl From<BranchOpenError> for Error {
-    fn from(e: BranchOpenError) -> Self {
-        Error::Python(e.into())
-    }
-}
-
-impl From<breezyshim::forge::Error> for Error {
-    fn from(e: breezyshim::forge::Error) -> Self {
-        Error::ForgeError(e)
     }
 }
 
@@ -87,54 +68,58 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::Python(e) => write!(f, "{}", e),
-            Error::ForgeError(e) => write!(f, "{}", e),
-            Error::IOError(e) => write!(f, "{}", e),
-            Error::UnknownFormat => write!(f, "Unknown format"),
+impl From<PublishError> for Error {
+    fn from(e: PublishError) -> Self {
+        match e {
+            PublishError::Other(e) => Error::BrzError(e),
+            e => Error::Other(format!("{:?}", e)),
         }
     }
 }
 
-impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
-        Error::Python(e)
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::IOError(e) => write!(f, "{}", e),
+            Error::UnknownFormat(n) => write!(f, "Unknown format: {}", n),
+            Error::BrzError(e) => write!(f, "{}", e),
+            Error::PermissionDenied(m) => write!(f, "Permission denied: {:?}", m),
+            Error::Other(e) => write!(f, "{}", e),
+        }
     }
 }
 
 #[derive(Default)]
-pub struct WorkspaceBuilder<'a> {
-    main_branch: Option<&'a dyn Branch>,
-    resume_branch: Option<&'a dyn Branch>,
-    cached_branch: Option<&'a dyn Branch>,
-    additional_colocated_branches: HashMap<&'a str, &'a str>,
-    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-    dir: Option<&'a Path>,
-    path: Option<&'a Path>,
-    format: Option<&'a str>,
+pub struct WorkspaceBuilder {
+    main_branch: Option<Box<dyn Branch>>,
+    resume_branch: Option<Box<dyn Branch>>,
+    cached_branch: Option<Box<dyn Branch>>,
+    additional_colocated_branches: HashMap<String, String>,
+    resume_branch_additional_colocated_branches: HashMap<String, String>,
+    dir: Option<PathBuf>,
+    path: Option<PathBuf>,
+    format: Option<ControlDirFormat>,
 }
 
-impl<'a> WorkspaceBuilder<'a> {
-    pub fn main_branch(mut self, main_branch: &'a dyn Branch) -> Self {
+impl WorkspaceBuilder {
+    pub fn main_branch(mut self, main_branch: Box<dyn Branch>) -> Self {
         self.main_branch = Some(main_branch);
         self
     }
 
-    pub fn resume_branch(mut self, resume_branch: &'a dyn Branch) -> Self {
+    pub fn resume_branch(mut self, resume_branch: Box<dyn Branch>) -> Self {
         self.resume_branch = Some(resume_branch);
         self
     }
 
-    pub fn cached_branch(mut self, cached_branch: &'a dyn Branch) -> Self {
+    pub fn cached_branch(mut self, cached_branch: Box<dyn Branch>) -> Self {
         self.cached_branch = Some(cached_branch);
         self
     }
 
     pub fn additional_colocated_branches(
         mut self,
-        additional_colocated_branches: HashMap<&'a str, &'a str>,
+        additional_colocated_branches: HashMap<String, String>,
     ) -> Self {
         self.additional_colocated_branches = additional_colocated_branches;
         self
@@ -142,39 +127,44 @@ impl<'a> WorkspaceBuilder<'a> {
 
     pub fn resume_branch_additional_colocated_branches(
         mut self,
-        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
+        resume_branch_additional_colocated_branches: HashMap<String, String>,
     ) -> Self {
         self.resume_branch_additional_colocated_branches =
             resume_branch_additional_colocated_branches;
         self
     }
 
-    pub fn dir(mut self, dir: &'a Path) -> Self {
+    pub fn dir(mut self, dir: PathBuf) -> Self {
         self.dir = Some(dir);
         self
     }
 
-    pub fn path(mut self, path: &'a Path) -> Self {
+    pub fn path(mut self, path: PathBuf) -> Self {
         self.path = Some(path);
         self
     }
 
-    pub fn format(mut self, format: &'a str) -> Self {
-        self.format = Some(format);
+    /// Set the control dir format to use.
+    ///
+    /// This defaults to the format of the remote branch.
+    pub fn format(mut self, format: impl breezyshim::controldir::AsFormat) -> Self {
+        self.format = format.as_format();
         self
     }
 
-    pub fn build(self) -> Result<Workspace<'a>, Error> {
-        let mut ws = Workspace::new(
-            self.main_branch,
-            self.resume_branch,
-            self.cached_branch,
-            self.additional_colocated_branches,
-            self.resume_branch_additional_colocated_branches,
-            self.dir,
-            self.path,
-            self.format,
-        );
+    pub fn build(self) -> Result<Workspace, Error> {
+        let mut ws = Workspace {
+            main_branch: self.main_branch,
+            resume_branch: self.resume_branch,
+            cached_branch: self.cached_branch,
+            additional_colocated_branches: self.additional_colocated_branches,
+            resume_branch_additional_colocated_branches: self
+                .resume_branch_additional_colocated_branches,
+            path: self.path,
+            dir: self.dir,
+            format: self.format,
+            state: None,
+        };
 
         ws.start()?;
         Ok(ws)
@@ -185,76 +175,102 @@ struct WorkspaceState {
     base_revid: RevisionId,
     local_tree: WorkingTree,
     refreshed: bool,
-    destroy_fn: Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>,
+    tempdir: Option<tempfile::TempDir>,
     main_colo_revid: HashMap<String, RevisionId>,
 }
 
-pub struct Workspace<'a> {
-    main_branch: Option<&'a dyn Branch>,
-    cached_branch: Option<&'a dyn Branch>,
-    resume_branch: Option<&'a dyn Branch>,
-    additional_colocated_branches: HashMap<&'a str, &'a str>,
-    resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-    dir: Option<&'a Path>,
-    path: Option<&'a Path>,
+pub struct Workspace {
+    main_branch: Option<Box<dyn Branch>>,
+    cached_branch: Option<Box<dyn Branch>>,
+    resume_branch: Option<Box<dyn Branch>>,
+    additional_colocated_branches: HashMap<String, String>,
+    resume_branch_additional_colocated_branches: HashMap<String, String>,
+    dir: Option<PathBuf>,
+    path: Option<PathBuf>,
     state: Option<WorkspaceState>,
     format: Option<breezyshim::controldir::ControlDirFormat>,
 }
 
-impl<'a> Workspace<'a> {
+impl Workspace {
+    #[deprecated(since = "0.1.0", note = "Use WorkspaceBuilder instead")]
     pub fn new(
-        main_branch: Option<&'a dyn Branch>,
-        resume_branch: Option<&'a dyn Branch>,
-        cached_branch: Option<&'a dyn Branch>,
-        additional_colocated_branches: HashMap<&'a str, &'a str>,
-        resume_branch_additional_colocated_branches: HashMap<&'a str, &'a str>,
-        dir: Option<&'a Path>,
-        path: Option<&'a Path>,
+        main_branch: Option<Box<dyn Branch>>,
+        resume_branch: Option<Box<dyn Branch>>,
+        cached_branch: Option<Box<dyn Branch>>,
+        additional_colocated_branches: HashMap<&str, &str>,
+        resume_branch_additional_colocated_branches: HashMap<&str, &str>,
+        dir: Option<&Path>,
+        path: Option<&Path>,
         format: Option<impl breezyshim::controldir::AsFormat>,
     ) -> Self {
         Self {
             main_branch,
             resume_branch,
             cached_branch,
-            additional_colocated_branches,
-            resume_branch_additional_colocated_branches,
-            path,
-            dir,
+            additional_colocated_branches: additional_colocated_branches
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            resume_branch_additional_colocated_branches:
+                resume_branch_additional_colocated_branches
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            path: path.map(|p| p.to_path_buf()),
+            dir: dir.map(|p| p.to_path_buf()),
             format: format.and_then(|f| f.as_format()),
             state: None,
         }
     }
 
-    pub fn start(&mut self) -> Result<(), Error> {
+    pub fn temporary() -> Result<Self, Error> {
+        let td = tempfile::tempdir().unwrap();
+        Self::builder().dir(td.into_path()).build()
+    }
+
+    pub fn from_url(url: &url::Url) -> Result<Self, Error> {
+        let branch = breezyshim::branch::open(url)?;
+        Self::builder().main_branch(branch).build()
+    }
+
+    /// Start this workspace
+    fn start(&mut self) -> Result<(), Error> {
+        if self.state.is_some() {
+            panic!("Workspace already started");
+        }
         let mut td: Option<tempfile::TempDir> = None;
-        let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch {
+        // First, clone the main branch from the most efficient source
+        let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch.as_ref() {
             (
                 Some(cache_branch),
                 self.additional_colocated_branches.clone(),
             )
-        } else if let Some(resume_branch) = self.resume_branch {
+        } else if let Some(resume_branch) = self.resume_branch.as_ref() {
             (
                 Some(resume_branch),
                 self.resume_branch_additional_colocated_branches.clone(),
             )
         } else {
-            (self.main_branch, self.additional_colocated_branches.clone())
+            (
+                self.main_branch.as_ref(),
+                self.additional_colocated_branches.clone(),
+            )
         };
 
-        let (local_tree, destroy_fn) = if let Some(sprout_base) = sprout_base {
-            log::debug!("Creating sprout from {:?}", sprout_base.get_user_url());
-            let (wt, dfn) = crate::utils::create_temp_sprout(
-                sprout_base,
+        let (local_tree, td) = if let Some(sprout_base) = sprout_base {
+            log::debug!("Creating sprout from {}", sprout_base.get_user_url());
+            let (wt, td) = crate::utils::create_temp_sprout(
+                sprout_base.as_ref(),
                 Some(
                     sprout_coloc
                         .iter()
                         .map(|(k, v)| (k.to_string(), v.to_string()))
                         .collect(),
                 ),
-                self.dir,
-                self.path,
+                self.dir.as_deref(),
+                self.path.as_deref(),
             )?;
-            (wt, Some(dfn))
+            (wt, td)
         } else {
             if let Some(format) = self.format.as_ref() {
                 log::debug!(
@@ -265,7 +281,7 @@ impl<'a> Workspace<'a> {
                 log::debug!("Creating new empty tree");
             };
 
-            let tp = if let Some(path) = self.path {
+            let tp = if let Some(path) = self.path.as_deref() {
                 std::fs::create_dir_all(path)?;
                 path.to_path_buf()
             } else {
@@ -283,13 +299,7 @@ impl<'a> Workspace<'a> {
                         .as_ref()
                         .unwrap_or(&breezyshim::controldir::ControlDirFormat::default()),
                 )?,
-                Some(Box::new(|| -> std::io::Result<()> {
-                    if let Some(td) = td {
-                        td.close().unwrap();
-                    }
-                    Ok(())
-                })
-                    as Box<dyn FnOnce() -> Result<(), std::io::Error> + Send>),
+                td,
             )
         };
 
@@ -297,40 +307,52 @@ impl<'a> Workspace<'a> {
 
         let mut refreshed = false;
 
-        if let Some(main_branch) = self.main_branch {
+        // If there is a main branch, ensure that revisions match
+        if let Some(main_branch) = self.main_branch.as_ref() {
             for (from_name, _to_name) in self.additional_colocated_branches.iter() {
                 match main_branch.controldir().open_branch(Some(from_name)) {
                     Ok(branch) => {
                         main_colo_revid.insert(from_name.to_string(), branch.last_revision());
                     }
-                    Err(breezyshim::branch::BranchOpenError::NotBranchError(..)) => {}
-                    Err(breezyshim::branch::BranchOpenError::NoColocatedBranchSupport) => {}
+                    Err(BrzError::NotBranchError(..)) => {}
+                    Err(BrzError::NoColocatedBranchSupport) => {}
                     Err(e) => {
                         log::warn!("Failed to open colocated branch {}: {}", from_name, e);
                     }
                 }
             }
 
-            if let Some(cached_branch) = self.cached_branch {
+            if let Some(cached_branch) = self.cached_branch.as_ref() {
                 log::debug!(
                     "Pulling in missing revisions from resume/main branch {:?}",
                     cached_branch.get_user_url()
                 );
 
-                match local_tree.pull(cached_branch, Some(true)) {
+                let from_branch = if let Some(resume_branch) = self.resume_branch.as_ref() {
+                    resume_branch.as_ref()
+                } else {
+                    main_branch.as_ref()
+                };
+
+                match local_tree.pull(from_branch, Some(true), None, None) {
                     Ok(_) => {}
-                    Err(PullError::DivergedBranches) => {
+                    Err(BrzError::DivergedBranches) => {
                         unreachable!();
                     }
-                    Err(PullError::Other(e)) => {
+                    Err(e) => {
                         return Err(e.into());
                     }
                 }
+
+                assert_eq!(
+                    local_tree.last_revision().unwrap(),
+                    main_branch.last_revision()
+                );
             }
 
             // At this point, we're either on the tip of the main branch or the tip of the resume
             // branch
-            if let Some(resume_branch) = self.resume_branch {
+            if let Some(resume_branch) = self.resume_branch.as_ref() {
                 // If there's a resume branch at play, make sure it's derived from the main branch
                 // *or* reset back to the main branch.
                 log::debug!(
@@ -338,43 +360,55 @@ impl<'a> Workspace<'a> {
                     main_branch.get_user_url()
                 );
 
-                match local_tree.pull(main_branch, Some(false)) {
-                    Err(PullError::DivergedBranches) => {
+                match local_tree.pull(main_branch.as_ref(), Some(false), None, None) {
+                    Err(BrzError::DivergedBranches) => {
                         log::info!("restarting branch");
                         refreshed = true;
                         self.resume_branch = None;
                         self.resume_branch_additional_colocated_branches.clear();
-                        match local_tree.pull(main_branch, Some(true)) {
+                        match local_tree.pull(main_branch.as_ref(), Some(true), None, None) {
                             Ok(_) => {}
-                            Err(PullError::DivergedBranches) => {
+                            Err(BrzError::DivergedBranches) => {
                                 unreachable!();
                             }
-                            Err(PullError::Other(e)) => {
+                            Err(e) => {
                                 return Err(e.into());
                             }
                         }
                         fetch_colocated(
                             &local_tree.branch().controldir(),
                             &main_branch.controldir(),
-                            &self.additional_colocated_branches,
+                            &self
+                                .additional_colocated_branches
+                                .iter()
+                                .map(|(k, v)| (k.as_str(), v.as_str()))
+                                .collect(),
                         )?;
                     }
                     Ok(_) => {
                         fetch_colocated(
                             &local_tree.branch().controldir(),
                             &main_branch.controldir(),
-                            &self.additional_colocated_branches,
+                            &self
+                                .additional_colocated_branches
+                                .iter()
+                                .map(|(k, v)| (k.as_str(), v.as_str()))
+                                .collect(),
                         )?;
 
                         if !self.resume_branch_additional_colocated_branches.is_empty() {
                             fetch_colocated(
                                 &local_tree.branch().controldir(),
                                 &resume_branch.controldir(),
-                                &self.resume_branch_additional_colocated_branches,
+                                &self
+                                    .resume_branch_additional_colocated_branches
+                                    .iter()
+                                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                                    .collect(),
                             )?;
 
                             self.additional_colocated_branches
-                                .extend(self.resume_branch_additional_colocated_branches.iter());
+                                .extend(self.resume_branch_additional_colocated_branches.clone());
                         }
                     }
                     Err(e) => {
@@ -385,7 +419,11 @@ impl<'a> Workspace<'a> {
                 fetch_colocated(
                     &local_tree.branch().controldir(),
                     &main_branch.controldir(),
-                    &self.additional_colocated_branches,
+                    &self
+                        .additional_colocated_branches
+                        .iter()
+                        .map(|(k, v)| (k.as_str(), v.as_str()))
+                        .collect(),
                 )?;
             }
         }
@@ -395,7 +433,7 @@ impl<'a> Workspace<'a> {
             local_tree,
             refreshed,
             main_colo_revid,
-            destroy_fn,
+            tempdir: td,
         });
 
         Ok(())
@@ -405,15 +443,15 @@ impl<'a> Workspace<'a> {
         self.state.as_ref().unwrap()
     }
 
-    pub fn builder() -> WorkspaceBuilder<'a> {
+    pub fn builder() -> WorkspaceBuilder {
         WorkspaceBuilder::default()
     }
 
     pub fn main_branch(&self) -> Option<&dyn Branch> {
-        self.main_branch
+        self.main_branch.as_deref()
     }
 
-    pub fn set_main_branch(&mut self, branch: &'a dyn Branch) -> Result<(), Error> {
+    pub fn set_main_branch(&mut self, branch: Box<dyn Branch>) -> Result<(), Error> {
         self.main_branch = Some(branch);
         Ok(())
     }
@@ -427,7 +465,7 @@ impl<'a> Workspace<'a> {
     }
 
     pub fn resume_branch(&self) -> Option<&dyn Branch> {
-        self.resume_branch
+        self.resume_branch.as_deref()
     }
 
     pub fn path(&self) -> PathBuf {
@@ -478,8 +516,8 @@ impl<'a> Workspace<'a> {
         for (from_name, to_name) in self.additional_colocated_branches().iter() {
             let to_revision = match local_controldir.open_branch(Some(to_name)) {
                 Ok(b) => Some(b.last_revision()),
-                Err(BranchOpenError::NoColocatedBranchSupport) => continue,
-                Err(BranchOpenError::NotBranchError(..)) => None,
+                Err(BrzError::NoColocatedBranchSupport) => continue,
+                Err(BrzError::NotBranchError(..)) => None,
                 Err(e) => {
                     panic!("Unexpected error opening branch {}: {}", to_name, e);
                 }
@@ -497,14 +535,22 @@ impl<'a> Workspace<'a> {
         self.state().main_colo_revid.clone()
     }
 
-    pub fn base_tree(&self) -> Box<dyn breezyshim::tree::Tree> {
-        self.state()
-            .local_tree
-            .revision_tree(&self.state().base_revid)
+    pub fn base_tree(&self) -> Result<Box<dyn breezyshim::tree::Tree>, BrzError> {
+        let base_revid = &self.state().base_revid;
+        match self.state().local_tree.revision_tree(base_revid) {
+            Ok(t) => Ok(t),
+            Err(BrzError::NoSuchRevisionInTree(revid)) => Ok(Box::new(
+                self.local_tree()
+                    .branch()
+                    .repository()
+                    .revision_tree(&revid)?,
+            )),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn defer_destroy(&mut self) {
-        self.state.as_mut().unwrap().destroy_fn = None;
+        self.state.as_mut().unwrap().tempdir = None;
     }
 
     pub fn publish_changes(
@@ -636,7 +682,7 @@ impl<'a> Workspace<'a> {
 
         let forge = match breezyshim::forge::get_forge(main_branch) {
             Ok(forge) => Some(forge),
-            Err(breezyshim::forge::Error::UnsupportedForge(e)) => {
+            Err(breezyshim::error::Error::UnsupportedForge(e)) => {
                 // We can't figure out what branch to resume from when there's no forge
                 // that can tell us.
                 log::warn!(
@@ -680,10 +726,10 @@ impl<'a> Workspace<'a> {
         outf: Box<dyn std::io::Write + Send>,
         old_label: Option<&str>,
         new_label: Option<&str>,
-    ) -> Result<(), PyErr> {
+    ) -> Result<(), BrzError> {
         breezyshim::diff::show_diff_trees(
-            self.base_tree().as_ref(),
-            self.local_tree().basis_tree().as_ref(),
+            self.base_tree()?.as_ref(),
+            &self.local_tree().basis_tree()?,
             outf,
             old_label,
             new_label,
@@ -691,65 +737,664 @@ impl<'a> Workspace<'a> {
     }
 
     pub fn destroy(&mut self) -> Result<(), Error> {
-        if let Some(state) = self.state.as_mut() {
-            if let Some(destroy_fn) = state.destroy_fn.take() {
-                destroy_fn()?;
-            }
-        }
         self.state = None;
         Ok(())
     }
 }
 
-impl Drop for Workspace<'_> {
-    fn drop(&mut self) {
-        if let Some(state) = self.state.as_mut() {
-            if let Some(destroy_fn) = state.destroy_fn.take() {
-                match destroy_fn() {
-                    Ok(()) => {}
-                    Err(e) => {
-                        log::error!("Error destroying workspace: {}", e);
-                    }
-                }
-            }
-        }
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_create_workspace() {
-    let mut ws = Workspace::builder().build().unwrap();
+    use breezyshim::controldir::ControlDirFormat;
 
-    assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
+    #[test]
+    fn test_create_workspace() {
+        let mut ws = Workspace::builder().build().unwrap();
 
-    assert_eq!(
-        ws.base_revid(),
-        Some(breezyshim::revisionid::RevisionId::null())
-    );
+        assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
 
-    // There are changes since the branch is created
-    assert!(ws.changes_since_main());
-    assert!(!ws.changes_since_base());
-    assert_eq!(
-        ws.changed_branches(),
-        vec![(
-            "".to_string(),
-            None,
+        assert_eq!(
+            ws.base_revid(),
             Some(breezyshim::revisionid::RevisionId::null())
-        )]
-    );
+        );
 
-    let revid = ws
-        .local_tree()
-        .commit("test commit", Some(true), None, None)
+        // There are changes since the branch is created
+        assert!(ws.changes_since_main());
+        assert!(!ws.changes_since_base());
+        assert_eq!(
+            ws.changed_branches(),
+            vec![(
+                "".to_string(),
+                None,
+                Some(breezyshim::revisionid::RevisionId::null())
+            )]
+        );
+
+        let revid = ws
+            .local_tree()
+            .build_commit()
+            .message("test commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.changes_since_base());
+        assert_eq!(
+            ws.changed_branches(),
+            vec![("".to_string(), None, Some(revid))]
+        );
+
+        ws.destroy().unwrap();
+    }
+
+    #[test]
+    fn test_temporary() {
+        let ws = Workspace::temporary().unwrap();
+
+        assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
+
+        assert_eq!(
+            ws.base_revid(),
+            Some(breezyshim::revisionid::RevisionId::null())
+        );
+
+        // There are changes since the branch is created
+        assert!(ws.changes_since_main());
+        assert!(!ws.changes_since_base());
+        assert_eq!(
+            ws.changed_branches(),
+            vec![(
+                "".to_string(),
+                None,
+                Some(breezyshim::revisionid::RevisionId::null())
+            )]
+        );
+    }
+
+    #[test]
+    fn test_nascent() {
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
         .unwrap();
 
-    assert!(ws.changes_since_main());
-    assert!(ws.changes_since_base());
-    assert_eq!(
-        ws.changed_branches(),
-        vec![("".to_string(), None, Some(revid))]
-    );
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
 
-    ws.destroy().unwrap();
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+        ws.local_tree()
+            .build_commit()
+            .message("A change")
+            .commit()
+            .unwrap();
+
+        assert_eq!(ws.path(), ws.local_tree().basedir().join("."));
+
+        assert!(ws.changes_since_main());
+        assert!(ws.changes_since_base());
+        assert!(ws.any_branch_changes());
+        assert_eq!(
+            vec![(
+                "".to_string(),
+                Some(breezyshim::revisionid::RevisionId::null()),
+                Some(ws.local_tree().last_revision().unwrap())
+            )],
+            ws.changed_branches()
+        );
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_without_main() {
+        let td = tempfile::tempdir().unwrap();
+
+        let ws = Workspace::builder()
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+        ws.local_tree()
+            .build_commit()
+            .message("A change")
+            .commit()
+            .unwrap();
+        assert!(ws.changes_since_main());
+        assert!(ws.changes_since_base());
+        assert!(ws.any_branch_changes());
+        assert_eq!(
+            vec![(
+                "".to_string(),
+                None,
+                Some(ws.local_tree().last_revision().unwrap())
+            )],
+            ws.changed_branches()
+        );
+        std::mem::drop(ws);
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_basic() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+
+        ws.local_tree()
+            .build_commit()
+            .message("A change")
+            .commit()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.changes_since_base());
+        assert!(ws.any_branch_changes());
+        assert_eq!(
+            vec![(
+                "".to_string(),
+                Some(revid1),
+                Some(ws.local_tree().last_revision().unwrap())
+            )],
+            ws.changed_branches()
+        );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_cached_branch_up_to_date() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let cached = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("cached")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.open_branch(None).unwrap())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+        assert_eq!(ws.local_tree().last_revision().unwrap(), revid1);
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_cached_branch_out_of_date() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let cached = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("cached")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.open_branch(None).unwrap())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+        assert_eq!(ws.local_tree().last_revision().unwrap(), revid2);
+
+        std::mem::drop(td);
+    }
+
+    fn commit_on_colo(
+        controldir: &ControlDir,
+        to_location: &std::path::Path,
+        message: &str,
+    ) -> RevisionId {
+        let colo_branch = controldir.create_branch(Some("colo")).unwrap();
+        let colo_checkout = colo_branch.create_checkout(to_location).unwrap();
+
+        colo_checkout
+            .build_commit()
+            .message(message)
+            .commit()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_colocated() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid1 = origin.build_commit().message("main").commit().unwrap();
+
+        let colo_revid1 = commit_on_colo(
+            &origin.branch().controldir(),
+            &td.path().join("colo"),
+            "Another",
+        );
+
+        assert_eq!(origin.branch().last_revision(), revid1);
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .dir(ws_dir)
+            .additional_colocated_branches(
+                vec![("colo".to_string(), "colo".to_string())]
+                    .into_iter()
+                    .collect(),
+            )
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(!ws.changes_since_base());
+
+        ws.local_tree()
+            .build_commit()
+            .message("A change")
+            .commit()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.changes_since_base());
+        assert!(ws.any_branch_changes());
+        assert_eq!(
+            vec![
+                (
+                    "".to_string(),
+                    Some(revid1),
+                    Some(ws.local_tree().last_revision().unwrap())
+                ),
+                (
+                    "colo".to_string(),
+                    Some(colo_revid1.clone()),
+                    Some(colo_revid1.clone())
+                ),
+            ],
+            ws.changed_branches()
+        );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_resume_continue() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let resume = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("resume")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let resume_tree = resume.open_workingtree().unwrap();
+
+        let resume_revid1 = resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .resume_branch(resume_tree.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.any_branch_changes());
+        assert!(!ws.refreshed());
+        assert!(!ws.changes_since_base());
+
+        assert_eq!(ws.local_tree().last_revision().unwrap(), resume_revid1);
+        assert_eq!(
+            vec![("".to_string(), Some(revid1), Some(resume_revid1))],
+            ws.changed_branches()
+        );
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_resume_discard() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let resume = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("resume")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
+
+        let resume_tree = resume.open_workingtree().unwrap();
+        resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .resume_branch(resume_tree.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(ws.refreshed());
+
+        assert!(!ws.changes_since_base());
+        assert_eq!(ws.local_tree().last_revision().unwrap(), revid2);
+
+        assert_eq!(
+            vec![("".to_string(), Some(revid2.clone()), Some(revid2.clone()))],
+            ws.changed_branches()
+        );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_resume_continue_with_unchanged_colocated() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let colo_revid1 = commit_on_colo(
+            &origin.branch().controldir(),
+            &td.path().join("colo"),
+            "First colo",
+        );
+
+        let resume = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("resume")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let resume_tree = resume.open_workingtree().unwrap();
+
+        let resume_revid1 = resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .resume_branch(resume_tree.branch())
+            .dir(ws_dir)
+            .additional_colocated_branches(
+                vec![("colo".to_string(), "colo".to_string())]
+                    .into_iter()
+                    .collect(),
+            )
+            .build()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.any_branch_changes());
+        assert!(!ws.refreshed());
+        assert!(!ws.changes_since_base());
+        assert_eq!(ws.local_tree().last_revision().unwrap(), resume_revid1);
+        assert_eq!(
+            vec![
+                ("".to_string(), Some(revid1), Some(resume_revid1)),
+                (
+                    "colo".to_string(),
+                    Some(colo_revid1.clone()),
+                    Some(colo_revid1.clone())
+                ),
+            ],
+            ws.changed_branches()
+        );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_resume_discard_with_unchanged_colocated() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let colo_revid1 = commit_on_colo(
+            &origin.branch().controldir(),
+            &td.path().join("colo"),
+            "First colo",
+        );
+
+        let resume = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("resume")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        commit_on_colo(
+            &resume,
+            &td.path().join("resume-colo"),
+            "First colo on resume",
+        );
+
+        let revid2 = origin
+            .build_commit()
+            .message("second commit")
+            .commit()
+            .unwrap();
+        let resume_tree = resume.open_workingtree().unwrap();
+        resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .resume_branch(resume_tree.branch())
+            .dir(ws_dir)
+            .additional_colocated_branches(
+                vec![("colo".to_string(), "colo".to_string())]
+                    .into_iter()
+                    .collect(),
+            )
+            .build()
+            .unwrap();
+
+        assert!(!ws.changes_since_main());
+        assert!(!ws.any_branch_changes());
+        assert!(ws.refreshed());
+        assert!(!ws.changes_since_base());
+        assert_eq!(ws.local_tree().last_revision().unwrap(), revid2);
+        assert_eq!(
+            vec![
+                ("".to_string(), Some(revid2.clone()), Some(revid2.clone())),
+                (
+                    "colo".to_string(),
+                    Some(colo_revid1.clone()),
+                    Some(colo_revid1.clone())
+                ),
+            ],
+            ws.changed_branches()
+        );
+        std::mem::drop(td);
+    }
 }

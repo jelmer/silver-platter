@@ -12,7 +12,6 @@ keywords = ["git bzr vcs github gitlab launchpad"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: GNU General Public License (GPL)",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -23,7 +22,7 @@ classifiers = [
     "Operating System :: POSIX",
     "Topic :: Software Development :: Version Control",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
     "breezy>=3.3.3",
     "dulwich>=0.20.23",
@@ -31,7 +30,7 @@ dependencies = [
     "pyyaml",
     "ruamel.yaml",
 ]
-dynamic = ["version"]
+version = "0.5.36"
 
 [project.urls]
 Homepage = "https://jelmer.uk/code/silver-platter"
@@ -54,24 +53,18 @@ testing = [
     "brz-debian",
 ]
 dev = [
-    "ruff==0.4.7"
+    "ruff==0.6.7"
 ]
 
 [project.scripts]
 debian-svp = "silver_platter.debian.__main__:main"
 
-[tool.setuptools]
-include-package-data = false
-
 [tool.setuptools.packages.find]
 where = ["py"]
-include = ["silver_platter"]
+include = ["silver_platter*"]
 
 [tool.setuptools.package-data]
 silver_platter = ["py.typed"]
-
-[tool.setuptools.dynamic]
-version = {attr = "silver_platter.__version__"}
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -117,6 +110,7 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-third-party = ["debian"]
+known-first-party = ["silver_platter"]
 
 [tool.cibuildwheel]
 environment = {PATH="$HOME/.cargo/bin:$PATH"}

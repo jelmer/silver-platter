@@ -67,10 +67,12 @@ impl std::str::FromStr for Mode {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl pyo3::FromPyObject<'_> for Mode {
-    fn extract(ob: &pyo3::PyAny) -> pyo3::PyResult<Self> {
-        let s: &str = ob.extract()?;
-        match s {
+    fn extract_bound(ob: &pyo3::Bound<pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        use pyo3::prelude::*;
+        let s: std::borrow::Cow<str> = ob.extract()?;
+        match s.as_ref() {
             "push" => Ok(Mode::Push),
             "propose" => Ok(Mode::Propose),
             "attempt-push" => Ok(Mode::AttemptPush),
@@ -84,6 +86,7 @@ impl pyo3::FromPyObject<'_> for Mode {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl pyo3::ToPyObject for Mode {
     fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
         self.to_string().to_object(py)
@@ -146,7 +149,17 @@ impl<'de> Deserialize<'de> for CommitPending {
 pub trait CodemodResult {
     fn context(&self) -> serde_json::Value;
 
+    fn value(&self) -> Option<u32>;
+
+    fn target_branch_url(&self) -> Option<url::Url>;
+
+    fn description(&self) -> Option<String>;
+
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)>;
+
     fn tera_context(&self) -> tera::Context {
         tera::Context::from_value(self.context()).unwrap()
     }
 }
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

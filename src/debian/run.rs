@@ -6,7 +6,8 @@ use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
-use breezyshim::forge::{get_forge, Error as ForgeError, Forge, MergeProposal};
+use breezyshim::error::Error as BrzError;
+use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
 use url::Url;
 
@@ -65,7 +66,7 @@ pub fn apply_and_publish(
         Vec<MergeProposal>,
         Option<Box<dyn Branch>>,
     ) = match get_forge(main_branch.as_ref()) {
-        Err(ForgeError::UnsupportedForge(e)) => {
+        Err(BrzError::UnsupportedForge(e)) => {
             if mode != Mode::Push {
                 error!("{}: {}", url, e);
                 return 2;
@@ -79,11 +80,15 @@ pub fn apply_and_publish(
             );
             (None, vec![], None)
         }
-        Err(ForgeError::ProjectExists(_)) => {
+        Err(BrzError::ForgeProjectExists(_)) | Err(BrzError::AlreadyControlDir(..)) => {
             unreachable!()
         }
-        Err(ForgeError::LoginRequired) => {
+        Err(BrzError::ForgeLoginRequired) => {
             warn!("Login required to access forge");
+            return 2;
+        }
+        Err(e) => {
+            error!("Failed to get forge: {}", e);
             return 2;
         }
         Ok(ref forge) => {
@@ -132,10 +137,16 @@ pub fn apply_and_publish(
 
     let subpath = std::path::Path::new("");
 
-    let mut ws_builder = Workspace::builder().main_branch(main_branch.as_ref());
+    let mut ws_builder = Workspace::builder();
 
-    ws_builder = if let Some(resume_branch) = resume_branch.as_ref() {
-        ws_builder.resume_branch(resume_branch.as_ref())
+    ws_builder = ws_builder.additional_colocated_branches(
+        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+    );
+
+    ws_builder = ws_builder.main_branch(main_branch);
+
+    ws_builder = if let Some(resume_branch) = resume_branch.take() {
+        ws_builder.resume_branch(resume_branch)
     } else {
         ws_builder
     };
@@ -149,7 +160,7 @@ pub fn apply_and_publish(
     };
 
     let result: CommandResult = match crate::debian::codemod::script_runner(
-        &ws.local_tree(),
+        ws.local_tree(),
         command,
         subpath,
         commit_pending,
@@ -179,7 +190,7 @@ pub fn apply_and_publish(
         }
 
         crate::debian::build(
-            &ws.local_tree(),
+            ws.local_tree(),
             subpath,
             builder.as_deref(),
             build_target_dir.as_deref(),
@@ -224,7 +235,7 @@ pub fn apply_and_publish(
         Err(PublishError::UnsupportedForge(_)) => {
             error!(
                 "No known supported forge for {}. Run 'svp login'?",
-                crate::vcs::full_branch_url(main_branch.as_ref()),
+                crate::vcs::full_branch_url(ws.main_branch().unwrap()),
             );
             return 2;
         }
@@ -246,6 +257,10 @@ pub fn apply_and_publish(
         }
         Err(PublishError::EmptyMergeProposal) => {
             error!("No changes to publish.");
+            return 2;
+        }
+        Err(PublishError::PermissionDenied) => {
+            error!("Permission denied to create merge proposal.");
             return 2;
         }
         Err(PublishError::Other(e)) => {
@@ -273,7 +288,7 @@ pub fn apply_and_publish(
 
     if install {
         crate::debian::install_built_package(
-            &ws.local_tree(),
+            ws.local_tree(),
             subpath,
             build_target_dir.as_ref().unwrap(),
         )

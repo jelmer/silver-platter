@@ -1,13 +1,14 @@
 use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
 use crate::CommitPending;
-use breezyshim::tree::{CommitError, Error as TreeError, MutableTree, Tree, WorkingTree};
+use breezyshim::error::Error as BrzError;
+use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use breezyshim::RevisionId;
 use debian_changelog::get_maintainer_from_env;
 use debian_changelog::ChangeLog;
 use std::collections::HashMap;
 use url::Url;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CommandResult {
     pub source_name: String,
     pub value: Option<u32>,
@@ -23,6 +24,22 @@ pub struct CommandResult {
 impl crate::CodemodResult for CommandResult {
     fn context(&self) -> serde_json::Value {
         self.context.clone().unwrap_or_default()
+    }
+
+    fn value(&self) -> Option<u32> {
+        self.value
+    }
+
+    fn target_branch_url(&self) -> Option<Url> {
+        self.target_branch_url.clone()
+    }
+
+    fn description(&self) -> Option<String> {
+        Some(self.description.clone())
+    }
+
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
+        self.tags.clone()
     }
 }
 
@@ -177,7 +194,7 @@ pub fn script_runner(
             .entries()
             .next()
             .and_then(|e| e.package()),
-        Err(TreeError::NoSuchFile(_)) => None,
+        Err(BrzError::NoSuchFile(_)) => None,
         Err(e) => {
             return Err(Error::Other(format!("Failed to read changelog: {}", e)));
         }
@@ -253,7 +270,7 @@ pub fn script_runner(
                     )));
                 }
             },
-            Err(TreeError::NoSuchFile(_)) => {
+            Err(BrzError::NoSuchFile(_)) => {
                 return Err(Error::MissingChangelog(cl_path));
             }
             Err(e) => {
@@ -325,14 +342,16 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
-        new_revision = match local_tree.commit(
-            result.description.as_ref().unwrap(),
-            Some(false),
-            committer,
-            None,
-        ) {
+        let mut builder = local_tree
+            .build_commit()
+            .message(result.description.as_ref().unwrap())
+            .allow_pointless(false);
+        if let Some(committer) = committer {
+            builder = builder.committer(committer);
+        }
+        new_revision = match builder.commit() {
             Ok(rev) => rev,
-            Err(CommitError::PointlessCommit) => {
+            Err(BrzError::PointlessCommit) => {
                 // No changes
                 last_revision.clone()
             }

@@ -102,8 +102,8 @@ enum Commands {
         gpg_verification: bool,
 
         /// Minimum age of the last commit, in days
-        #[arg(long, default_value_t = 0)]
-        min_commit_age: usize,
+        #[arg(long)]
+        min_commit_age: Option<i64>,
 
         /// Show diff
         #[arg(long)]
@@ -147,7 +147,7 @@ enum Commands {
 
         /// APT repository key to use for validation, if --apt-repository is set.
         #[arg(long, env = "APT_REPOSITORY_KEY")]
-        apt_repository_key: Option<String>,
+        apt_repository_key: Option<std::path::PathBuf>,
 
         /// Packages to upload
         packages: Vec<String>,
@@ -528,88 +528,37 @@ pub fn batch_publish(
 }
 
 fn login(url: &url::Url) -> i32 {
-    pyo3::Python::with_gil(|py| {
-        let m = py.import("launchpadlib").unwrap();
-        let lp_uris = match m.getattr("uris") {
-            Ok(lp_uris) => lp_uris
-                .getattr("web_roots")
-                .unwrap()
-                .extract::<HashMap<String, String>>()
-                .unwrap(),
-            Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                log::warn!("launchpadlib is not installed, unable to log in to launchpad");
-                HashMap::new()
-            }
-            Err(e) => {
-                panic!("Failed to import launchpadlib: {}", e);
-            }
-        };
+    let lp_uris = breezyshim::launchpad::uris().unwrap();
 
-        let forge = if url.host_str() == Some("github.com") {
-            "github"
-        } else if lp_uris.iter().any(|(_key, root)| {
-            url.host_str() == Some(root) || url.host_str() == Some(root.trim_end_matches('/'))
-        }) {
-            "launchpad"
-        } else {
-            "gitlab"
-        };
+    let forge = if url.host_str() == Some("github.com") {
+        "github"
+    } else if lp_uris.iter().any(|(_key, root)| {
+        url.host_str() == Some(root) || url.host_str() == Some(root.trim_end_matches('/'))
+    }) {
+        "launchpad"
+    } else {
+        "gitlab"
+    };
 
-        match forge {
-            "gitlab" => {
-                let m = py.import("breezy.plugins.gitlab.cmds").unwrap();
-                let cmd = m.getattr("cmd_gitlab_login").unwrap();
-
-                let cmd_gl = cmd.call0().unwrap();
-                cmd_gl.call_method0("_setup_outf").unwrap();
-
-                cmd_gl.call_method1("run", (url.as_str(),)).unwrap();
-            }
-            "github" => {
-                let m = py.import("breezy.plugins.github.cmds").unwrap();
-                let cmd = m.getattr("cmd_github_login").unwrap();
-
-                let cmd_gl = cmd.call0().unwrap();
-                cmd_gl.call_method0("_setup_outf").unwrap();
-
-                cmd_gl.call_method0("run").unwrap();
-            }
-            "launchpad" => {
-                let m = py.import("breezy.plugins.launchpad.cmds").unwrap();
-                let cmd = m.getattr("cmd_launchpad_login").unwrap();
-
-                let cmd_lp = cmd.call0().unwrap();
-                cmd_lp.call_method0("_setup_outf").unwrap();
-
-                cmd_lp.call_method1("run", (url.as_str(),)).unwrap();
-
-                let lp_api = py.import("breezy.plugins.launchpad.lp_api").unwrap();
-
-                let lp_service_root = lp_uris
-                    .iter()
-                    .find(|(_key, root)| {
-                        url.host_str() == Some(root)
-                            || url.host_str() == Some(root.trim_end_matches('/'))
-                    })
-                    .unwrap()
-                    .1;
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("version", "devel").unwrap();
-                lp_api
-                    .call_method("connect_launchpad", (lp_service_root,), Some(kwargs))
-                    .unwrap();
-            }
-            _ => {
-                panic!("Unknown forge {}", forge);
-            }
+    match forge {
+        "gitlab" => {
+            breezyshim::gitlab::login(url).unwrap();
         }
+        "github" => {
+            breezyshim::github::login().unwrap();
+        }
+        "launchpad" => {
+            breezyshim::launchpad::login(url);
+        }
+        _ => {
+            panic!("Unknown forge {}", forge);
+        }
+    }
 
-        0
-    })
+    0
 }
 
 fn main() {
-    pyo3::prepare_freethreaded_python();
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -624,15 +573,9 @@ fn main() {
         )
         .init();
 
-    breezyshim::init().unwrap();
+    breezyshim::init();
 
-    pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
-        let m = py.import("breezy.plugin").unwrap();
-        let load_plugins = m.getattr("load_plugins").unwrap();
-        load_plugins.call0().unwrap();
-        Ok(())
-    })
-    .unwrap();
+    breezyshim::plugin::load_plugins();
 
     std::process::exit(match &cli.command {
         Commands::Forges {} => {
@@ -688,11 +631,12 @@ fn main() {
                 std::process::exit(1);
             };
 
-            let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
+            let (local_tree, subpath) =
+                breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
 
             check_clean_tree(
                 &local_tree,
-                local_tree.basis_tree().as_ref(),
+                &local_tree.basis_tree().unwrap(),
                 subpath.as_path(),
             )
             .unwrap();
@@ -723,7 +667,7 @@ fn main() {
                 Ok(result) => result,
                 Err(err) => {
                     error!("Failed: {}", err);
-                    reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                    reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                     std::process::exit(1);
                 }
             };
@@ -750,8 +694,8 @@ fn main() {
             info!("Succeeded: {} ", result.description);
 
             if *diff {
-                let old_tree = local_tree.revision_tree(&result.old_revision);
-                let new_tree = local_tree.revision_tree(&result.new_revision);
+                let old_tree = local_tree.revision_tree(&result.old_revision).unwrap();
+                let new_tree = local_tree.revision_tree(&result.new_revision).unwrap();
                 breezyshim::diff::show_diff_trees(
                     old_tree.as_ref(),
                     new_tree.as_ref(),
@@ -797,44 +741,24 @@ fn main() {
             apt_repository,
             apt_repository_key,
             packages,
-        } => pyo3::Python::with_gil(|py| {
-            let kwargs = pyo3::types::PyDict::new(py);
-            kwargs.set_item("maintainer", maintainer).unwrap();
-            kwargs.set_item("acceptable_keys", acceptable_keys).unwrap();
-            kwargs
-                .set_item("gpg_verification", gpg_verification)
-                .unwrap();
-            kwargs.set_item("min_commit_age", min_commit_age).unwrap();
-            kwargs.set_item("diff", diff).unwrap();
-            kwargs.set_item("builder", builder).unwrap();
-            kwargs
-                .set_item("autopkgtest_only", autopkgtest_only)
-                .unwrap();
-            kwargs.set_item("exclude", exclude).unwrap();
-            kwargs.set_item("verify_command", verify_command).unwrap();
-            kwargs.set_item("shuffle", shuffle).unwrap();
-            kwargs
-                .set_item("allowed_committer", allowed_committer)
-                .unwrap();
-            kwargs.set_item("vcswatch", vcswatch).unwrap();
-            kwargs.set_item("diff", diff).unwrap();
-            kwargs.set_item("debug", cli.debug).unwrap();
-            kwargs.set_item("apt_repository", apt_repository).unwrap();
-            kwargs
-                .set_item("apt_repository_key", apt_repository_key)
-                .unwrap();
-            kwargs.set_item("packages", packages).unwrap();
-
-            let m = py.import("silver_platter.debian.uploader").unwrap();
-            let main = m.getattr("main").unwrap();
-            match main.call((), Some(kwargs)) {
-                Ok(o) => o.extract().unwrap(),
-                Err(e) => {
-                    error!("Failed to upload: {}", e);
-                    1
-                }
-            }
-        }),
+        } => silver_platter::debian::uploader::main(
+            packages.clone(),
+            acceptable_keys.clone(),
+            *gpg_verification,
+            *min_commit_age,
+            *diff,
+            builder.clone(),
+            maintainer.clone(),
+            *vcswatch,
+            exclude.clone(),
+            *autopkgtest_only,
+            allowed_committer.clone(),
+            cli.debug,
+            *shuffle,
+            verify_command.clone(),
+            apt_repository.clone(),
+            apt_repository_key.clone(),
+        ),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,
