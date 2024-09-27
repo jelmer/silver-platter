@@ -1,9 +1,10 @@
-use breezyshim::tree::{CommitError, WorkingTree};
+use breezyshim::error::Error as BrzError;
+use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
 use url::Url;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CommandResult {
     pub value: Option<u32>,
     pub context: Option<serde_json::Value>,
@@ -20,6 +21,22 @@ pub struct CommandResult {
 impl crate::CodemodResult for CommandResult {
     fn context(&self) -> serde_json::Value {
         self.context.clone().unwrap_or_default()
+    }
+
+    fn value(&self) -> Option<u32> {
+        self.value
+    }
+
+    fn target_branch_url(&self) -> Option<Url> {
+        self.target_branch_url.clone()
+    }
+
+    fn description(&self) -> Option<String> {
+        self.description.clone()
+    }
+
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
+        self.tags.clone()
     }
 }
 
@@ -256,14 +273,16 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
-        new_revision = match local_tree.commit(
-            result.description.as_ref().unwrap(),
-            Some(false),
-            committer,
-            None,
-        ) {
+        let mut builder = local_tree
+            .build_commit()
+            .message(result.description.as_ref().unwrap())
+            .allow_pointless(false);
+        if let Some(committer) = committer {
+            builder = builder.committer(committer);
+        }
+        new_revision = match builder.commit() {
             Ok(rev) => rev,
-            Err(CommitError::PointlessCommit) => {
+            Err(BrzError::PointlessCommit) => {
                 // No changes
                 last_revision.clone()
             }
@@ -329,7 +348,7 @@ echo Did a thing
         std::fs::write(d.join("bar"), "bar").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
             &tree,
@@ -371,7 +390,7 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
         std::fs::write(d.join("bar"), "bar").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
             &tree,
@@ -413,7 +432,7 @@ echo Did a thing
         std::fs::write(d.join("bar"), "initial").unwrap();
 
         tree.add(&[std::path::Path::new("bar")]).unwrap();
-        let old_revid = tree.commit("initial", None, None, None).unwrap();
+        let old_revid = tree.build_commit().message("initial").commit().unwrap();
 
         let script_path_str = script_path.to_str().unwrap();
         let result = super::script_runner(
@@ -454,7 +473,11 @@ echo Did a thing
 
         make_executable(&script_path);
 
-        tree.commit("initial", Some(true), None, None).unwrap();
+        tree.build_commit()
+            .message("initial")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
         let script_path_str = script_path.to_str().unwrap();
         let err = super::script_runner(
             &tree,

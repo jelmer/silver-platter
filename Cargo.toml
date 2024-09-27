@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.23"
+version = "0.5.39"
 authors = [ "Jelmer Vernooĳ <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
@@ -10,40 +10,42 @@ homepage = "https://github.com/jelmer/silver-platter"
 default-run = "svp"
 
 [dependencies]
-tempfile = "3.10.1"
-serde_yaml = "0.9.33"
-log = "0.4"
-percent-encoding = "2.3.0"
-chrono = "0.4.38"
-regex = "1.9.5"
+tempfile = "3"
+serde_yaml = ">=0.9"
+log = ">=0.4"
+percent-encoding = "2"
+chrono = ">=0.4"
+regex = "1"
 debian-changelog = { workspace = true }
 tera.workspace = true
 clap = { workspace = true, optional = true, features = ["derive", "env"] }
-shlex = "1.3.0"
+shlex = "1"
 env_logger = { workspace = true, optional = true }
-trivialdb = { version = "0.1.4", optional = true }
+trivialdb = { version = "0.1.7", optional = true }
 flate2 = { version = "1", optional = true }
-reqwest = { version = "0.12", optional = true, features = ["blocking"] }
-lazy-regex = "3.0.2"
+reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
+lazy-regex = ">=2"
 libc = "0.2"
 xdg = "2.5"
-debian-analyzer = { version = ">=0.155", optional = true }
+debian-analyzer = { version = ">=0.158.8", optional = true }
+#debian-analyzer = { path = "../lintian-brush/analyzer", optional = true }
 gpgme = { version = "0.11.0", optional = true }
+pyo3 = { optional = true, workspace = true }
+lazy_static = "1.5.0"
+debian-control = { version = ">=0.1", optional = true }
+rand = "0.8.5"
 
 [workspace]
 members = [ "crates/*",]
 
 [features]
 default = ["debian", "detect-update-changelog"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
-detect-update-changelog = ["dep:debian-analyzer"]
+detect-update-changelog = []
 cli = ["dep:clap", "dep:env_logger"]
-
-[dependencies.pyo3]
-workspace = true
-features = [ "chrono",]
+pyo3 = ["dep:pyo3"]
 
 [dependencies.serde]
 workspace = true
@@ -57,6 +59,7 @@ workspace = true
 
 [dependencies.debversion]
 version = ">=0.1"
+features = ["python-debian", "serde"]
 optional = true
 
 [dependencies.url]
@@ -64,17 +67,17 @@ workspace = true
 features = [ "serde",]
 
 [workspace.dependencies]
-pyo3 = ">=0.20"
-pyo3-log = "0.9"
+pyo3 = ">=0.22"
+pyo3-log = ">=0.11"
 serde_json = "1"
 tera = "1"
-serde = "1.0.203"
-breezyshim = ">=0.1.79"
-url = "2.4.0"
-debian-changelog = "0.1.10"
+serde = "1"
+breezyshim = ">=0.1.160"
+#breezyshim = { path = "../breezyshim/trunk" }
+url = "2"
+debian-changelog = ">=0.1.10"
 env_logger = ">=0.10"
-# Avoid 4.5.0 due to higher minimum rust version
-clap = "4.4.11,<4.5"
+clap = "4"
 
 [[bin]]
 name = "svp"

@@ -21,7 +21,7 @@ import shutil
 from breezy.revision import NULL_REVISION
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter.workspace import Workspace
+from silver_platter import Workspace
 
 
 class TestWorkspace(TestCaseWithTransport):
@@ -43,15 +43,15 @@ class TestWorkspace(TestCaseWithTransport):
 
     def test_without_main(self):
         with Workspace(None, dir=self.test_dir) as ws:
-            self.assertFalse(ws.changes_since_main())
-            self.assertFalse(ws.any_branch_changes())
+            self.assertTrue(ws.changes_since_main())
+            self.assertTrue(ws.any_branch_changes())
             self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("A change")
             self.assertTrue(ws.changes_since_main())
             self.assertTrue(ws.changes_since_base())
             self.assertTrue(ws.any_branch_changes())
             self.assertEqual(
-                [("", NULL_REVISION, ws.local_tree.last_revision())],
+                [("", None, ws.local_tree.last_revision())],
                 ws.result_branches(),
             )
 

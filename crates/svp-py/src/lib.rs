@@ -1,4 +1,4 @@
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
@@ -10,54 +10,82 @@ use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
 
 create_exception!(
-    silver_platter.utils,
+    silver_platter,
+    BranchUnsupported,
+    PyException,
+    "Unsupported"
+);
+create_exception!(
+    silver_platter,
+    BranchTemporarilyUnavailable,
+    PyException,
+    "TemporarilyUnavailable"
+);
+create_exception!(
+    silver_platter,
+    BranchUnavailable,
+    PyException,
+    "Unavailable"
+);
+create_exception!(
+    silver_platter,
+    BranchRateLimited,
+    PyException,
+    "RateLimited"
+);
+create_exception!(silver_platter, BranchMissing, PyException, "Missing");
+
+create_exception!(
+    silver_platter,
+    UnrelatedBranchExists,
+    pyo3::exceptions::PyException
+);
+
+create_exception!(
+    silver_platter,
     PreCheckFailed,
     pyo3::exceptions::PyException
 );
 
 create_exception!(
-    silver_platter.utils,
+    silver_platter,
     PostCheckFailed,
     pyo3::exceptions::PyException
 );
 
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ScriptMadeNoChanges,
     pyo3::exceptions::PyException
 );
+create_exception!(silver_platter, ScriptFailed, pyo3::exceptions::PyException);
 create_exception!(
-    silver_platter.apply,
-    ScriptFailed,
-    pyo3::exceptions::PyException
-);
-create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ScriptNotFound,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     DetailedFailure,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.apply,
+    silver_platter,
     ResultFileFormatError,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     InsufficientChangesForNewProposal,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     EmptyMergeProposal,
     pyo3::exceptions::PyException
 );
 create_exception!(
-    silver_platter.publish,
+    silver_platter,
     MissingChangelog,
     pyo3::exceptions::PyException
 );
@@ -66,12 +94,18 @@ import_exception!(breezy.errors, DivergedBranches);
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
 
-fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
+fn json_to_py<'a, 'b, 'py>(py: Python<'py>, value: &'b serde_json::Value) -> Bound<'a, PyAny>
+where
+    'py: 'a,
+{
     match value {
-        serde_json::Value::Null => py.None(),
-        serde_json::Value::Bool(b) => pyo3::types::PyBool::new(py, *b).into(),
+        serde_json::Value::Null => py.None().into_bound(py),
+        serde_json::Value::Bool(b) => {
+            let o = pyo3::types::PyBool::new_bound(py, *b).into_py(py);
+            o.into_bound(py)
+        }
         serde_json::Value::Number(n) => {
-            if let Some(n) = n.as_u64() {
+            let n: PyObject = if let Some(n) = n.as_u64() {
                 n.into_py(py)
             } else if let Some(n) = n.as_i64() {
                 n.into_py(py)
@@ -79,27 +113,28 @@ fn json_to_py(py: Python, value: &serde_json::Value) -> PyObject {
                 n.into_py(py)
             } else {
                 unreachable!()
-            }
+            };
+            n.into_bound(py)
         }
-        serde_json::Value::String(s) => pyo3::types::PyString::new(py, s.as_str()).into(),
+        serde_json::Value::String(s) => pyo3::types::PyString::new_bound(py, s.as_str()).into_any(),
         serde_json::Value::Array(a) => {
-            let list = pyo3::types::PyList::empty(py);
+            let list = pyo3::types::PyList::empty_bound(py);
             for v in a {
                 list.append(json_to_py(py, v)).unwrap();
             }
-            list.into_py(py)
+            list.into_any()
         }
         serde_json::Value::Object(o) => {
-            let dict = pyo3::types::PyDict::new(py);
+            let dict = pyo3::types::PyDict::new_bound(py);
             for (k, v) in o {
                 dict.set_item(k, json_to_py(py, v)).unwrap();
             }
-            dict.into_py(py)
+            dict.into_any()
         }
     }
 }
 
-fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
+fn py_to_json(obj: &Bound<PyAny>) -> PyResult<serde_json::Value> {
     if obj.is_none() {
         Ok(serde_json::Value::Null)
     } else if let Ok(b) = obj.downcast::<pyo3::types::PyBool>() {
@@ -112,13 +147,15 @@ fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
         Ok(serde_json::Value::String(s.to_string_lossy().to_string()))
     } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
         Ok(serde_json::Value::Array(
-            l.iter().map(py_to_json).collect::<PyResult<Vec<_>>>()?,
+            l.iter()
+                .map(|x| py_to_json(&x))
+                .collect::<PyResult<Vec<_>>>()?,
         ))
     } else if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
         let mut ret = serde_json::Map::new();
         for (k, v) in d.iter() {
             let k = k.extract::<String>()?;
-            let v = py_to_json(v)?;
+            let v = py_to_json(&v)?;
             ret.insert(k, v);
         }
         Ok(serde_json::Value::Object(ret))
@@ -130,7 +167,7 @@ fn py_to_json(obj: &PyAny) -> PyResult<serde_json::Value> {
 #[pymethods]
 impl Recipe {
     #[classmethod]
-    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
         let recipe = silver_platter::recipe::Recipe::from_path(path.as_path())?;
         Ok(Recipe(recipe))
     }
@@ -172,7 +209,7 @@ impl Recipe {
         self.0.mode.as_ref().map(|m| m.to_string())
     }
 
-    fn render_merge_request_title(&self, context: &PyAny) -> PyResult<Option<String>> {
+    fn render_merge_request_title(&self, context: &Bound<PyAny>) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
         } else {
@@ -184,7 +221,10 @@ impl Recipe {
         })
     }
 
-    fn render_merge_request_commit_message(&self, context: &PyAny) -> PyResult<Option<String>> {
+    fn render_merge_request_commit_message(
+        &self,
+        context: &Bound<PyAny>,
+    ) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
         } else {
@@ -202,7 +242,7 @@ impl Recipe {
     fn render_merge_request_description(
         &self,
         format: &str,
-        context: &PyAny,
+        context: &Bound<PyAny>,
     ) -> PyResult<Option<String>> {
         let merge_request = if let Some(mp) = self.0.merge_request.as_ref() {
             mp
@@ -232,12 +272,12 @@ impl Recipe {
     }
 }
 
-fn py_dict_to_tera_context(py_dict: &PyAny) -> PyResult<tera::Context> {
+fn py_dict_to_tera_context(py_dict: &Bound<PyAny>) -> PyResult<tera::Context> {
     let mut context = tera::Context::new();
     if py_dict.is_none() {
         return Ok(context);
     }
-    let py_dict = py_dict.extract::<&PyDict>()?;
+    let py_dict = py_dict.extract::<Bound<PyDict>>()?;
     for (key, value) in py_dict.iter() {
         let key = key.extract::<String>()?;
         if let Ok(value) = value.extract::<String>() {
@@ -301,12 +341,16 @@ impl CommandResult {
     }
 
     #[getter]
-    fn context(&self, py: Python) -> Option<PyObject> {
+    fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
+    where
+        'py: 'a,
+    {
         self.0.context.as_ref().map(|c| json_to_py(py, c))
     }
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_tree, script, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None))]
 fn script_runner(
     py: Python,
     local_tree: PyObject,
@@ -344,7 +388,7 @@ fn script_runner(
             Some(false) => CommitPending::No,
         },
         resume_metadata
-            .map(|m| py_to_json(m.as_ref(py)).unwrap())
+            .map(|m| py_to_json(m.bind(py)).unwrap())
             .as_ref(),
         committer,
         extra_env,
@@ -383,91 +427,58 @@ fn script_runner(
 struct Transport(silver_platter::Transport);
 
 #[pyclass]
-struct Prober(silver_platter::Prober);
-
-#[pyclass]
 struct ControlDir(silver_platter::ControlDir);
+
+struct PyProber(PyObject);
+impl ToPyObject for PyProber {
+    fn to_object(&self, py: Python) -> PyObject {
+        self.0.clone_ref(py)
+    }
+}
+impl breezyshim::controldir::Prober for PyProber {}
 
 #[pymethods]
 impl ControlDir {
     #[classmethod]
+    #[pyo3(signature = (transport, probers=None))]
     fn open_from_transport(
-        _cls: &PyType,
+        _cls: &Bound<PyType>,
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<Self> {
-        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
-            probers
-                .into_iter()
-                .map(silver_platter::Prober::new)
-                .collect()
+        let pyprobers =
+            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+            ps.iter()
+                .map(|p| p as &dyn breezyshim::controldir::Prober)
+                .collect::<Vec<_>>()
         });
-        let control_dir = match breezyshim::controldir::open_from_transport(
+        let control_dir = breezyshim::controldir::open_from_transport(
             &silver_platter::Transport::new(transport),
-            probers.as_deref(),
-        ) {
-            Ok(control_dir) => control_dir,
-            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
-            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
-                pyo3::import_exception!(breezy.errors, NotBranchError);
-                return Err(NotBranchError::new_err(e));
-            }
-            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
-                pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err(
-                    "Unknown format (not a Breezy branch)",
-                ));
-            }
-        };
+            ref_pyprobers.as_deref(),
+        )?;
         Ok(ControlDir(control_dir))
     }
 
     #[classmethod]
+    #[pyo3(signature = (transport, probers=None))]
     fn open_containing_from_transport(
-        _cls: &PyType,
+        _cls: &Bound<PyType>,
         transport: PyObject,
         probers: Option<Vec<PyObject>>,
     ) -> PyResult<(Self, String)> {
-        let probers: Option<Vec<silver_platter::Prober>> = probers.map(|probers| {
-            probers
-                .into_iter()
-                .map(silver_platter::Prober::new)
-                .collect()
+        let pyprobers =
+            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+            ps.iter()
+                .map(|p| p as &dyn breezyshim::controldir::Prober)
+                .collect::<Vec<_>>()
         });
-        let (control_dir, subpath) = match breezyshim::controldir::open_containing_from_transport(
+        let (control_dir, subpath) = breezyshim::controldir::open_containing_from_transport(
             &silver_platter::Transport::new(transport),
-            probers.as_deref(),
-        ) {
-            Ok(control_dir) => control_dir,
-            Err(breezyshim::controldir::OpenError::Python(e)) => return Err(e),
-            Err(breezyshim::controldir::OpenError::NotFound(e)) => {
-                pyo3::import_exception!(breezy.errors, NotBranchError);
-                return Err(NotBranchError::new_err(e));
-            }
-            Err(breezyshim::controldir::OpenError::UnknownFormat) => {
-                pyo3::import_exception!(breezy.errors, UnknownFormatError);
-                return Err(UnknownFormatError::new_err(
-                    "Unknown format (not a Breezy branch)",
-                ));
-            }
-        };
+            ref_pyprobers.as_deref(),
+        )?;
         Ok((ControlDir(control_dir), subpath))
-    }
-}
-
-#[pyclass]
-struct Branch(Box<dyn silver_platter::Branch>);
-
-#[pymethods]
-impl Branch {
-    #[getter]
-    fn name(&self) -> Option<String> {
-        self.0.name().map(|s| s.to_string())
-    }
-
-    #[getter]
-    fn user_url(&self) -> String {
-        self.0.get_user_url().to_string()
     }
 }
 
@@ -475,7 +486,9 @@ impl Branch {
 struct Forge(silver_platter::Forge);
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge, name, overwrite_existing=None, owner=None, tags=None, stop_revision=None))]
 fn push_derived_changes(
+    py: Python,
     local_branch: PyObject,
     main_branch: PyObject,
     forge: PyObject,
@@ -484,7 +497,7 @@ fn push_derived_changes(
     owner: Option<&str>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
-) -> PyResult<(Branch, String)> {
+) -> PyResult<(PyObject, String)> {
     let (b, u) = silver_platter::publish::push_derived_changes(
         &silver_platter::RegularBranch::new(local_branch),
         &silver_platter::RegularBranch::new(main_branch),
@@ -495,7 +508,7 @@ fn push_derived_changes(
         tags,
         stop_revision.as_ref(),
     )?;
-    Ok((Branch(b), u.to_string()))
+    Ok((b.to_object(py), u.to_string()))
 }
 
 #[pyclass]
@@ -504,7 +517,7 @@ struct CandidateList(silver_platter::candidates::Candidates);
 #[pymethods]
 impl CandidateList {
     #[classmethod]
-    fn from_path(_type: &PyType, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
         Ok(Self(silver_platter::candidates::Candidates::from_path(
             path.as_path(),
         )?))
@@ -552,6 +565,7 @@ impl Candidate {
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge=None, possible_transports=None, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -576,6 +590,7 @@ fn push_changes(
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, remote_branch, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_result(
     local_branch: PyObject,
     remote_branch: PyObject,
@@ -602,56 +617,72 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
 fn open_branch(
+    py: Python,
     url: &str,
     possible_transports: Option<Vec<PyObject>>,
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
-) -> PyResult<Branch> {
+) -> PyResult<PyObject> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let probers: Option<Vec<silver_platter::Prober>> =
-        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
-    Ok(Branch(silver_platter::vcs::open_branch(
+    let pyprobers = probers.map(|probers| probers.into_iter().map(PyProber).collect::<Vec<_>>());
+    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+        ps.iter()
+            .map(|p| p as &dyn breezyshim::controldir::Prober)
+            .collect::<Vec<_>>()
+    });
+    Ok(silver_platter::vcs::open_branch(
         &url.parse().unwrap(),
         possible_transports.as_mut(),
-        probers.as_deref(),
+        ref_pyprobers.as_deref(),
         name,
-    )?))
+    )?
+    .to_object(py))
 }
 
 #[pyfunction]
+#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
 fn open_branch_containing(
+    py: Python,
     url: &str,
     possible_transports: Option<Vec<PyObject>>,
     probers: Option<Vec<PyObject>>,
     name: Option<&str>,
-) -> PyResult<(Branch, String)> {
+) -> PyResult<(PyObject, String)> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let probers: Option<Vec<silver_platter::Prober>> =
-        probers.map(|t| t.into_iter().map(silver_platter::Prober::new).collect());
+    let pyprobers =
+        probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
+    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
+        ps.iter()
+            .map(|p| p as &dyn breezyshim::controldir::Prober)
+            .collect::<Vec<_>>()
+    });
     let (b, u) = silver_platter::vcs::open_branch_containing(
         &url.parse().unwrap(),
         possible_transports.as_mut(),
-        probers.as_deref(),
+        ref_pyprobers.as_deref(),
         name,
     )?;
-    Ok((Branch(b), u))
+    Ok((b.to_object(py), u))
 }
 
 #[pyclass]
 struct MergeProposal(silver_platter::MergeProposal);
 
 #[pyfunction]
+#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated, owner=None, preferred_schemes=None))]
 fn find_existing_proposed(
+    py: Python,
     main_branch: PyObject,
     forge: PyObject,
     name: &str,
     overwrite_unrelated: bool,
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
-) -> PyResult<(Option<Branch>, Option<bool>, Option<Vec<MergeProposal>>)> {
+) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
     let main_branch = silver_platter::RegularBranch::new(main_branch);
     let forge = silver_platter::Forge::from(forge);
     let preferred_schemes = preferred_schemes
@@ -666,20 +697,21 @@ fn find_existing_proposed(
         preferred_schemes.as_deref(),
     )?;
     Ok((
-        b.map(Branch),
+        b.map(|x| x.to_object(py)),
         o,
         p.map(|p| p.into_iter().map(MergeProposal).collect()),
     ))
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, forge, name, mp_description, resume_branch=None, resume_proposal=None, overwrite_existing=None, labels=None, commit_message=None, title=None, additional_colocated_branches=None, allow_empty=None, reviewers=None, tags=None, owner=None, stop_revision=None, allow_collaboration=None, auto_merge=None))]
 fn propose_changes(
-    local_branch: &Branch,
-    main_branch: &Branch,
+    local_branch: PyObject,
+    main_branch: PyObject,
     forge: &Forge,
     name: &str,
     mp_description: &str,
-    resume_branch: Option<&Branch>,
+    resume_branch: Option<PyObject>,
     resume_proposal: Option<&MergeProposal>,
     overwrite_existing: Option<bool>,
     labels: Option<Vec<String>>,
@@ -694,13 +726,16 @@ fn propose_changes(
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
+    let resume_branch = resume_branch.map(|b| breezyshim::branch::RegularBranch::new(b));
     silver_platter::publish::propose_changes(
-        local_branch.0.as_ref(),
-        main_branch.0.as_ref(),
+        &breezyshim::branch::RegularBranch::new(local_branch),
+        &breezyshim::branch::RegularBranch::new(main_branch),
         &forge.0,
         name,
         mp_description,
-        resume_branch.map(|b| b.0.as_ref()),
+        resume_branch
+            .as_ref()
+            .map(|b| b as &dyn silver_platter::Branch),
         resume_proposal.as_ref().map(|p| p.0.clone()),
         overwrite_existing,
         labels,
@@ -716,6 +751,7 @@ fn propose_changes(
         auto_merge,
     )
     .map(|(p, b)| (MergeProposal(p), b))
+    .map_err(Into::into)
 }
 
 #[pyclass]
@@ -727,16 +763,21 @@ impl PublishResult {
     fn is_new(&self) -> Option<bool> {
         self.0.is_new
     }
+    #[getter]
+    fn forge(&self, py: Python) -> Option<PyObject> {
+        Some(self.0.forge.to_object(py))
+    }
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, main_branch, mode, name, get_proposal_description, resume_branch=None, get_proposal_commit_message=None, get_proposal_title=None, forge=None, allow_create_proposal=None, labels=None, overwrite_existing=None, existing_proposal=None, reviewers=None, tags=None, derived_owner=None, allow_collaboration=None, stop_revision=None))]
 fn publish_changes(
-    local_branch: &Branch,
-    main_branch: &Branch,
+    local_branch: PyObject,
+    main_branch: PyObject,
     mode: Mode,
     name: &str,
     get_proposal_description: PyObject,
-    resume_branch: Option<&Branch>,
+    resume_branch: Option<PyObject>,
     get_proposal_commit_message: Option<PyObject>,
     get_proposal_title: Option<PyObject>,
     forge: Option<&Forge>,
@@ -778,10 +819,13 @@ fn publish_changes(
             })
         }
     });
+    let resume_branch = resume_branch.map(breezyshim::branch::RegularBranch::new);
     Ok(PublishResult(silver_platter::publish::publish_changes(
-        local_branch.0.as_ref(),
-        main_branch.0.as_ref(),
-        resume_branch.map(|b| b.0.as_ref()),
+        &breezyshim::branch::RegularBranch::new(local_branch),
+        &breezyshim::branch::RegularBranch::new(main_branch),
+        resume_branch
+            .as_ref()
+            .map(|b| b as &dyn silver_platter::Branch),
         mode,
         name,
         get_proposal_description,
@@ -812,27 +856,6 @@ impl DestroyFn {
             Err(PyRuntimeError::new_err("Already called"))
         }
     }
-}
-
-#[pyfunction]
-fn create_temp_sprout(
-    branch: PyObject,
-    additional_colocated_branches: Option<std::collections::HashMap<String, String>>,
-    dir: Option<std::path::PathBuf>,
-    path: Option<std::path::PathBuf>,
-) -> PyResult<(PyObject, DestroyFn)> {
-    import_exception!(breezy.errors, UnknownFormat);
-    silver_platter::utils::create_temp_sprout(
-        &breezyshim::branch::RegularBranch::new(branch),
-        additional_colocated_branches,
-        dir.as_deref(),
-        path.as_deref(),
-    )
-    .map_err(|e| match e {
-        silver_platter::utils::Error::Other(e) => e,
-        silver_platter::utils::Error::UnknownFormat => UnknownFormat::new_err(()),
-    })
-    .map(|(wt, cb)| (wt.0, DestroyFn(Some(cb))))
 }
 
 /// Run a script before making any changes to a tree.
@@ -882,9 +905,11 @@ fn fetch_colocated(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect::<HashMap<_, _>>(),
     )
+    .map_err(Into::into)
 }
 
 #[pyfunction]
+#[pyo3(signature = (local_branch, target_branch, stop_revision=None))]
 fn check_proposal_diff(
     local_branch: PyObject,
     target_branch: PyObject,
@@ -957,12 +982,16 @@ pub(crate) mod debian {
         }
 
         #[getter]
-        fn context(&self, py: Python) -> Option<PyObject> {
+        fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
+        where
+            'py: 'a,
+        {
             self.0.context.as_ref().map(|c| json_to_py(py, c))
         }
     }
 
     #[pyfunction]
+    #[pyo3(signature = (local_tree, script, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None, update_changelog=None))]
     pub(crate) fn debian_script_runner(
         py: Python,
         local_tree: PyObject,
@@ -1001,7 +1030,7 @@ pub(crate) mod debian {
                 None => CommitPending::Auto,
             },
             resume_metadata
-                .map(|m| py_to_json(m.as_ref(py)).unwrap())
+                .map(|m| py_to_json(m.bind(py)).unwrap())
                 .as_ref(),
             committer,
             extra_env,
@@ -1099,6 +1128,7 @@ pub(crate) mod debian {
     }
 
     #[pyfunction]
+    #[pyo3(signature = (tree, subpath, builder=None, result_dir=None))]
     pub(crate) fn build(
         tree: PyObject,
         subpath: PathBuf,
@@ -1136,6 +1166,7 @@ pub(crate) mod debian {
 /// Returns:
 ///   boolean indicating whether the merge would result in conflicts
 #[pyfunction]
+#[pyo3(signature = (main_branch, other_branch, other_revision=None))]
 fn merge_conflicts(
     main_branch: PyObject,
     other_branch: PyObject,
@@ -1145,28 +1176,288 @@ fn merge_conflicts(
         &breezyshim::branch::RegularBranch::new(main_branch),
         &breezyshim::branch::RegularBranch::new(other_branch),
         other_revision.as_ref(),
-    ))
+    )?)
 }
 
-#[pymodule]
-fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
+fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
+    import_exception!(breezy.errors, UnknownFormat);
+    import_exception!(breezy.errors, PermissionDenied);
+    match e {
+        silver_platter::workspace::Error::BrzError(e) => e.into(),
+        silver_platter::workspace::Error::IOError(e) => e.into(),
+        silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
+        silver_platter::workspace::Error::PermissionDenied(e) => PermissionDenied::new_err((e,)),
+        silver_platter::workspace::Error::UnknownFormat(format) => {
+            UnknownFormat::new_err((format,))
+        }
+    }
+}
+
+#[pyclass(subclass)]
+struct Workspace(silver_platter::workspace::Workspace);
+
+#[pymethods]
+impl Workspace {
+    /// Create a workspace from a URL.
+    ///
+    /// # Arguments
+    /// * `url` - The URL to create the workspace from
+    #[classmethod]
+    fn from_url(_cls: &Bound<PyType>, url: &str) -> PyResult<Self> {
+        Ok(Self(
+            silver_platter::workspace::Workspace::from_url(
+                &url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?,
+            )
+            .map_err(workspace_error_to_py_err)?,
+        ))
+    }
+
+    #[getter]
+    fn path(&self) -> std::path::PathBuf {
+        self.0.path()
+    }
+
+    #[getter]
+    fn base_revid(&self) -> Option<RevisionId> {
+        self.0.base_revid()
+    }
+
+    #[new]
+    #[pyo3(signature = (main_branch=None, resume_branch=None, cached_branch=None, dir=None, path=None, additional_colocated_branches=None, resume_branch_additional_colocated_branches=None, format=None))]
+    fn new(
+        py: Python,
+        main_branch: Option<PyObject>,
+        resume_branch: Option<PyObject>,
+        cached_branch: Option<PyObject>,
+        dir: Option<std::path::PathBuf>,
+        path: Option<std::path::PathBuf>,
+        additional_colocated_branches: Option<PyObject>,
+        resume_branch_additional_colocated_branches: Option<PyObject>,
+        format: Option<PyObject>,
+    ) -> PyResult<Self> {
+        let mut builder = silver_platter::workspace::Workspace::builder();
+
+        if let Some(main_branch) = main_branch {
+            builder = builder.main_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                main_branch,
+            )));
+        }
+
+        if let Some(resume_branch) = resume_branch {
+            builder = builder.resume_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                resume_branch,
+            )));
+        }
+
+        if let Some(cached_branch) = cached_branch {
+            builder = builder.cached_branch(Box::new(breezyshim::branch::RegularBranch::new(
+                cached_branch,
+            )));
+        }
+
+        if let Some(additional_colocated_branches) = additional_colocated_branches {
+            if let Ok(additional_colocated_branches) =
+                additional_colocated_branches.extract::<HashMap<String, String>>(py)
+            {
+                builder = builder.additional_colocated_branches(additional_colocated_branches);
+            } else if let Ok(additional_colocated_branches) =
+                additional_colocated_branches.extract::<Vec<String>>(py)
+            {
+                builder = builder.additional_colocated_branches(
+                    additional_colocated_branches
+                        .into_iter()
+                        .map(|x| (x.clone(), x))
+                        .collect(),
+                );
+            } else {
+                return Err(PyTypeError::new_err(
+                    "additional_colocated_branches must be a dict or a list of tuples",
+                ));
+            }
+        }
+
+        if let Some(resume_branch_additional_colocated_branches) =
+            resume_branch_additional_colocated_branches
+        {
+            if let Ok(resume_branch_additional_colocated_branches) =
+                resume_branch_additional_colocated_branches.extract::<HashMap<String, String>>(py)
+            {
+                builder = builder.resume_branch_additional_colocated_branches(
+                    resume_branch_additional_colocated_branches,
+                );
+            } else if let Ok(resume_branch_additional_colocated_branches) =
+                resume_branch_additional_colocated_branches.extract::<Vec<String>>(py)
+            {
+                builder = builder.resume_branch_additional_colocated_branches(
+                    resume_branch_additional_colocated_branches
+                        .into_iter()
+                        .map(|x| (x.clone(), x))
+                        .collect(),
+                );
+            } else {
+                return Err(PyTypeError::new_err(
+                    "resume_branch_additional_colocated_branches must be a dict or a list of tuples",
+                ));
+            }
+        }
+
+        if let Some(path) = path {
+            builder = builder.path(path);
+        }
+
+        if let Some(dir) = dir {
+            builder = builder.dir(dir);
+        }
+
+        if let Some(format) = format {
+            if let Ok(format) = format.extract::<String>(py) {
+                builder = builder.format(format.as_str());
+            } else if format.bind(py).hasattr("get_format_description")? {
+                builder = builder.format(&breezyshim::controldir::ControlDirFormat::from(format));
+            } else {
+                return Err(PyTypeError::new_err("format must be a string"));
+            }
+        }
+
+        Ok(Self(builder.build().map_err(workspace_error_to_py_err)?))
+    }
+
+    #[getter]
+    fn base_tree(&self, py: Python) -> PyResult<PyObject> {
+        Ok(self.0.base_tree()?.to_object(py))
+    }
+
+    #[getter]
+    fn local_tree(&self, py: Python) -> PyObject {
+        self.0.local_tree().to_object(py)
+    }
+
+    #[getter]
+    fn main_branch(&self, py: Python) -> PyObject {
+        self.0.main_branch().to_object(py)
+    }
+
+    #[getter]
+    fn resume_branch(&self, py: Python) -> Option<PyObject> {
+        self.0.resume_branch().map(|b| b.to_object(py))
+    }
+
+    fn any_branch_changes(&self) -> bool {
+        self.0.any_branch_changes()
+    }
+
+    fn changes_since_main(&self) -> bool {
+        self.0.changes_since_main()
+    }
+
+    fn changes_since_base(&self) -> bool {
+        self.0.changes_since_base()
+    }
+
+    #[getter]
+    fn main_branch_revid(&self) -> RevisionId {
+        self.0.main_branch().unwrap().last_revision()
+    }
+
+    #[getter]
+    fn refreshed(&self) -> bool {
+        self.0.refreshed()
+    }
+
+    fn result_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
+        self.0.changed_branches()
+    }
+
+    fn __enter__(slf: Bound<Self>) -> Bound<Self> {
+        slf.clone()
+    }
+
+    #[pyo3(signature = (_exc_type, _exc_value, _traceback))]
+    fn __exit__(
+        slf: Bound<Self>,
+        _exc_type: Option<PyObject>,
+        _exc_value: Option<PyObject>,
+        _traceback: Option<PyObject>,
+    ) -> PyResult<bool> {
+        slf.borrow_mut()
+            .0
+            .destroy()
+            .map_err(workspace_error_to_py_err)?;
+        Ok(false)
+    }
+
+    #[pyo3(signature = (outf, old_label=None, new_label=None))]
+    fn show_diff(
+        &self,
+        outf: PyObject,
+        old_label: Option<&str>,
+        new_label: Option<&str>,
+    ) -> PyResult<()> {
+        let outf = Box::new(pyo3_filelike::PyBinaryFile::from(outf));
+
+        self.0.show_diff(outf, old_label, new_label)?;
+
+        Ok(())
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (vcs_type=None))]
+fn select_preferred_probers(py: Python, vcs_type: Option<&str>) -> Vec<PyObject> {
+    let probers = silver_platter::probers::select_preferred_probers(vcs_type);
+    probers.into_iter().map(|p| p.to_object(py)).collect()
+}
+
+#[pyfunction]
+#[pyo3(signature = (vcs_type=None))]
+fn select_probers(py: Python, vcs_type: Option<&str>) -> Vec<PyObject> {
+    let probers = silver_platter::probers::select_probers(vcs_type);
+    probers.into_iter().map(|p| p.to_object(py)).collect()
+}
+
+#[pymodule(name = "silver_platter")]
+fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(derived_branch_name, m)?)?;
     m.add_function(wrap_pyfunction!(script_runner, m)?)?;
-    m.add("ScriptMadeNoChanges", py.get_type::<ScriptMadeNoChanges>())?;
-    m.add("ScriptFailed", py.get_type::<ScriptFailed>())?;
-    m.add("ScriptNotFound", py.get_type::<ScriptNotFound>())?;
-    m.add("DetailedFailure", py.get_type::<DetailedFailure>())?;
-    m.add("MissingChangelog", py.get_type::<MissingChangelog>())?;
+    m.add_function(wrap_pyfunction!(select_preferred_probers, m)?)?;
+    m.add_function(wrap_pyfunction!(select_probers, m)?)?;
+    m.add(
+        "ScriptMadeNoChanges",
+        py.get_type_bound::<ScriptMadeNoChanges>(),
+    )?;
+    m.add("ScriptFailed", py.get_type_bound::<ScriptFailed>())?;
+    m.add("ScriptNotFound", py.get_type_bound::<ScriptNotFound>())?;
+    m.add("DetailedFailure", py.get_type_bound::<DetailedFailure>())?;
+    m.add("MissingChangelog", py.get_type_bound::<MissingChangelog>())?;
     m.add(
         "ResultFileFormatError",
-        py.get_type::<ResultFileFormatError>(),
+        py.get_type_bound::<ResultFileFormatError>(),
     )?;
+    m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
+    m.add(
+        "BranchUnavailable",
+        py.get_type_bound::<BranchUnavailable>(),
+    )?;
+    m.add(
+        "BranchTemporarilyUnavailable",
+        py.get_type_bound::<BranchTemporarilyUnavailable>(),
+    )?;
+    m.add(
+        "BranchUnsupported",
+        py.get_type_bound::<BranchUnsupported>(),
+    )?;
+    m.add(
+        "BranchRateLimited",
+        py.get_type_bound::<BranchRateLimited>(),
+    )?;
+
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
     m.add_function(wrap_pyfunction!(push_derived_changes, m)?)?;
-    m.add_class::<Branch>()?;
     m.add_class::<Forge>()?;
+    m.add_class::<Workspace>()?;
     m.add_class::<CandidateList>()?;
     m.add_class::<Candidate>()?;
     m.add_function(wrap_pyfunction!(push_result, m)?)?;
@@ -1197,16 +1488,37 @@ fn _svp_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PublishResult>()?;
     m.add(
         "InsufficientChangesForNewProposal",
-        py.get_type::<InsufficientChangesForNewProposal>(),
+        py.get_type_bound::<InsufficientChangesForNewProposal>(),
     )?;
-    m.add_function(wrap_pyfunction!(create_temp_sprout, m)?)?;
+    m.add(
+        "UnrelatedBranchExists",
+        py.get_type_bound::<UnrelatedBranchExists>(),
+    )?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
     m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
-    m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
-    m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
-    m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
+    m.add("PostCheckFailed", py.get_type_bound::<PostCheckFailed>())?;
+    m.add("PreCheckFailed", py.get_type_bound::<PreCheckFailed>())?;
+    m.add(
+        "EmptyMergeProposal",
+        py.get_type_bound::<EmptyMergeProposal>(),
+    )?;
+
+    m.add("MODE_PUSH", "push")?;
+    m.add("MODE_ATTEMPT_PUSH", "attempt-push")?;
+    m.add("MODE_PROPOSE", "propose")?;
+    m.add("MODE_PUSH_DERIVED", "push-derived")?;
+    m.add(
+        "SUPPORTED_MODES",
+        vec!["push", "attempt-push", "propose", "push-derived"],
+    )?;
+    let items = silver_platter::VERSION.split('.').collect::<Vec<_>>();
+    let tuple = items
+        .iter()
+        .map(|i| i.parse::<i32>().unwrap())
+        .collect::<Vec<_>>();
+    m.add("__version__", pyo3::types::PyTuple::new_bound(py, tuple))?;
 
     Ok(())
 }

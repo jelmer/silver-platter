@@ -1,8 +1,9 @@
 use crate::vcs::{full_branch_url, open_branch};
 use breezyshim::branch::Branch;
+use breezyshim::error::Error as BrzError;
 pub use breezyshim::forge::MergeProposal;
 pub use breezyshim::forge::MergeProposalStatus;
-use breezyshim::forge::{iter_forge_instances, Error as ForgeError, Forge};
+use breezyshim::forge::{iter_forge_instances, Forge};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
@@ -17,7 +18,7 @@ fn instance_iter_mps(
         .flat_map(
             move |status| match instance.iter_my_proposals(Some(status), None) {
                 Ok(mps) => Some(mps),
-                Err(ForgeError::LoginRequired) => {
+                Err(BrzError::ForgeLoginRequired) => {
                     log::warn!("Skipping forge {:?} because login is required", instance);
                     None
                 }

@@ -9,7 +9,7 @@ use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
-use breezyshim::forge::Error as ForgeError;
+use breezyshim::error::Error as BrzError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -114,14 +114,17 @@ impl Entry {
         };
 
         let mut ws = Workspace::builder()
-            .main_branch(main_branch.as_ref())
-            .path(basepath)
+            .main_branch(main_branch)
+            .path(basepath.to_path_buf())
             .build()?;
 
-        log::info!("Making changes to {}", main_branch.get_user_url());
+        log::info!(
+            "Making changes to {}",
+            ws.main_branch().unwrap().get_user_url()
+        );
 
         let result = match script_runner(
-            &ws.local_tree(),
+            ws.local_tree(),
             recipe
                 .command
                 .as_ref()
@@ -217,10 +220,8 @@ impl Entry {
         }
     }
 
-    pub fn working_tree(
-        &self,
-    ) -> Result<breezyshim::tree::WorkingTree, breezyshim::tree::WorkingTreeOpenError> {
-        breezyshim::tree::WorkingTree::open(&self.local_path)
+    pub fn working_tree(&self) -> Result<breezyshim::tree::WorkingTree, BrzError> {
+        breezyshim::workingtree::open(&self.local_path)
     }
 
     pub fn target_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
@@ -418,9 +419,9 @@ pub fn publish_one(
                 };
                 (Some(f), existing_proposal, resume_branch)
             }
-            Err(ForgeError::UnsupportedForge(e)) => {
+            Err(BrzError::UnsupportedForge(e)) => {
                 if mode != Mode::Push {
-                    return Err(ForgeError::UnsupportedForge(e).into());
+                    return Err(BrzError::UnsupportedForge(e).into());
                 }
 
                 // We can't figure out what branch to resume from when there's no forge

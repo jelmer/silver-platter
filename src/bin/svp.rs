@@ -413,88 +413,36 @@ pub fn batch_publish(
 }
 
 fn login(url: &url::Url) -> i32 {
-    pyo3::Python::with_gil(|py| {
-        let m = py.import("launchpadlib").unwrap();
-        let lp_uris = match m.getattr("uris") {
-            Ok(lp_uris) => lp_uris
-                .getattr("web_roots")
-                .unwrap()
-                .extract::<HashMap<String, String>>()
-                .unwrap(),
-            Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                log::warn!("launchpadlib is not installed, unable to log in to launchpad");
-                HashMap::new()
-            }
-            Err(e) => {
-                panic!("Failed to import launchpadlib: {}", e);
-            }
-        };
+    let lp_uris = breezyshim::launchpad::uris().unwrap();
+    let forge = if url.host_str() == Some("github.com") {
+        "github"
+    } else if lp_uris.iter().any(|(_key, root)| {
+        url.host_str() == Some(root) || url.host_str() == Some(root.trim_end_matches('/'))
+    }) {
+        "launchpad"
+    } else {
+        "gitlab"
+    };
 
-        let forge = if url.host_str() == Some("github.com") {
-            "github"
-        } else if lp_uris.iter().any(|(_key, root)| {
-            url.host_str() == Some(root) || url.host_str() == Some(root.trim_end_matches('/'))
-        }) {
-            "launchpad"
-        } else {
-            "gitlab"
-        };
-
-        match forge {
-            "gitlab" => {
-                let m = py.import("breezy.plugins.gitlab.cmds").unwrap();
-                let cmd = m.getattr("cmd_gitlab_login").unwrap();
-
-                let cmd_gl = cmd.call0().unwrap();
-                cmd_gl.call_method0("_setup_outf").unwrap();
-
-                cmd_gl.call_method1("run", (url.as_str(),)).unwrap();
-            }
-            "github" => {
-                let m = py.import("breezy.plugins.github.cmds").unwrap();
-                let cmd = m.getattr("cmd_github_login").unwrap();
-
-                let cmd_gl = cmd.call0().unwrap();
-                cmd_gl.call_method0("_setup_outf").unwrap();
-
-                cmd_gl.call_method0("run").unwrap();
-            }
-            "launchpad" => {
-                let m = py.import("breezy.plugins.launchpad.cmds").unwrap();
-                let cmd = m.getattr("cmd_launchpad_login").unwrap();
-
-                let cmd_lp = cmd.call0().unwrap();
-                cmd_lp.call_method0("_setup_outf").unwrap();
-
-                cmd_lp.call_method1("run", (url.as_str(),)).unwrap();
-
-                let lp_api = py.import("breezy.plugins.launchpad.lp_api").unwrap();
-
-                let lp_service_root = lp_uris
-                    .iter()
-                    .find(|(_key, root)| {
-                        url.host_str() == Some(root)
-                            || url.host_str() == Some(root.trim_end_matches('/'))
-                    })
-                    .unwrap()
-                    .1;
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("version", "devel").unwrap();
-                lp_api
-                    .call_method("connect_launchpad", (lp_service_root,), Some(kwargs))
-                    .unwrap();
-            }
-            _ => {
-                panic!("Unknown forge {}", forge);
-            }
+    match forge {
+        "gitlab" => {
+            breezyshim::gitlab::login(url).unwrap();
         }
+        "github" => {
+            breezyshim::github::login().unwrap();
+        }
+        "launchpad" => {
+            breezyshim::launchpad::login(url);
+        }
+        _ => {
+            panic!("Unknown forge {}", forge);
+        }
+    }
 
-        0
-    })
+    0
 }
 
 fn main() {
-    pyo3::prepare_freethreaded_python();
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -509,15 +457,8 @@ fn main() {
         )
         .init();
 
-    breezyshim::init().unwrap();
-
-    pyo3::Python::with_gil(|py| -> pyo3::PyResult<()> {
-        let m = py.import("breezy.plugin").unwrap();
-        let load_plugins = m.getattr("load_plugins").unwrap();
-        load_plugins.call0().unwrap();
-        Ok(())
-    })
-    .unwrap();
+    breezyshim::init();
+    breezyshim::plugin::load_plugins();
 
     std::process::exit(match &cli.command {
         Commands::Forges {} => {
@@ -563,11 +504,12 @@ fn main() {
                 std::process::exit(1);
             };
 
-            let (local_tree, subpath) = WorkingTree::open_containing(Path::new(".")).unwrap();
+            let (local_tree, subpath) =
+                breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
 
             check_clean_tree(
                 &local_tree,
-                local_tree.basis_tree().as_ref(),
+                &local_tree.basis_tree().unwrap(),
                 subpath.as_path(),
             )
             .unwrap();
@@ -589,7 +531,7 @@ fn main() {
                 Ok(result) => result,
                 Err(err) => {
                     error!("Failed: {}", err);
-                    reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                    reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                     std::process::exit(1);
                 }
             };
@@ -606,20 +548,20 @@ fn main() {
                     Ok(status) if status.success() => {}
                     Ok(status) => {
                         error!("Verify command failed: {}", status);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                        reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                         std::process::exit(1);
                     }
                     Err(err) => {
                         error!("Verify command failed: {}", err);
-                        reset_tree(&local_tree, None, Some(subpath.as_path()), None).unwrap();
+                        reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
                         std::process::exit(1);
                     }
                 }
             }
 
             if *diff {
-                let old_tree = local_tree.revision_tree(&result.old_revision);
-                let new_tree = local_tree.revision_tree(&result.new_revision);
+                let old_tree = local_tree.revision_tree(&result.old_revision).unwrap();
+                let new_tree = local_tree.revision_tree(&result.new_revision).unwrap();
                 breezyshim::diff::show_diff_trees(
                     old_tree.as_ref(),
                     new_tree.as_ref(),
