@@ -141,7 +141,7 @@ fn py_to_json(obj: &Bound<PyAny>) -> PyResult<serde_json::Value> {
 #[pymethods]
 impl Recipe {
     #[classmethod]
-    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: PathBuf) -> PyResult<Self> {
         let recipe = silver_platter::recipe::Recipe::from_path(path.as_path())?;
         Ok(Recipe(recipe))
     }
@@ -329,7 +329,7 @@ fn script_runner(
     py: Python,
     local_tree: PyObject,
     script: PyObject,
-    subpath: Option<std::path::PathBuf>,
+    subpath: Option<PathBuf>,
     commit_pending: Option<bool>,
     resume_metadata: Option<PyObject>,
     committer: Option<&str>,
@@ -431,7 +431,7 @@ struct CandidateList(silver_platter::candidates::Candidates);
 #[pymethods]
 impl CandidateList {
     #[classmethod]
-    fn from_path(_type: &Bound<PyType>, path: std::path::PathBuf) -> PyResult<Self> {
+    fn from_path(_type: &Bound<PyType>, path: PathBuf) -> PyResult<Self> {
         Ok(Self(silver_platter::candidates::Candidates::from_path(
             path.as_path(),
         )?))
@@ -838,7 +838,7 @@ pub(crate) mod debian {
         py: Python,
         local_tree: PyObject,
         script: PyObject,
-        subpath: Option<std::path::PathBuf>,
+        subpath: Option<PathBuf>,
         commit_pending: Option<bool>,
         resume_metadata: Option<PyObject>,
         committer: Option<&str>,
@@ -1072,8 +1072,8 @@ impl Workspace {
         main_branch: Option<PyObject>,
         resume_branch: Option<PyObject>,
         cached_branch: Option<PyObject>,
-        dir: Option<std::path::PathBuf>,
-        path: Option<std::path::PathBuf>,
+        dir: Option<PathBuf>,
+        path: Option<PathBuf>,
         additional_colocated_branches: Option<PyObject>,
         resume_branch_additional_colocated_branches: Option<PyObject>,
         format: Option<PyObject>,
