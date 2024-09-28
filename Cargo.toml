@@ -36,7 +36,7 @@ debian-control = { version = ">=0.1", optional = true }
 rand = "0.8.5"
 
 [workspace]
-members = [ "crates/*",]
+members = [ "svp-client", "svp-py" ]
 
 [features]
 default = ["debian", "detect-update-changelog"]

@@ -30,6 +30,10 @@ struct Success {
     debian: Option<debian::Context>,
 }
 
+pub fn enabled() -> bool {
+    std::env::var("SVP_API").ok().as_deref() == Some("1")
+}
+
 /// Report a success to the SVP server.
 ///
 /// # Arguments
@@ -39,7 +43,7 @@ pub fn report_success(
     value: Option<i32>,
     context: Option<serde_json::Value>,
 ) {
-    if std::env::var("SVP_API").ok().as_deref() == Some("1") {
+    if enabled() {
         let f = std::fs::File::create(std::env::var("SVP_RESULT").unwrap()).unwrap();
 
         serde_json::to_writer(
@@ -82,7 +86,7 @@ pub fn report_fatal(
     hint: Option<&str>,
     transient: Option<bool>,
 ) -> ! {
-    if std::env::var("SVP_API").ok().as_deref() == Some("1") {
+    if enabled() {
         let f = std::fs::File::create(std::env::var("SVP_RESULT").unwrap()).unwrap();
 
         serde_json::to_writer(
@@ -103,11 +107,11 @@ pub fn report_fatal(
     std::process::exit(1);
 }
 
-pub fn load_resume() -> Option<serde_json::Value> {
-    if std::env::var("SVP_API").ok().as_deref() == Some("1") {
+pub fn load_resume<T: serde::de::DeserializeOwned>() -> Option<T> {
+    if enabled() {
         if let Ok(resume_path) = std::env::var("SVP_RESUME") {
             let f = std::fs::File::open(resume_path).unwrap();
-            let resume: serde_json::Value = serde_json::from_reader(f).unwrap();
+            let resume: T = serde_json::from_reader(f).unwrap();
             Some(resume)
         } else {
             None
@@ -115,8 +119,4 @@ pub fn load_resume() -> Option<serde_json::Value> {
     } else {
         None
     }
-}
-
-pub fn enabled() -> bool {
-    std::env::var("SVP_API").ok().as_deref() == Some("1")
 }
