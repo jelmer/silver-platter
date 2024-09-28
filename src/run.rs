@@ -60,7 +60,7 @@ pub fn apply_and_publish(
     let mut overwrite = false;
 
     let (forge, existing_proposals, mut resume_branch): (
-        Option<Forge>,
+        Option<Box<Forge>>,
         Vec<MergeProposal>,
         Option<Box<dyn Branch>>,
     ) = match get_forge(main_branch.as_ref()) {
@@ -89,21 +89,26 @@ pub fn apply_and_publish(
             error!("Failed to get forge: {}", e);
             return 2;
         }
-        Ok(ref forge) => {
-            let (resume_branch, resume_overwrite, existing_proposals) = find_existing_proposed(
+        Ok(forge) => {
+            let (resume_branch, resume_overwrite, existing_proposals) = match find_existing_proposed(
                 main_branch.as_ref(),
-                forge,
+                &forge,
                 name,
                 false,
                 derived_owner,
                 None,
-            )
-            .unwrap();
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Failed to find existing proposals: {}", e);
+                    return 2;
+                }
+            };
             if let Some(resume_overwrite) = resume_overwrite {
                 overwrite = resume_overwrite;
             }
             (
-                Some(forge.clone()),
+                Some(Box::new(forge)),
                 existing_proposals.unwrap_or_default(),
                 resume_branch,
             )
@@ -218,7 +223,7 @@ pub fn apply_and_publish(
                 None
             }
         }),
-        forge.as_ref(),
+        forge.as_deref(),
         allow_create_proposal.map(|f| f(&result)),
         labels.map(|l| l.iter().map(|s| s.to_string()).collect()),
         Some(overwrite),

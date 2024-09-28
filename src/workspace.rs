@@ -7,7 +7,6 @@ use breezyshim::forge::{Forge, MergeProposal};
 use breezyshim::tree::WorkingTree;
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
-use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -16,7 +15,7 @@ fn fetch_colocated(
     from_controldir: &ControlDir,
     additional_colocated_branches: &HashMap<&str, &str>,
 ) -> Result<(), BrzError> {
-    info!(
+    log::debug!(
         "Fetching colocated branches: {:?}",
         additional_colocated_branches
     );

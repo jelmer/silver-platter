@@ -19,6 +19,7 @@ pub struct MergeRequest {
     pub propose_threshold: Option<u32>,
 
     /// Description templates
+    #[serde(default)]
     pub description: HashMap<Option<DescriptionFormat>, String>,
 }
 
@@ -59,6 +60,38 @@ impl MergeRequest {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(untagged)]
+/// Command as either a shell string or a vector of arguments
+pub enum Command {
+    /// Command as a shell string
+    Shell(String),
+
+    /// Command as a vector of arguments
+    Argv(Vec<String>),
+}
+
+impl Command {
+    /// Get the command as a shell string
+    pub fn shell(&self) -> String {
+        match self {
+            Command::Shell(s) => s.clone(),
+            Command::Argv(v) => {
+                let args = v.iter().map(|x| x.as_str()).collect::<Vec<_>>();
+                shlex::try_join(args).unwrap()
+            }
+        }
+    }
+
+    /// Get the command as a vector of arguments
+    pub fn argv(&self) -> Vec<String> {
+        match self {
+            Command::Shell(s) => vec!["sh".to_string(), "-c".to_string(), s.clone()],
+            Command::Argv(v) => v.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// A recipe
 pub struct Recipe {
@@ -73,7 +106,7 @@ pub struct Recipe {
     pub labels: Option<Vec<String>>,
 
     /// Command to run
-    pub command: Option<Vec<String>>,
+    pub command: Option<Command>,
 
     /// Mode to run the recipe in
     pub mode: Option<Mode>,
@@ -120,8 +153,8 @@ merge-request:
     let recipe = Recipe::from_path(&path).unwrap();
     assert_eq!(recipe.name, Some("test".to_string()));
     assert_eq!(
-        recipe.command,
-        Some(vec!["echo".to_string(), "hello".to_string()])
+        recipe.command.unwrap().argv(),
+        vec!["echo".to_string(), "hello".to_string()]
     );
     assert_eq!(recipe.mode, Some(Mode::Propose));
     assert_eq!(

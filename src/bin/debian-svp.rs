@@ -306,7 +306,7 @@ fn run(args: &RunArgs) -> i32 {
     let command = if let Some(command) = args.command.as_ref() {
         shlex::split(command.as_str()).unwrap()
     } else if let Some(recipe) = &recipe {
-        recipe.command.clone().unwrap()
+        recipe.command.as_ref().unwrap().argv()
     } else {
         error!("No command specified");
         return 1;
@@ -624,7 +624,7 @@ fn main() {
             let command = if let Some(command) = command.as_ref() {
                 shlex::split(command.as_str()).unwrap()
             } else if let Some(recipe) = &recipe {
-                recipe.command.clone().unwrap()
+                recipe.command.as_ref().unwrap().argv()
             } else {
                 error!("No command specified");
                 std::process::exit(1);
