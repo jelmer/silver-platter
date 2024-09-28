@@ -33,8 +33,12 @@ pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
 
 #[cfg(not(feature = "detect-update-changelog"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Changelog behaviour
 pub struct ChangelogBehaviour {
+    /// Whether to update the changelog
     pub update_changelog: bool,
+
+    /// Explanation for the decision
     pub explanation: String,
 }
 

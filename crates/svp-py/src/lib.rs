@@ -890,25 +890,6 @@ fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyRe
 }
 
 #[pyfunction]
-fn fetch_colocated(
-    controldir: PyObject,
-    from_controldir: PyObject,
-    additional_colocated_branches: HashMap<String, String>,
-) -> PyResult<()> {
-    let controldir = breezyshim::ControlDir::new(controldir);
-    let from_controldir = breezyshim::ControlDir::new(from_controldir);
-    silver_platter::workspace::fetch_colocated(
-        &controldir,
-        &from_controldir,
-        &additional_colocated_branches
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect::<HashMap<_, _>>(),
-    )
-    .map_err(Into::into)
-}
-
-#[pyfunction]
 #[pyo3(signature = (local_branch, target_branch, stop_revision=None))]
 fn check_proposal_diff(
     local_branch: PyObject,
@@ -1496,7 +1477,6 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     )?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
-    m.add_function(wrap_pyfunction!(fetch_colocated, m)?)?;
     m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
     m.add("PostCheckFailed", py.get_type_bound::<PostCheckFailed>())?;
     m.add("PreCheckFailed", py.get_type_bound::<PreCheckFailed>())?;
