@@ -1,4 +1,4 @@
-use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
@@ -8,32 +8,6 @@ use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
-
-create_exception!(
-    silver_platter,
-    BranchUnsupported,
-    PyException,
-    "Unsupported"
-);
-create_exception!(
-    silver_platter,
-    BranchTemporarilyUnavailable,
-    PyException,
-    "TemporarilyUnavailable"
-);
-create_exception!(
-    silver_platter,
-    BranchUnavailable,
-    PyException,
-    "Unavailable"
-);
-create_exception!(
-    silver_platter,
-    BranchRateLimited,
-    PyException,
-    "RateLimited"
-);
-create_exception!(silver_platter, BranchMissing, PyException, "Missing");
 
 create_exception!(
     silver_platter,
@@ -392,16 +366,15 @@ fn script_runner(
             .as_ref(),
         committer,
         extra_env,
-        match stderr {
-            Some(stderr) => {
-                let fd = stderr
-                    .call_method0(py, "fileno")?
-                    .extract::<i32>(py)
-                    .unwrap();
-                let f = unsafe { std::fs::File::from_raw_fd(fd) };
-                std::process::Stdio::from(f)
-            }
-            None => std::process::Stdio::inherit(),
+        if let Some(stderr) = stderr {
+            let fd = stderr
+                .call_method0(py, "fileno")?
+                .extract::<i32>(py)
+                .unwrap();
+            let f = unsafe { std::fs::File::from_raw_fd(fd) };
+            std::process::Stdio::from(f)
+        } else {
+            std::process::Stdio::inherit()
         },
     )
     .map(|result| CommandResult(result).into_py(py))
@@ -421,65 +394,6 @@ fn script_runner(
         CodemodError::Other(err) => PyRuntimeError::new_err(format!("Script failed: {}", err)),
         CodemodError::Utf8(err) => err.into(),
     })
-}
-
-#[pyclass]
-struct Transport(silver_platter::Transport);
-
-#[pyclass]
-struct ControlDir(silver_platter::ControlDir);
-
-struct PyProber(PyObject);
-impl ToPyObject for PyProber {
-    fn to_object(&self, py: Python) -> PyObject {
-        self.0.clone_ref(py)
-    }
-}
-impl breezyshim::controldir::Prober for PyProber {}
-
-#[pymethods]
-impl ControlDir {
-    #[classmethod]
-    #[pyo3(signature = (transport, probers=None))]
-    fn open_from_transport(
-        _cls: &Bound<PyType>,
-        transport: PyObject,
-        probers: Option<Vec<PyObject>>,
-    ) -> PyResult<Self> {
-        let pyprobers =
-            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
-        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
-            ps.iter()
-                .map(|p| p as &dyn breezyshim::controldir::Prober)
-                .collect::<Vec<_>>()
-        });
-        let control_dir = breezyshim::controldir::open_from_transport(
-            &silver_platter::Transport::new(transport),
-            ref_pyprobers.as_deref(),
-        )?;
-        Ok(ControlDir(control_dir))
-    }
-
-    #[classmethod]
-    #[pyo3(signature = (transport, probers=None))]
-    fn open_containing_from_transport(
-        _cls: &Bound<PyType>,
-        transport: PyObject,
-        probers: Option<Vec<PyObject>>,
-    ) -> PyResult<(Self, String)> {
-        let pyprobers =
-            probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
-        let ref_pyprobers = pyprobers.as_deref().map(|ps| {
-            ps.iter()
-                .map(|p| p as &dyn breezyshim::controldir::Prober)
-                .collect::<Vec<_>>()
-        });
-        let (control_dir, subpath) = breezyshim::controldir::open_containing_from_transport(
-            &silver_platter::Transport::new(transport),
-            ref_pyprobers.as_deref(),
-        )?;
-        Ok((ControlDir(control_dir), subpath))
-    }
 }
 
 #[pyclass]
@@ -614,59 +528,6 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
         silver_platter::vcs::full_branch_url(&silver_platter::RegularBranch::new(branch))
             .to_string(),
     )
-}
-
-#[pyfunction]
-#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
-fn open_branch(
-    py: Python,
-    url: &str,
-    possible_transports: Option<Vec<PyObject>>,
-    probers: Option<Vec<PyObject>>,
-    name: Option<&str>,
-) -> PyResult<PyObject> {
-    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
-        possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let pyprobers = probers.map(|probers| probers.into_iter().map(PyProber).collect::<Vec<_>>());
-    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
-        ps.iter()
-            .map(|p| p as &dyn breezyshim::controldir::Prober)
-            .collect::<Vec<_>>()
-    });
-    Ok(silver_platter::vcs::open_branch(
-        &url.parse().unwrap(),
-        possible_transports.as_mut(),
-        ref_pyprobers.as_deref(),
-        name,
-    )?
-    .to_object(py))
-}
-
-#[pyfunction]
-#[pyo3(signature = (url, possible_transports=None, probers=None, name=None))]
-fn open_branch_containing(
-    py: Python,
-    url: &str,
-    possible_transports: Option<Vec<PyObject>>,
-    probers: Option<Vec<PyObject>>,
-    name: Option<&str>,
-) -> PyResult<(PyObject, String)> {
-    let mut possible_transports: Option<Vec<silver_platter::Transport>> =
-        possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
-    let pyprobers =
-        probers.map(|probers| probers.into_iter().map(|p| PyProber(p)).collect::<Vec<_>>());
-    let ref_pyprobers = pyprobers.as_deref().map(|ps| {
-        ps.iter()
-            .map(|p| p as &dyn breezyshim::controldir::Prober)
-            .collect::<Vec<_>>()
-    });
-    let (b, u) = silver_platter::vcs::open_branch_containing(
-        &url.parse().unwrap(),
-        possible_transports.as_mut(),
-        ref_pyprobers.as_deref(),
-        name,
-    )?;
-    Ok((b.to_object(py), u))
 }
 
 #[pyclass]
@@ -1416,23 +1277,6 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "ResultFileFormatError",
         py.get_type_bound::<ResultFileFormatError>(),
     )?;
-    m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
-    m.add(
-        "BranchUnavailable",
-        py.get_type_bound::<BranchUnavailable>(),
-    )?;
-    m.add(
-        "BranchTemporarilyUnavailable",
-        py.get_type_bound::<BranchTemporarilyUnavailable>(),
-    )?;
-    m.add(
-        "BranchUnsupported",
-        py.get_type_bound::<BranchUnsupported>(),
-    )?;
-    m.add(
-        "BranchRateLimited",
-        py.get_type_bound::<BranchRateLimited>(),
-    )?;
 
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
@@ -1461,8 +1305,6 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
             m
         )?)?;
     }
-    m.add_function(wrap_pyfunction!(open_branch, m)?)?;
-    m.add_function(wrap_pyfunction!(open_branch_containing, m)?)?;
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
     m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
     m.add_function(wrap_pyfunction!(publish_changes, m)?)?;

@@ -3,7 +3,6 @@ from typing import Sequence
 from breezy.branch import Branch
 from breezy.controldir import ControlDirFormat, Prober
 from breezy.forge import Forge, MergeProposal
-from breezy.transport import Transport
 from breezy.workingtree import WorkingTree
 
 def full_branch_url(branch: Branch) -> str: ...
@@ -43,20 +42,6 @@ class Workspace:
         self,
     ) -> Sequence[tuple[str, bytes | None, bytes | None]]: ...
 
-class BranchMissing(Exception):
-    """Raised when a branch is missing."""
-
-class BranchRateLimited(Exception):
-    """Raised when a branch is rate limited."""
-
-class BranchTemporarilyUnavailable(Exception):
-    """Raised when a branch is temporarily unavailable."""
-
-class BranchUnavailable(Exception):
-    """Raised when a branch is unavailable."""
-
-class BranchUnsupported(Exception):
-    """Raised when a branch is unsupported."""
 
 class EmptyMergeProposal(Exception):
     """Raised when a merge proposal is empty."""
@@ -64,12 +49,6 @@ class EmptyMergeProposal(Exception):
 class InsufficientChangesForNewProposal(Exception):
     """Raised when there are insufficient changes for a new proposal."""
 
-def open_branch(
-    url: str,
-    possible_transports: Sequence[Transport] | None = None,
-    probers: Sequence[Prober] | None = None,
-    name: str | None = None,
-) -> Branch: ...
 def select_probers(vcs_type: str | None = None) -> Sequence[Prober]: ...
 def select_preferred_probers(
     vcs_type: str | None = None,
