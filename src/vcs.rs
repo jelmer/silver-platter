@@ -1,3 +1,4 @@
+//! Version control system (VCS) support.
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::error::Error as BrzError;
 use breezyshim::{
@@ -6,29 +7,54 @@ use breezyshim::{
 use percent_encoding::{utf8_percent_encode, CONTROLS};
 
 #[derive(Debug)]
+/// Errors that can occur when opening a branch.
 pub enum BranchOpenError {
+    /// The VCS is not supported.
     Unsupported {
+        /// The URL of the branch.
         url: url::Url,
+        /// A description of the error.
         description: String,
+        /// The VCS that is not supported.
         vcs: Option<String>,
     },
+    /// The branch is missing.
     Missing {
+        /// The URL of the branch.
         url: url::Url,
+
+        /// A description of the error.
         description: String,
     },
+    /// The branch is rate limited.
     RateLimited {
+        /// The URL of the branch.
         url: url::Url,
+
+        /// A description of the error.
         description: String,
+
+        /// The time to wait before retrying.
         retry_after: Option<f64>,
     },
+    /// The branch is unavailable.
     Unavailable {
+        /// The URL of the branch.
         url: url::Url,
+
+        /// A description of the error.
         description: String,
     },
+    /// The branch is temporarily unavailable.
     TemporarilyUnavailable {
+        /// The URL of the branch.
         url: url::Url,
+
+        /// A description of the error.
         description: String,
     },
+
+    /// An error occurred.
     Other(String),
 }
 
@@ -106,6 +132,7 @@ impl From<BranchOpenError> for pyo3::PyErr {
 }
 
 impl BranchOpenError {
+    /// Convert a BrzError to a BranchOpenError.
     pub fn from_err(url: url::Url, e: &BrzError) -> Self {
         match e {
             BrzError::NotBranchError(e, reason) => {
@@ -241,6 +268,7 @@ impl BranchOpenError {
     }
 }
 
+/// Open a branch from a URL.
 pub fn open_branch(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
@@ -263,6 +291,9 @@ pub fn open_branch(
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))
 }
 
+/// Open a branch, either at the specified URL or in a containing directory.
+///
+/// Return the branch and the subpath of the URL that was used to open it.
 pub fn open_branch_containing(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,

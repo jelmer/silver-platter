@@ -1,3 +1,4 @@
+//! Check if the package should be uploaded
 use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
@@ -6,6 +7,7 @@ use std::fmt;
 use std::process::Command;
 
 #[derive(Debug)]
+/// The pre check failed
 pub struct PreCheckFailed;
 
 impl fmt::Display for PreCheckFailed {
@@ -16,6 +18,7 @@ impl fmt::Display for PreCheckFailed {
 
 impl Error for PreCheckFailed {}
 
+/// Run check to see if the package should be uploaded
 pub fn run_pre_check(tree: WorkingTree, script: &str) -> Result<(), PreCheckFailed> {
     let path = tree.abspath(std::path::Path::new("")).unwrap();
     let status = Command::new("sh")
@@ -37,6 +40,7 @@ pub fn run_pre_check(tree: WorkingTree, script: &str) -> Result<(), PreCheckFail
 }
 
 #[derive(Debug)]
+/// The post check failed
 pub struct PostCheckFailed;
 
 impl fmt::Display for PostCheckFailed {
@@ -47,6 +51,7 @@ impl fmt::Display for PostCheckFailed {
 
 impl Error for PostCheckFailed {}
 
+/// Post-build check if the package should be uploaded
 pub fn run_post_check(
     tree: WorkingTree,
     script: &str,

@@ -1,3 +1,5 @@
+//! Codemod runner
+
 use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
 use crate::CommitPending;
 use breezyshim::error::Error as BrzError;
@@ -9,15 +11,33 @@ use std::collections::HashMap;
 use url::Url;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+/// A codemod command result
 pub struct CommandResult {
+    /// Source package name
     pub source_name: String,
+
+    /// Result value
     pub value: Option<u32>,
+
+    /// Unique representation of the context
     pub context: Option<serde_json::Value>,
+
+    /// Description of the command
     pub description: String,
+
+    /// Serialized context
     pub serialized_context: Option<String>,
+
+    /// Tags
     pub tags: Vec<(String, Option<RevisionId>)>,
+
+    /// Target branch URL
     pub target_branch_url: Option<Url>,
+
+    /// Old revision
     pub old_revision: RevisionId,
+
+    /// New revision
     pub new_revision: RevisionId,
 }
 
@@ -73,16 +93,36 @@ struct DetailedSuccess {
 }
 
 #[derive(Debug)]
+/// Code mod error
 pub enum Error {
+    /// The script made no changes
     ScriptMadeNoChanges,
+
+    /// The script was not found
     ScriptNotFound,
+
+    /// No changelog found
     MissingChangelog(std::path::PathBuf),
+
+    /// Changelog parse error
     ChangelogParse(debian_changelog::ParseError),
+
+    /// Script exited with a non-zero exit code
     ExitCode(i32),
+
+    /// Detailed failure
     Detailed(DetailedFailure),
+
+    /// I/O error
     Io(std::io::Error),
+
+    /// JSON error
     Json(serde_json::Error),
+
+    /// UTF-8 error
     Utf8(std::string::FromUtf8Error),
+
+    /// Other error
     Other(String),
 }
 
@@ -133,10 +173,15 @@ impl From<std::string::FromUtf8Error> for Error {
 impl std::error::Error for Error {}
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+/// A detailed failure
 pub struct DetailedFailure {
+    /// Result code
     pub result_code: String,
+    /// Description of the failure
     pub description: Option<String>,
+    /// Stage at with the failure occurred
     pub stage: Option<Vec<String>>,
+    /// Details about the failure
     pub details: Option<serde_json::Value>,
 }
 

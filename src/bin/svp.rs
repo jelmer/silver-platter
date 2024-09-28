@@ -1,4 +1,4 @@
-use breezyshim::tree::WorkingTree;
+use breezyshim::workingtree;
 use breezyshim::workspace::{check_clean_tree, reset_tree};
 use clap::{Args, Parser, Subcommand};
 use log::{error, info};
@@ -9,7 +9,6 @@ use silver_platter::publish::Error as PublishError;
 use silver_platter::CodemodResult;
 
 use silver_platter::Mode;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -504,8 +503,7 @@ fn main() {
                 std::process::exit(1);
             };
 
-            let (local_tree, subpath) =
-                breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
+            let (local_tree, subpath) = workingtree::open_containing(Path::new(".")).unwrap();
 
             check_clean_tree(
                 &local_tree,

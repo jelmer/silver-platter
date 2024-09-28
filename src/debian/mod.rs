@@ -1,3 +1,4 @@
+//! Utility functions for working with Debian packages.
 use breezyshim::branch::Branch;
 use breezyshim::debian::apt::Apt;
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
@@ -9,13 +10,14 @@ use pyo3::types::PyDict;
 
 use std::path::Path;
 
+/// Default build command
 pub const DEFAULT_BUILDER: &str = "sbuild --no-clean-source";
 
 pub mod codemod;
 pub mod run;
 pub mod uploader;
-pub mod vcswatch;
 
+/// Check whether the control files are in the root of the package.
 pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
     let debian_path = subpath.join("debian");
     if tree.has_filename(&debian_path) {
@@ -31,8 +33,12 @@ pub fn control_files_in_root(tree: &dyn Tree, subpath: &Path) -> bool {
 
 #[cfg(not(feature = "detect-update-changelog"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Changelog behaviour
 pub struct ChangelogBehaviour {
+    /// Whether to update the changelog
     pub update_changelog: bool,
+
+    /// Explanation for the decision
     pub explanation: String,
 }
 
@@ -51,6 +57,7 @@ impl FromPyObject<'_> for ChangelogBehaviour {
     }
 }
 
+/// Guess whether the changelog should be updated.
 pub fn guess_update_changelog(
     #[allow(unused_variables)] tree: &WorkingTree,
     #[allow(unused_variables)] debian_path: &Path,
@@ -115,11 +122,13 @@ pub fn add_changelog_entry(
         .unwrap();
 }
 
+/// Check if a directory is a debcargo package.
 pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
     let control_path = subpath.join("debian").join("debcargo.toml");
     tree.has_filename(&control_path)
 }
 
+/// Install the built package.
 pub fn install_built_package(
     local_tree: &WorkingTree,
     subpath: &Path,
@@ -207,6 +216,7 @@ pub fn build(
     })
 }
 
+/// Run `gbp dch` in a directory.
 pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
     let mut cmd = std::process::Command::new("gbp");
     cmd.arg("dch").arg("--ignore-branch");
@@ -221,6 +231,7 @@ pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+/// Find the last release revision id for a given version.
 pub fn find_last_release_revid(
     branch: &dyn breezyshim::branch::Branch,
     version: debversion::Version,
@@ -234,6 +245,7 @@ pub fn find_last_release_revid(
     })
 }
 
+/// Pick the additional colocated branches to use for a given main branch.
 pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<String, String> {
     let mut ret: HashMap<String, String> = vec![
         ("pristine-tar", "pristine-tar"),

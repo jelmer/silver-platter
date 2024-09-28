@@ -1,22 +1,29 @@
+//! Recipes
 use crate::proposal::DescriptionFormat;
 use crate::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+/// Merge request configuration
 pub struct MergeRequest {
     #[serde(rename = "commit-message")]
+    /// Commit message template
     pub commit_message: Option<String>,
 
+    /// Title template
     pub title: Option<String>,
 
     #[serde(rename = "propose-threshold")]
+    /// Value threshold for proposing the merge request
     pub propose_threshold: Option<u32>,
 
+    /// Description templates
     pub description: HashMap<Option<DescriptionFormat>, String>,
 }
 
 impl MergeRequest {
+    /// Render a commit message
     pub fn render_commit_message(&self, context: &tera::Context) -> tera::Result<Option<String>> {
         let mut tera = tera::Tera::default();
         self.commit_message
@@ -25,6 +32,7 @@ impl MergeRequest {
             .transpose()
     }
 
+    /// Render the title of the merge request
     pub fn render_title(&self, context: &tera::Context) -> tera::Result<Option<String>> {
         let mut tera = tera::Tera::default();
         self.title
@@ -33,6 +41,7 @@ impl MergeRequest {
             .transpose()
     }
 
+    /// Render the description of the merge request
     pub fn render_description(
         &self,
         description_format: DescriptionFormat,
@@ -51,25 +60,34 @@ impl MergeRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// A recipe
 pub struct Recipe {
+    /// Name of the recipe
     pub name: Option<String>,
 
     #[serde(rename = "merge-request")]
+    /// Merge request configuration
     pub merge_request: Option<MergeRequest>,
 
+    /// Labels to apply to the merge request
     pub labels: Option<Vec<String>>,
 
+    /// Command to run
     pub command: Option<Vec<String>>,
 
+    /// Mode to run the recipe in
     pub mode: Option<Mode>,
 
+    /// Whether to resume a previous run
     pub resume: Option<bool>,
 
     #[serde(rename = "commit-pending")]
+    /// Whether to commit pending changes
     pub commit_pending: crate::CommitPending,
 }
 
 impl Recipe {
+    /// Load a recipe from a file
     pub fn from_path(path: &std::path::Path) -> std::io::Result<Self> {
         let file = std::fs::File::open(path)?;
         let mut recipe: Recipe = serde_yaml::from_reader(file).unwrap();

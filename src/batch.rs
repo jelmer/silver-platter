@@ -15,39 +15,79 @@ use std::path::{Path, PathBuf};
 use url::Url;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// Batch entry
 pub struct Entry {
     #[serde(skip)]
     local_path: PathBuf,
+    /// Subpath within the local path to work on.
     pub subpath: Option<PathBuf>,
+
+    /// URL of the target branch.
     pub target_branch_url: Option<Url>,
+
+    /// Description of the work to be done.
     pub description: String,
+
     #[serde(rename = "commit-message")]
+    /// Commit message for the work.
     pub commit_message: Option<String>,
+
+    /// Mode for the work.
     pub mode: Mode,
+
+    /// Title of the work.
     pub title: Option<String>,
+
+    /// Owner of the work.
     pub owner: Option<String>,
+
+    /// Labels for the work.
     pub labels: Option<Vec<String>>,
+
+    /// Context for the work.
     pub context: serde_yaml::Value,
+
     #[serde(rename = "proposal-url")]
+    /// URL of the proposal for this work.
     pub proposal_url: Option<Url>,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// Batch
 pub struct Batch {
+    /// Recipe
     pub recipe: Recipe,
+
+    /// Batch name
     pub name: String,
+
+    /// Work to be done in this batch.
     pub work: HashMap<String, Entry>,
+
     #[serde(skip)]
+    /// Basepath for the batch
     pub basepath: PathBuf,
 }
 
 #[derive(Debug)]
+/// Batch error
 pub enum Error {
+    /// Error running a script
     Script(crate::codemod::Error),
+
+    /// Error opening a branch
     Vcs(crate::vcs::BranchOpenError),
+
+    /// I/O error
     Io(std::io::Error),
+
+    /// Error parsing YAML
     Yaml(serde_yaml::Error),
+
+    /// Error with Tera
     Tera(tera::Error),
+
+    /// Error with workspace
     Workspace(crate::workspace::Error),
 }
 
@@ -101,6 +141,7 @@ impl std::fmt::Display for Error {
 }
 
 impl Entry {
+    /// Create a new batch entry from a recipe.
     pub fn from_recipe(
         recipe: &Recipe,
         basepath: &Path,
@@ -205,6 +246,7 @@ impl Entry {
         })
     }
 
+    /// Return the status of this entry
     pub fn status(&self) -> Status {
         if let Some(proposal_url) = self.proposal_url.as_ref() {
             let proposal = breezyshim::forge::get_proposal_by_url(proposal_url).unwrap();
@@ -220,14 +262,17 @@ impl Entry {
         }
     }
 
+    /// Get the local working tree for this entry.
     pub fn working_tree(&self) -> Result<breezyshim::tree::WorkingTree, BrzError> {
         breezyshim::workingtree::open(&self.local_path)
     }
 
+    /// Get the target branch for this entry.
     pub fn target_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
         open_branch(self.target_branch_url.as_ref().unwrap(), None, None, None)
     }
 
+    /// Get the local branch for this entry.
     pub fn local_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
         open_branch(
             &url::Url::from_directory_path(&self.local_path).unwrap(),
@@ -238,10 +283,18 @@ impl Entry {
     }
 }
 
+/// Status of a batch entry.
 pub enum Status {
+    /// Merged - URL of the merge proposal.
     Merged(Url),
+
+    /// Closed - URL of the merge proposal.
     Closed(Url),
+
+    /// Open - URL of the merge proposal.
     Open(Url),
+
+    /// Not published yet.
     NotPublished(),
 }
 
@@ -257,6 +310,7 @@ impl std::fmt::Display for Status {
 }
 
 impl Batch {
+    /// Create a batch from a recipe and a set of candidates.
     pub fn from_recipe<'a>(
         recipe: &Recipe,
         candidates: impl Iterator<Item = &'a Candidate>,
@@ -338,14 +392,17 @@ impl Batch {
         Ok(batch)
     }
 
+    /// Get reference to a batch entry.
     pub fn get(&self, name: &str) -> Option<&Entry> {
         self.work.get(name)
     }
 
+    /// Get a mutable reference to a batch entry.
     pub fn get_mut(&mut self, name: &str) -> Option<&mut Entry> {
         self.work.get_mut(name)
     }
 
+    /// Returen the status of all work in the batch.
     pub fn status(&self) -> HashMap<&str, Status> {
         let mut status = HashMap::new();
         for (name, entry) in self.work.iter() {
@@ -354,6 +411,7 @@ impl Batch {
         status
     }
 
+    /// Remove work from the batch.
     pub fn remove(&mut self, name: &str) -> Result<(), Error> {
         self.work.remove(name);
         std::fs::remove_dir_all(self.basepath.join(name))?;
@@ -361,6 +419,7 @@ impl Batch {
     }
 }
 
+/// Drop a batch entry from the given directory.
 pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
     let mut batch = load_batch_metadata(directory).unwrap();
     batch.work.remove(name);
@@ -369,17 +428,20 @@ pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// Save batch metadata to the metadata file in the given directory.
 pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error> {
     let mut file = std::fs::File::create(directory.join("batch.yaml"))?;
     serde_yaml::to_writer(&mut file, &batch)?;
     Ok(())
 }
 
+/// Load a batch metadata from the metadata file in the given directory.
 pub fn load_batch_metadata(directory: &Path) -> Option<Batch> {
     let file = std::fs::File::open(directory.join("batch.yaml")).ok()?;
     serde_yaml::from_reader(file).ok()
 }
 
+/// Publish a single batch entry.
 pub fn publish_one(
     url: &url::Url,
     local_tree: &breezyshim::tree::WorkingTree,
