@@ -145,7 +145,7 @@ pub fn find_existing_proposed(
             Err(BrzError::NotBranchError(..)) => {
                 return Ok((None, None, None));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         };
 
     log::info!(

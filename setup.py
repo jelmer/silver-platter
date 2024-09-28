@@ -13,7 +13,7 @@ setup(
     rust_extensions=[
         RustExtension(
             "silver_platter",
-            "crates/svp-py/Cargo.toml",
+            "svp-py/Cargo.toml",
             binding=Binding.PyO3,
             args=["--no-default-features"],
             features=features + ["extension-module"],
