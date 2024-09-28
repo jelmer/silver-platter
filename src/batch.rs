@@ -170,6 +170,7 @@ impl Entry {
                 .command
                 .as_ref()
                 .unwrap()
+                .argv()
                 .iter()
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>()

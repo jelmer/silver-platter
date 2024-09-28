@@ -171,11 +171,8 @@ impl Recipe {
     }
 
     #[getter]
-    fn command(&self) -> Option<Vec<&str>> {
-        self.0
-            .command
-            .as_ref()
-            .map(|v| v.iter().map(|s| s.as_str()).collect())
+    fn command(&self) -> Option<Vec<String>> {
+        self.0.command.as_ref().map(|v| v.argv())
     }
 
     #[getter]
