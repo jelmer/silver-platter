@@ -1,3 +1,4 @@
+//! Run the given command and publish the changes as a merge proposal.
 use crate::debian::codemod::{CommandResult, Error as CommandError};
 use crate::publish::{
     enable_tag_pushing, find_existing_proposed, DescriptionFormat, Error as PublishError,
@@ -11,6 +12,7 @@ use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
 use url::Url;
 
+/// Run the given command and publish the changes as a merge proposal.
 pub fn apply_and_publish(
     url: &Url,
     name: &str,

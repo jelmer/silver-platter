@@ -1,3 +1,4 @@
+//! Utility functions for working with branches.
 use breezyshim::branch::Branch;
 use breezyshim::controldir::ControlDir;
 use breezyshim::error::Error as BrzError;
@@ -6,12 +7,17 @@ use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
 
+/// A temporary sprout of a branch.
 pub struct TempSprout {
+    /// The working tree of the sprout.
     pub workingtree: WorkingTree,
+
+    /// The temporary directory that the sprout is in.
     pub tempdir: Option<tempfile::TempDir>,
 }
 
 impl TempSprout {
+    /// Create a temporary sprout of a branch.
     pub fn new(
         branch: &dyn Branch,
         additional_colocated_branches: Option<HashMap<String, String>>,
@@ -23,6 +29,7 @@ impl TempSprout {
         })
     }
 
+    /// Create a temporary sprout of a branch in a specific directory.
     pub fn new_in(
         branch: &dyn Branch,
         additional_colocated_branches: Option<HashMap<String, String>>,
@@ -36,6 +43,7 @@ impl TempSprout {
         })
     }
 
+    /// Create a temporary sprout of a branch with a specific path.
     pub fn new_in_path(
         branch: &dyn Branch,
         additional_colocated_branches: Option<HashMap<String, String>>,
@@ -49,6 +57,7 @@ impl TempSprout {
         })
     }
 
+    /// Return the tree of the sprout.
     pub fn tree(&self) -> &WorkingTree {
         &self.workingtree
     }
@@ -134,6 +143,7 @@ fn create_temp_sprout_cd(
     Ok((to_dir, td))
 }
 
+/// Check if there are any merge conflicts between two branches.
 pub fn merge_conflicts(
     main_branch: &dyn Branch,
     other_branch: &dyn Branch,

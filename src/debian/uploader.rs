@@ -1,3 +1,4 @@
+//! Upload packages to the Debian archive.
 use crate::vcs::{open_branch, BranchOpenError};
 use breezyshim::branch::Branch;
 use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
@@ -62,6 +63,7 @@ impl Default for LastAttemptDatabase {
     }
 }
 
+/// debsign a changes file
 pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
     let mut args = vec!["debsign".to_string()];
     if let Some(keyid) = keyid {
@@ -83,6 +85,7 @@ pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
     }
 }
 
+/// dput a changes file
 pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
     let status = std::process::Command::new("dput")
         .arg(path.file_name().unwrap().to_string_lossy().to_string())
@@ -128,12 +131,12 @@ pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, 
 }
 
 #[derive(Clone, Debug)]
-pub enum PackageResult {
+enum PackageResult {
     Ignored(String, Option<String>),
     ProcessingFailure(String, Option<String>),
 }
 
-pub fn vcswatch_prescan_package(
+fn vcswatch_prescan_package(
     _package: &str,
     vw: &VcswatchEntry,
     exclude: Option<&[String]>,
@@ -338,8 +341,12 @@ impl Revision for breezyshim::repository::Revision {
     }
 }
 
+/// Errors that can occur when checking a revision.
 pub enum RevisionRejected {
+    /// The committer is not allowed.
     CommitterNotAllowed(String, Vec<String>),
+
+    /// The commit is too recent.
     RecentCommits(i64, i64),
 }
 
@@ -392,10 +399,18 @@ fn check_revision(
 }
 
 #[derive(serde::Deserialize)]
-pub struct VcswatchEntry {
+/// Struct for vcswatch entry
+struct VcswatchEntry {
+    /// Package name
     package: String,
+
+    /// Control file
     vcslog: Option<String>,
+
+    /// Number of commits
     commits: usize,
+
+    /// Control file
     url: Option<String>,
     last_scan: Option<String>,
     status: Option<String>,
@@ -404,7 +419,7 @@ pub struct VcswatchEntry {
     archive_version: Option<debversion::Version>,
 }
 
-pub fn vcswatch_prescan_packages(
+fn vcswatch_prescan_packages(
     packages: &[String],
     inc_stats: &mut dyn FnMut(&str),
     exclude: Option<&[String]>,
@@ -470,10 +485,7 @@ pub fn vcswatch_prescan_packages(
     Ok((packages, failures, vcswatch))
 }
 
-pub fn find_last_release_revid(
-    branch: &dyn Branch,
-    version: &Version,
-) -> Result<RevisionId, BrzError> {
+fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> Result<RevisionId, BrzError> {
     use pyo3::prelude::*;
     pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
         let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
@@ -486,7 +498,8 @@ pub fn find_last_release_revid(
     .map_err(|e| BrzError::from(e))
 }
 
-pub fn select_apt_packages(
+/// Select packages from the apt repository.
+fn select_apt_packages(
     apt_repo: &dyn Apt,
     package_names: Option<&[String]>,
     maintainer: Option<&[String]>,
@@ -514,6 +527,7 @@ pub fn select_apt_packages(
     packages
 }
 
+/// Process a package for upload.
 pub fn main(
     mut packages: Vec<String>,
     acceptable_keys: Option<Vec<String>>,
@@ -666,6 +680,7 @@ pub fn main(
     ret
 }
 
+/// Errors that can occur when preparing a package for upload.
 pub enum PrepareUploadError {
     /// Failed to run gbp dch
     GbpDchFailed,
@@ -700,14 +715,19 @@ pub enum PrepareUploadError {
     /// Package version not present
     PackageVersionNotPresent(String, String),
 
+    /// Missing changelog
     MissingChangelog,
 
+    /// Changelog parse error
     ChangelogParseError(String),
 
+    /// Breezy error
     BrzError(BrzError),
 
+    /// Debian error
     DebianError(DebianError),
 
+    /// There is a missing nested tree
     MissingNestedTree(std::path::PathBuf),
 }
 
@@ -720,6 +740,7 @@ impl From<BrzError> for PrepareUploadError {
     }
 }
 
+/// Prepare a package for upload.
 pub fn prepare_upload_package(
     local_tree: &WorkingTree,
     subpath: &std::path::Path,
@@ -817,7 +838,7 @@ pub fn prepare_upload_package(
     let lock = local_tree.lock_read();
     let last_release_revid: RevisionId = if let Some(last_uploaded_version) = last_uploaded_version
     {
-        match find_last_release_revid(local_tree.branch().as_ref(), &last_uploaded_version) {
+        match find_last_release_revid(local_tree.branch().as_ref(), last_uploaded_version) {
             Ok(revid) => revid,
             Err(BrzError::NoSuchTag(..)) => {
                 return Err(PrepareUploadError::LastReleaseRevisionNotFound(
@@ -863,7 +884,7 @@ pub fn prepare_upload_package(
     for (_revid, rev) in local_tree.branch().repository().iter_revisions(revids) {
         if let Some(rev) = rev {
             check_revision(&rev, min_commit_age, allowed_committers)
-                .map_err(|e| PrepareUploadError::Rejected(e))?;
+                .map_err(PrepareUploadError::Rejected)?;
         }
     }
 
@@ -874,6 +895,7 @@ pub fn prepare_upload_package(
     }
     std::mem::drop(lock);
     let mut qa_upload = false;
+    #[allow(unused_mut)]
     let mut team_upload = false;
     let control_path = local_tree
         .abspath(debian_path.join("control").as_path())
@@ -960,6 +982,7 @@ pub fn prepare_upload_package(
     Ok((source.into(), Some(tag_name)))
 }
 
+/// Process a package for upload.
 pub fn process_package(
     apt_repo: &dyn Apt,
     package: &str,
