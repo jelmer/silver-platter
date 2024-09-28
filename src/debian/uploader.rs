@@ -16,12 +16,14 @@ use std::str::FromStr;
 use trivialdb as tdb;
 
 #[cfg(feature = "last-attempt-db")]
+/// Database for storing the last upload attempt time for each package.
 pub struct LastAttemptDatabase {
     db: tdb::Tdb,
 }
 
 #[cfg(feature = "last-attempt-db")]
 impl LastAttemptDatabase {
+    /// Open the last attempt database.
     pub fn open(path: &Path) -> Self {
         Self {
             db: tdb::Tdb::open(
@@ -35,6 +37,7 @@ impl LastAttemptDatabase {
         }
     }
 
+    /// Get the last upload attempt time for a package.
     pub fn get(&self, package: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
         let key = package.to_string().into_bytes();
         self.db.fetch(&key).unwrap().map(|value| {
@@ -43,12 +46,14 @@ impl LastAttemptDatabase {
         })
     }
 
+    /// Set the last upload attempt time for a package.
     pub fn set(&mut self, package: &str, value: chrono::DateTime<chrono::FixedOffset>) {
         let key = package.to_string().into_bytes();
         let value = value.to_rfc3339();
         self.db.store(&key, value.as_bytes(), None).unwrap();
     }
 
+    /// Set the last upload attempt time for a package to the current time.
     pub fn refresh(&mut self, package: &str) {
         self.set(package, chrono::Utc::now().into());
     }
@@ -103,6 +108,7 @@ pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
 }
 
 #[cfg(feature = "gpg")]
+/// Get the key IDs for Debian maintainers.
 pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, gpgme::Error> {
     context.import("/usr/share/keyrings/debian-keyring.gpg")?;
 
@@ -131,8 +137,12 @@ pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, 
 }
 
 #[derive(Clone, Debug)]
-enum PackageResult {
+/// Result of uploading a package.
+pub enum UploadPackageError {
+    /// Package was ignored.
     Ignored(String, Option<String>),
+
+    /// Package processing failed.
     ProcessingFailure(String, Option<String>),
 }
 
@@ -142,17 +152,17 @@ fn vcswatch_prescan_package(
     exclude: Option<&[String]>,
     min_commit_age: Option<i64>,
     allowed_committers: Option<&[String]>,
-) -> Result<Option<chrono::DateTime<chrono::Utc>>, PackageResult> {
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, UploadPackageError> {
     if let Some(exclude) = exclude {
         if exclude.contains(&vw.package) {
-            return Err(PackageResult::Ignored(
+            return Err(UploadPackageError::Ignored(
                 "excluded".to_string(),
                 Some("Excluded".to_string()),
             ));
         }
     }
     if vw.url.is_none() || vw.vcs.is_none() {
-        return Err(PackageResult::ProcessingFailure(
+        return Err(UploadPackageError::ProcessingFailure(
             "not-in-vcs".to_string(),
             Some("Not in VCS".to_string()),
         ));
@@ -162,14 +172,14 @@ fn vcswatch_prescan_package(
     // pkg_source = Deb822(vw.controlfile)
     // has_testsuite = "Testsuite" in pkg_source
     if vw.commits == 0 {
-        return Err(PackageResult::Ignored(
+        return Err(UploadPackageError::Ignored(
             "no-unuploaded-changes".to_string(),
             Some("No unuploaded changes".to_string()),
         ));
     }
     if vw.status.as_deref() == Some("ERROR") {
         log::warn!("vcswatch: unable to access {}: {:?}", vw.package, vw.error);
-        return Err(PackageResult::ProcessingFailure(
+        return Err(UploadPackageError::ProcessingFailure(
             "vcs-inaccessible".to_string(),
             Some(format!("Unable to access vcs: {:?}", vw.error)),
         ));
@@ -187,7 +197,7 @@ fn vcswatch_prescan_package(
                         committer,
                         allowed_committers,
                     );
-                    return Err(PackageResult::Ignored(
+                    return Err(UploadPackageError::Ignored(
                         "committer-not-allowed".to_string(),
                         Some(format!(
                             "committer {} not in allowed list: {:?}",
@@ -202,7 +212,7 @@ fn vcswatch_prescan_package(
                         commit_age,
                         min_commit_age,
                     );
-                    return Err(PackageResult::Ignored(
+                    return Err(UploadPackageError::Ignored(
                         "recent-commits".to_string(),
                         Some(format!(
                             "Recent commits ({} days < {} days)",
@@ -224,6 +234,7 @@ fn check_git_commits(
     min_commit_age: Option<i64>,
     allowed_committers: Option<&[String]>,
 ) -> Result<chrono::DateTime<chrono::Utc>, RevisionRejected> {
+    #[allow(dead_code)]
     pub struct GitRevision {
         commit_id: String,
         headers: HashMap<String, String>,
@@ -462,11 +473,11 @@ fn vcswatch_prescan_packages(
             continue;
         };
         match vcswatch_prescan_package(package, vw, exclude, min_commit_age, allowed_committers) {
-            Err(PackageResult::ProcessingFailure(reason, _description)) => {
+            Err(UploadPackageError::ProcessingFailure(reason, _description)) => {
                 inc_stats(reason.as_str());
                 failures += 1;
             }
-            Err(PackageResult::Ignored(reason, _description)) => {
+            Err(UploadPackageError::Ignored(reason, _description)) => {
                 inc_stats(reason.as_str());
             }
             Ok(ts) => {
@@ -656,11 +667,11 @@ pub fn main(
             extra_package.and_then(|p| p.archive_version.as_ref()),
             verify_command.as_deref(),
         ) {
-            Err(PackageResult::ProcessingFailure(reason, _description)) => {
+            Err(UploadPackageError::ProcessingFailure(reason, _description)) => {
                 inc_stats(reason.as_str());
                 ret = 1;
             }
-            Err(PackageResult::Ignored(reason, _description)) => inc_stats(reason.as_str()),
+            Err(UploadPackageError::Ignored(reason, _description)) => inc_stats(reason.as_str()),
             Ok(_) => {
                 inc_stats("success");
             }
@@ -1000,7 +1011,7 @@ pub fn process_package(
     source_name: Option<&str>,
     archive_version: Option<&debversion::Version>,
     verify_command: Option<&str>,
-) -> Result<(), PackageResult> {
+) -> Result<(), UploadPackageError> {
     let mut archive_version = archive_version.cloned();
     let mut source_name = source_name.map(|s| s.to_string());
     let mut vcs_type = vcs_type.map(|s| s.to_string());
@@ -1014,7 +1025,7 @@ pub fn process_package(
             Some(pkg_source) => pkg_source,
             None => {
                 log::info!("{}: package not found in apt", package);
-                return Err(PackageResult::ProcessingFailure(
+                return Err(UploadPackageError::ProcessingFailure(
                     "not-in-apt".to_string(),
                     Some("Package not found in apt".to_string()),
                 ));
@@ -1028,7 +1039,7 @@ pub fn process_package(
                         "{}: no declared vcs location, skipping",
                         pkg_source.package().unwrap()
                     );
-                    return Err(PackageResult::ProcessingFailure(
+                    return Err(UploadPackageError::ProcessingFailure(
                         "not-in-vcs".to_string(),
                         Some("No declared vcs location".to_string()),
                     ));
@@ -1037,7 +1048,7 @@ pub fn process_package(
         }
         source_name = Some(source_name.unwrap_or_else(|| pkg_source.package().unwrap()));
         if exclude.contains(source_name.as_ref().unwrap()) {
-            return Err(PackageResult::Ignored("excluded".to_string(), None));
+            return Err(UploadPackageError::Ignored("excluded".to_string(), None));
         }
         archive_version = Some(archive_version.unwrap_or_else(|| pkg_source.version().unwrap()));
         has_testsuite = Some(pkg_source.testsuite().is_some());
@@ -1072,7 +1083,7 @@ pub fn process_package(
                 vcs_url.as_ref().unwrap(),
                 description
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-inaccessible".to_string(),
                 Some(format!("Unable to access vcs: {:?}", description)),
             ));
@@ -1087,7 +1098,7 @@ pub fn process_package(
                 vcs_url.unwrap(),
                 retry_after.map_or("unknown".to_string(), |i| i.to_string())
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "rate-limited".to_string(),
                 Some(format!(
                     "Rate limited by server (retrying after {})",
@@ -1097,7 +1108,7 @@ pub fn process_package(
         }
         Err(BranchOpenError::Missing { description, .. }) => {
             log::info!("{}: branch not found: {}", vcs_url.unwrap(), description);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-inaccessible".to_string(),
                 Some(format!("Unable to access vcs: {:?}", description)),
             ));
@@ -1108,14 +1119,14 @@ pub fn process_package(
                 vcs_url.unwrap(),
                 description
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-error".to_string(),
                 Some(format!("Unable to access vcs: {:?}", description)),
             ));
         }
         Err(BranchOpenError::Unsupported { description, .. }) => {
             log::info!("{}: branch not found: {}", vcs_url.unwrap(), description);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-unsupported".to_string(),
                 Some(format!("Unable to access vcs: {:?}", description)),
             ));
@@ -1141,7 +1152,7 @@ pub fn process_package(
             Some(p) => p,
             None => {
                 log::info!("{}: package not found in apt", package);
-                return Err(PackageResult::ProcessingFailure(
+                return Err(UploadPackageError::ProcessingFailure(
                     "not-in-apt".to_owned(),
                     Some("Package not found in apt".to_owned()),
                 ));
@@ -1153,7 +1164,7 @@ pub fn process_package(
     let has_testsuite = has_testsuite.unwrap();
     let source_name = source_name.unwrap();
     if exclude.contains(&source_name) {
-        return Err(PackageResult::Ignored("excluded".to_string(), None));
+        return Err(UploadPackageError::Ignored("excluded".to_string(), None));
     }
     if autopkgtest_only
         && !has_testsuite
@@ -1162,7 +1173,10 @@ pub fn process_package(
             .has_filename(&subpath.join("debian/tests/control"))
     {
         log::info!("{}: Skipping, package has no autopkgtest.", source_name);
-        return Err(PackageResult::Ignored("no-autopkgtest".to_owned(), None));
+        return Err(UploadPackageError::Ignored(
+            "no-autopkgtest".to_owned(),
+            None,
+        ));
     }
     let branch_config = ws.local_tree().branch().get_config();
     let gpg_strategy = if gpg_verification {
@@ -1200,7 +1214,7 @@ pub fn process_package(
         Ok(r) => r,
         Err(PrepareUploadError::GbpDchFailed) => {
             log::warn!("{}: 'gbp dch' failed to run", source_name);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "gbp-dch-failed".to_string(),
                 None,
             ));
@@ -1212,7 +1226,7 @@ pub fn process_package(
                 package,
                 version
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "missing-upstream-tarball".to_string(),
                 Some(format!("Missing upstream tarball: {} {}", package, version)),
             ));
@@ -1227,7 +1241,7 @@ pub fn process_package(
                 committer,
                 allowed_committers,
             );
-            return Err(PackageResult::Ignored(
+            return Err(UploadPackageError::Ignored(
                 "committer-not-allowed".to_string(),
                 Some(format!(
                     "committer {} not in allowed list: {:?}",
@@ -1237,7 +1251,7 @@ pub fn process_package(
         }
         Err(PrepareUploadError::BuildFailed) => {
             log::warn!("{}: package failed to build", source_name);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "build-failed".to_string(),
                 None,
             ));
@@ -1248,7 +1262,7 @@ pub fn process_package(
                 source_name,
                 version,
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "last-release-missing".to_string(),
                 Some(format!(
                     "Unable to find revision matching last release {}",
@@ -1263,7 +1277,7 @@ pub fn process_package(
                 archive_version,
                 vcs_version,
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "last-upload-not-in-vcs".to_string(),
                 Some(format!(
                     "Last upload ({}) was more recent than VCS ({})",
@@ -1273,14 +1287,14 @@ pub fn process_package(
         }
         Err(PrepareUploadError::ChangelogParseError(reason)) => {
             log::info!("{}: Error parsing changelog: {}", source_name, reason);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "changelog-parse-error".to_string(),
                 Some(reason),
             ));
         }
         Err(PrepareUploadError::MissingChangelog) => {
             log::info!("{}: No changelog found, skipping.", source_name);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "missing-changelog".to_string(),
                 None,
             ));
@@ -1290,7 +1304,7 @@ pub fn process_package(
                 "{}: Changelog is generated and unable to update, skipping.",
                 source_name,
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "generated-changelog".to_string(),
                 None,
             ));
@@ -1304,42 +1318,42 @@ pub fn process_package(
                 source_name,
                 commit_age,
             );
-            return Err(PackageResult::Ignored(
+            return Err(UploadPackageError::Ignored(
                 "recent-commits".to_string(),
                 Some(format!("Recent commits ({} days)", commit_age)),
             ));
         }
         Err(PrepareUploadError::NoUnuploadedChanges(_version)) => {
             log::info!("{}: No unuploaded changes, skipping.", source_name,);
-            return Err(PackageResult::Ignored(
+            return Err(UploadPackageError::Ignored(
                 "no-unuploaded-changes".to_string(),
                 Some("No unuploaded changes".to_string()),
             ));
         }
         Err(PrepareUploadError::NoUnreleasedChanges(_version)) => {
             log::info!("{}: No unreleased changes, skipping.", source_name,);
-            return Err(PackageResult::Ignored(
+            return Err(UploadPackageError::Ignored(
                 "no-unreleased-changes".to_string(),
                 Some("No unreleased changes".to_string()),
             ));
         }
         Err(PrepareUploadError::MissingNestedTree(_)) => {
             log::error!("{}: missing nested tree", source_name);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "missing-nested-tree".to_string(),
                 None,
             ));
         }
         Err(PrepareUploadError::BrzError(e)) => {
             log::error!("{}: error: {:?}", source_name, e);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-error".to_string(),
                 Some(format!("{:?}", e)),
             ));
         }
         Err(PrepareUploadError::DebianError(e)) => {
             log::error!("{}: error: {:?}", source_name, e);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "debian-error".to_string(),
                 Some(format!("{:?}", e)),
             ));
@@ -1350,7 +1364,7 @@ pub fn process_package(
                 source_name,
                 revid
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "no-valid-gpg-signature".to_string(),
                 Some(format!("No valid GPG signature for revision {}", revid)),
             ));
@@ -1361,7 +1375,7 @@ pub fn process_package(
                 package,
                 version
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "package-version-not-present".to_string(),
                 Some(format!(
                     "Package version {} not present in repository",
@@ -1378,7 +1392,7 @@ pub fn process_package(
         {
             Ok(o) => {
                 if o.code() == Some(1) {
-                    return Err(PackageResult::Ignored(
+                    return Err(UploadPackageError::Ignored(
                         "verify-command-declined".to_string(),
                         Some(format!(
                             "{}: Verify command {} declined upload",
@@ -1386,7 +1400,7 @@ pub fn process_package(
                         )),
                     ));
                 } else if o.code() != Some(0) {
-                    return Err(PackageResult::ProcessingFailure(
+                    return Err(UploadPackageError::ProcessingFailure(
                         "verify-command-error".to_string(),
                         Some(format!(
                             "{}: Error running verify command {}: returncode {}",
@@ -1398,7 +1412,7 @@ pub fn process_package(
                 }
             }
             Err(e) => {
-                return Err(PackageResult::ProcessingFailure(
+                return Err(UploadPackageError::ProcessingFailure(
                     "verify-command-error".to_string(),
                     Some(format!(
                         "{}: Error running verify command {}: {}",
@@ -1429,14 +1443,14 @@ pub fn process_package(
                 "{}: Permission denied pushing to branch, skipping.",
                 source_name,
             );
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "vcs-permission-denied".to_string(),
                 None,
             ));
         }
         Err(e) => {
             log::error!("{}: Error pushing: {}", source_name, e);
-            return Err(PackageResult::ProcessingFailure(
+            return Err(UploadPackageError::ProcessingFailure(
                 "push-error".to_string(),
                 Some(format!("{:?}", e)),
             ));

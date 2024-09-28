@@ -334,6 +334,7 @@ pub fn propose_changes(
         Ok((resume_proposal, false))
     } else {
         let mut proposal_builder = forge.get_proposer(remote_branch, main_branch)?;
+        std::mem::drop(ref_resume_branch);
         if forge.supports_merge_proposal_commit_message() {
             if let Some(commit_message) = commit_message {
                 proposal_builder = proposal_builder.commit_message(commit_message);
