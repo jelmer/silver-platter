@@ -525,12 +525,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "deb822-derive"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b6e5cafe61e77421a090e2a33b8a2e4e2ff1b106fd906ebade111307064d981"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+]
+
+[[package]]
 name = "deb822-lossless"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a3282376f8ff540293a247cc4b875d00c95de27ac8049e8e388bc5752659af7"
 dependencies = [
- "deb822-derive",
+ "deb822-derive 0.1.1",
+ "regex",
+ "rowan",
+ "serde",
+]
+
+[[package]]
+name = "deb822-lossless"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "607abd8f5e3d131f03a1f351f5a5c8426ba4bf820ad10a2c59a1d4fd6d8eb1d9"
+dependencies = [
+ "deb822-derive 0.2.0",
  "pyo3",
  "regex",
  "rowan",
@@ -546,7 +569,7 @@ dependencies = [
  "breezyshim",
  "chrono",
  "configparser",
- "deb822-lossless",
+ "deb822-lossless 0.1.27",
  "debian-changelog",
  "debian-control",
  "debian-copyright",
@@ -590,12 +613,12 @@ dependencies = [
 
 [[package]]
 name = "debian-control"
-version = "0.1.37"
+version = "0.1.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9597b6d2961a9dda53e20390f5f548fafb315399d059fe92722eae805dcf81a"
+checksum = "eaf55e0dedfa829500f3d707d7e3689cf4101be13e23536a47e0cee56d868093"
 dependencies = [
  "chrono",
- "deb822-lossless",
+ "deb822-lossless 0.2.1",
  "debversion",
  "pyo3",
  "regex",
@@ -609,7 +632,7 @@ version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f70c67f0e99e0de82d1f48ee8123ef1b8759fb033502c596f11a13d6a7410662"
 dependencies = [
- "deb822-lossless",
+ "deb822-lossless 0.1.27",
  "debversion",
  "regex",
 ]
@@ -633,7 +656,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a70a2eea1431de0923428866df2e7f9e843d2587bfa580fa6ad538fb822921df"
 dependencies = [
  "chrono",
- "deb822-lossless",
+ "deb822-lossless 0.1.27",
  "url",
 ]
 
@@ -1329,7 +1352,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
