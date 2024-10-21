@@ -172,9 +172,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.205"
+version = "0.1.206"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b65aed03af8411fde0dbc3af7243cb72c366716d7e4374dd7ba135bd4d445d9"
+checksum = "0e1ee6287e72e8de0c869503f866798f6f9d45aab81218ed961ef3d0e63e29d9"
 dependencies = [
  "chrono",
  "ctor",
@@ -1335,7 +1335,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
