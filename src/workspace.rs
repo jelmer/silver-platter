@@ -558,8 +558,10 @@ impl Workspace {
     }
 
     /// Defer destroying the workspace, even if the Workspace is dropped
-    pub fn defer_destroy(&mut self) {
-        self.state.as_mut().unwrap().tempdir = None;
+    pub fn defer_destroy(&mut self) -> std::path::PathBuf {
+        let tempdir = self.state.as_mut().unwrap().tempdir.take().unwrap();
+
+        tempdir.into_path()
     }
 
     /// Publish the changes back to the main branch
@@ -1411,6 +1413,40 @@ mod tests {
             ],
             ws.changed_branches()
         );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_defer_destroy() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let mut ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        let tempdir = ws.defer_destroy();
+
+        assert!(tempdir.exists());
+
+        std::mem::drop(ws);
+
+        assert!(tempdir.exists());
         std::mem::drop(td);
     }
 }
