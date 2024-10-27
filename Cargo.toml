@@ -8,6 +8,7 @@ description = "Large scale VCS change management"
 repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 default-run = "svp"
+categories = ["development-tools"]
 
 [dependencies]
 tempfile = "3"
