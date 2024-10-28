@@ -178,7 +178,7 @@ checksum = "0e1ee6287e72e8de0c869503f866798f6f9d45aab81218ed961ef3d0e63e29d9"
 dependencies = [
  "chrono",
  "ctor",
- "debian-changelog",
+ "debian-changelog 0.1.14",
  "debian-control",
  "debversion",
  "difflib",
@@ -547,7 +547,7 @@ dependencies = [
  "chrono",
  "configparser",
  "deb822-lossless",
- "debian-changelog",
+ "debian-changelog 0.2.0",
  "debian-control",
  "debian-copyright",
  "debversion",
@@ -578,6 +578,21 @@ name = "debian-changelog"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b616910c0602f11746ba04c1b7af7e7d54c7f05c2b84ce56ce7e33ca1b5627d7"
+dependencies = [
+ "chrono",
+ "debversion",
+ "lazy-regex",
+ "log",
+ "rowan",
+ "textwrap",
+ "whoami",
+]
+
+[[package]]
+name = "debian-changelog"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98258e2066472d8d04bfe8a3fab2e7be77fe87b913dab2308a59f13061145814"
 dependencies = [
  "chrono",
  "debversion",
@@ -1335,7 +1350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2180,7 +2195,7 @@ dependencies = [
  "chrono",
  "clap",
  "debian-analyzer",
- "debian-changelog",
+ "debian-changelog 0.2.0",
  "debian-control",
  "debversion",
  "env_logger",
@@ -2291,7 +2306,7 @@ name = "svp-py"
 version = "0.0.0"
 dependencies = [
  "breezyshim",
- "debian-changelog",
+ "debian-changelog 0.2.0",
  "pyo3",
  "pyo3-filelike",
  "pyo3-log",
