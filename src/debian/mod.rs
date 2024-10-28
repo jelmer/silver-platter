@@ -141,7 +141,7 @@ pub fn install_built_package(
 
     let cl = ChangeLog::read_path(abspath)?;
 
-    let first_entry = cl.entries().next().unwrap();
+    let first_entry = cl.iter().next().unwrap();
 
     let package = first_entry.package().unwrap();
     let version = first_entry.version().unwrap();

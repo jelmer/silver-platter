@@ -27,7 +27,7 @@ pub mod run;
 pub mod utils;
 pub mod vcs;
 pub mod workspace;
-pub use breezyshim::branch::{Branch, RegularBranch};
+pub use breezyshim::branch::{Branch, GenericBranch};
 pub use breezyshim::controldir::{ControlDir, Prober};
 pub use breezyshim::forge::{Forge, MergeProposal};
 pub use breezyshim::transport::Transport;

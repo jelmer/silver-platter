@@ -236,7 +236,7 @@ pub fn script_runner(
     let source_name = match local_tree.get_file_text(&cl_path) {
         Ok(text) => debian_changelog::ChangeLog::read(text.as_slice())
             .unwrap()
-            .entries()
+            .iter()
             .next()
             .and_then(|e| e.package()),
         Err(BrzError::NoSuchFile(_)) => None,
@@ -303,7 +303,7 @@ pub fn script_runner(
     } else {
         match local_tree.get_file_text(&cl_path) {
             Ok(text) => match ChangeLog::read(text.as_slice())?
-                .entries()
+                .iter()
                 .next()
                 .and_then(|e| e.package())
             {

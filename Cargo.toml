@@ -76,7 +76,7 @@ serde = "1"
 breezyshim = ">=0.1.205"
 #breezyshim = { path = "../breezyshim/trunk" }
 url = "2"
-debian-changelog = ">=0.1.10"
+debian-changelog = "0.2"
 env_logger = ">=0.10"
 clap = "4"
 

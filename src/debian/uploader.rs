@@ -816,7 +816,7 @@ pub fn prepare_upload_package(
         }
     })?;
 
-    let first_block = match cl.entries().next() {
+    let first_block = match cl.iter().next() {
         Some(e) => e,
         None => {
             return Err(PrepareUploadError::NoUnuploadedChanges(
@@ -935,10 +935,7 @@ pub fn prepare_upload_package(
             None
         };
         if let Some(message) = message {
-            cl.entries()
-                .next()
-                .unwrap()
-                .ensure_first_line("Team upload.");
+            cl.iter().next().unwrap().ensure_first_line("Team upload.");
             local_tree
                 .put_file_bytes_non_atomic(changelog_path.as_path(), cl.to_string().as_bytes())
                 .unwrap();
