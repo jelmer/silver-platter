@@ -410,8 +410,8 @@ fn push_derived_changes(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<(PyObject, String)> {
     let (b, u) = silver_platter::publish::push_derived_changes(
-        &silver_platter::RegularBranch::new(local_branch),
-        &silver_platter::RegularBranch::new(main_branch),
+        &silver_platter::GenericBranch::new(local_branch),
+        &silver_platter::GenericBranch::new(main_branch),
         &silver_platter::Forge::from(forge),
         name,
         overwrite_existing,
@@ -489,8 +489,8 @@ fn push_changes(
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
     silver_platter::publish::push_changes(
-        &silver_platter::RegularBranch::new(local_branch),
-        &silver_platter::RegularBranch::new(main_branch),
+        &silver_platter::GenericBranch::new(local_branch),
+        &silver_platter::GenericBranch::new(main_branch),
         forge.map(silver_platter::Forge::from).as_ref(),
         possible_transports.as_mut(),
         additional_colocated_branches,
@@ -510,8 +510,8 @@ fn push_result(
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
     silver_platter::publish::push_result(
-        &silver_platter::RegularBranch::new(local_branch),
-        &silver_platter::RegularBranch::new(remote_branch),
+        &silver_platter::GenericBranch::new(local_branch),
+        &silver_platter::GenericBranch::new(remote_branch),
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
@@ -522,7 +522,7 @@ fn push_result(
 #[pyfunction]
 fn full_branch_url(branch: PyObject) -> PyResult<String> {
     Ok(
-        silver_platter::vcs::full_branch_url(&silver_platter::RegularBranch::new(branch))
+        silver_platter::vcs::full_branch_url(&silver_platter::GenericBranch::new(branch))
             .to_string(),
     )
 }
@@ -541,7 +541,7 @@ fn find_existing_proposed(
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
 ) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
-    let main_branch = silver_platter::RegularBranch::new(main_branch);
+    let main_branch = silver_platter::GenericBranch::new(main_branch);
     let forge = silver_platter::Forge::from(forge);
     let preferred_schemes = preferred_schemes
         .as_ref()
@@ -584,10 +584,10 @@ fn propose_changes(
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
-    let resume_branch = resume_branch.map(|b| breezyshim::branch::RegularBranch::new(b));
+    let resume_branch = resume_branch.map(|b| breezyshim::branch::GenericBranch::new(b));
     silver_platter::publish::propose_changes(
-        &breezyshim::branch::RegularBranch::new(local_branch),
-        &breezyshim::branch::RegularBranch::new(main_branch),
+        &breezyshim::branch::GenericBranch::new(local_branch),
+        &breezyshim::branch::GenericBranch::new(main_branch),
         &forge.0,
         name,
         mp_description,
@@ -677,10 +677,10 @@ fn publish_changes(
             })
         }
     });
-    let resume_branch = resume_branch.map(breezyshim::branch::RegularBranch::new);
+    let resume_branch = resume_branch.map(breezyshim::branch::GenericBranch::new);
     Ok(PublishResult(silver_platter::publish::publish_changes(
-        &breezyshim::branch::RegularBranch::new(local_branch),
-        &breezyshim::branch::RegularBranch::new(main_branch),
+        &breezyshim::branch::GenericBranch::new(local_branch),
+        &breezyshim::branch::GenericBranch::new(main_branch),
         resume_branch
             .as_ref()
             .map(|b| b as &dyn silver_platter::Branch),
@@ -754,8 +754,8 @@ fn check_proposal_diff(
     target_branch: PyObject,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
-    let local_branch = breezyshim::branch::RegularBranch::new(local_branch);
-    let target_branch = breezyshim::branch::RegularBranch::new(target_branch);
+    let local_branch = breezyshim::branch::GenericBranch::new(local_branch);
+    let target_branch = breezyshim::branch::GenericBranch::new(target_branch);
     if silver_platter::publish::check_proposal_diff_empty(
         &local_branch,
         &target_branch,
@@ -776,7 +776,7 @@ pub(crate) mod debian {
     #[pyfunction]
     pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
         silver_platter::debian::pick_additional_colocated_branches(
-            &breezyshim::branch::RegularBranch::new(main_branch),
+            &breezyshim::branch::GenericBranch::new(main_branch),
         )
     }
 
@@ -1012,8 +1012,8 @@ fn merge_conflicts(
     other_revision: Option<RevisionId>,
 ) -> PyResult<bool> {
     Ok(silver_platter::utils::merge_conflicts(
-        &breezyshim::branch::RegularBranch::new(main_branch),
-        &breezyshim::branch::RegularBranch::new(other_branch),
+        &breezyshim::branch::GenericBranch::new(main_branch),
+        &breezyshim::branch::GenericBranch::new(other_branch),
         other_revision.as_ref(),
     )?)
 }
@@ -1078,19 +1078,19 @@ impl Workspace {
         let mut builder = silver_platter::workspace::Workspace::builder();
 
         if let Some(main_branch) = main_branch {
-            builder = builder.main_branch(Box::new(breezyshim::branch::RegularBranch::new(
+            builder = builder.main_branch(Box::new(breezyshim::branch::GenericBranch::new(
                 main_branch,
             )));
         }
 
         if let Some(resume_branch) = resume_branch {
-            builder = builder.resume_branch(Box::new(breezyshim::branch::RegularBranch::new(
+            builder = builder.resume_branch(Box::new(breezyshim::branch::GenericBranch::new(
                 resume_branch,
             )));
         }
 
         if let Some(cached_branch) = cached_branch {
-            builder = builder.cached_branch(Box::new(breezyshim::branch::RegularBranch::new(
+            builder = builder.cached_branch(Box::new(breezyshim::branch::GenericBranch::new(
                 cached_branch,
             )));
         }
