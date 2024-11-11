@@ -628,7 +628,7 @@ impl PublishResult {
 }
 
 #[pyfunction]
-#[pyo3(signature = (local_branch, main_branch, mode, name, get_proposal_description, resume_branch=None, get_proposal_commit_message=None, get_proposal_title=None, forge=None, allow_create_proposal=None, labels=None, overwrite_existing=None, existing_proposal=None, reviewers=None, tags=None, derived_owner=None, allow_collaboration=None, stop_revision=None))]
+#[pyo3(signature = (local_branch, main_branch, mode, name, get_proposal_description, resume_branch=None, get_proposal_commit_message=None, get_proposal_title=None, forge=None, allow_create_proposal=None, labels=None, overwrite_existing=None, existing_proposal=None, reviewers=None, tags=None, derived_owner=None, allow_collaboration=None, stop_revision=None, auto_merge=None))]
 fn publish_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -648,6 +648,7 @@ fn publish_changes(
     derived_owner: Option<&str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<RevisionId>,
+    auto_merge: Option<bool>,
 ) -> PyResult<PublishResult> {
     let get_proposal_description =
         |format: silver_platter::proposal::DescriptionFormat,
@@ -699,6 +700,7 @@ fn publish_changes(
         derived_owner,
         allow_collaboration,
         stop_revision.as_ref(),
+        auto_merge,
     )?))
 }
 

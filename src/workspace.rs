@@ -583,6 +583,7 @@ impl Workspace {
         derived_owner: Option<&str>,
         allow_collaboration: Option<bool>,
         stop_revision: Option<&RevisionId>,
+        auto_merge: Option<bool>,
     ) -> Result<PublishResult, PublishError> {
         let main_branch = self.main_branch();
         crate::publish::publish_changes(
@@ -604,6 +605,7 @@ impl Workspace {
             derived_owner,
             allow_collaboration,
             stop_revision,
+            auto_merge,
         )
     }
 

@@ -32,6 +32,10 @@ pub struct Entry {
     /// Commit message for the work.
     pub commit_message: Option<String>,
 
+    #[serde(rename = "auto-merge", default)]
+    /// Whether to automatically merge the proposal.
+    pub auto_merge: Option<bool>,
+
     /// Mode for the work.
     pub mode: Mode,
 
@@ -222,6 +226,8 @@ impl Entry {
         let labels = recipe.labels.clone();
         let context = result.context;
 
+        let auto_merge = recipe.merge_request.as_ref().and_then(|mr| mr.auto_merge);
+
         let owner = None;
 
         ws.defer_destroy();
@@ -236,6 +242,7 @@ impl Entry {
             owner,
             title,
             labels,
+            auto_merge,
             proposal_url: None,
             context: serde_yaml::from_str(
                 context
@@ -456,6 +463,7 @@ pub fn publish_one(
     title: Option<&str>,
     description: Option<&str>,
     mut overwrite: Option<bool>,
+    auto_merge: Option<bool>,
 ) -> Result<PublishResult, PublishError> {
     let main_branch = match crate::vcs::open_branch(url, None, None, None) {
         Ok(b) => b,
@@ -534,6 +542,7 @@ pub fn publish_one(
         derived_owner,
         None,
         None,
+        auto_merge,
     ) {
         Ok(r) => r,
         Err(e) => match e {
