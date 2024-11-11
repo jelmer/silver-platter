@@ -1,0 +1,10 @@
+---
+name: disperse-migrate
+command: |-
+  disperse migrate
+mode: propose
+merge-request:
+  commit-message: Migrate disperse config to new version
+  description: |
+    Migrate disperse.conf (using ini format) to disperse.toml (using toml format).
+  auto-merge: true
