@@ -509,6 +509,7 @@ impl From<Error> for pyo3::PyErr {
 /// * `tags` - Tags to push (None for default behaviour)
 /// * `derived_owner` - Name of any derived branch
 /// * `allow_collaboration` - Whether to allow target branch owners to modify source branch.
+/// * `auto_merge` - Enable merging once CI passes
 pub fn publish_changes(
     local_branch: &dyn Branch,
     main_branch: &dyn Branch,
@@ -528,6 +529,7 @@ pub fn publish_changes(
     derived_owner: Option<&str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<&RevisionId>,
+    auto_merge: Option<bool>,
 ) -> Result<PublishResult, Error> {
     let stop_revision = stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
     let allow_create_proposal = allow_create_proposal.unwrap_or(true);
@@ -678,7 +680,7 @@ pub fn publish_changes(
         derived_owner,
         Some(&stop_revision),
         allow_collaboration,
-        None,
+        auto_merge,
     )?;
     Ok(PublishResult {
         mode,

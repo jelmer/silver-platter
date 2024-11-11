@@ -19,8 +19,38 @@ pub struct MergeRequest {
     pub propose_threshold: Option<u32>,
 
     /// Description templates
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_description")]
     pub description: HashMap<Option<DescriptionFormat>, String>,
+
+    /// Whether to enable automatic merge
+    #[serde(rename = "auto-merge", default)]
+    pub auto_merge: Option<bool>,
+}
+
+fn deserialize_description<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<Option<DescriptionFormat>, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrMap {
+        String(String),
+        Map(HashMap<Option<DescriptionFormat>, String>),
+    }
+
+    let helper = StringOrMap::deserialize(deserializer)?;
+    let mut result = HashMap::new();
+    match helper {
+        StringOrMap::String(s) => {
+            result.insert(None, s);
+        }
+        StringOrMap::Map(m) => {
+            result = m;
+        }
+    }
+    Ok(result)
 }
 
 impl MergeRequest {
@@ -163,6 +193,7 @@ merge-request:
             commit_message: Some("test commit message".to_string()),
             title: Some("test title".to_string()),
             propose_threshold: None,
+            auto_merge: None,
             description: vec![(
                 Some(DescriptionFormat::Plain),
                 "test description".to_string()

@@ -455,6 +455,7 @@ pub fn publish_entry(
         entry.title.as_deref(),
         Some(entry.description.as_str()),
         overwrite,
+        entry.auto_merge,
     ) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
