@@ -40,7 +40,7 @@ rand = "0.8.5"
 members = [ "svp-client", "svp-py" ]
 
 [features]
-default = ["debian", "detect-update-changelog"]
+default = ["debian", "detect-update-changelog", "cli"]
 debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
