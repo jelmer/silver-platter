@@ -10,6 +10,7 @@ use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -23,6 +24,7 @@ pub struct Entry {
     pub subpath: Option<PathBuf>,
 
     /// URL of the target branch.
+    #[serde(rename = "url")]
     pub target_branch_url: Option<Url>,
 
     /// Description of the work to be done.
@@ -49,6 +51,7 @@ pub struct Entry {
     pub labels: Option<Vec<String>>,
 
     /// Context for the work.
+    #[serde(default)]
     pub context: serde_yaml::Value,
 
     #[serde(rename = "proposal-url")]
@@ -60,6 +63,7 @@ pub struct Entry {
 /// Batch
 pub struct Batch {
     /// Recipe
+    #[serde(deserialize_with = "deserialize_recipe")]
     pub recipe: Recipe,
 
     /// Batch name
@@ -71,6 +75,30 @@ pub struct Batch {
     #[serde(skip)]
     /// Basepath for the batch
     pub basepath: PathBuf,
+}
+
+fn deserialize_recipe<'de, D>(deserializer: D) -> Result<Recipe, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Recipe can either be a PathBuf or a Recipe
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum RecipeOrPathBuf {
+        Recipe(Recipe),
+        PathBuf(PathBuf),
+    }
+
+    let value = RecipeOrPathBuf::deserialize(deserializer)?;
+
+    match value {
+        RecipeOrPathBuf::Recipe(recipe) => Ok(recipe),
+        RecipeOrPathBuf::PathBuf(path) => {
+            let file = std::fs::File::open(&path).map_err(serde::de::Error::custom)?;
+            let recipe: Recipe = serde_yaml::from_reader(file).map_err(serde::de::Error::custom)?;
+            Ok(recipe)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -327,13 +355,14 @@ impl Batch {
         std::fs::create_dir(directory)?;
 
         let mut batch = match load_batch_metadata(directory) {
-            Some(batch) => batch,
-            None => Batch {
+            Ok(Some(batch)) => batch,
+            Ok(None) => Batch {
                 recipe: recipe.clone(),
                 name: recipe.name.clone().unwrap(),
                 work: HashMap::new(),
                 basepath: directory.to_path_buf(),
             },
+            Err(e) => return Err(e),
         };
 
         for candidate in candidates {
@@ -429,7 +458,10 @@ impl Batch {
 
 /// Drop a batch entry from the given directory.
 pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
-    let mut batch = load_batch_metadata(directory).unwrap();
+    let mut batch = match load_batch_metadata(directory)? {
+        Some(batch) => batch,
+        None => return Ok(()),
+    };
     batch.work.remove(name);
     std::fs::remove_dir_all(directory.join(name))?;
     save_batch_metadata(directory, &batch)?;
@@ -444,9 +476,17 @@ pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error>
 }
 
 /// Load a batch metadata from the metadata file in the given directory.
-pub fn load_batch_metadata(directory: &Path) -> Option<Batch> {
-    let file = std::fs::File::open(directory.join("batch.yaml")).ok()?;
-    serde_yaml::from_reader(file).ok()
+pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
+    let file = match std::fs::File::open(directory.join("batch.yaml")) {
+        Ok(f) => f,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return Ok(None);
+            }
+            return Err(Error::Io(e));
+        }
+    };
+    Ok(Some(serde_yaml::from_reader(file)?))
 }
 
 /// Publish a single batch entry.
