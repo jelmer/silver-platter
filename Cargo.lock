@@ -172,9 +172,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.1.213"
+version = "0.1.214"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a0b670c2a2a927aeef6c6b96fdff0368992b462946f6922848b232a50891dd1"
+checksum = "eea37e5fd668439fce6138ab97be3fc940e44f212d59e11e198c9afa1805969b"
 dependencies = [
  "chrono",
  "ctor",

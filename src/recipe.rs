@@ -8,13 +8,16 @@ use std::collections::HashMap;
 /// Merge request configuration
 pub struct MergeRequest {
     #[serde(rename = "commit-message")]
+    #[serde(default)]
     /// Commit message template
     pub commit_message: Option<String>,
 
     /// Title template
+    #[serde(default)]
     pub title: Option<String>,
 
     #[serde(rename = "propose-threshold")]
+    #[serde(default)]
     /// Value threshold for proposing the merge request
     pub propose_threshold: Option<u32>,
 
@@ -133,6 +136,7 @@ pub struct Recipe {
     pub merge_request: Option<MergeRequest>,
 
     /// Labels to apply to the merge request
+    #[serde(default)]
     pub labels: Option<Vec<String>>,
 
     /// Command to run

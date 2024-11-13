@@ -495,7 +495,17 @@ pub fn batch_publish(
     refresh: bool,
     overwrite: Option<bool>,
 ) -> i32 {
-    let mut batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+    let mut batch = match silver_platter::batch::load_batch_metadata(directory) {
+        Ok(Some(batch)) => batch,
+        Ok(None) => {
+            info!("No batch.yaml found in {}", directory.display());
+            return 1;
+        }
+        Err(e) => {
+            error!("Failed to load batch.yaml: {}", e);
+            return 1;
+        }
+    };
 
     let mut errors = 0;
     if let Some(codebase) = codebase {
@@ -558,7 +568,7 @@ fn login(url: &url::Url) -> i32 {
     0
 }
 
-fn main() {
+fn main() -> Result<(), i32> {
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -577,22 +587,28 @@ fn main() {
 
     breezyshim::plugin::load_plugins();
 
-    std::process::exit(match &cli.command {
+    match &cli.command {
         Commands::Forges {} => {
             for instance in breezyshim::forge::iter_forge_instances() {
                 println!("{} ({})", instance.base_url(), instance.forge_kind());
             }
-            0
+            Ok(())
         }
-        Commands::Login { url } => login(url),
+        Commands::Login { url } => match login(url) {
+            0 => Ok(()),
+            e => Err(e),
+        },
         Commands::Proposals { status } => {
             let statuses = status.as_ref().map(|status| vec![*status]);
             for (_forge, proposal) in silver_platter::proposal::iter_all_mps(statuses) {
                 println!("{}", proposal.url().unwrap());
             }
-            0
+            Ok(())
         }
-        Commands::Run(args) => run(args),
+        Commands::Run(args) => match run(args) {
+            0 => Ok(()),
+            e => Err(e),
+        },
         Commands::Apply {
             command,
             diff,
@@ -628,7 +644,7 @@ fn main() {
                 recipe.command.as_ref().unwrap().argv()
             } else {
                 error!("No command specified");
-                std::process::exit(1);
+                return Err(1);
             };
 
             let (local_tree, subpath) = workingtree::open_containing(Path::new(".")).unwrap();
@@ -667,7 +683,7 @@ fn main() {
                 Err(err) => {
                     error!("Failed: {}", err);
                     reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
-                    std::process::exit(1);
+                    return Err(1);
                 }
             };
 
@@ -722,7 +738,7 @@ fn main() {
                 let context = result.context.unwrap();
                 println!("{}", serde_json::to_string_pretty(&context).unwrap());
             }
-            0
+            Ok(())
         }
         Commands::UploadPending {
             acceptable_keys,
@@ -790,7 +806,7 @@ fn main() {
                 )
                 .unwrap();
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
-                0
+                Ok(())
             }
             BatchArgs::Publish { directory, name } => {
                 let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
@@ -799,13 +815,26 @@ fn main() {
                     "To see the status of open merge requests, run: \"svn batch status {}\"",
                     directory.display()
                 );
-                ret
+                match ret {
+                    0 => Ok(()),
+                    e => Err(e),
+                }
             }
             BatchArgs::Status {
                 directory,
                 codebase,
             } => {
-                let batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(directory) {
+                    Ok(Some(batch)) => batch,
+                    Ok(None) => {
+                        info!("No batch.yaml found in {}", directory.display());
+                        return Err(1);
+                    }
+                    Err(e) => {
+                        error!("Failed to load batch.yaml: {}", e);
+                        return Err(1);
+                    }
+                };
                 if let Some(codebase) = codebase {
                     let entry = batch.work.get(codebase).unwrap();
                     info!("{}: {}", codebase, entry.status());
@@ -814,19 +843,29 @@ fn main() {
                         info!("{}: {}", name, entry.status());
                     }
                 }
-                0
+                Ok(())
             }
             BatchArgs::Diff {
                 directory,
                 codebase,
             } => {
-                let batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(directory) {
+                    Ok(Some(batch)) => batch,
+                    Ok(None) => {
+                        info!("No batch.yaml found in {}", directory.display());
+                        return Err(1);
+                    }
+                    Err(e) => {
+                        error!("Failed to load batch.yaml: {}", e);
+                        return Err(1);
+                    }
+                };
                 let entry = batch.work.get(codebase.as_str()).unwrap();
                 let main_branch = match entry.target_branch() {
                     Ok(branch) => branch,
                     Err(e) => {
                         error!("Failed to open branch: {}", e);
-                        std::process::exit(1);
+                        return Err(1);
                     }
                 };
 
@@ -834,7 +873,7 @@ fn main() {
                     Ok(branch) => branch,
                     Err(e) => {
                         error!("Failed to open branch: {}", e);
-                        std::process::exit(1);
+                        return Err(1);
                     }
                 };
 
@@ -846,8 +885,8 @@ fn main() {
                     Some("new/"),
                 )
                 .unwrap();
-                1
+                Err(1)
             }
         },
-    })
+    }
 }

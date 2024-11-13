@@ -556,8 +556,8 @@ pub fn main(
     verify_command: Option<String>,
     apt_repository: Option<String>,
     apt_repository_key: Option<std::path::PathBuf>,
-) -> i32 {
-    let mut ret = 0;
+) -> Result<(), i32> {
+    let mut ret = Ok(());
 
     if packages.is_empty() && maintainer.is_none() {
         if let Some((_name, email)) = debian_changelog::get_maintainer() {
@@ -589,7 +589,7 @@ pub fn main(
 
     if packages.is_empty() {
         log::info!("No packages found.");
-        return 1;
+        return Err(1);
     }
 
     if shuffle {
@@ -619,7 +619,7 @@ pub fn main(
         packages = new_packages;
         extra_data = Some(new_extra_data);
         if failures > 0 {
-            ret = 1
+            ret = Err(1);
         }
     };
 
@@ -669,7 +669,7 @@ pub fn main(
         ) {
             Err(UploadPackageError::ProcessingFailure(reason, _description)) => {
                 inc_stats(reason.as_str());
-                ret = 1;
+                ret = Err(1);
             }
             Err(UploadPackageError::Ignored(reason, _description)) => inc_stats(reason.as_str()),
             Ok(_) => {
