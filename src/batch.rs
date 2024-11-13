@@ -15,6 +15,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use url::Url;
 
+/// Current version of the batch format.
+pub const CURRENT_VERSION: u8 = 1;
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// Batch entry
 pub struct Entry {
@@ -62,6 +65,10 @@ pub struct Entry {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 /// Batch
 pub struct Batch {
+    /// Format version
+    #[serde(default)]
+    pub version: u8,
+
     /// Recipe
     #[serde(deserialize_with = "deserialize_recipe")]
     pub recipe: Recipe,
@@ -357,6 +364,7 @@ impl Batch {
         let mut batch = match load_batch_metadata(directory) {
             Ok(Some(batch)) => batch,
             Ok(None) => Batch {
+                version: CURRENT_VERSION,
                 recipe: recipe.clone(),
                 name: recipe.name.clone().unwrap(),
                 work: HashMap::new(),
