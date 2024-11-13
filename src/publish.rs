@@ -659,8 +659,17 @@ pub fn publish_changes(
     } else {
         None
     };
-    let title =
-        title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
+    let title = if let Some(title) = title {
+        Some(title)
+    } else {
+        match breezyshim::forge::determine_title(mp_description.as_str()) {
+            Ok(title) => Some(title),
+            Err(e) => {
+                log::warn!("Failed to determine title from description: {}", e);
+                None
+            }
+        }
+    };
     let (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
@@ -672,7 +681,7 @@ pub fn publish_changes(
         overwrite_existing,
         labels,
         commit_message.as_deref(),
-        Some(title.as_str()),
+        title.as_deref(),
         None,
         None,
         reviewers,

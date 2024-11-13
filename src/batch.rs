@@ -24,6 +24,7 @@ pub struct Entry {
     #[serde(skip)]
     local_path: PathBuf,
     /// Subpath within the local path to work on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subpath: Option<PathBuf>,
 
     /// URL of the target branch.
@@ -33,11 +34,19 @@ pub struct Entry {
     /// Description of the work to be done.
     pub description: String,
 
-    #[serde(rename = "commit-message")]
+    #[serde(
+        rename = "commit-message",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// Commit message for the work.
     pub commit_message: Option<String>,
 
-    #[serde(rename = "auto-merge", default)]
+    #[serde(
+        rename = "auto-merge",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// Whether to automatically merge the proposal.
     pub auto_merge: Option<bool>,
 
@@ -45,19 +54,26 @@ pub struct Entry {
     pub mode: Mode,
 
     /// Title of the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
     /// Owner of the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
 
     /// Labels for the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<String>>,
 
     /// Context for the work.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "serde_yaml::Value::is_null")]
     pub context: serde_yaml::Value,
 
-    #[serde(rename = "proposal-url")]
+    #[serde(
+        rename = "proposal-url",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// URL of the proposal for this work.
     pub proposal_url: Option<Url>,
 }
@@ -193,7 +209,7 @@ impl Entry {
             Err(e) => return Err(Error::Vcs(e)),
         };
 
-        let mut ws = Workspace::builder()
+        let ws = Workspace::builder()
             .main_branch(main_branch)
             .path(basepath.to_path_buf())
             .build()?;
@@ -228,13 +244,15 @@ impl Entry {
         let tera_context: tera::Context = tera::Context::from_value(
             result
                 .context
-                .as_ref()
-                .unwrap_or(&serde_json::Value::Null)
-                .clone(),
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({})),
         )
         .unwrap();
 
-        let target_branch_url = result.target_branch_url;
+        let target_branch_url = match result.target_branch_url {
+            Some(url) => Some(url),
+            None => Some(url.clone()),
+        };
         let description = if let Some(description) = result.description {
             description
         } else if let Some(ref mr) = recipe.merge_request {
@@ -264,8 +282,6 @@ impl Entry {
         let auto_merge = recipe.merge_request.as_ref().and_then(|mr| mr.auto_merge);
 
         let owner = None;
-
-        ws.defer_destroy();
 
         Ok(Entry {
             local_path: basepath.to_path_buf(),
@@ -359,9 +375,11 @@ impl Batch {
         candidates: impl Iterator<Item = &'a Candidate>,
         directory: &Path,
     ) -> Result<Batch, Error> {
+        // make sure directory is an absolute path
         std::fs::create_dir(directory)?;
+        let directory = directory.canonicalize().unwrap();
 
-        let mut batch = match load_batch_metadata(directory) {
+        let mut batch = match load_batch_metadata(&directory) {
             Ok(Some(batch)) => batch,
             Ok(None) => Batch {
                 version: CURRENT_VERSION,
@@ -374,20 +392,7 @@ impl Batch {
         };
 
         for candidate in candidates {
-            // TODO(jelmer): Move this logic to candidate
-            let basename: String = candidate.name.as_ref().map_or_else(
-                || {
-                    candidate
-                        .url
-                        .to_string()
-                        .trim_end_matches('/')
-                        .rsplit('/')
-                        .last()
-                        .unwrap()
-                        .to_string()
-                },
-                |name| name.clone(),
-            );
+            let basename: String = candidate.shortname();
 
             let mut name = basename.clone();
 
@@ -423,7 +428,7 @@ impl Batch {
             ) {
                 Ok(entry) => {
                     batch.work.insert(name, entry);
-                    save_batch_metadata(directory, &batch)?;
+                    save_batch_metadata(&directory, &batch)?;
                 }
                 Err(e) => {
                     log::error!("Failed to generate batch entry for {}: {}", name, e);
@@ -433,7 +438,7 @@ impl Batch {
                 }
             }
         }
-        save_batch_metadata(directory, &batch)?;
+        save_batch_metadata(&directory, &batch)?;
         Ok(batch)
     }
 

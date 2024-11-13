@@ -327,8 +327,15 @@ pub fn publish_entry(
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
     let tree = entry.working_tree().unwrap();
+    let target_branch_url = match entry.target_branch_url.as_ref() {
+        Some(url) => url,
+        None => {
+            error!("No target branch URL for {}", name);
+            return false;
+        }
+    };
     let publish_result = match silver_platter::batch::publish_one(
-        entry.target_branch_url.as_ref().unwrap(),
+        target_branch_url,
         &tree,
         batch_name.as_str(),
         entry.mode,
@@ -635,7 +642,7 @@ fn main() -> Result<(), i32> {
                 let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
 
                 info!(
-                    "To see the status of open merge requests, run: \"svn batch status {}\"",
+                    "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
                 match ret {

@@ -812,7 +812,7 @@ fn main() -> Result<(), i32> {
                 let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
 
                 info!(
-                    "To see the status of open merge requests, run: \"svn batch status {}\"",
+                    "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
                 match ret {
