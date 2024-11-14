@@ -441,22 +441,7 @@ pub fn publish_entry(
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let tree = entry.working_tree().unwrap();
-    let publish_result = match silver_platter::batch::publish_one(
-        entry.target_branch_url.as_ref().unwrap(),
-        &tree,
-        batch_name.as_str(),
-        entry.mode,
-        entry.proposal_url.as_ref(),
-        entry.labels.clone(),
-        entry.owner.as_deref(),
-        refresh,
-        entry.commit_message.as_deref(),
-        entry.title.as_deref(),
-        Some(entry.description.as_str()),
-        overwrite,
-        entry.auto_merge,
-    ) {
+    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");

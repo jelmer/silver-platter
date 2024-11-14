@@ -126,6 +126,7 @@ struct RunArgs {
 /// Operate on multiple repositories at once
 #[derive(Subcommand)]
 enum BatchArgs {
+    /// Generate a batch
     Generate {
         /// Recipe to use
         #[arg(long)]
@@ -138,13 +139,23 @@ enum BatchArgs {
         /// Directory to run in
         directory: Option<std::path::PathBuf>,
     },
+    /// Publish a batch or specific entry
     Publish {
         /// Directory to run in
         directory: std::path::PathBuf,
 
         /// Specific entry to publish
         name: Option<String>,
+
+        /// Whether to overwrite existing branches
+        #[arg(long)]
+        overwrite: Option<bool>,
+
+        /// Refresh changes
+        #[arg(long)]
+        refresh: bool,
     },
+    /// Show status of a batch or specific entry
     Status {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -152,6 +163,7 @@ enum BatchArgs {
         /// Specific entry to publish
         codebase: Option<String>,
     },
+    /// Show diff of a specific entry in a batch
     Diff {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -318,7 +330,7 @@ fn run(args: &RunArgs) -> i32 {
     retcode
 }
 
-pub fn publish_entry(
+fn publish_entry(
     batch: &mut silver_platter::batch::Batch,
     name: &str,
     refresh: bool,
@@ -616,8 +628,18 @@ fn main() -> Result<(), i32> {
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
                 Ok(())
             }
-            BatchArgs::Publish { directory, name } => {
-                let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
+            BatchArgs::Publish {
+                directory,
+                name,
+                overwrite,
+                refresh,
+            } => {
+                let ret = batch_publish(
+                    directory.as_path(),
+                    name.as_deref(),
+                    *refresh,
+                    overwrite.clone(),
+                );
 
                 info!(
                     "To see the status of open merge requests, run: \"svp batch status {}\"",

@@ -23,6 +23,7 @@ pub const CURRENT_VERSION: u8 = 1;
 pub struct Entry {
     #[serde(skip)]
     local_path: PathBuf,
+
     /// Subpath within the local path to work on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subpath: Option<PathBuf>,
@@ -407,8 +408,26 @@ impl Batch {
         directory: &Path,
     ) -> Result<Batch, Error> {
         // make sure directory is an absolute path
-        std::fs::create_dir(directory)?;
         let directory = directory.canonicalize().unwrap();
+        // The directory should either be empty or not exist
+        if directory.exists() {
+            if !directory.is_dir() {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "Not a directory",
+                )));
+            }
+            if let Ok(entries) = std::fs::read_dir(&directory) {
+                if entries.count() > 0 {
+                    return Err(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "Directory not empty",
+                    )));
+                }
+            }
+        } else {
+            std::fs::create_dir_all(&directory)?;
+        }
 
         let mut batch = match load_batch_metadata(&directory) {
             Ok(Some(batch)) => batch,
@@ -530,7 +549,15 @@ pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
             return Err(Error::Io(e));
         }
     };
-    Ok(Some(serde_yaml::from_reader(file)?))
+
+    let mut batch: Batch = serde_yaml::from_reader(file)?;
+
+    // Set local path for entries
+    for (key, entry) in batch.work.iter_mut() {
+        entry.local_path = directory.join(key);
+    }
+
+    Ok(Some(batch))
 }
 
 /// Publish a single batch entry.
@@ -698,6 +725,36 @@ mod tests {
             None,
         )
         .unwrap();
+        assert_eq!(entry.description, "hello\n");
+    }
+
+    #[test]
+    fn test_batch_from_recipe() {
+        let td = tempfile::tempdir().unwrap();
+        let remote = tempfile::tempdir().unwrap();
+        breezyshim::controldir::create_branch_convenience(
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            None,
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let recipe = crate::recipe::RecipeBuilder::new();
+        let recipe = recipe
+            .name("hello".to_owned())
+            .shell("echo hello > hello.txt; echo hello".to_owned())
+            .build();
+        let candidate = crate::candidates::Candidate {
+            url: url::Url::from_directory_path(&remote.path()).unwrap(),
+            subpath: None,
+            default_mode: None,
+            branch: None,
+            name: Some("foo".to_owned()),
+        };
+        let batch =
+            crate::batch::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path())
+                .unwrap();
+        assert_eq!(batch.work.len(), 1);
+        let entry = batch.work.get("foo").unwrap();
         assert_eq!(entry.description, "hello\n");
     }
 }
