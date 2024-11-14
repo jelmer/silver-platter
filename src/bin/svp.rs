@@ -149,7 +149,7 @@ enum BatchArgs {
 
         /// Whether to overwrite existing branches
         #[arg(long)]
-        overwrite: Option<bool>,
+        overwrite: bool,
 
         /// Refresh changes
         #[arg(long)]
@@ -343,11 +343,11 @@ fn publish_entry(
     batch: &mut silver_platter::batch::Batch,
     name: &str,
     refresh: bool,
-    overwrite: Option<bool>,
+    overwrite: bool,
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
+    let publish_result = match entry.publish(&batch_name, refresh, Some(overwrite)) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
@@ -389,9 +389,10 @@ pub fn batch_publish(
     directory: &Path,
     codebase: Option<&str>,
     refresh: bool,
-    overwrite: Option<bool>,
+    overwrite: bool,
 ) -> i32 {
-    let mut batch = match silver_platter::batch::load_batch_metadata(directory) {
+    let directory = directory.canonicalize().unwrap();
+    let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
         Ok(Some(batch)) => batch,
         Ok(None) => {
             info!("No batch.yaml found in {}", directory.display());
@@ -410,7 +411,7 @@ pub fn batch_publish(
     let mut errors = 0;
     if let Some(codebase) = codebase {
         if publish_entry(&mut batch, codebase, refresh, overwrite) {
-            silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
+            silver_platter::batch::save_batch_metadata(&directory, &batch).unwrap();
         } else {
             error!("Failed to publish {}", codebase);
             errors = 1;
@@ -422,7 +423,7 @@ pub fn batch_publish(
                 errors += 1;
             }
         }
-        silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
+        silver_platter::batch::save_batch_metadata(&directory, &batch).unwrap();
     }
     if batch.work.is_empty() {
         info!(
@@ -681,7 +682,8 @@ fn main() -> Result<(), i32> {
                 directory,
                 codebase,
             } => {
-                let batch = match silver_platter::batch::load_batch_metadata(directory) {
+                let directory = directory.canonicalize().unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(&directory) {
                     Ok(Some(batch)) => batch,
                     Ok(None) => {
                         info!("No batch.yaml found in {}", directory.display());
@@ -710,7 +712,8 @@ fn main() -> Result<(), i32> {
                 directory,
                 codebase,
             } => {
-                let batch = match silver_platter::batch::load_batch_metadata(directory) {
+                let directory = directory.canonicalize().unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(&directory) {
                     Ok(Some(batch)) => batch,
                     Ok(None) => {
                         info!("No batch.yaml found in {}", directory.display());
@@ -742,9 +745,19 @@ fn main() -> Result<(), i32> {
                     }
                 };
 
+                let repository = local_branch.repository();
+
+                let main_revision = main_branch.last_revision();
+
+                repository
+                    .fetch(&main_branch.repository(), Some(&main_revision))
+                    .unwrap();
+
+                let main_tree = repository.revision_tree(&main_revision).unwrap();
+
                 breezyshim::diff::show_diff_trees(
                     &local_branch.basis_tree().unwrap(),
-                    &main_branch.basis_tree().unwrap(),
+                    &main_tree,
                     Box::new(std::io::stdout()),
                     Some("old/"),
                     Some("new/"),

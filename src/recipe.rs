@@ -26,7 +26,11 @@ pub struct MergeRequest {
     pub description: HashMap<Option<DescriptionFormat>, String>,
 
     /// Whether to enable automatic merge
-    #[serde(rename = "auto-merge", default)]
+    #[serde(
+        rename = "auto-merge",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub auto_merge: Option<bool>,
 }
 
@@ -237,10 +241,12 @@ pub struct Recipe {
     pub mode: Option<Mode>,
 
     /// Whether to resume a previous run
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<bool>,
 
     #[serde(rename = "commit-pending")]
     /// Whether to commit pending changes
+    #[serde(default, skip_serializing_if = "crate::CommitPending::is_default")]
     pub commit_pending: crate::CommitPending,
 }
 

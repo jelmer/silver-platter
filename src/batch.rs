@@ -207,6 +207,7 @@ impl Entry {
         default_mode: Option<Mode>,
         extra_env: Option<HashMap<String, String>>,
     ) -> Result<Self, Error> {
+        let basepath = basepath.canonicalize().unwrap();
         let main_branch = match open_branch(url, None, None, None) {
             Ok(branch) => branch,
             Err(e) => return Err(Error::Vcs(e)),
@@ -336,12 +337,16 @@ impl Entry {
 
     /// Get the local branch for this entry.
     pub fn local_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
-        open_branch(
-            &url::Url::from_directory_path(&self.local_path).unwrap(),
-            None,
-            None,
-            None,
-        )
+        let url = match url::Url::from_directory_path(&self.local_path) {
+            Ok(url) => url,
+            Err(_) => {
+                return Err(BranchOpenError::Other(format!(
+                    "Invalid URL: {}",
+                    self.local_path.display()
+                )));
+            }
+        };
+        open_branch(&url, None, None, None)
     }
 
     /// Publish this entry
@@ -566,6 +571,7 @@ pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error>
 
 /// Load a batch metadata from the metadata file in the given directory.
 pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
+    assert!(directory.is_absolute());
     let file = match std::fs::File::open(directory.join("batch.yaml")) {
         Ok(f) => f,
         Err(e) => {

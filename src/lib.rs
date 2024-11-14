@@ -175,6 +175,13 @@ impl<'de> Deserialize<'de> for CommitPending {
     }
 }
 
+impl CommitPending {
+    /// Returns whether the policy is to commit pending changes
+    pub fn is_default(&self) -> bool {
+        *self == CommitPending::Auto
+    }
+}
+
 /// The result of a codemod
 pub trait CodemodResult {
     /// Context
