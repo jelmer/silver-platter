@@ -534,7 +534,7 @@ pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
 }
 
 /// Publish a single batch entry.
-pub fn publish_one(
+fn publish_one(
     url: &url::Url,
     local_tree: &breezyshim::tree::WorkingTree,
     batch_name: &str,
@@ -672,4 +672,32 @@ pub fn publish_one(
         );
     }
     Ok(publish_result)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_entry_from_recipe() {
+        let td = tempfile::tempdir().unwrap();
+        let remote = tempfile::tempdir().unwrap();
+        breezyshim::controldir::create_branch_convenience(
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            None,
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let recipe = crate::recipe::RecipeBuilder::new();
+        let recipe = recipe
+            .shell("echo hello > hello.txt; echo hello".to_owned())
+            .build();
+        let entry = crate::batch::Entry::from_recipe(
+            &recipe,
+            td.path(),
+            &url::Url::from_directory_path(&remote.path()).unwrap(),
+            &std::path::Path::new(""),
+            None,
+        )
+        .unwrap();
+        assert_eq!(entry.description, "hello\n");
+    }
 }

@@ -125,6 +125,97 @@ impl Command {
     }
 }
 
+/// A recipe builder
+pub struct RecipeBuilder {
+    recipe: Recipe,
+}
+
+impl RecipeBuilder {
+    /// Create a new recipe builder
+    pub fn new() -> Self {
+        Self {
+            recipe: Recipe {
+                name: None,
+                merge_request: None,
+                labels: None,
+                command: None,
+                mode: None,
+                resume: None,
+                commit_pending: crate::CommitPending::default(),
+            },
+        }
+    }
+
+    /// Set the name of the recipe
+    pub fn name(mut self, name: String) -> Self {
+        self.recipe.name = Some(name);
+        self
+    }
+
+    /// Set the merge request configuration
+    pub fn merge_request(mut self, merge_request: MergeRequest) -> Self {
+        self.recipe.merge_request = Some(merge_request);
+        self
+    }
+
+    /// Set the labels to apply to the merge request
+    pub fn labels(mut self, labels: Vec<String>) -> Self {
+        self.recipe.labels = Some(labels);
+        self
+    }
+
+    /// Set a label to apply to the merge request
+    pub fn label(mut self, label: String) -> Self {
+        if let Some(labels) = &mut self.recipe.labels {
+            labels.push(label);
+        } else {
+            self.recipe.labels = Some(vec![label]);
+        }
+        self
+    }
+
+    /// Set the command to run
+    pub fn command(mut self, command: Command) -> Self {
+        self.recipe.command = Some(command);
+        self
+    }
+
+    /// Set the command to run as an argv
+    pub fn argv(mut self, argv: Vec<String>) -> Self {
+        self.recipe.command = Some(Command::Argv(argv));
+        self
+    }
+
+    /// Set the command to run as a shell string
+    pub fn shell(mut self, shell: String) -> Self {
+        self.recipe.command = Some(Command::Shell(shell));
+        self
+    }
+
+    /// Set the mode to run the recipe in
+    pub fn mode(mut self, mode: Mode) -> Self {
+        self.recipe.mode = Some(mode);
+        self
+    }
+
+    /// Set whether to resume a previous run
+    pub fn resume(mut self, resume: bool) -> Self {
+        self.recipe.resume = Some(resume);
+        self
+    }
+
+    /// Set whether to commit pending changes
+    pub fn commit_pending(mut self, commit_pending: crate::CommitPending) -> Self {
+        self.recipe.commit_pending = commit_pending;
+        self
+    }
+
+    /// Build the recipe
+    pub fn build(self) -> Recipe {
+        self.recipe
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// A recipe
 pub struct Recipe {
@@ -165,13 +256,17 @@ impl Recipe {
     }
 }
 
-#[test]
-fn test_simple() {
-    let td = tempfile::tempdir().unwrap();
-    let path = td.path().join("test.yaml");
-    std::fs::write(
-        &path,
-        r#"---
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple() {
+        let td = tempfile::tempdir().unwrap();
+        let path = td.path().join("test.yaml");
+        std::fs::write(
+            &path,
+            r#"---
 name: test
 command: ["echo", "hello"]
 mode: propose
@@ -181,29 +276,56 @@ merge-request:
   description:
     plain: "test description"
 "#,
-    )
-    .unwrap();
+        )
+        .unwrap();
 
-    let recipe = Recipe::from_path(&path).unwrap();
-    assert_eq!(recipe.name, Some("test".to_string()));
-    assert_eq!(
-        recipe.command.unwrap().argv(),
-        vec!["echo".to_string(), "hello".to_string()]
-    );
-    assert_eq!(recipe.mode, Some(Mode::Propose));
-    assert_eq!(
-        recipe.merge_request,
-        Some(MergeRequest {
-            commit_message: Some("test commit message".to_string()),
-            title: Some("test title".to_string()),
-            propose_threshold: None,
-            auto_merge: None,
-            description: vec![(
-                Some(DescriptionFormat::Plain),
-                "test description".to_string()
-            )]
-            .into_iter()
-            .collect(),
-        })
-    );
+        let recipe = Recipe::from_path(&path).unwrap();
+        assert_eq!(recipe.name, Some("test".to_string()));
+        assert_eq!(
+            recipe.command.unwrap().argv(),
+            vec!["echo".to_string(), "hello".to_string()]
+        );
+        assert_eq!(recipe.mode, Some(Mode::Propose));
+        assert_eq!(
+            recipe.merge_request,
+            Some(MergeRequest {
+                commit_message: Some("test commit message".to_string()),
+                title: Some("test title".to_string()),
+                propose_threshold: None,
+                auto_merge: None,
+                description: vec![(
+                    Some(DescriptionFormat::Plain),
+                    "test description".to_string()
+                )]
+                .into_iter()
+                .collect(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_builder() {
+        let recipe = RecipeBuilder::new()
+            .name("test".to_string())
+            .command(Command::Argv(vec!["echo".to_string(), "hello".to_string()]))
+            .mode(Mode::Propose)
+            .merge_request(MergeRequest {
+                commit_message: Some("test commit message".to_string()),
+                title: Some("test title".to_string()),
+                propose_threshold: None,
+                auto_merge: None,
+                description: vec![(
+                    Some(DescriptionFormat::Plain),
+                    "test description".to_string(),
+                )]
+                .into_iter()
+                .collect(),
+            })
+            .build();
+        assert_eq!(recipe.name, Some("test".to_string()));
+        assert_eq!(
+            recipe.command.unwrap().argv(),
+            vec!["echo".to_string(), "hello".to_string()]
+        );
+    }
 }
