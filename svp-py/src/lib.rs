@@ -63,6 +63,11 @@ create_exception!(
     MissingChangelog,
     pyo3::exceptions::PyException
 );
+create_exception!(
+    silver_platter,
+    NoTargetBranch,
+    pyo3::exceptions::PyException
+);
 import_exception!(breezy.errors, DivergedBranches);
 create_exception!(
     silver_platter,

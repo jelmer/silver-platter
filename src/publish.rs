@@ -491,6 +491,7 @@ impl From<Error> for pyo3::PyErr {
                     "InsufficientChangesForNewProposal",
                 )
             }
+            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(),
         }
     }
 }
