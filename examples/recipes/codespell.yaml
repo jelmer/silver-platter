@@ -1,3 +1,5 @@
+# To use this recipe, install codespell:
+# pip install codespell
 ---
 name: codespell
 command: |-

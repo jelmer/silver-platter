@@ -1,3 +1,4 @@
+# Example of a trivial fix that uses a sed command to correct a typo in a file.
 ---
 name: framwork
 command: |-
