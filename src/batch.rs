@@ -751,6 +751,7 @@ mod tests {
             &url::Url::from_directory_path(&remote.path()).unwrap(),
             &std::path::Path::new(""),
             None,
+            None,
         )
         .unwrap();
         assert_eq!(entry.description, "hello\n");
@@ -779,7 +780,7 @@ mod tests {
             name: Some("foo".to_owned()),
         };
         let batch =
-            crate::batch::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path())
+            crate::batch::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path(), None)
                 .unwrap();
         assert_eq!(batch.work.len(), 1);
         let entry = batch.work.get("foo").unwrap();

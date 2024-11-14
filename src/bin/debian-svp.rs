@@ -9,9 +9,9 @@ use silver_platter::publish::Error as PublishError;
 use silver_platter::CodemodResult;
 
 use silver_platter::Mode;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -799,6 +799,7 @@ fn main() -> Result<(), i32> {
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
+                    None,
                 )
                 .unwrap();
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());

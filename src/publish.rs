@@ -471,7 +471,8 @@ impl From<Error> for pyo3::PyErr {
         import_exception!(breezy.forge, ForgeLoginRequired);
         import_exception!(silver_platter, EmptyMergeProposal);
         import_exception!(silver_platter, UnrelatedBranchExists);
-        import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, NoTargetBranch);
 
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
@@ -479,6 +480,7 @@ impl From<Error> for pyo3::PyErr {
             Error::BranchOpenError(e) => e.into(),
             Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
             Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
+            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>("NoTargetBranch"),
             Error::UnrelatedBranchExists => {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }

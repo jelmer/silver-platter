@@ -64,6 +64,11 @@ create_exception!(
     pyo3::exceptions::PyException
 );
 import_exception!(breezy.errors, DivergedBranches);
+create_exception!(
+    silver_platter,
+    NoTargetBranch,
+    pyo3::exceptions::PyException
+);
 
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
@@ -1272,6 +1277,7 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("ScriptNotFound", py.get_type_bound::<ScriptNotFound>())?;
     m.add("DetailedFailure", py.get_type_bound::<DetailedFailure>())?;
     m.add("MissingChangelog", py.get_type_bound::<MissingChangelog>())?;
+    m.add("NoTargetBranch", py.get_type_bound::<NoTargetBranch>())?;
     m.add(
         "ResultFileFormatError",
         py.get_type_bound::<ResultFileFormatError>(),
