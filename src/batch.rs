@@ -12,15 +12,21 @@ use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use url::Url;
+
+/// Current version of the batch format.
+pub const CURRENT_VERSION: u8 = 1;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// Batch entry
 pub struct Entry {
     #[serde(skip)]
     local_path: PathBuf,
+
     /// Subpath within the local path to work on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subpath: Option<PathBuf>,
 
     /// URL of the target branch.
@@ -30,11 +36,19 @@ pub struct Entry {
     /// Description of the work to be done.
     pub description: String,
 
-    #[serde(rename = "commit-message")]
+    #[serde(
+        rename = "commit-message",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// Commit message for the work.
     pub commit_message: Option<String>,
 
-    #[serde(rename = "auto-merge", default)]
+    #[serde(
+        rename = "auto-merge",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// Whether to automatically merge the proposal.
     pub auto_merge: Option<bool>,
 
@@ -42,19 +56,26 @@ pub struct Entry {
     pub mode: Mode,
 
     /// Title of the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
     /// Owner of the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
 
     /// Labels for the work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<String>>,
 
     /// Context for the work.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "serde_yaml::Value::is_null")]
     pub context: serde_yaml::Value,
 
-    #[serde(rename = "proposal-url")]
+    #[serde(
+        rename = "proposal-url",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     /// URL of the proposal for this work.
     pub proposal_url: Option<Url>,
 }
@@ -62,6 +83,10 @@ pub struct Entry {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 /// Batch
 pub struct Batch {
+    /// Format version
+    #[serde(default)]
+    pub version: u8,
+
     /// Recipe
     #[serde(deserialize_with = "deserialize_recipe")]
     pub recipe: Recipe,
@@ -180,13 +205,14 @@ impl Entry {
         url: &Url,
         subpath: &Path,
         default_mode: Option<Mode>,
+        extra_env: Option<HashMap<String, String>>,
     ) -> Result<Self, Error> {
         let main_branch = match open_branch(url, None, None, None) {
             Ok(branch) => branch,
             Err(e) => return Err(Error::Vcs(e)),
         };
 
-        let mut ws = Workspace::builder()
+        let ws = Workspace::builder()
             .main_branch(main_branch)
             .path(basepath.to_path_buf())
             .build()?;
@@ -211,7 +237,7 @@ impl Entry {
             recipe.commit_pending,
             None,
             None,
-            None,
+            extra_env,
             std::process::Stdio::inherit(),
         ) {
             Ok(result) => result,
@@ -221,13 +247,15 @@ impl Entry {
         let tera_context: tera::Context = tera::Context::from_value(
             result
                 .context
-                .as_ref()
-                .unwrap_or(&serde_json::Value::Null)
-                .clone(),
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({})),
         )
         .unwrap();
 
-        let target_branch_url = result.target_branch_url;
+        let target_branch_url = match result.target_branch_url {
+            Some(url) => Some(url),
+            None => Some(url.clone()),
+        };
         let description = if let Some(description) = result.description {
             description
         } else if let Some(ref mr) = recipe.merge_request {
@@ -257,8 +285,6 @@ impl Entry {
         let auto_merge = recipe.merge_request.as_ref().and_then(|mr| mr.auto_merge);
 
         let owner = None;
-
-        ws.defer_destroy();
 
         Ok(Entry {
             local_path: basepath.to_path_buf(),
@@ -317,6 +343,37 @@ impl Entry {
             None,
         )
     }
+
+    /// Publish this entry
+    pub fn publish(
+        &self,
+        batch_name: &str,
+        refresh: bool,
+        overwrite: Option<bool>,
+    ) -> Result<PublishResult, PublishError> {
+        let target_branch_url = match self.target_branch_url.as_ref() {
+            Some(url) => url,
+            None => {
+                return Err(PublishError::NoTargetBranch);
+            }
+        };
+
+        publish_one(
+            target_branch_url,
+            &self.working_tree().unwrap(),
+            batch_name,
+            self.mode,
+            self.proposal_url.as_ref(),
+            self.labels.clone(),
+            self.owner.as_deref(),
+            refresh,
+            self.commit_message.as_deref(),
+            self.title.as_deref(),
+            Some(self.description.as_str()),
+            overwrite,
+            self.auto_merge,
+        )
+    }
 }
 
 /// Status of a batch entry.
@@ -351,12 +408,35 @@ impl Batch {
         recipe: &Recipe,
         candidates: impl Iterator<Item = &'a Candidate>,
         directory: &Path,
+        extra_env: Option<HashMap<String, String>>,
     ) -> Result<Batch, Error> {
-        std::fs::create_dir(directory)?;
+        // The directory should either be empty or not exist
+        if directory.exists() {
+            if !directory.is_dir() {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "Not a directory",
+                )));
+            }
+            if let Ok(entries) = std::fs::read_dir(&directory) {
+                if entries.count() > 0 {
+                    return Err(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "Directory not empty",
+                    )));
+                }
+            }
+        } else {
+            std::fs::create_dir_all(&directory)?;
+        }
 
-        let mut batch = match load_batch_metadata(directory) {
+        // make sure directory is an absolute path
+        let directory = directory.canonicalize().unwrap();
+
+        let mut batch = match load_batch_metadata(&directory) {
             Ok(Some(batch)) => batch,
             Ok(None) => Batch {
+                version: CURRENT_VERSION,
                 recipe: recipe.clone(),
                 name: recipe.name.clone().unwrap(),
                 work: HashMap::new(),
@@ -366,20 +446,7 @@ impl Batch {
         };
 
         for candidate in candidates {
-            // TODO(jelmer): Move this logic to candidate
-            let basename: String = candidate.name.as_ref().map_or_else(
-                || {
-                    candidate
-                        .url
-                        .to_string()
-                        .trim_end_matches('/')
-                        .rsplit('/')
-                        .last()
-                        .unwrap()
-                        .to_string()
-                },
-                |name| name.clone(),
-            );
+            let basename: String = candidate.shortname();
 
             let mut name = basename.clone();
 
@@ -412,10 +479,11 @@ impl Batch {
                     .as_deref()
                     .unwrap_or_else(|| Path::new("")),
                 candidate.default_mode,
+                extra_env.clone(),
             ) {
                 Ok(entry) => {
                     batch.work.insert(name, entry);
-                    save_batch_metadata(directory, &batch)?;
+                    save_batch_metadata(&directory, &batch)?;
                 }
                 Err(e) => {
                     log::error!("Failed to generate batch entry for {}: {}", name, e);
@@ -425,7 +493,7 @@ impl Batch {
                 }
             }
         }
-        save_batch_metadata(directory, &batch)?;
+        save_batch_metadata(&directory, &batch)?;
         Ok(batch)
     }
 
@@ -451,8 +519,15 @@ impl Batch {
     /// Remove work from the batch.
     pub fn remove(&mut self, name: &str) -> Result<(), Error> {
         self.work.remove(name);
-        std::fs::remove_dir_all(self.basepath.join(name))?;
-        Ok(())
+        let path = self.basepath.join(name);
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                log::warn!("{} ({}): already removed - {}", name, path.display(), e);
+                Ok(())
+            }
+            Err(e) => Err(Error::Io(e)),
+        }
     }
 }
 
@@ -463,7 +538,20 @@ pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
         None => return Ok(()),
     };
     batch.work.remove(name);
-    std::fs::remove_dir_all(directory.join(name))?;
+    match std::fs::remove_dir_all(directory.join(name)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            log::warn!(
+                "{} ({}): already removed - {}",
+                name,
+                directory.join(name).display(),
+                e
+            );
+        }
+        Err(e) => {
+            return Err(Error::Io(e));
+        }
+    }
     save_batch_metadata(directory, &batch)?;
     Ok(())
 }
@@ -472,6 +560,7 @@ pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
 pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error> {
     let mut file = std::fs::File::create(directory.join("batch.yaml"))?;
     serde_yaml::to_writer(&mut file, &batch)?;
+    file.flush()?;
     Ok(())
 }
 
@@ -486,11 +575,21 @@ pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
             return Err(Error::Io(e));
         }
     };
-    Ok(Some(serde_yaml::from_reader(file)?))
+
+    let mut batch: Batch = serde_yaml::from_reader(file)?;
+
+    batch.basepath = directory.to_path_buf();
+
+    // Set local path for entries
+    for (key, entry) in batch.work.iter_mut() {
+        entry.local_path = directory.join(key);
+    }
+
+    Ok(Some(batch))
 }
 
 /// Publish a single batch entry.
-pub fn publish_one(
+fn publish_one(
     url: &url::Url,
     local_tree: &breezyshim::tree::WorkingTree,
     batch_name: &str,
@@ -628,4 +727,63 @@ pub fn publish_one(
         );
     }
     Ok(publish_result)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_entry_from_recipe() {
+        let td = tempfile::tempdir().unwrap();
+        let remote = tempfile::tempdir().unwrap();
+        breezyshim::controldir::create_branch_convenience(
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            None,
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let recipe = crate::recipe::RecipeBuilder::new();
+        let recipe = recipe
+            .shell("echo hello > hello.txt; echo hello".to_owned())
+            .build();
+        let entry = crate::batch::Entry::from_recipe(
+            &recipe,
+            td.path(),
+            &url::Url::from_directory_path(&remote.path()).unwrap(),
+            &std::path::Path::new(""),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(entry.description, "hello\n");
+    }
+
+    #[test]
+    fn test_batch_from_recipe() {
+        let td = tempfile::tempdir().unwrap();
+        let remote = tempfile::tempdir().unwrap();
+        breezyshim::controldir::create_branch_convenience(
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            None,
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let recipe = crate::recipe::RecipeBuilder::new();
+        let recipe = recipe
+            .name("hello".to_owned())
+            .shell("echo hello > hello.txt; echo hello".to_owned())
+            .build();
+        let candidate = crate::candidates::Candidate {
+            url: url::Url::from_directory_path(&remote.path()).unwrap(),
+            subpath: None,
+            default_mode: None,
+            branch: None,
+            name: Some("foo".to_owned()),
+        };
+        let batch =
+            crate::batch::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path(), None)
+                .unwrap();
+        assert_eq!(batch.work.len(), 1);
+        let entry = batch.work.get("foo").unwrap();
+        assert_eq!(entry.description, "hello\n");
+    }
 }

@@ -122,9 +122,10 @@ pub fn derived_branch_name(script: &str) -> &str {
 }
 
 /// Policy on whether to commit pending changes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CommitPending {
     /// Automatically determine pending changes
+    #[default]
     Auto,
 
     /// Commit pending changes

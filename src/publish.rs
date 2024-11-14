@@ -414,6 +414,9 @@ pub enum Error {
 
     /// Permission denied
     PermissionDenied,
+
+    /// No target branch
+    NoTargetBranch,
 }
 
 impl From<BrzError> for Error {
@@ -449,6 +452,7 @@ impl std::fmt::Display for Error {
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
+            Error::NoTargetBranch => write!(f, "No target branch"),
         }
     }
 }
@@ -467,7 +471,8 @@ impl From<Error> for pyo3::PyErr {
         import_exception!(breezy.forge, ForgeLoginRequired);
         import_exception!(silver_platter, EmptyMergeProposal);
         import_exception!(silver_platter, UnrelatedBranchExists);
-        import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, NoTargetBranch);
 
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
@@ -475,6 +480,7 @@ impl From<Error> for pyo3::PyErr {
             Error::BranchOpenError(e) => e.into(),
             Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
             Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
+            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>("NoTargetBranch"),
             Error::UnrelatedBranchExists => {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
@@ -659,8 +665,17 @@ pub fn publish_changes(
     } else {
         None
     };
-    let title =
-        title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
+    let title = if let Some(title) = title {
+        Some(title)
+    } else {
+        match breezyshim::forge::determine_title(mp_description.as_str()) {
+            Ok(title) => Some(title),
+            Err(e) => {
+                log::warn!("Failed to determine title from description: {}", e);
+                None
+            }
+        }
+    };
     let (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
@@ -672,7 +687,7 @@ pub fn publish_changes(
         overwrite_existing,
         labels,
         commit_message.as_deref(),
-        Some(title.as_str()),
+        title.as_deref(),
         None,
         None,
         reviewers,

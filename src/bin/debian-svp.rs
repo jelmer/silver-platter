@@ -9,6 +9,7 @@ use silver_platter::publish::Error as PublishError;
 use silver_platter::CodemodResult;
 
 use silver_platter::Mode;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -271,6 +272,15 @@ enum BatchArgs {
 }
 
 fn run(args: &RunArgs) -> i32 {
+    let mut extra_env = HashMap::new();
+
+    if let Some(recipe) = &args.recipe {
+        extra_env.insert(
+            "RECIPEDIR".to_string(),
+            recipe.parent().unwrap().to_str().unwrap().to_string(),
+        );
+    }
+
     let recipe = args
         .recipe
         .as_ref()
@@ -426,6 +436,7 @@ fn run(args: &RunArgs) -> i32 {
             args.build_target_dir.clone(),
             Some(args.builder.clone()),
             args.install,
+            Some(extra_env.clone()),
         );
         retcode = std::cmp::max(retcode, result)
     }
@@ -441,22 +452,7 @@ pub fn publish_entry(
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let tree = entry.working_tree().unwrap();
-    let publish_result = match silver_platter::batch::publish_one(
-        entry.target_branch_url.as_ref().unwrap(),
-        &tree,
-        batch_name.as_str(),
-        entry.mode,
-        entry.proposal_url.as_ref(),
-        entry.labels.clone(),
-        entry.owner.as_deref(),
-        refresh,
-        entry.commit_message.as_deref(),
-        entry.title.as_deref(),
-        Some(entry.description.as_str()),
-        overwrite,
-        entry.auto_merge,
-    ) {
+    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
@@ -803,6 +799,7 @@ fn main() -> Result<(), i32> {
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
+                    None,
                 )
                 .unwrap();
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
@@ -812,7 +809,7 @@ fn main() -> Result<(), i32> {
                 let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
 
                 info!(
-                    "To see the status of open merge requests, run: \"svn batch status {}\"",
+                    "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
                 match ret {

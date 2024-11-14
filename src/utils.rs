@@ -97,6 +97,8 @@ fn create_temp_sprout_cd(
     path: Option<&std::path::Path>,
 ) -> Result<(ControlDir, Option<tempfile::TempDir>), BrzError> {
     let (td, path) = if let Some(path) = path {
+        // ensure that path is absolute
+        assert!(path.is_absolute());
         (None, path.to_path_buf())
     } else {
         let td = if let Some(dir) = dir {

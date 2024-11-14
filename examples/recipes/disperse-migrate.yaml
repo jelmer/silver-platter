@@ -1,3 +1,5 @@
+# To use this recipe, install disperse:
+# cargo install --locked disperse
 ---
 name: disperse-migrate
 command: |-

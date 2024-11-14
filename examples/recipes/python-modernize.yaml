@@ -1,3 +1,5 @@
+# To use this recipe install modernize:
+# pip install modernize
 ---
 name: modernize
 command: python -m modernize -w .

@@ -126,6 +126,7 @@ struct RunArgs {
 /// Operate on multiple repositories at once
 #[derive(Subcommand)]
 enum BatchArgs {
+    /// Generate a batch
     Generate {
         /// Recipe to use
         #[arg(long)]
@@ -138,13 +139,23 @@ enum BatchArgs {
         /// Directory to run in
         directory: Option<std::path::PathBuf>,
     },
+    /// Publish a batch or specific entry
     Publish {
         /// Directory to run in
         directory: std::path::PathBuf,
 
         /// Specific entry to publish
         name: Option<String>,
+
+        /// Whether to overwrite existing branches
+        #[arg(long)]
+        overwrite: Option<bool>,
+
+        /// Refresh changes
+        #[arg(long)]
+        refresh: bool,
     },
+    /// Show status of a batch or specific entry
     Status {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -152,6 +163,7 @@ enum BatchArgs {
         /// Specific entry to publish
         codebase: Option<String>,
     },
+    /// Show diff of a specific entry in a batch
     Diff {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -162,10 +174,18 @@ enum BatchArgs {
 }
 
 fn run(args: &RunArgs) -> i32 {
+    let mut extra_env = std::collections::HashMap::new();
     let recipe = args
         .recipe
         .as_ref()
         .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap());
+
+    if let Some(recipe) = &args.recipe {
+        extra_env.insert(
+            "RECIPEDIR".to_string(),
+            recipe.parent().unwrap().to_str().unwrap().to_string(),
+        );
+    }
 
     let mut urls = vec![];
 
@@ -311,6 +331,7 @@ fn run(args: &RunArgs) -> i32 {
             Some(get_commit_message),
             Some(get_title),
             get_description,
+            Some(extra_env.clone()),
         );
         retcode = std::cmp::max(retcode, result)
     }
@@ -318,7 +339,7 @@ fn run(args: &RunArgs) -> i32 {
     retcode
 }
 
-pub fn publish_entry(
+fn publish_entry(
     batch: &mut silver_platter::batch::Batch,
     name: &str,
     refresh: bool,
@@ -326,26 +347,16 @@ pub fn publish_entry(
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let tree = entry.working_tree().unwrap();
-    let publish_result = match silver_platter::batch::publish_one(
-        entry.target_branch_url.as_ref().unwrap(),
-        &tree,
-        batch_name.as_str(),
-        entry.mode,
-        entry.proposal_url.as_ref(),
-        entry.labels.clone(),
-        entry.owner.as_deref(),
-        refresh,
-        entry.commit_message.as_deref(),
-        entry.title.as_deref(),
-        Some(entry.description.as_str()),
-        overwrite,
-        entry.auto_merge,
-    ) {
+    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
-            batch.remove(name).unwrap();
+            match batch.remove(name) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to remove {}: {}", name, e);
+                }
+            }
             return true;
         }
         Err(PublishError::UnrelatedBranchExists) => {
@@ -598,7 +609,19 @@ fn main() -> Result<(), i32> {
                 candidates,
                 directory,
             } => {
+                let mut extra_env = std::collections::HashMap::new();
+
                 let recipe = if let Some(recipe) = recipe {
+                    extra_env.insert(
+                        "RECIPEDIR".to_string(),
+                        recipe
+                            .as_path()
+                            .parent()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    );
                     silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap()
                 } else {
                     panic!("No recipe specified");
@@ -621,6 +644,7 @@ fn main() -> Result<(), i32> {
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
+                    Some(extra_env),
                 ) {
                     Ok(_batch) => {}
                     Err(e) => {
@@ -631,11 +655,21 @@ fn main() -> Result<(), i32> {
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
                 Ok(())
             }
-            BatchArgs::Publish { directory, name } => {
-                let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
+            BatchArgs::Publish {
+                directory,
+                name,
+                overwrite,
+                refresh,
+            } => {
+                let ret = batch_publish(
+                    directory.as_path(),
+                    name.as_deref(),
+                    *refresh,
+                    overwrite.clone(),
+                );
 
                 info!(
-                    "To see the status of open merge requests, run: \"svn batch status {}\"",
+                    "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
                 match ret {

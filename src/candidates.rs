@@ -22,6 +22,19 @@ pub struct Candidate {
     pub default_mode: Option<Mode>,
 }
 
+impl Candidate {
+    /// Return the short name of the candidate.
+    pub fn shortname(&self) -> String {
+        self.name.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
+            self.url
+                .path_segments()
+                .and_then(|segments| segments.last())
+                .unwrap_or("unknown")
+                .to_string()
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 /// Candidates
 pub struct Candidates(Vec<Candidate>);
@@ -64,28 +77,58 @@ impl From<Vec<Candidate>> for Candidates {
     }
 }
 
-#[test]
-fn test_read() {
-    let td = tempfile::tempdir().unwrap();
-    let path = td.path().join("candidates.yaml");
-    std::fs::write(
-        &path,
-        r#"---
-- url: https://github.com/jelmer/dulwich
-- name: samba
-  url: https://git.samba.org/samba.git
-"#,
-    )
-    .unwrap();
-    let candidates = Candidates::from_path(&path).unwrap();
-    assert_eq!(candidates.candidates().len(), 2);
-    assert_eq!(
-        candidates.candidates()[0].url,
-        url::Url::parse("https://github.com/jelmer/dulwich").unwrap()
-    );
-    assert_eq!(
-        candidates.candidates()[1].url,
-        url::Url::parse("https://git.samba.org/samba.git").unwrap()
-    );
-    assert_eq!(candidates.candidates()[1].name, Some("samba".to_string()));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_read() {
+        let td = tempfile::tempdir().unwrap();
+        let path = td.path().join("candidates.yaml");
+        std::fs::write(
+            &path,
+            r#"---
+    - url: https://github.com/jelmer/dulwich
+    - name: samba
+      url: https://git.samba.org/samba.git
+    "#,
+        )
+        .unwrap();
+        let candidates = Candidates::from_path(&path).unwrap();
+        assert_eq!(candidates.candidates().len(), 2);
+        assert_eq!(
+            candidates.candidates()[0].url,
+            url::Url::parse("https://github.com/jelmer/dulwich").unwrap()
+        );
+        assert_eq!(
+            candidates.candidates()[1].url,
+            url::Url::parse("https://git.samba.org/samba.git").unwrap()
+        );
+        assert_eq!(candidates.candidates()[1].name, Some("samba".to_string()));
+    }
+
+    #[test]
+    fn test_shortname() {
+        let candidate = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        assert_eq!(candidate.shortname(), "dulwich");
+    }
+
+    #[test]
+    fn test_shortname_stored() {
+        let candidate = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("foo".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        assert_eq!(candidate.shortname(), "foo");
+    }
 }
