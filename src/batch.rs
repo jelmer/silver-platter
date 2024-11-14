@@ -207,6 +207,9 @@ impl Entry {
         default_mode: Option<Mode>,
         extra_env: Option<HashMap<String, String>>,
     ) -> Result<Self, Error> {
+        if !basepath.exists() {
+            std::fs::create_dir_all(basepath)?;
+        }
         let basepath = basepath.canonicalize().unwrap();
         let main_branch = match open_branch(url, None, None, None) {
             Ok(branch) => branch,
