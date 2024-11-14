@@ -174,10 +174,18 @@ enum BatchArgs {
 }
 
 fn run(args: &RunArgs) -> i32 {
+    let mut extra_env = std::collections::HashMap::new();
     let recipe = args
         .recipe
         .as_ref()
         .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap());
+
+    if let Some(recipe) = &args.recipe {
+        extra_env.insert(
+            "RECIPEDIR".to_string(),
+            recipe.parent().unwrap().to_str().unwrap().to_string(),
+        );
+    }
 
     let mut urls = vec![];
 
@@ -323,6 +331,7 @@ fn run(args: &RunArgs) -> i32 {
             Some(get_commit_message),
             Some(get_title),
             get_description,
+            Some(extra_env.clone()),
         );
         retcode = std::cmp::max(retcode, result)
     }
@@ -342,7 +351,12 @@ fn publish_entry(
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
-            batch.remove(name).unwrap();
+            match batch.remove(name) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to remove {}: {}", name, e);
+                }
+            }
             return true;
         }
         Err(PublishError::UnrelatedBranchExists) => {
@@ -595,7 +609,19 @@ fn main() -> Result<(), i32> {
                 candidates,
                 directory,
             } => {
+                let mut extra_env = std::collections::HashMap::new();
+
                 let recipe = if let Some(recipe) = recipe {
+                    extra_env.insert(
+                        "RECIPEDIR".to_string(),
+                        recipe
+                            .as_path()
+                            .parent()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    );
                     silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap()
                 } else {
                     panic!("No recipe specified");
@@ -618,6 +644,7 @@ fn main() -> Result<(), i32> {
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
+                    Some(extra_env),
                 ) {
                     Ok(_batch) => {}
                     Err(e) => {

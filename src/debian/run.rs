@@ -10,6 +10,7 @@ use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
+use std::collections::HashMap;
 use url::Url;
 
 /// Run the given command and publish the changes as a merge proposal.
@@ -34,6 +35,7 @@ pub fn apply_and_publish(
     mut build_target_dir: Option<std::path::PathBuf>,
     builder: Option<String>,
     install: bool,
+    extra_env: Option<HashMap<String, String>>,
 ) -> i32 {
     let main_branch = match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
@@ -168,7 +170,7 @@ pub fn apply_and_publish(
         commit_pending,
         None,
         None,
-        None,
+        extra_env,
         std::process::Stdio::inherit(),
         update_changelog,
     ) {

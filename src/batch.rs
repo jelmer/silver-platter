@@ -12,6 +12,7 @@ use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -204,6 +205,7 @@ impl Entry {
         url: &Url,
         subpath: &Path,
         default_mode: Option<Mode>,
+        extra_env: Option<HashMap<String, String>>,
     ) -> Result<Self, Error> {
         let main_branch = match open_branch(url, None, None, None) {
             Ok(branch) => branch,
@@ -235,7 +237,7 @@ impl Entry {
             recipe.commit_pending,
             None,
             None,
-            None,
+            extra_env,
             std::process::Stdio::inherit(),
         ) {
             Ok(result) => result,
@@ -406,9 +408,8 @@ impl Batch {
         recipe: &Recipe,
         candidates: impl Iterator<Item = &'a Candidate>,
         directory: &Path,
+        extra_env: Option<HashMap<String, String>>,
     ) -> Result<Batch, Error> {
-        // make sure directory is an absolute path
-        let directory = directory.canonicalize().unwrap();
         // The directory should either be empty or not exist
         if directory.exists() {
             if !directory.is_dir() {
@@ -428,6 +429,9 @@ impl Batch {
         } else {
             std::fs::create_dir_all(&directory)?;
         }
+
+        // make sure directory is an absolute path
+        let directory = directory.canonicalize().unwrap();
 
         let mut batch = match load_batch_metadata(&directory) {
             Ok(Some(batch)) => batch,
@@ -475,6 +479,7 @@ impl Batch {
                     .as_deref()
                     .unwrap_or_else(|| Path::new("")),
                 candidate.default_mode,
+                extra_env.clone(),
             ) {
                 Ok(entry) => {
                     batch.work.insert(name, entry);
@@ -514,8 +519,15 @@ impl Batch {
     /// Remove work from the batch.
     pub fn remove(&mut self, name: &str) -> Result<(), Error> {
         self.work.remove(name);
-        std::fs::remove_dir_all(self.basepath.join(name))?;
-        Ok(())
+        let path = self.basepath.join(name);
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                log::warn!("{} ({}): already removed - {}", name, path.display(), e);
+                Ok(())
+            }
+            Err(e) => Err(Error::Io(e)),
+        }
     }
 }
 
@@ -526,7 +538,20 @@ pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
         None => return Ok(()),
     };
     batch.work.remove(name);
-    std::fs::remove_dir_all(directory.join(name))?;
+    match std::fs::remove_dir_all(directory.join(name)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            log::warn!(
+                "{} ({}): already removed - {}",
+                name,
+                directory.join(name).display(),
+                e
+            );
+        }
+        Err(e) => {
+            return Err(Error::Io(e));
+        }
+    }
     save_batch_metadata(directory, &batch)?;
     Ok(())
 }
@@ -535,6 +560,7 @@ pub fn drop_batch_entry(directory: &Path, name: &str) -> Result<(), Error> {
 pub fn save_batch_metadata(directory: &Path, batch: &Batch) -> Result<(), Error> {
     let mut file = std::fs::File::create(directory.join("batch.yaml"))?;
     serde_yaml::to_writer(&mut file, &batch)?;
+    file.flush()?;
     Ok(())
 }
 
@@ -551,6 +577,8 @@ pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
     };
 
     let mut batch: Batch = serde_yaml::from_reader(file)?;
+
+    batch.basepath = directory.to_path_buf();
 
     // Set local path for entries
     for (key, entry) in batch.work.iter_mut() {

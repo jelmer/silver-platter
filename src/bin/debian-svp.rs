@@ -11,6 +11,7 @@ use silver_platter::CodemodResult;
 use silver_platter::Mode;
 use std::io::Write;
 use std::path::Path;
+use std::collections::HashMap;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -271,6 +272,15 @@ enum BatchArgs {
 }
 
 fn run(args: &RunArgs) -> i32 {
+    let mut extra_env = HashMap::new();
+
+    if let Some(recipe) = &args.recipe {
+        extra_env.insert(
+            "RECIPEDIR".to_string(),
+            recipe.parent().unwrap().to_str().unwrap().to_string(),
+        );
+    }
+
     let recipe = args
         .recipe
         .as_ref()
@@ -426,6 +436,7 @@ fn run(args: &RunArgs) -> i32 {
             args.build_target_dir.clone(),
             Some(args.builder.clone()),
             args.install,
+            Some(extra_env.clone()),
         );
         retcode = std::cmp::max(retcode, result)
     }
