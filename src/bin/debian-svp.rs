@@ -874,14 +874,25 @@ fn main() -> Result<(), i32> {
                     }
                 };
 
+                let repository = local_branch.repository();
+
+                let main_revision = main_branch.last_revision();
+
+                repository
+                    .fetch(&main_branch.repository(), Some(&main_revision))
+                    .unwrap();
+
+                let main_tree = repository.revision_tree(&main_revision).unwrap();
+
                 breezyshim::diff::show_diff_trees(
+                    &main_tree,
                     &local_branch.basis_tree().unwrap(),
-                    &main_branch.basis_tree().unwrap(),
                     Box::new(std::io::stdout()),
                     Some("old/"),
                     Some("new/"),
                 )
                 .unwrap();
+
                 Err(1)
             }
         },

@@ -756,8 +756,8 @@ fn main() -> Result<(), i32> {
                 let main_tree = repository.revision_tree(&main_revision).unwrap();
 
                 breezyshim::diff::show_diff_trees(
-                    &local_branch.basis_tree().unwrap(),
                     &main_tree,
+                    &local_branch.basis_tree().unwrap(),
                     Box::new(std::io::stdout()),
                     Some("old/"),
                     Some("new/"),
