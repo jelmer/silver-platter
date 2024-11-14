@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: '0 6 * * *'  # Daily 6AM UTC build
+  - cron: '0 6 * * *'    # Daily 6AM UTC build
 
 jobs:
   build:
@@ -13,33 +13,38 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: [3.8, 3.9, "3.10", "3.11", "3.12"]
+        python-version:
+        - '3.13'
+        - '3.12'
+        - '3.11'
+        - '3.10'
+        - '3.9'
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          sudo apt -y update
-          sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
-          pip install --upgrade pip
-          pip install -U pip setuptools setuptools-rust testtools
-          pip install ".[debian,launchpad,dev]"
-          pip install --upgrade breezy
-      - name: Build
-        run: |
-          python setup.py build_ext -i
-      - name: Style checks
-        run: |
-          ruff check py
-      - name: Test suite run
-        if: always()
-        run: |
-          python -m unittest tests.test_suite
-        env:
-          PYTHONHASHSEED: random
-          PYTHONPATH: py
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        sudo apt -y update
+        sudo apt -y install devscripts bzr rustc cargo libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev
+        pip install --upgrade pip
+        pip install -U pip setuptools setuptools-rust testtools
+        pip install ".[debian,launchpad,dev]"
+        pip install --upgrade breezy
+    - name: Build
+      run: |
+        python setup.py build_ext -i
+    - name: Style checks
+      run: |
+        ruff check py
+    - name: Test suite run
+      if: always()
+      run: |
+        python -m unittest tests.test_suite
+      env:
+        PYTHONHASHSEED: random
+        PYTHONPATH: py
