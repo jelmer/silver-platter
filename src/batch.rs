@@ -340,6 +340,37 @@ impl Entry {
             None,
         )
     }
+
+    /// Publish this entry
+    pub fn publish(
+        &self,
+        batch_name: &str,
+        refresh: bool,
+        overwrite: Option<bool>,
+    ) -> Result<PublishResult, PublishError> {
+        let target_branch_url = match self.target_branch_url.as_ref() {
+            Some(url) => url,
+            None => {
+                return Err(PublishError::NoTargetBranch);
+            }
+        };
+
+        publish_one(
+            target_branch_url,
+            &self.working_tree().unwrap(),
+            batch_name,
+            self.mode,
+            self.proposal_url.as_ref(),
+            self.labels.clone(),
+            self.owner.as_deref(),
+            refresh,
+            self.commit_message.as_deref(),
+            self.title.as_deref(),
+            Some(self.description.as_str()),
+            overwrite,
+            self.auto_merge,
+        )
+    }
 }
 
 /// Status of a batch entry.

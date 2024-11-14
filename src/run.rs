@@ -271,6 +271,9 @@ pub fn apply_and_publish(
             error!("Permission denied to create merge proposal.");
             return 2;
         }
+        Err(PublishError::NoTargetBranch) => {
+            unreachable!();
+        }
     };
 
     if let Some(mp) = publish_result.proposal {

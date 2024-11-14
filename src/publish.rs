@@ -414,6 +414,9 @@ pub enum Error {
 
     /// Permission denied
     PermissionDenied,
+
+    /// No target branch
+    NoTargetBranch,
 }
 
 impl From<BrzError> for Error {
@@ -449,6 +452,7 @@ impl std::fmt::Display for Error {
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
+            Error::NoTargetBranch => write!(f, "No target branch"),
         }
     }
 }
