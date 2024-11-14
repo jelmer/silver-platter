@@ -480,7 +480,6 @@ impl From<Error> for pyo3::PyErr {
             Error::BranchOpenError(e) => e.into(),
             Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
             Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
-            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>("NoTargetBranch"),
             Error::UnrelatedBranchExists => {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
@@ -491,6 +490,7 @@ impl From<Error> for pyo3::PyErr {
                     "InsufficientChangesForNewProposal",
                 )
             }
+            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
         }
     }
 }
