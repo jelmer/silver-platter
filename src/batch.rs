@@ -464,7 +464,7 @@ impl Entry {
 
     /// Publish this entry
     pub fn publish(
-        &self,
+        &mut self,
         batch_name: &str,
         refresh: bool,
         overwrite: Option<bool>,
@@ -476,7 +476,7 @@ impl Entry {
             }
         };
 
-        publish_one(
+        let result = publish_one(
             target_branch_url,
             &self.working_tree().unwrap(),
             batch_name,
@@ -488,9 +488,20 @@ impl Entry {
             self.commit_message.as_deref(),
             self.title.as_deref(),
             Some(self.description.as_str()),
-            overwrite,
+            overwrite.or_else(|| {
+                if self.proposal_url.is_some() {
+                    Some(true)
+                } else {
+                    None
+                }
+            }),
             self.auto_merge,
-        )
+        )?;
+
+        if let Some(ref proposal) = result.proposal {
+            self.proposal_url = Some(proposal.url().unwrap());
+        }
+        Ok(result)
     }
 }
 
@@ -743,13 +754,18 @@ fn publish_one(
                     let (resume_branch_url, params) =
                         breezyshim::urlutils::split_segment_parameters(&resume_branch_url);
                     let resume_branch_name = params.get("branch");
-                    let resume_branch = crate::vcs::open_branch(
+                    let resume_branch = match crate::vcs::open_branch(
                         &resume_branch_url,
                         None,
                         None,
                         resume_branch_name.map(|x| x.as_str()),
-                    )
-                    .unwrap();
+                    ) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            log::error!("{} {:?}: {}", resume_branch_url, resume_branch_name, e);
+                            return Err(e.into());
+                        }
+                    };
                     (Some(existing_proposal), Some(resume_branch))
                 } else {
                     (None, None)
