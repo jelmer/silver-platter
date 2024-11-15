@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.41"
+version = "0.5.42"
 authors = [ "Jelmer Vernooĳ <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
