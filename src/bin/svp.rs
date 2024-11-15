@@ -393,14 +393,14 @@ fn publish_entry(
     true
 }
 
-pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> i32 {
+pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> Result<(), i32> {
     let directory = directory.canonicalize().unwrap();
 
     let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
         Ok(Some(batch)) => batch,
         Ok(None) => {
             info!("No batch.yaml found in {}", directory.display());
-            return 1;
+            return Err(1);
         }
         Err(e) => {
             error!(
@@ -408,7 +408,7 @@ pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> i32 {
                 directory.display(),
                 e
             );
-            return 1;
+            return Err(1);
         }
     };
 
@@ -436,7 +436,7 @@ pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> i32 {
                 directory.display(),
                 e
             );
-            return 1;
+            return Err(1);
         }
     }
     if batch.work.is_empty() {
@@ -446,9 +446,9 @@ pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> i32 {
         );
     }
     if errors > 0 {
-        1
+        Err(1)
     } else {
-        0
+        Ok(())
     }
 }
 
@@ -457,13 +457,13 @@ pub fn batch_publish(
     codebase: Option<&str>,
     refresh: bool,
     overwrite: bool,
-) -> i32 {
+) -> Result<(), i32> {
     let directory = directory.canonicalize().unwrap();
     let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
         Ok(Some(batch)) => batch,
         Ok(None) => {
             info!("No batch.yaml found in {}", directory.display());
-            return 1;
+            return Err(1);
         }
         Err(e) => {
             error!(
@@ -471,7 +471,7 @@ pub fn batch_publish(
                 directory.display(),
                 e
             );
-            return 1;
+            return Err(1);
         }
     };
 
@@ -499,9 +499,9 @@ pub fn batch_publish(
         );
     }
     if errors > 0 {
-        1
+        Err(1)
     } else {
-        0
+        Ok(())
     }
 }
 
@@ -720,7 +720,15 @@ fn main() -> Result<(), i32> {
                         return Err(1);
                     }
                 }
-                info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
+                info!("Now, review the patches under {}, edit {} as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.join("batch.yaml").display(), directory.display());
+                info!(
+                    "You can run \"svp batch status {}\" to see the status of the patches",
+                    directory.display()
+                );
+                info!(
+                    "To refresh the patches, run \"svp batch refresh {}\"",
+                    directory.display()
+                );
                 Ok(())
             }
             BatchArgs::Publish {
@@ -729,21 +737,13 @@ fn main() -> Result<(), i32> {
                 overwrite,
                 refresh,
             } => {
-                let ret = batch_publish(
-                    directory.as_path(),
-                    name.as_deref(),
-                    *refresh,
-                    overwrite.clone(),
-                );
+                let ret = batch_publish(directory.as_path(), name.as_deref(), *refresh, *overwrite);
 
                 info!(
                     "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
-                match ret {
-                    0 => Ok(()),
-                    e => Err(e),
-                }
+                ret
             }
             BatchArgs::Status {
                 directory,
@@ -835,14 +835,7 @@ fn main() -> Result<(), i32> {
             BatchArgs::Refresh {
                 directory,
                 codebase,
-            } => {
-                let ret = batch_refresh(directory.as_path(), codebase.as_deref());
-
-                match ret {
-                    0 => Ok(()),
-                    e => Err(e),
-                }
-            }
+            } => batch_refresh(directory.as_path(), codebase.as_deref()),
         },
     }
 }
