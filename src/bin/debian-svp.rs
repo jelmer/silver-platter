@@ -269,6 +269,14 @@ enum BatchArgs {
         /// Specific entry to publish
         codebase: String,
     },
+    /// Refresh changes
+    Refresh {
+        /// Directory to run in
+        directory: std::path::PathBuf,
+
+        /// Specific entry to publish
+        codebase: Option<String>,
+    },
 }
 
 fn run(args: &RunArgs) -> i32 {
@@ -562,6 +570,65 @@ fn login(url: &url::Url) -> i32 {
     }
 
     0
+}
+
+pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> i32 {
+    let directory = directory.canonicalize().unwrap();
+
+    let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
+        Ok(Some(batch)) => batch,
+        Ok(None) => {
+            info!("No batch.yaml found in {}", directory.display());
+            return 1;
+        }
+        Err(e) => {
+            error!(
+                "Failed to load batch metadata from {}: {}",
+                directory.display(),
+                e
+            );
+            return 1;
+        }
+    };
+
+    let mut errors = 0;
+
+    if let Some(codebase) = codebase {
+        let entry = batch.work.get_mut(codebase).unwrap();
+        if entry.refresh(&batch.recipe, None).is_err() {
+            errors += 1;
+        }
+    } else {
+        let names = batch.work.keys().cloned().collect::<Vec<_>>();
+        for name in names {
+            let entry = batch.work.get_mut(name.as_str()).unwrap();
+            if entry.refresh(&batch.recipe, None).is_err() {
+                errors += 1;
+            }
+        }
+    }
+    match silver_platter::batch::save_batch_metadata(&directory, &batch) {
+        Ok(_) => {}
+        Err(e) => {
+            error!(
+                "Failed to save batch metadata to {}: {}",
+                directory.display(),
+                e
+            );
+            return 1;
+        }
+    }
+    if batch.work.is_empty() {
+        info!(
+            "No work left in batch.yaml; you can now remove {}",
+            directory.display()
+        );
+    }
+    if errors > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 fn main() -> Result<(), i32> {
@@ -894,6 +961,17 @@ fn main() -> Result<(), i32> {
                 .unwrap();
 
                 Err(1)
+            }
+            BatchArgs::Refresh {
+                directory,
+                codebase,
+            } => {
+                let ret = batch_refresh(directory.as_path(), codebase.as_deref());
+
+                match ret {
+                    0 => Ok(()),
+                    e => Err(e),
+                }
             }
         },
     }

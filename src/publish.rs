@@ -567,6 +567,7 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
+    let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
             let (_remote_branch, _public_url) = push_derived_changes(
@@ -697,6 +698,7 @@ pub fn publish_changes(
         allow_collaboration,
         auto_merge,
     )?;
+    std::mem::drop(write_lock);
     Ok(PublishResult {
         mode,
         proposal: Some(proposal),

@@ -352,6 +352,116 @@ impl Entry {
         open_branch(&url, None, None, None)
     }
 
+    /// Refresh the changes for this entry.
+    pub fn refresh(
+        &mut self,
+        recipe: &Recipe,
+        extra_env: Option<HashMap<String, String>>,
+    ) -> Result<(), Error> {
+        let url = self.target_branch_url.as_ref().unwrap();
+        let main_branch = match open_branch(url, None, None, None) {
+            Ok(branch) => branch,
+            Err(e) => return Err(Error::Vcs(e)),
+        };
+
+        let ws = Workspace::builder()
+            .main_branch(main_branch)
+            .path(self.local_path.clone())
+            .build()?;
+
+        log::info!(
+            "Making changes to {}",
+            ws.main_branch().unwrap().get_user_url()
+        );
+
+        assert_eq!(
+            ws.main_branch().unwrap().last_revision(),
+            ws.local_tree().last_revision().unwrap()
+        );
+
+        let result = match script_runner(
+            ws.local_tree(),
+            recipe
+                .command
+                .as_ref()
+                .unwrap()
+                .argv()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            self.subpath.as_deref().unwrap_or_else(|| Path::new("")),
+            recipe.commit_pending,
+            None,
+            None,
+            extra_env,
+            std::process::Stdio::inherit(),
+        ) {
+            Ok(result) => result,
+            Err(e) => return Err(Error::Script(e)),
+        };
+
+        let tera_context: tera::Context = tera::Context::from_value(
+            result
+                .context
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({})),
+        )
+        .unwrap();
+
+        let target_branch_url = match result.target_branch_url {
+            Some(url) => Some(url),
+            None => Some(url.clone()),
+        };
+        let description = if let Some(description) = result.description {
+            description
+        } else if let Some(ref mr) = recipe.merge_request {
+            mr.render_description(DescriptionFormat::Markdown, &tera_context)?
+                .unwrap()
+        } else {
+            panic!("No description provided");
+        };
+        let commit_message = if let Some(commit_message) = result.commit_message {
+            Some(commit_message)
+        } else if let Some(ref mr) = recipe.merge_request {
+            mr.render_commit_message(&tera_context)?
+        } else {
+            None
+        };
+        let title = if let Some(title) = result.title {
+            Some(title)
+        } else if let Some(ref mr) = recipe.merge_request {
+            mr.render_title(&tera_context)?
+        } else {
+            None
+        };
+        let mode = recipe.mode.unwrap_or_default();
+        let labels = recipe.labels.clone();
+        let context = result.context;
+
+        let auto_merge = recipe.merge_request.as_ref().and_then(|mr| mr.auto_merge);
+
+        let owner = None;
+
+        self.target_branch_url = target_branch_url;
+        self.description = description;
+        self.commit_message = commit_message;
+        self.mode = mode;
+        self.owner = owner;
+        self.title = title;
+        self.labels = labels;
+        self.auto_merge = auto_merge;
+        self.context = serde_yaml::from_str(
+            context
+                .unwrap_or(serde_json::Value::Null)
+                .to_string()
+                .as_str(),
+        )
+        .unwrap();
+
+        Ok(())
+    }
+
     /// Publish this entry
     pub fn publish(
         &self,
@@ -630,8 +740,16 @@ fn publish_one(
                     let existing_proposal = f.get_proposal_by_url(existing_proposal_url).unwrap();
                     let resume_branch_url =
                         existing_proposal.get_source_branch_url().unwrap().unwrap();
-                    let resume_branch =
-                        crate::vcs::open_branch(&resume_branch_url, None, None, None).unwrap();
+                    let (resume_branch_url, params) =
+                        breezyshim::urlutils::split_segment_parameters(&resume_branch_url);
+                    let resume_branch_name = params.get("branch");
+                    let resume_branch = crate::vcs::open_branch(
+                        &resume_branch_url,
+                        None,
+                        None,
+                        resume_branch_name.map(|x| x.as_str()),
+                    )
+                    .unwrap();
                     (Some(existing_proposal), Some(resume_branch))
                 } else {
                     (None, None)
