@@ -355,7 +355,8 @@ fn publish_entry(
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let publish_result = match entry.publish(&batch_name, refresh, Some(overwrite)) {
+    let overwrite = if overwrite { Some(true) } else { None };
+    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
@@ -368,6 +369,7 @@ fn publish_entry(
             return true;
         }
         Err(PublishError::UnrelatedBranchExists) => {
+            error!("An unrelated branch exists. Remove it or use --overwrite.");
             return false;
         }
         Err(e) => {

@@ -254,6 +254,10 @@ enum BatchArgs {
 
         /// Specific entry to publish
         name: Option<String>,
+
+        #[arg(long)]
+        /// Overwrite existing merge requests
+        overwrite: bool,
     },
     Status {
         /// Directory to run in
@@ -872,8 +876,13 @@ fn main() -> Result<(), i32> {
                 info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
                 Ok(())
             }
-            BatchArgs::Publish { directory, name } => {
-                let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
+            BatchArgs::Publish {
+                directory,
+                name,
+                overwrite,
+            } => {
+                let overwrite = if *overwrite { Some(true) } else { None };
+                let ret = batch_publish(directory.as_path(), name.as_deref(), false, overwrite);
 
                 info!(
                     "To see the status of open merge requests, run: \"svp batch status {}\"",
