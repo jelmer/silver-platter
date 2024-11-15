@@ -294,6 +294,10 @@ impl Workspace {
             )
         };
 
+        if let Some(path) = self.path.as_ref() {
+            breezyshim::clean_tree::clean_tree(path, true, true, true, false, true)?;
+        }
+
         let mut main_colo_revid = std::collections::HashMap::new();
 
         let mut refreshed = false;
