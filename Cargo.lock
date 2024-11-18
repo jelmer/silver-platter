@@ -186,7 +186,7 @@ dependencies = [
  "lazy-regex",
  "lazy_static",
  "log",
- "patchkit",
+ "patchkit 0.1.8",
  "percent-encoding",
  "pyo3",
  "pyo3-filelike",
@@ -539,9 +539,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.158.21"
+version = "0.158.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e65f0f777187f4b58ea1e68803d3b338c5b8bfc84144e724c55a67c40067b37"
+checksum = "c0864a87f6f5e9c2963d72541469594e5ff7d79ea7b5939f747db51931816988"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -562,7 +562,7 @@ dependencies = [
  "makefile-lossless",
  "maplit",
  "merge3",
- "patchkit",
+ "patchkit 0.2.1",
  "pyo3",
  "quote",
  "reqwest",
@@ -1744,6 +1744,19 @@ name = "patchkit"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1628449e4d9f7e8501e9389daf6242adfd8284c2364a3f2a87e16176756b6768"
+dependencies = [
+ "chrono",
+ "lazy-regex",
+ "lazy_static",
+ "once_cell",
+ "regex",
+]
+
+[[package]]
+name = "patchkit"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31e00ed52656b51f535293e40caf6579b4cf09f25e660fc6e6936ab70e78972f"
 dependencies = [
  "chrono",
  "lazy-regex",
