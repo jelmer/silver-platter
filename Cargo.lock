@@ -539,9 +539,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.158.24"
+version = "0.158.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a82b2f48997e6d74e716beb0bd364ed3678ba28f615c25f7841a32d115d71da"
+checksum = "020b3e231f70e3dc28582501d5454eb8074c5c80ee998fecce123bfd44f90253"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -1483,7 +1483,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
