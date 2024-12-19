@@ -1,2 +1,2 @@
 #!/bin/sh
-python3 -m unittest tests.test_suite
+PYTHONPATH=py python3 -m unittest tests.test_suite

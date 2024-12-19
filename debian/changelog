@@ -1,9 +1,9 @@
-silver-platter (0.5.44-1) UNRELEASED; urgency=low
+silver-platter (0.5.44-1) unstable; urgency=low
 
   * New upstream release.
    + Fixes FTBFS. Closes: #1086317
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 19 Dec 2024 18:01:01 -0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 19 Dec 2024 18:14:03 +0000
 
 silver-platter (0.5.39-1) unstable; urgency=low
 
