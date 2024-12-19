@@ -1,3 +1,5 @@
+# To use this recipe, install teyit:
+# pip install teyit
 ---
 name: teyit
 command: |-

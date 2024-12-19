@@ -1,6 +1,6 @@
 [package]
 name = "silver-platter"
-version = "0.5.39"
+version = "0.5.44"
 authors = [ "Jelmer Vernooĳ <jelmer@jelmer.uk>",]
 edition = "2021"
 license = "GPL-2.0+"
@@ -8,6 +8,7 @@ description = "Large scale VCS change management"
 repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 default-run = "svp"
+categories = ["development-tools"]
 
 [dependencies]
 tempfile = "3"
@@ -27,7 +28,7 @@ reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
 lazy-regex = ">=2"
 libc = "0.2"
 xdg = "2.5"
-debian-analyzer = { version = ">=0.158.8", optional = true }
+debian-analyzer = { version = ">=0.158.19", optional = true }
 #debian-analyzer = { path = "../lintian-brush/analyzer", optional = true }
 gpgme = { version = "0.11.0", optional = true }
 pyo3 = { optional = true, workspace = true }
@@ -36,14 +37,14 @@ debian-control = { version = ">=0.1", optional = true }
 rand = "0.8.5"
 
 [workspace]
-members = [ "crates/*",]
+members = [ "svp-client", "svp-py" ]
 
 [features]
-default = ["debian", "detect-update-changelog"]
+default = ["debian", "detect-update-changelog", "cli"]
 debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
-detect-update-changelog = []
+detect-update-changelog = ["debian"]
 cli = ["dep:clap", "dep:env_logger"]
 pyo3 = ["dep:pyo3"]
 
@@ -72,10 +73,10 @@ pyo3-log = ">=0.11"
 serde_json = "1"
 tera = "1"
 serde = "1"
-breezyshim = ">=0.1.160"
+breezyshim = ">=0.1.227"
 #breezyshim = { path = "../breezyshim/trunk" }
 url = "2"
-debian-changelog = ">=0.1.10"
+debian-changelog = "0.2"
 env_logger = ">=0.10"
 clap = "4"
 

@@ -1,3 +1,4 @@
+//! Run the codemod script and publish the changes as a merge proposal.
 use crate::codemod::{CommandResult, Error as CommandError};
 use crate::publish::{
     enable_tag_pushing, find_existing_proposed, DescriptionFormat, Error as PublishError,
@@ -9,8 +10,10 @@ use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
+use std::collections::HashMap;
 use url::Url;
 
+/// Apply a codemod script and publish the changes as a merge proposal.
 pub fn apply_and_publish(
     url: &Url,
     name: &str,
@@ -28,6 +31,7 @@ pub fn apply_and_publish(
     >,
     get_title: Option<impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>>,
     get_description: impl FnOnce(&CommandResult, DescriptionFormat, Option<&MergeProposal>) -> String,
+    extra_env: Option<HashMap<String, String>>,
 ) -> i32 {
     let main_branch = match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
@@ -58,7 +62,7 @@ pub fn apply_and_publish(
     let mut overwrite = false;
 
     let (forge, existing_proposals, mut resume_branch): (
-        Option<Forge>,
+        Option<Box<Forge>>,
         Vec<MergeProposal>,
         Option<Box<dyn Branch>>,
     ) = match get_forge(main_branch.as_ref()) {
@@ -87,21 +91,26 @@ pub fn apply_and_publish(
             error!("Failed to get forge: {}", e);
             return 2;
         }
-        Ok(ref forge) => {
-            let (resume_branch, resume_overwrite, existing_proposals) = find_existing_proposed(
+        Ok(forge) => {
+            let (resume_branch, resume_overwrite, existing_proposals) = match find_existing_proposed(
                 main_branch.as_ref(),
-                forge,
+                &forge,
                 name,
                 false,
                 derived_owner,
                 None,
-            )
-            .unwrap();
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Failed to find existing proposals: {}", e);
+                    return 2;
+                }
+            };
             if let Some(resume_overwrite) = resume_overwrite {
                 overwrite = resume_overwrite;
             }
             (
-                Some(forge.clone()),
+                Some(Box::new(forge)),
                 existing_proposals.unwrap_or_default(),
                 resume_branch,
             )
@@ -156,7 +165,7 @@ pub fn apply_and_publish(
         commit_pending,
         None,
         None,
-        None,
+        extra_env,
         std::process::Stdio::inherit(),
     ) {
         Ok(r) => r,
@@ -216,7 +225,7 @@ pub fn apply_and_publish(
                 None
             }
         }),
-        forge.as_ref(),
+        forge.as_deref(),
         allow_create_proposal.map(|f| f(&result)),
         labels.map(|l| l.iter().map(|s| s.to_string()).collect()),
         Some(overwrite),
@@ -224,6 +233,7 @@ pub fn apply_and_publish(
         None,
         None,
         derived_owner,
+        None,
         None,
         None,
     ) {
@@ -262,6 +272,9 @@ pub fn apply_and_publish(
         Err(PublishError::PermissionDenied) => {
             error!("Permission denied to create merge proposal.");
             return 2;
+        }
+        Err(PublishError::NoTargetBranch) => {
+            unreachable!();
         }
     };
 

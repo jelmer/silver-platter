@@ -1,3 +1,4 @@
+//! Merge proposal related functions
 use crate::vcs::{full_branch_url, open_branch};
 use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
@@ -31,6 +32,7 @@ fn instance_iter_mps(
         .flatten()
 }
 
+/// Iterate over all merge proposals
 pub fn iter_all_mps(
     statuses: Option<Vec<MergeProposalStatus>>,
 ) -> impl Iterator<Item = (Forge, MergeProposal)> {
@@ -103,9 +105,15 @@ pub fn iter_conflicted(
 
 #[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+/// Description format for merge proposals descriptions
 pub enum DescriptionFormat {
+    /// Markdown format
     Markdown,
+
+    /// HTML format
     Html,
+
+    /// Plain text format
     Plain,
 }
 

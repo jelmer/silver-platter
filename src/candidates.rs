@@ -1,34 +1,63 @@
+//! Candidates for packages.
 use crate::Mode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+/// A candidate for a package.
 pub struct Candidate {
+    /// The URL of the repository.
     pub url: url::Url,
+
+    /// The name of the package.
     pub name: Option<String>,
+
+    /// The branch to use.
     pub branch: Option<String>,
+
+    /// The subpath to use.
     pub subpath: Option<std::path::PathBuf>,
+
     #[serde(rename = "default-mode")]
+    /// The default mode to use.
     pub default_mode: Option<Mode>,
 }
 
+impl Candidate {
+    /// Return the short name of the candidate.
+    pub fn shortname(&self) -> String {
+        self.name.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
+            self.url
+                .path_segments()
+                .and_then(|segments| segments.last())
+                .unwrap_or("unknown")
+                .to_string()
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default)]
+/// Candidates
 pub struct Candidates(Vec<Candidate>);
 
 impl Candidates {
+    /// Load packages from a file
     pub fn from_path(path: &std::path::Path) -> std::io::Result<Self> {
         let f = std::fs::File::open(path)?;
         let candidates: Vec<Candidate> = serde_yaml::from_reader(f).unwrap();
         Ok(Self(candidates))
     }
 
+    /// Return a slice of the candidates.
     pub fn candidates(&self) -> &[Candidate] {
         self.0.as_slice()
     }
 
+    /// Return an iterator over the candidates.
     pub fn iter(&self) -> impl Iterator<Item = &Candidate> {
         self.0.iter()
     }
 
+    /// Create an empty Candidates object.
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -48,28 +77,58 @@ impl From<Vec<Candidate>> for Candidates {
     }
 }
 
-#[test]
-fn test_read() {
-    let td = tempfile::tempdir().unwrap();
-    let path = td.path().join("candidates.yaml");
-    std::fs::write(
-        &path,
-        r#"---
-- url: https://github.com/jelmer/dulwich
-- name: samba
-  url: https://git.samba.org/samba.git
-"#,
-    )
-    .unwrap();
-    let candidates = Candidates::from_path(&path).unwrap();
-    assert_eq!(candidates.candidates().len(), 2);
-    assert_eq!(
-        candidates.candidates()[0].url,
-        url::Url::parse("https://github.com/jelmer/dulwich").unwrap()
-    );
-    assert_eq!(
-        candidates.candidates()[1].url,
-        url::Url::parse("https://git.samba.org/samba.git").unwrap()
-    );
-    assert_eq!(candidates.candidates()[1].name, Some("samba".to_string()));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_read() {
+        let td = tempfile::tempdir().unwrap();
+        let path = td.path().join("candidates.yaml");
+        std::fs::write(
+            &path,
+            r#"---
+    - url: https://github.com/jelmer/dulwich
+    - name: samba
+      url: https://git.samba.org/samba.git
+    "#,
+        )
+        .unwrap();
+        let candidates = Candidates::from_path(&path).unwrap();
+        assert_eq!(candidates.candidates().len(), 2);
+        assert_eq!(
+            candidates.candidates()[0].url,
+            url::Url::parse("https://github.com/jelmer/dulwich").unwrap()
+        );
+        assert_eq!(
+            candidates.candidates()[1].url,
+            url::Url::parse("https://git.samba.org/samba.git").unwrap()
+        );
+        assert_eq!(candidates.candidates()[1].name, Some("samba".to_string()));
+    }
+
+    #[test]
+    fn test_shortname() {
+        let candidate = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        assert_eq!(candidate.shortname(), "dulwich");
+    }
+
+    #[test]
+    fn test_shortname_stored() {
+        let candidate = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("foo".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        assert_eq!(candidate.shortname(), "foo");
+    }
 }

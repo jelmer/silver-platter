@@ -1,3 +1,4 @@
+//! Codemod
 use breezyshim::error::Error as BrzError;
 use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
@@ -5,16 +6,36 @@ use std::collections::HashMap;
 use url::Url;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+/// Command result
 pub struct CommandResult {
+    /// Value
     pub value: Option<u32>,
+
+    /// Context
     pub context: Option<serde_json::Value>,
+
+    /// Description
     pub description: Option<String>,
+
+    /// Serialized context
     pub serialized_context: Option<String>,
+
+    /// Commit message
     pub commit_message: Option<String>,
+
+    /// Title
     pub title: Option<String>,
+
+    /// Tags
     pub tags: Vec<(String, Option<RevisionId>)>,
+
+    /// Target branch URL
     pub target_branch_url: Option<Url>,
+
+    /// Old revision
     pub old_revision: RevisionId,
+
+    /// New revision
     pub new_revision: RevisionId,
 }
 
@@ -75,14 +96,30 @@ struct DetailedSuccess {
 }
 
 #[derive(Debug)]
+/// Error while running codemod
 pub enum Error {
+    /// Script made no changes
     ScriptMadeNoChanges,
+
+    /// Script was not found
     ScriptNotFound,
+
+    /// The script failed with a specific exit code
     ExitCode(i32),
+
+    /// Detailed failure
     Detailed(DetailedFailure),
+
+    /// I/O error
     Io(std::io::Error),
+
+    /// JSON error
     Json(serde_json::Error),
+
+    /// UTF-8 error
     Utf8(std::string::FromUtf8Error),
+
+    /// Other error
     Other(String),
 }
 
@@ -122,10 +159,18 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq)]
+/// Detailed failure information
 pub struct DetailedFailure {
+    /// Result code
     pub result_code: String,
+
+    /// Description of the failure
     pub description: Option<String>,
+
+    /// Stage at which the failure occurred
     pub stage: Option<Vec<String>>,
+
+    /// Additional details
     pub details: Option<serde_json::Value>,
 }
 

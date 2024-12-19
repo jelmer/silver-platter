@@ -1,3 +1,4 @@
+//! Publishing changes
 pub use crate::proposal::DescriptionFormat;
 use crate::vcs::open_branch;
 use crate::Mode;
@@ -14,6 +15,7 @@ fn _tag_selector_from_tags(
     move |tag| tags.contains_key(tag.as_str())
 }
 
+/// Push derived changes
 pub fn push_derived_changes(
     local_branch: &dyn Branch,
     main_branch: &dyn Branch,
@@ -37,6 +39,7 @@ pub fn push_derived_changes(
     Ok((remote_branch, public_branch_url))
 }
 
+/// Push result
 pub fn push_result(
     local_branch: &dyn Branch,
     remote_branch: &dyn Branch,
@@ -70,27 +73,16 @@ pub fn push_result(
     Ok(())
 }
 
-#[test]
-fn test_push_result() {
-    use breezyshim::controldir::{
-        create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
-    };
-    let td = tempfile::tempdir().unwrap();
-    let target_path = td.path().join("target");
-    let source_path = td.path().join("source");
-    let target_url = url::Url::from_file_path(target_path).unwrap();
-    let target =
-        create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
-    let source = create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
-    let revid = source
-        .build_commit()
-        .message("Some change")
-        .commit()
-        .unwrap();
-    push_result(source.branch().as_ref(), target.as_ref(), None, None, None).unwrap();
-    assert_eq!(target.last_revision(), revid);
-}
-
+/// Push changes to a branch.
+///
+/// # Arguments
+/// * `local_branch` - Local branch to push
+/// * `main_branch` - Main branch to push to
+/// * `forge` - Forge to push to
+/// * `possible_transports` - Possible transports to use
+/// * `additional_colocated_branches` - Additional colocated branches to push
+/// * `tags` - Tags to push
+/// * `stop_revision` - Revision to stop pushing at
 pub fn push_changes(
     local_branch: &dyn Branch,
     main_branch: &dyn Branch,
@@ -153,7 +145,7 @@ pub fn find_existing_proposed(
             Err(BrzError::NotBranchError(..)) => {
                 return Ok((None, None, None));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         };
 
     log::info!(
@@ -342,6 +334,7 @@ pub fn propose_changes(
         Ok((resume_proposal, false))
     } else {
         let mut proposal_builder = forge.get_proposer(remote_branch, main_branch)?;
+        std::mem::drop(ref_resume_branch);
         if forge.supports_merge_proposal_commit_message() {
             if let Some(commit_message) = commit_message {
                 proposal_builder = proposal_builder.commit_message(commit_message);
@@ -393,16 +386,37 @@ pub fn propose_changes(
 }
 
 #[derive(Debug)]
+/// Error type for publishing
 pub enum Error {
+    /// Diverged branches
     DivergedBranches(),
+
+    /// An unrelated branch existed
     UnrelatedBranchExists,
+
+    /// Other vcs error
     Other(BrzError),
+
+    /// Unsupported forge
     UnsupportedForge(url::Url),
+
+    /// Forge login required
     ForgeLoginRequired,
+
+    /// Insufficient changes for new proposal
     InsufficientChangesForNewProposal,
+
+    /// Branch open error
     BranchOpenError(crate::vcs::BranchOpenError),
+
+    /// Empty merge proposal
     EmptyMergeProposal,
+
+    /// Permission denied
     PermissionDenied,
+
+    /// No target branch
+    NoTargetBranch,
 }
 
 impl From<BrzError> for Error {
@@ -438,6 +452,7 @@ impl std::fmt::Display for Error {
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
             }
+            Error::NoTargetBranch => write!(f, "No target branch"),
         }
     }
 }
@@ -456,7 +471,8 @@ impl From<Error> for pyo3::PyErr {
         import_exception!(breezy.forge, ForgeLoginRequired);
         import_exception!(silver_platter, EmptyMergeProposal);
         import_exception!(silver_platter, UnrelatedBranchExists);
-        import_exception!(silver_platter.publish, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, NoTargetBranch);
 
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
@@ -474,6 +490,7 @@ impl From<Error> for pyo3::PyErr {
                     "InsufficientChangesForNewProposal",
                 )
             }
+            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
         }
     }
 }
@@ -498,6 +515,7 @@ impl From<Error> for pyo3::PyErr {
 /// * `tags` - Tags to push (None for default behaviour)
 /// * `derived_owner` - Name of any derived branch
 /// * `allow_collaboration` - Whether to allow target branch owners to modify source branch.
+/// * `auto_merge` - Enable merging once CI passes
 pub fn publish_changes(
     local_branch: &dyn Branch,
     main_branch: &dyn Branch,
@@ -517,6 +535,7 @@ pub fn publish_changes(
     derived_owner: Option<&str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<&RevisionId>,
+    auto_merge: Option<bool>,
 ) -> Result<PublishResult, Error> {
     let stop_revision = stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
     let allow_create_proposal = allow_create_proposal.unwrap_or(true);
@@ -548,6 +567,7 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
+    let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
             let (_remote_branch, _public_url) = push_derived_changes(
@@ -646,8 +666,17 @@ pub fn publish_changes(
     } else {
         None
     };
-    let title =
-        title.unwrap_or_else(|| breezyshim::forge::determine_title(mp_description.as_str()));
+    let title = if let Some(title) = title {
+        Some(title)
+    } else {
+        match breezyshim::forge::determine_title(mp_description.as_str()) {
+            Ok(title) => Some(title),
+            Err(e) => {
+                log::warn!("Failed to determine title from description: {}", e);
+                None
+            }
+        }
+    };
     let (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
@@ -659,7 +688,7 @@ pub fn publish_changes(
         overwrite_existing,
         labels,
         commit_message.as_deref(),
-        Some(title.as_str()),
+        title.as_deref(),
         None,
         None,
         reviewers,
@@ -667,8 +696,9 @@ pub fn publish_changes(
         derived_owner,
         Some(&stop_revision),
         allow_collaboration,
-        None,
+        auto_merge,
     )?;
+    std::mem::drop(write_lock);
     Ok(PublishResult {
         mode,
         proposal: Some(proposal),
@@ -678,14 +708,25 @@ pub fn publish_changes(
     })
 }
 
+/// Publish result
 pub struct PublishResult {
+    /// Publish mode
     pub mode: Mode,
+
+    /// Merge proposal
     pub proposal: Option<MergeProposal>,
+
+    /// Whether the proposal is new
     pub is_new: Option<bool>,
+
+    /// Target branch
     pub target_branch: url::Url,
+
+    /// Forge
     pub forge: Forge,
 }
 
+/// Check whether a proposal has any changes.
 pub fn check_proposal_diff_empty(
     other_branch: &dyn Branch,
     main_branch: &dyn Branch,
@@ -716,155 +757,189 @@ pub fn check_proposal_diff_empty(
     Ok(!changes.any(|_| true))
 }
 
-#[test]
-fn test_no_new_commits() {
-    use breezyshim::controldir::create_standalone_workingtree;
-    use breezyshim::controldir::ControlDirFormat;
-    let td = tempfile::tempdir().unwrap();
-    let orig = td.path().join("orig");
-    let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
-
-    std::fs::write(orig.join("a"), "a").unwrap();
-    tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.build_commit().message("blah").commit().unwrap();
-
-    let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
-
-    let proposal = tree
-        .controldir()
-        .sprout(proposal_url, None, None, None, None)
-        .unwrap()
-        .open_branch(None)
-        .unwrap();
-    assert!(check_proposal_diff_empty(proposal.as_ref(), tree.branch().as_ref(), None).unwrap());
-}
-
-#[test]
-fn test_no_op_commits() {
-    use breezyshim::controldir::create_standalone_workingtree;
-    use breezyshim::controldir::ControlDirFormat;
-    let td = tempfile::tempdir().unwrap();
-    let orig = td.path().join("orig");
-    let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
-
-    std::fs::write(orig.join("a"), "a").unwrap();
-    tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.build_commit().message("blah").commit().unwrap();
-
-    let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
-
-    let proposal = tree
-        .controldir()
-        .sprout(proposal_url, None, None, None, None)
-        .unwrap()
-        .open_workingtree()
-        .unwrap();
-    proposal
-        .build_commit()
-        .message("another commit that is pointless")
-        .commit()
-        .unwrap();
-
-    assert!(
-        check_proposal_diff_empty(proposal.branch().as_ref(), tree.branch().as_ref(), None)
-            .unwrap()
-    );
-}
-
-#[test]
-fn test_indep() {
-    use breezyshim::bazaar::tree::MutableInventoryTree;
-    use breezyshim::bazaar::FileId;
-    use breezyshim::controldir::create_standalone_workingtree;
-    use breezyshim::controldir::ControlDirFormat;
-    let td = tempfile::tempdir().unwrap();
-    let orig = td.path().join("orig");
-    let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
-
-    std::fs::write(orig.join("a"), "a").unwrap();
-    tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.build_commit().message("blah").commit().unwrap();
-
-    std::fs::write(orig.join("b"), "b").unwrap();
-    std::fs::write(orig.join("c"), "c").unwrap();
-    tree.add(&[std::path::Path::new("b"), std::path::Path::new("c")])
-        .unwrap();
-    tree.build_commit().message("independent").commit().unwrap();
-
-    let proposal_path = orig.join("proposal");
-    let proposal_url = url::Url::from_file_path(proposal_path.as_path()).unwrap();
-
-    let proposal = tree
-        .controldir()
-        .sprout(proposal_url, None, None, None, None)
-        .unwrap()
-        .open_workingtree()
-        .unwrap();
-
-    assert!(proposal_path.exists());
-
-    std::fs::write(proposal_path.join("b"), "b").unwrap();
-
-    if proposal.supports_setting_file_ids() {
-        MutableInventoryTree::add(
-            &proposal,
-            &[std::path::Path::new("b")],
-            &[FileId::from("b")],
-        )
-        .unwrap();
-    } else {
-        proposal.add(&[std::path::Path::new("b")]).unwrap();
-    }
-    proposal
-        .build_commit()
-        .message("not pointless")
-        .commit()
-        .unwrap();
-
-    assert!(
-        check_proposal_diff_empty(proposal.branch().as_ref(), tree.branch().as_ref(), None)
-            .unwrap()
-    );
-
-    std::mem::drop(td);
-}
-
-#[test]
-fn test_changes() {
-    use breezyshim::controldir::create_standalone_workingtree;
-    use breezyshim::controldir::ControlDirFormat;
-    let td = tempfile::tempdir().unwrap();
-    let orig = td.path().join("orig");
-    let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
-    std::fs::write(orig.join("a"), "a").unwrap();
-    tree.add(&[std::path::Path::new("a")]).unwrap();
-    tree.build_commit().message("blah").commit().unwrap();
-
-    let proposal_url = url::Url::from_file_path(td.path().join("proposal")).unwrap();
-    let proposal_tree = tree
-        .controldir()
-        .sprout(proposal_url, None, None, None, None)
-        .unwrap()
-        .open_workingtree()
-        .unwrap();
-    std::fs::write(proposal_tree.basedir().join("b"), "b").unwrap();
-    proposal_tree.add(&[std::path::Path::new("b")]).unwrap();
-    proposal_tree
-        .build_commit()
-        .message("not pointless")
-        .commit()
-        .unwrap();
-
-    assert!(!check_proposal_diff_empty(
-        proposal_tree.branch().as_ref(),
-        tree.branch().as_ref(),
-        None
-    )
-    .unwrap());
-}
-
+/// Enable tag pushing for a branch
 pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
     let config = branch.get_config();
     config.set_user_option("branch.fetch_tags", true)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_no_new_commits() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        let td = tempfile::tempdir().unwrap();
+        let orig = td.path().join("orig");
+        let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
+
+        std::fs::write(orig.join("a"), "a").unwrap();
+        tree.add(&[std::path::Path::new("a")]).unwrap();
+        tree.build_commit().message("blah").commit().unwrap();
+
+        let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
+
+        let proposal = tree
+            .controldir()
+            .sprout(proposal_url, None, None, None, None)
+            .unwrap()
+            .open_branch(None)
+            .unwrap();
+        assert!(
+            check_proposal_diff_empty(proposal.as_ref(), tree.branch().as_ref(), None).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_no_op_commits() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        let td = tempfile::tempdir().unwrap();
+        let orig = td.path().join("orig");
+        let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
+
+        std::fs::write(orig.join("a"), "a").unwrap();
+        tree.add(&[std::path::Path::new("a")]).unwrap();
+        tree.build_commit().message("blah").commit().unwrap();
+
+        let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
+
+        let proposal = tree
+            .controldir()
+            .sprout(proposal_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+        proposal
+            .build_commit()
+            .message("another commit that is pointless")
+            .commit()
+            .unwrap();
+
+        assert!(check_proposal_diff_empty(
+            proposal.branch().as_ref(),
+            tree.branch().as_ref(),
+            None
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn test_indep() {
+        use breezyshim::bazaar::tree::MutableInventoryTree;
+        use breezyshim::bazaar::FileId;
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        let td = tempfile::tempdir().unwrap();
+        let orig = td.path().join("orig");
+        let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
+
+        std::fs::write(orig.join("a"), "a").unwrap();
+        tree.add(&[std::path::Path::new("a")]).unwrap();
+        tree.build_commit().message("blah").commit().unwrap();
+
+        std::fs::write(orig.join("b"), "b").unwrap();
+        std::fs::write(orig.join("c"), "c").unwrap();
+        tree.add(&[std::path::Path::new("b"), std::path::Path::new("c")])
+            .unwrap();
+        tree.build_commit().message("independent").commit().unwrap();
+
+        let proposal_path = orig.join("proposal");
+        let proposal_url = url::Url::from_file_path(proposal_path.as_path()).unwrap();
+
+        let proposal = tree
+            .controldir()
+            .sprout(proposal_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+
+        assert!(proposal_path.exists());
+
+        std::fs::write(proposal_path.join("b"), "b").unwrap();
+
+        if proposal.supports_setting_file_ids() {
+            MutableInventoryTree::add(
+                &proposal,
+                &[std::path::Path::new("b")],
+                &[FileId::from("b")],
+            )
+            .unwrap();
+        } else {
+            proposal.add(&[std::path::Path::new("b")]).unwrap();
+        }
+        proposal
+            .build_commit()
+            .message("not pointless")
+            .commit()
+            .unwrap();
+
+        assert!(check_proposal_diff_empty(
+            proposal.branch().as_ref(),
+            tree.branch().as_ref(),
+            None
+        )
+        .unwrap());
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_changes() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        let td = tempfile::tempdir().unwrap();
+        let orig = td.path().join("orig");
+        let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
+        std::fs::write(orig.join("a"), "a").unwrap();
+        tree.add(&[std::path::Path::new("a")]).unwrap();
+        tree.build_commit().message("blah").commit().unwrap();
+
+        let proposal_url = url::Url::from_file_path(td.path().join("proposal")).unwrap();
+        let proposal_tree = tree
+            .controldir()
+            .sprout(proposal_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+        std::fs::write(proposal_tree.basedir().join("b"), "b").unwrap();
+        proposal_tree.add(&[std::path::Path::new("b")]).unwrap();
+        proposal_tree
+            .build_commit()
+            .message("not pointless")
+            .commit()
+            .unwrap();
+
+        assert!(!check_proposal_diff_empty(
+            proposal_tree.branch().as_ref(),
+            tree.branch().as_ref(),
+            None
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn test_push_result() {
+        use breezyshim::controldir::{
+            create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
+        };
+        let td = tempfile::tempdir().unwrap();
+        let target_path = td.path().join("target");
+        let source_path = td.path().join("source");
+        let target_url = url::Url::from_file_path(target_path).unwrap();
+        let target =
+            create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
+        let source =
+            create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
+        let revid = source
+            .build_commit()
+            .message("Some change")
+            .commit()
+            .unwrap();
+        push_result(source.branch().as_ref(), target.as_ref(), None, None, None).unwrap();
+        assert_eq!(target.last_revision(), revid);
+    }
 }

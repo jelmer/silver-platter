@@ -1,4 +1,4 @@
-use breezyshim::tree::WorkingTree;
+use breezyshim::workingtree;
 use breezyshim::workspace::{check_clean_tree, reset_tree};
 use clap::{Args, Parser, Subcommand};
 use log::{error, info};
@@ -9,7 +9,6 @@ use silver_platter::publish::Error as PublishError;
 use silver_platter::CodemodResult;
 
 use silver_platter::Mode;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -127,6 +126,7 @@ struct RunArgs {
 /// Operate on multiple repositories at once
 #[derive(Subcommand)]
 enum BatchArgs {
+    /// Generate a batch
     Generate {
         /// Recipe to use
         #[arg(long)]
@@ -139,13 +139,23 @@ enum BatchArgs {
         /// Directory to run in
         directory: Option<std::path::PathBuf>,
     },
+    /// Publish a batch or specific entry
     Publish {
         /// Directory to run in
         directory: std::path::PathBuf,
 
         /// Specific entry to publish
         name: Option<String>,
+
+        /// Whether to overwrite existing branches
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Refresh changes
+        #[arg(long)]
+        refresh: bool,
     },
+    /// Show status of a batch or specific entry
     Status {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -153,6 +163,7 @@ enum BatchArgs {
         /// Specific entry to publish
         codebase: Option<String>,
     },
+    /// Show diff of a specific entry in a batch
     Diff {
         /// Directory to run in
         directory: std::path::PathBuf,
@@ -160,13 +171,29 @@ enum BatchArgs {
         /// Specific entry to publish
         codebase: String,
     },
+    /// Refresh changes
+    Refresh {
+        /// Directory to run in
+        directory: std::path::PathBuf,
+
+        /// Specific entry to publish
+        codebase: Option<String>,
+    },
 }
 
 fn run(args: &RunArgs) -> i32 {
+    let mut extra_env = std::collections::HashMap::new();
     let recipe = args
         .recipe
         .as_ref()
         .map(|recipe| silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap());
+
+    if let Some(recipe) = &args.recipe {
+        extra_env.insert(
+            "RECIPEDIR".to_string(),
+            recipe.parent().unwrap().to_str().unwrap().to_string(),
+        );
+    }
 
     let mut urls = vec![];
 
@@ -190,7 +217,7 @@ fn run(args: &RunArgs) -> i32 {
     let command = if let Some(command) = args.command.as_ref() {
         shlex::split(command.as_str()).unwrap()
     } else if let Some(recipe) = &recipe {
-        recipe.command.clone().unwrap()
+        recipe.command.as_ref().unwrap().argv()
     } else {
         error!("No command specified");
         return 1;
@@ -312,6 +339,7 @@ fn run(args: &RunArgs) -> i32 {
             Some(get_commit_message),
             Some(get_title),
             get_description,
+            Some(extra_env.clone()),
         );
         retcode = std::cmp::max(retcode, result)
     }
@@ -319,36 +347,29 @@ fn run(args: &RunArgs) -> i32 {
     retcode
 }
 
-pub fn publish_entry(
+fn publish_entry(
     batch: &mut silver_platter::batch::Batch,
     name: &str,
     refresh: bool,
-    overwrite: Option<bool>,
+    overwrite: bool,
 ) -> bool {
     let batch_name = batch.name.clone();
     let entry = batch.get_mut(name).unwrap();
-    let tree = entry.working_tree().unwrap();
-    let publish_result = match silver_platter::batch::publish_one(
-        entry.target_branch_url.as_ref().unwrap(),
-        &tree,
-        batch_name.as_str(),
-        entry.mode,
-        entry.proposal_url.as_ref(),
-        entry.labels.clone(),
-        entry.owner.as_deref(),
-        refresh,
-        entry.commit_message.as_deref(),
-        entry.title.as_deref(),
-        Some(entry.description.as_str()),
-        overwrite,
-    ) {
+    let overwrite = if overwrite { Some(true) } else { None };
+    let publish_result = match entry.publish(&batch_name, refresh, overwrite) {
         Ok(publish_result) => publish_result,
         Err(PublishError::EmptyMergeProposal) => {
             info!("No changes left");
-            batch.remove(name).unwrap();
+            match batch.remove(name) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to remove {}: {}", name, e);
+                }
+            }
             return true;
         }
         Err(PublishError::UnrelatedBranchExists) => {
+            error!("An unrelated branch exists. Remove it or use --overwrite.");
             return false;
         }
         Err(e) => {
@@ -374,18 +395,92 @@ pub fn publish_entry(
     true
 }
 
+pub fn batch_refresh(directory: &Path, codebase: Option<&str>) -> Result<(), i32> {
+    let directory = directory.canonicalize().unwrap();
+
+    let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
+        Ok(Some(batch)) => batch,
+        Ok(None) => {
+            info!("No batch.yaml found in {}", directory.display());
+            return Err(1);
+        }
+        Err(e) => {
+            error!(
+                "Failed to load batch metadata from {}: {}",
+                directory.display(),
+                e
+            );
+            return Err(1);
+        }
+    };
+
+    let mut errors = 0;
+
+    if let Some(codebase) = codebase {
+        let entry = batch.work.get_mut(codebase).unwrap();
+        if entry.refresh(&batch.recipe, None).is_err() {
+            errors += 1;
+        }
+    } else {
+        let names = batch.work.keys().cloned().collect::<Vec<_>>();
+        for name in names {
+            let entry = batch.work.get_mut(name.as_str()).unwrap();
+            if entry.refresh(&batch.recipe, None).is_err() {
+                errors += 1;
+            }
+        }
+    }
+    match silver_platter::batch::save_batch_metadata(&directory, &batch) {
+        Ok(_) => {}
+        Err(e) => {
+            error!(
+                "Failed to save batch metadata to {}: {}",
+                directory.display(),
+                e
+            );
+            return Err(1);
+        }
+    }
+    if batch.work.is_empty() {
+        info!(
+            "No work left in batch.yaml; you can now remove {}",
+            directory.display()
+        );
+    }
+    if errors > 0 {
+        Err(1)
+    } else {
+        Ok(())
+    }
+}
+
 pub fn batch_publish(
     directory: &Path,
     codebase: Option<&str>,
     refresh: bool,
-    overwrite: Option<bool>,
-) -> i32 {
-    let mut batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+    overwrite: bool,
+) -> Result<(), i32> {
+    let directory = directory.canonicalize().unwrap();
+    let mut batch = match silver_platter::batch::load_batch_metadata(&directory) {
+        Ok(Some(batch)) => batch,
+        Ok(None) => {
+            info!("No batch.yaml found in {}", directory.display());
+            return Err(1);
+        }
+        Err(e) => {
+            error!(
+                "Failed to load batch metadata from {}: {}",
+                directory.display(),
+                e
+            );
+            return Err(1);
+        }
+    };
 
     let mut errors = 0;
     if let Some(codebase) = codebase {
         if publish_entry(&mut batch, codebase, refresh, overwrite) {
-            silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
+            silver_platter::batch::save_batch_metadata(&directory, &batch).unwrap();
         } else {
             error!("Failed to publish {}", codebase);
             errors = 1;
@@ -397,7 +492,7 @@ pub fn batch_publish(
                 errors += 1;
             }
         }
-        silver_platter::batch::save_batch_metadata(directory, &batch).unwrap();
+        silver_platter::batch::save_batch_metadata(&directory, &batch).unwrap();
     }
     if batch.work.is_empty() {
         info!(
@@ -406,9 +501,9 @@ pub fn batch_publish(
         );
     }
     if errors > 0 {
-        1
+        Err(1)
     } else {
-        0
+        Ok(())
     }
 }
 
@@ -442,7 +537,7 @@ fn login(url: &url::Url) -> i32 {
     0
 }
 
-fn main() {
+fn main() -> Result<(), i32> {
     let cli = Cli::parse();
 
     env_logger::builder()
@@ -460,22 +555,28 @@ fn main() {
     breezyshim::init();
     breezyshim::plugin::load_plugins();
 
-    std::process::exit(match &cli.command {
+    match &cli.command {
         Commands::Forges {} => {
             for instance in breezyshim::forge::iter_forge_instances() {
                 println!("{} ({})", instance.base_url(), instance.forge_kind());
             }
-            0
+            Ok(())
         }
-        Commands::Login { url } => login(url),
+        Commands::Login { url } => match login(url) {
+            0 => Ok(()),
+            e => Err(e),
+        },
         Commands::Proposals { status } => {
             let statuses = status.as_ref().map(|status| vec![*status]);
             for (_forge, proposal) in silver_platter::proposal::iter_all_mps(statuses) {
                 println!("{}", proposal.url().unwrap());
             }
-            0
+            Ok(())
         }
-        Commands::Run(args) => run(args),
+        Commands::Run(args) => match run(args) {
+            0 => Ok(()),
+            e => Err(e),
+        },
         Commands::Apply {
             command,
             diff,
@@ -498,14 +599,13 @@ fn main() {
             let command = if let Some(command) = command.as_ref() {
                 shlex::split(command.as_str()).unwrap()
             } else if let Some(recipe) = &recipe {
-                recipe.command.clone().unwrap()
+                recipe.command.clone().unwrap().argv()
             } else {
                 error!("No command specified");
-                std::process::exit(1);
+                return Err(1);
             };
 
-            let (local_tree, subpath) =
-                breezyshim::workingtree::open_containing(Path::new(".")).unwrap();
+            let (local_tree, subpath) = workingtree::open_containing(Path::new(".")).unwrap();
 
             check_clean_tree(
                 &local_tree,
@@ -532,7 +632,7 @@ fn main() {
                 Err(err) => {
                     error!("Failed: {}", err);
                     reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
-                    std::process::exit(1);
+                    return Err(1);
                 }
             };
 
@@ -549,12 +649,12 @@ fn main() {
                     Ok(status) => {
                         error!("Verify command failed: {}", status);
                         reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
-                        std::process::exit(1);
+                        return Err(1);
                     }
                     Err(err) => {
                         error!("Verify command failed: {}", err);
                         reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
-                        std::process::exit(1);
+                        return Err(1);
                     }
                 }
             }
@@ -571,7 +671,7 @@ fn main() {
                 )
                 .unwrap();
             }
-            0
+            Ok(())
         }
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
@@ -579,7 +679,19 @@ fn main() {
                 candidates,
                 directory,
             } => {
+                let mut extra_env = std::collections::HashMap::new();
+
                 let recipe = if let Some(recipe) = recipe {
+                    extra_env.insert(
+                        "RECIPEDIR".to_string(),
+                        recipe
+                            .as_path()
+                            .parent()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    );
                     silver_platter::recipe::Recipe::from_path(recipe.as_path()).unwrap()
                 } else {
                     panic!("No recipe specified");
@@ -598,20 +710,39 @@ fn main() {
                     std::path::PathBuf::from(recipe.name.clone().unwrap())
                 };
 
-                silver_platter::batch::Batch::from_recipe(
+                match silver_platter::batch::Batch::from_recipe(
                     &recipe,
                     candidates.iter(),
                     directory.as_path(),
-                )
-                .unwrap();
-                info!("Now, review the patches under {}, edit {}/batch.yaml as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.display(), directory.display());
-                0
+                    Some(extra_env),
+                ) {
+                    Ok(_batch) => {}
+                    Err(e) => {
+                        error!("Failed to generate batch: {}", e);
+                        return Err(1);
+                    }
+                }
+                info!("Now, review the patches under {}, edit {} as appropriate and then run \"svp batch publish {}\"", directory.display(), directory.join("batch.yaml").display(), directory.display());
+                info!(
+                    "You can run \"svp batch status {}\" to see the status of the patches",
+                    directory.display()
+                );
+                info!(
+                    "To refresh the patches, run \"svp batch refresh {}\"",
+                    directory.display()
+                );
+                Ok(())
             }
-            BatchArgs::Publish { directory, name } => {
-                let ret = batch_publish(directory.as_path(), name.as_deref(), false, None);
+            BatchArgs::Publish {
+                directory,
+                name,
+                overwrite,
+                refresh,
+            } => {
+                let ret = batch_publish(directory.as_path(), name.as_deref(), *refresh, *overwrite);
 
                 info!(
-                    "To see the status of open merge requests, run: \"svn batch status {}\"",
+                    "To see the status of open merge requests, run: \"svp batch status {}\"",
                     directory.display()
                 );
                 ret
@@ -620,7 +751,22 @@ fn main() {
                 directory,
                 codebase,
             } => {
-                let batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+                let directory = directory.canonicalize().unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(&directory) {
+                    Ok(Some(batch)) => batch,
+                    Ok(None) => {
+                        info!("No batch.yaml found in {}", directory.display());
+                        return Err(1);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to load batch metadata from {}: {}",
+                            directory.display(),
+                            e
+                        );
+                        return Err(1);
+                    }
+                };
                 if let Some(codebase) = codebase {
                     let entry = batch.work.get(codebase).unwrap();
                     info!("{}: {}", codebase, entry.status());
@@ -629,19 +775,34 @@ fn main() {
                         info!("{}: {}", name, entry.status());
                     }
                 }
-                0
+                Ok(())
             }
             BatchArgs::Diff {
                 directory,
                 codebase,
             } => {
-                let batch = silver_platter::batch::load_batch_metadata(directory).unwrap();
+                let directory = directory.canonicalize().unwrap();
+                let batch = match silver_platter::batch::load_batch_metadata(&directory) {
+                    Ok(Some(batch)) => batch,
+                    Ok(None) => {
+                        info!("No batch.yaml found in {}", directory.display());
+                        return Err(1);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to load batch metadata from {}: {}",
+                            directory.display(),
+                            e
+                        );
+                        return Err(1);
+                    }
+                };
                 let entry = batch.work.get(codebase.as_str()).unwrap();
                 let main_branch = match entry.target_branch() {
                     Ok(branch) => branch,
                     Err(e) => {
                         error!("Failed to open branch: {}", e);
-                        std::process::exit(1);
+                        return Err(1);
                     }
                 };
 
@@ -649,20 +810,34 @@ fn main() {
                     Ok(branch) => branch,
                     Err(e) => {
                         error!("Failed to open branch: {}", e);
-                        std::process::exit(1);
+                        return Err(1);
                     }
                 };
 
+                let repository = local_branch.repository();
+
+                let main_revision = main_branch.last_revision();
+
+                repository
+                    .fetch(&main_branch.repository(), Some(&main_revision))
+                    .unwrap();
+
+                let main_tree = repository.revision_tree(&main_revision).unwrap();
+
                 breezyshim::diff::show_diff_trees(
+                    &main_tree,
                     &local_branch.basis_tree().unwrap(),
-                    &main_branch.basis_tree().unwrap(),
                     Box::new(std::io::stdout()),
                     Some("old/"),
                     Some("new/"),
                 )
                 .unwrap();
-                1
+                Err(1)
             }
+            BatchArgs::Refresh {
+                directory,
+                codebase,
+            } => batch_refresh(directory.as_path(), codebase.as_deref()),
         },
-    })
+    }
 }

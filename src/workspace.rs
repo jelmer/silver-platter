@@ -1,3 +1,4 @@
+//! Workspace for preparing changes for publication
 use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
 use breezyshim::branch::Branch;
 use breezyshim::controldir::ControlDirFormat;
@@ -6,16 +7,15 @@ use breezyshim::forge::{Forge, MergeProposal};
 use breezyshim::tree::WorkingTree;
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
-use log::info;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-pub fn fetch_colocated(
+fn fetch_colocated(
     controldir: &ControlDir,
     from_controldir: &ControlDir,
     additional_colocated_branches: &HashMap<&str, &str>,
 ) -> Result<(), BrzError> {
-    info!(
+    log::debug!(
         "Fetching colocated branches: {:?}",
         additional_colocated_branches
     );
@@ -43,11 +43,21 @@ pub fn fetch_colocated(
 }
 
 #[derive(Debug)]
+/// An error that can occur when working with a workspace
 pub enum Error {
+    /// An error from the Breezy shim
     BrzError(BrzError),
+
+    /// An I/O error
     IOError(std::io::Error),
+
+    /// Unknown format was specified
     UnknownFormat(String),
+
+    /// Permission denied
     PermissionDenied(Option<String>),
+
+    /// Other error
     Other(String),
 }
 
@@ -90,6 +100,7 @@ impl std::fmt::Display for Error {
 }
 
 #[derive(Default)]
+/// A builder for a workspace
 pub struct WorkspaceBuilder {
     main_branch: Option<Box<dyn Branch>>,
     resume_branch: Option<Box<dyn Branch>>,
@@ -102,21 +113,25 @@ pub struct WorkspaceBuilder {
 }
 
 impl WorkspaceBuilder {
+    /// Set the main branch
     pub fn main_branch(mut self, main_branch: Box<dyn Branch>) -> Self {
         self.main_branch = Some(main_branch);
         self
     }
 
+    /// Set the resume branch
     pub fn resume_branch(mut self, resume_branch: Box<dyn Branch>) -> Self {
         self.resume_branch = Some(resume_branch);
         self
     }
 
+    /// Set the cached branch
     pub fn cached_branch(mut self, cached_branch: Box<dyn Branch>) -> Self {
         self.cached_branch = Some(cached_branch);
         self
     }
 
+    /// Set the additional colocated branches
     pub fn additional_colocated_branches(
         mut self,
         additional_colocated_branches: HashMap<String, String>,
@@ -125,6 +140,7 @@ impl WorkspaceBuilder {
         self
     }
 
+    /// Set the additional colocated branches for the resume branch
     pub fn resume_branch_additional_colocated_branches(
         mut self,
         resume_branch_additional_colocated_branches: HashMap<String, String>,
@@ -134,11 +150,13 @@ impl WorkspaceBuilder {
         self
     }
 
+    /// Set the containing directory to use for the workspace
     pub fn dir(mut self, dir: PathBuf) -> Self {
         self.dir = Some(dir);
         self
     }
 
+    /// Set the path to the workspace
     pub fn path(mut self, path: PathBuf) -> Self {
         self.path = Some(path);
         self
@@ -152,6 +170,7 @@ impl WorkspaceBuilder {
         self
     }
 
+    /// Build the workspace
     pub fn build(self) -> Result<Workspace, Error> {
         let mut ws = Workspace {
             main_branch: self.main_branch,
@@ -179,6 +198,7 @@ struct WorkspaceState {
     main_colo_revid: HashMap<String, RevisionId>,
 }
 
+/// A place in which changes can be prepared for publication
 pub struct Workspace {
     main_branch: Option<Box<dyn Branch>>,
     cached_branch: Option<Box<dyn Branch>>,
@@ -192,42 +212,13 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    #[deprecated(since = "0.1.0", note = "Use WorkspaceBuilder instead")]
-    pub fn new(
-        main_branch: Option<Box<dyn Branch>>,
-        resume_branch: Option<Box<dyn Branch>>,
-        cached_branch: Option<Box<dyn Branch>>,
-        additional_colocated_branches: HashMap<&str, &str>,
-        resume_branch_additional_colocated_branches: HashMap<&str, &str>,
-        dir: Option<&Path>,
-        path: Option<&Path>,
-        format: Option<impl breezyshim::controldir::AsFormat>,
-    ) -> Self {
-        Self {
-            main_branch,
-            resume_branch,
-            cached_branch,
-            additional_colocated_branches: additional_colocated_branches
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-            resume_branch_additional_colocated_branches:
-                resume_branch_additional_colocated_branches
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            path: path.map(|p| p.to_path_buf()),
-            dir: dir.map(|p| p.to_path_buf()),
-            format: format.and_then(|f| f.as_format()),
-            state: None,
-        }
-    }
-
+    /// Create a new temporary workspace
     pub fn temporary() -> Result<Self, Error> {
         let td = tempfile::tempdir().unwrap();
         Self::builder().dir(td.into_path()).build()
     }
 
+    /// Create a new workspace from a main branch URL
     pub fn from_url(url: &url::Url) -> Result<Self, Error> {
         let branch = breezyshim::branch::open(url)?;
         Self::builder().main_branch(branch).build()
@@ -302,6 +293,10 @@ impl Workspace {
                 td,
             )
         };
+
+        if let Some(path) = self.path.as_ref() {
+            breezyshim::clean_tree::clean_tree(path, true, true, true, false, true)?;
+        }
 
         let mut main_colo_revid = std::collections::HashMap::new();
 
@@ -439,50 +434,63 @@ impl Workspace {
         Ok(())
     }
 
+    /// Return the state of the workspace
     fn state(&self) -> &WorkspaceState {
         self.state.as_ref().unwrap()
     }
 
+    /// Create a new workspace builder
     pub fn builder() -> WorkspaceBuilder {
         WorkspaceBuilder::default()
     }
 
+    /// Return the main branch
     pub fn main_branch(&self) -> Option<&dyn Branch> {
         self.main_branch.as_deref()
     }
 
+    /// Set the main branch
     pub fn set_main_branch(&mut self, branch: Box<dyn Branch>) -> Result<(), Error> {
         self.main_branch = Some(branch);
         Ok(())
     }
 
+    /// Return the cached branch
     pub fn local_tree(&self) -> &WorkingTree {
         &self.state().local_tree
     }
 
+    /// Return whether the workspace has been refreshed
+    ///
+    /// In other words, whether the workspace has been reset to the main branch
     pub fn refreshed(&self) -> bool {
         self.state().refreshed
     }
 
+    /// Return the resume branch
     pub fn resume_branch(&self) -> Option<&dyn Branch> {
         self.resume_branch.as_deref()
     }
 
+    /// Return the path to the workspace
     pub fn path(&self) -> PathBuf {
         self.local_tree()
             .abspath(std::path::Path::new("."))
             .unwrap()
     }
 
+    /// Return whether there are changes since the main branch
     pub fn changes_since_main(&self) -> bool {
         Some(self.local_tree().branch().last_revision())
             != self.main_branch().map(|b| b.last_revision())
     }
 
+    /// Return whether there are changes since the base revision
     pub fn changes_since_base(&self) -> bool {
         Some(self.local_tree().branch().last_revision()) != self.base_revid()
     }
 
+    /// Return the base revision id
     pub fn base_revid(&self) -> Option<RevisionId> {
         self.state.as_ref().map(|s| s.base_revid.clone())
     }
@@ -494,6 +502,7 @@ impl Workspace {
         self.changed_branches().iter().any(|(_, br, r)| br != r)
     }
 
+    /// Return the additional colocated branches
     pub fn additional_colocated_branches(&self) -> HashMap<String, String> {
         self.additional_colocated_branches
             .iter()
@@ -501,6 +510,7 @@ impl Workspace {
             .collect()
     }
 
+    /// Return the branches that have changed
     pub fn changed_branches(&self) -> Vec<(String, Option<RevisionId>, Option<RevisionId>)> {
         let main_branch = self.main_branch();
         let mut branches = vec![(
@@ -531,10 +541,12 @@ impl Workspace {
         branches
     }
 
+    /// Return the main colocated branch revision ids
     pub fn main_colo_revid(&self) -> HashMap<String, RevisionId> {
         self.state().main_colo_revid.clone()
     }
 
+    /// Return the basis tree
     pub fn base_tree(&self) -> Result<Box<dyn breezyshim::tree::Tree>, BrzError> {
         let base_revid = &self.state().base_revid;
         match self.state().local_tree.revision_tree(base_revid) {
@@ -549,10 +561,14 @@ impl Workspace {
         }
     }
 
-    pub fn defer_destroy(&mut self) {
-        self.state.as_mut().unwrap().tempdir = None;
+    /// Defer destroying the workspace, even if the Workspace is dropped
+    pub fn defer_destroy(&mut self) -> std::path::PathBuf {
+        let tempdir = self.state.as_mut().unwrap().tempdir.take().unwrap();
+
+        tempdir.into_path()
     }
 
+    /// Publish the changes back to the main branch
     pub fn publish_changes(
         &self,
         target_branch: Option<&dyn Branch>,
@@ -571,6 +587,7 @@ impl Workspace {
         derived_owner: Option<&str>,
         allow_collaboration: Option<bool>,
         stop_revision: Option<&RevisionId>,
+        auto_merge: Option<bool>,
     ) -> Result<PublishResult, PublishError> {
         let main_branch = self.main_branch();
         crate::publish::publish_changes(
@@ -592,9 +609,11 @@ impl Workspace {
             derived_owner,
             allow_collaboration,
             stop_revision,
+            auto_merge,
         )
     }
 
+    /// Propose the changes against the main branch
     pub fn propose(
         &self,
         name: &str,
@@ -644,6 +663,7 @@ impl Workspace {
         .map_err(|e| e.into())
     }
 
+    /// Push a new derived branch
     pub fn push_derived(
         &self,
         name: &str,
@@ -673,10 +693,12 @@ impl Workspace {
         .map_err(|e| e.into())
     }
 
+    /// Push the specified tags to the main branch
     pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
         self.push(Some(tags))
     }
 
+    /// Push the changes back to the main branch
     pub fn push(&self, tags: Option<HashMap<String, RevisionId>>) -> Result<(), Error> {
         let main_branch = self.main_branch().unwrap();
 
@@ -721,6 +743,7 @@ impl Workspace {
         result
     }
 
+    /// Show the diff between the base tree and the local tree
     pub fn show_diff(
         &self,
         outf: Box<dyn std::io::Write + Send>,
@@ -736,6 +759,7 @@ impl Workspace {
         )
     }
 
+    /// Destroy this workspace
     pub fn destroy(&mut self) -> Result<(), Error> {
         self.state = None;
         Ok(())
@@ -1395,6 +1419,40 @@ mod tests {
             ],
             ws.changed_branches()
         );
+        std::mem::drop(td);
+    }
+
+    #[test]
+    fn test_defer_destroy() {
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let mut ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        let tempdir = ws.defer_destroy();
+
+        assert!(tempdir.exists());
+
+        std::mem::drop(ws);
+
+        assert!(tempdir.exists());
         std::mem::drop(td);
     }
 }

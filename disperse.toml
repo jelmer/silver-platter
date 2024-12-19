@@ -1,0 +1,12 @@
+tag-name = "$VERSION"
+verify-command = "make check"
+tarball-location = []
+release-timeout = 5
+
+[[update_version]]
+path = "pyproject.toml"
+match = '^version = "(.*)"$'
+new-line = 'version = "$VERSION"'
+
+[github]
+url = "https://github.com/jelmer/silver-platter"
