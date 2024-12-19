@@ -1,3 +1,4 @@
+//! Run the given command and publish the changes as a merge proposal.
 use crate::debian::codemod::{CommandResult, Error as CommandError};
 use crate::publish::{
     enable_tag_pushing, find_existing_proposed, DescriptionFormat, Error as PublishError,
@@ -9,8 +10,10 @@ use breezyshim::branch::Branch;
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
+use std::collections::HashMap;
 use url::Url;
 
+/// Run the given command and publish the changes as a merge proposal.
 pub fn apply_and_publish(
     url: &Url,
     name: &str,
@@ -32,6 +35,7 @@ pub fn apply_and_publish(
     mut build_target_dir: Option<std::path::PathBuf>,
     builder: Option<String>,
     install: bool,
+    extra_env: Option<HashMap<String, String>>,
 ) -> i32 {
     let main_branch = match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
@@ -166,7 +170,7 @@ pub fn apply_and_publish(
         commit_pending,
         None,
         None,
-        None,
+        extra_env,
         std::process::Stdio::inherit(),
         update_changelog,
     ) {
@@ -230,6 +234,7 @@ pub fn apply_and_publish(
         derived_owner,
         None,
         None,
+        None,
     ) {
         Ok(r) => r,
         Err(PublishError::UnsupportedForge(_)) => {
@@ -266,6 +271,9 @@ pub fn apply_and_publish(
         Err(PublishError::Other(e)) => {
             error!("Failed to publish changes: {}", e);
             return 2;
+        }
+        Err(PublishError::NoTargetBranch) => {
+            unreachable!()
         }
     };
 

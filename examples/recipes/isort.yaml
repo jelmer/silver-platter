@@ -1,3 +1,5 @@
+# To use this recipe, install isort:
+# $ pip install isort
 ---
 name: isort
 command: ['sh', '-c', 'isort --om -q .; echo "Sort Python import definitions with isort"']
