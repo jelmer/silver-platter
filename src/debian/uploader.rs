@@ -595,7 +595,7 @@ pub fn main(
     if shuffle {
         use rand::seq::SliceRandom;
         // Shuffle packages vec
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         packages.shuffle(&mut rng);
     }
 
