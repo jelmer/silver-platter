@@ -1,3 +1,7 @@
+// Allow unknown cfgs for now, since import_exception_bound
+// expects a gil-refs feature that is not defined
+#![allow(unexpected_cfgs)]
+
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};

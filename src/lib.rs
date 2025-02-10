@@ -13,6 +13,9 @@
 //! have conflicts due to upstream changes.
 
 #![deny(missing_docs)]
+// Allow unknown cfgs for now, since import_exception_bound
+// expects a gil-refs feature that is not defined
+#![allow(unexpected_cfgs)]
 pub mod batch;
 pub mod candidates;
 pub mod checks;
