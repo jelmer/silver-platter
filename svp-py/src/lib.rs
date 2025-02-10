@@ -1,7 +1,11 @@
+// Allow unknown cfgs for now, since import_exception_bound
+// expects a gil-refs feature that is not defined
+#![allow(unexpected_cfgs)]
+
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
-use pyo3::{create_exception, import_exception};
+use pyo3::{create_exception, import_exception_bound};
 use silver_platter::codemod::Error as CodemodError;
 use silver_platter::{CommitPending, Mode};
 use silver_platter::{RevisionId, WorkingTree};
@@ -63,7 +67,7 @@ create_exception!(
     MissingChangelog,
     pyo3::exceptions::PyException
 );
-import_exception!(breezy.errors, DivergedBranches);
+import_exception_bound!(breezy.errors, DivergedBranches);
 create_exception!(
     silver_platter,
     NoTargetBranch,
@@ -1026,8 +1030,8 @@ fn merge_conflicts(
 }
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
-    import_exception!(breezy.errors, UnknownFormat);
-    import_exception!(breezy.errors, PermissionDenied);
+    import_exception_bound!(breezy.errors, UnknownFormat);
+    import_exception_bound!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
