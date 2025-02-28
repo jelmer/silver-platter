@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (C) 2018 Jelmer Vernooij <jelmer@jelmer.uk>
+# Copyright (C) 2024 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,15 +15,22 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import unittest
+import os
+
+from breezy.tests import TestCaseWithTransport
+
+from silver_platter import BranchMissing, _open_branch
 
 
-def test_suite():
-    names = [
-        "proposal",
-        "vcs",
-        "workspace",
-    ]
-    module_names = [__name__ + ".test_" + name for name in names]
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromNames(module_names)
+class OpenBranchTests(TestCaseWithTransport):
+    def test_simple(self):
+        a = self.make_branch("target")
+        b = _open_branch(a.base)
+        self.assertEqual(a.base, b.base)
+
+    def test_missing(self):
+        url = f"file://{os.getcwd()}/nonexistent"
+        e = self.assertRaises(BranchMissing, _open_branch, url)
+        self.assertIsInstance(e.url, str)
+        self.assertIsInstance(e.message, str)
+        self.assertEqual(e.url, url)
