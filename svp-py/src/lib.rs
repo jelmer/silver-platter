@@ -73,6 +73,11 @@ create_exception!(
     NoTargetBranch,
     pyo3::exceptions::PyException
 );
+create_exception!(silver_platter, BranchUnsupported, pyo3::exceptions::PyException);
+create_exception!(silver_platter, BranchTemporarilyUnavailable, pyo3::exceptions::PyException);
+create_exception!(silver_platter, BranchUnavailable, pyo3::exceptions::PyException);
+create_exception!(silver_platter, BranchRateLimited, pyo3::exceptions::PyException);
+create_exception!(silver_platter, BranchMissing, pyo3::exceptions::PyException);
 
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
@@ -1286,6 +1291,11 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "ResultFileFormatError",
         py.get_type_bound::<ResultFileFormatError>(),
     )?;
+    m.add("BranchUnsupported", py.get_type_bound::<BranchUnsupported>())?;
+    m.add("BranchTemporarilyUnavailable", py.get_type_bound::<BranchTemporarilyUnavailable>())?;
+    m.add("BranchUnavailable", py.get_type_bound::<BranchUnavailable>())?;
+    m.add("BranchRateLimited", py.get_type_bound::<BranchRateLimited>())?;
+    m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
 
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
