@@ -30,7 +30,7 @@ dependencies = [
     "pyyaml",
     "ruamel.yaml",
 ]
-version = "0.5.36"
+version = "0.5.46"
 
 [project.urls]
 Homepage = "https://jelmer.uk/code/silver-platter"
