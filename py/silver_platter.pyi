@@ -42,7 +42,6 @@ class Workspace:
         self,
     ) -> Sequence[tuple[str, bytes | None, bytes | None]]: ...
 
-
 class EmptyMergeProposal(Exception):
     """Raised when a merge proposal is empty."""
 

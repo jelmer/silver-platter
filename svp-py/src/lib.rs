@@ -2,7 +2,7 @@
 // expects a gil-refs feature that is not defined
 #![allow(unexpected_cfgs)]
 
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception_bound};
@@ -73,11 +73,29 @@ create_exception!(
     NoTargetBranch,
     pyo3::exceptions::PyException
 );
-create_exception!(silver_platter, BranchUnsupported, pyo3::exceptions::PyException);
-create_exception!(silver_platter, BranchTemporarilyUnavailable, pyo3::exceptions::PyException);
-create_exception!(silver_platter, BranchUnavailable, pyo3::exceptions::PyException);
-create_exception!(silver_platter, BranchRateLimited, pyo3::exceptions::PyException);
-create_exception!(silver_platter, BranchMissing, pyo3::exceptions::PyException);
+
+#[pyclass(extends=PyException,subclass)]
+struct BranchError {
+    #[pyo3(get)]
+    url: String,
+
+    #[pyo3(get)]
+    message: String,
+}
+
+#[pymethods]
+impl BranchError {
+    #[new]
+    fn new(url: String, message: String) -> Self {
+        Self { url, message }
+    }
+}
+
+create_exception!(silver_platter, BranchUnsupported, BranchError);
+create_exception!(silver_platter, BranchTemporarilyUnavailable, BranchError);
+create_exception!(silver_platter, BranchUnavailable, BranchError);
+create_exception!(silver_platter, BranchRateLimited, BranchError);
+create_exception!(silver_platter, BranchMissing, BranchError);
 
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
@@ -1271,6 +1289,15 @@ fn select_probers(py: Python, vcs_type: Option<&str>) -> Vec<PyObject> {
     probers.into_iter().map(|p| p.to_object(py)).collect()
 }
 
+#[pyfunction]
+#[pyo3(signature = (url, name=None))]
+fn _open_branch(py: Python, url: &str, name: Option<&str>) -> PyResult<PyObject> {
+    let url = url
+        .parse()
+        .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?;
+    Ok(silver_platter::vcs::open_branch(&url, None, None, name)?.to_object(py))
+}
+
 #[pymodule(name = "silver_platter")]
 fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
@@ -1278,6 +1305,7 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(script_runner, m)?)?;
     m.add_function(wrap_pyfunction!(select_preferred_probers, m)?)?;
     m.add_function(wrap_pyfunction!(select_probers, m)?)?;
+    m.add_function(wrap_pyfunction!(_open_branch, m)?)?;
     m.add(
         "ScriptMadeNoChanges",
         py.get_type_bound::<ScriptMadeNoChanges>(),
@@ -1291,10 +1319,23 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "ResultFileFormatError",
         py.get_type_bound::<ResultFileFormatError>(),
     )?;
-    m.add("BranchUnsupported", py.get_type_bound::<BranchUnsupported>())?;
-    m.add("BranchTemporarilyUnavailable", py.get_type_bound::<BranchTemporarilyUnavailable>())?;
-    m.add("BranchUnavailable", py.get_type_bound::<BranchUnavailable>())?;
-    m.add("BranchRateLimited", py.get_type_bound::<BranchRateLimited>())?;
+    m.add("BranchError", py.get_type_bound::<BranchError>())?;
+    m.add(
+        "BranchUnsupported",
+        py.get_type_bound::<BranchUnsupported>(),
+    )?;
+    m.add(
+        "BranchTemporarilyUnavailable",
+        py.get_type_bound::<BranchTemporarilyUnavailable>(),
+    )?;
+    m.add(
+        "BranchUnavailable",
+        py.get_type_bound::<BranchUnavailable>(),
+    )?;
+    m.add(
+        "BranchRateLimited",
+        py.get_type_bound::<BranchRateLimited>(),
+    )?;
     m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
 
     m.add_class::<CommandResult>()?;
