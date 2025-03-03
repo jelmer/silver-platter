@@ -53,7 +53,7 @@ testing = [
     "brz-debian",
 ]
 dev = [
-    "ruff==0.9.7"
+    "ruff==0.9.9"
 ]
 
 [project.scripts]
