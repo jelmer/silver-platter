@@ -949,6 +949,26 @@ pub(crate) mod debian {
         })
     }
 
+    /// Sign a debian package.
+    ///
+    /// Args:
+    /// * path: Path to the package to sign
+    /// * keyid: Optional key ID to use for signing
+    #[pyfunction]
+    #[pyo3(signature = (path, keyid=None))]
+    pub(crate) fn debsign(path: PathBuf, keyid: Option<&str>) -> PyResult<()> {
+        silver_platter::debian::uploader::debsign(path.as_path(), keyid).map_err(|e| e.into())
+    }
+
+    /// Upload a debian package.
+    ///
+    /// Args:
+    /// * path: Path to the package to upload
+    #[pyfunction]
+    pub(crate) fn dput_changes(path: PathBuf) -> PyResult<()> {
+        silver_platter::debian::uploader::dput_changes(path.as_path()).map_err(|e| e.into())
+    }
+
     #[pyfunction]
     pub(crate) fn get_maintainer_from_env(
         env: HashMap<String, String>,
@@ -1364,6 +1384,8 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
             debian::pick_additional_colocated_branches,
             m
         )?)?;
+        m.add_function(wrap_pyfunction!(debian::debsign, m)?)?;
+        m.add_function(wrap_pyfunction!(debian::dput_changes, m)?)?;
     }
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
     m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
