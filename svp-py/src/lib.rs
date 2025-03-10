@@ -806,6 +806,9 @@ pub(crate) mod debian {
     use super::*;
     use silver_platter::debian::codemod::Error as DebianCodemodError;
 
+    create_exception!(silver_platter, DputFailure, PyException);
+    create_exception!(silver_platter, DebsignFailure, PyException);
+
     #[cfg(feature = "debian")]
     #[pyfunction]
     pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
@@ -957,7 +960,15 @@ pub(crate) mod debian {
     #[pyfunction]
     #[pyo3(signature = (path, keyid=None))]
     pub(crate) fn debsign(path: PathBuf, keyid: Option<&str>) -> PyResult<()> {
-        silver_platter::debian::uploader::debsign(path.as_path(), keyid).map_err(|e| e.into())
+        match silver_platter::debian::uploader::debsign(path.as_path(), keyid) {
+            Ok(()) => Ok(()),
+            Err(e) => match e {
+                silver_platter::debian::uploader::SignError::Failed(e) => {
+                    Err(DebsignFailure::new_err(e))
+                }
+                silver_platter::debian::uploader::SignError::IOError(e) => Err(e.into()),
+            },
+        }
     }
 
     /// Upload a debian package.
@@ -965,8 +976,17 @@ pub(crate) mod debian {
     /// Args:
     /// * path: Path to the package to upload
     #[pyfunction]
-    pub(crate) fn dput_changes(path: PathBuf) -> PyResult<()> {
-        silver_platter::debian::uploader::dput_changes(path.as_path()).map_err(|e| e.into())
+    #[pyo3(signature = (path, host=None))]
+    pub(crate) fn dput_changes(path: PathBuf, host: Option<&str>) -> PyResult<()> {
+        match silver_platter::debian::uploader::dput_changes(path.as_path(), host) {
+            Ok(()) => Ok(()),
+            Err(e) => match e {
+                silver_platter::debian::uploader::UploadError::Failed(e) => {
+                    Err(DputFailure::new_err(e))
+                }
+                silver_platter::debian::uploader::UploadError::IOError(e) => Err(e.into()),
+            },
+        }
     }
 
     #[pyfunction]
@@ -1386,6 +1406,11 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         )?)?;
         m.add_function(wrap_pyfunction!(debian::debsign, m)?)?;
         m.add_function(wrap_pyfunction!(debian::dput_changes, m)?)?;
+        m.add("DputFailure", py.get_type_bound::<debian::DputFailure>())?;
+        m.add(
+            "DebsignFailure",
+            py.get_type_bound::<debian::DebsignFailure>(),
+        )?;
     }
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
     m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
