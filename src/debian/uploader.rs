@@ -68,8 +68,35 @@ impl Default for LastAttemptDatabase {
     }
 }
 
+/// Errors that can occur when signing a package.
+#[derive(Debug)]
+pub enum SignError {
+    /// debsign failed
+    Failed(String),
+
+    /// I/O error
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for SignError {
+    fn from(e: std::io::Error) -> Self {
+        SignError::IOError(e)
+    }
+}
+
+impl std::fmt::Display for SignError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SignError::Failed(s) => write!(f, "Failed to sign: {}", s),
+            SignError::IOError(e) => write!(f, "I/O error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for SignError {}
+
 /// debsign a changes file
-pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
+pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
     let mut args = vec!["debsign".to_string()];
     if let Some(keyid) = keyid {
         args.push(format!("-k{}", keyid));
@@ -81,27 +108,52 @@ pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
         .status()?;
 
     if !status.success() {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "debsign failed",
-        ))
+        Err(SignError::Failed("debsign failed".to_string()))
     } else {
         Ok(())
     }
 }
 
+/// Errors that can occur when uploading a package.
+#[derive(Debug)]
+pub enum UploadError {
+    /// Upload failed
+    Failed(String),
+
+    /// I/O error
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for UploadError {
+    fn from(e: std::io::Error) -> Self {
+        UploadError::IOError(e)
+    }
+}
+
+impl std::fmt::Display for UploadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            UploadError::Failed(s) => write!(f, "Failed to upload: {}", s),
+            UploadError::IOError(e) => write!(f, "I/O error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for UploadError {}
+
 /// dput a changes file
-pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
-    let status = std::process::Command::new("dput")
+pub fn dput_changes(path: &Path, host: Option<&str>) -> Result<(), UploadError> {
+    let mut binding = std::process::Command::new("dput");
+    let mut cmd = binding.current_dir(path.parent().unwrap());
+    if let Some(host) = host {
+        cmd = cmd.arg(host)
+    };
+    let status = cmd
         .arg(path.file_name().unwrap().to_string_lossy().to_string())
-        .current_dir(path.parent().unwrap())
         .status()?;
 
     if !status.success() {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "dput failed",
-        ))
+        Err(UploadError::Failed("dput failed".to_string()))
     } else {
         Ok(())
     }
@@ -740,6 +792,9 @@ pub enum PrepareUploadError {
 
     /// There is a missing nested tree
     MissingNestedTree(std::path::PathBuf),
+
+    /// Sign error
+    SignError(SignError),
 }
 
 impl From<BrzError> for PrepareUploadError {
@@ -986,7 +1041,10 @@ pub fn prepare_upload_package(
         e => PrepareUploadError::DebianError(e),
     })?;
     let source = target_changes.get("source").unwrap();
-    debsign(std::path::Path::new(&source), None).unwrap();
+    debsign(std::path::Path::new(&source), None).map_err(|e| {
+        log::warn!("Failed to sign changes file: {:?}", e);
+        PrepareUploadError::SignError(e)
+    })?;
     Ok((source.into(), Some(tag_name)))
 }
 
@@ -1380,6 +1438,13 @@ pub fn process_package(
                 )),
             ));
         }
+        Err(PrepareUploadError::SignError(e)) => {
+            log::warn!("{}: Failed to sign changes file: {:?}", source_name, e);
+            return Err(UploadPackageError::ProcessingFailure(
+                "sign-error".to_string(),
+                Some(format!("{:?}", e)),
+            ));
+        }
     };
 
     if let Some(verify_command) = verify_command {
@@ -1453,7 +1518,10 @@ pub fn process_package(
             ));
         }
     }
-    dput_changes(&target_changes).unwrap();
+    dput_changes(&target_changes, None).map_err(|e| {
+        log::error!("{}: Error uploading: {}", source_name, e);
+        UploadPackageError::ProcessingFailure("upload-error".to_string(), Some(format!("{:?}", e)))
+    })?;
     if diff {
         ws.show_diff(Box::new(std::io::stdout()), None, None)
             .unwrap();
