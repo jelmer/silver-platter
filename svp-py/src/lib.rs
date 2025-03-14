@@ -1,6 +1,7 @@
 // Allow unknown cfgs for now, since import_exception_bound
 // expects a gil-refs feature that is not defined
 #![allow(unexpected_cfgs)]
+#![allow(clippy::too_many_arguments)]
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
