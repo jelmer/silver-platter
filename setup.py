@@ -16,7 +16,7 @@ setup(
             "svp-py/Cargo.toml",
             binding=Binding.PyO3,
             args=["--no-default-features"],
-            features=features + ["extension-module"],
+            features=features + ["extension-module", "debian"],
         ),
     ],
 )
