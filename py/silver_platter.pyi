@@ -5,7 +5,6 @@ from breezy.controldir import ControlDirFormat, Prober
 from breezy.forge import Forge, MergeProposal
 from breezy.workingtree import WorkingTree
 
-
 def full_branch_url(branch: Branch) -> str:
     """Return the full URL of the branch.
 
