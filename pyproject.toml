@@ -56,9 +56,6 @@ dev = [
     "ruff==0.11.2"
 ]
 
-[project.scripts]
-debian-svp = "silver_platter.debian.__main__:main"
-
 [tool.setuptools.packages.find]
 where = ["py"]
 include = ["silver_platter*"]
