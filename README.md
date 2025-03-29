@@ -1,6 +1,6 @@
 # Silver-Platter
 
-<img src="logo.png" alt="Silver-Platter logo" align="center" width="200px"/>
+<img src="https://github.com/jelmer/silver-platter/blob/master/logo.png" alt="Silver-Platter logo" align="center" width="200px"/>
 
 Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system
