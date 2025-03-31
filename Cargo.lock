@@ -540,9 +540,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.158.25"
+version = "0.158.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "020b3e231f70e3dc28582501d5454eb8074c5c80ee998fecce123bfd44f90253"
+checksum = "8f0af448ff06c7970aea2806a35573aa53968d5435d765a81ee9ddfd1f7c8c3a"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -1564,9 +1564,9 @@ checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "makefile-lossless"
-version = "0.1.7"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85fd6456fd1895499a2cd26302eff80855631c6c7f6a3af2a29d71eb45c3098e"
+checksum = "07ea491a96d7e6a435fa6723adfd304918c2569ac62e5d0ae506a0037f5beecb"
 dependencies = [
  "log",
  "rowan 0.16.1",
