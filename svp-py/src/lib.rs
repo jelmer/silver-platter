@@ -564,13 +564,13 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
 struct MergeProposal(silver_platter::MergeProposal);
 
 #[pyfunction]
-#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated, owner=None, preferred_schemes=None))]
+#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated=None, owner=None, preferred_schemes=None))]
 fn find_existing_proposed(
     py: Python,
     main_branch: PyObject,
     forge: PyObject,
     name: &str,
-    overwrite_unrelated: bool,
+    overwrite_unrelated: Option<bool>,
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
 ) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
@@ -579,6 +579,7 @@ fn find_existing_proposed(
     let preferred_schemes = preferred_schemes
         .as_ref()
         .map(|s| s.iter().map(|s| s.as_ref()).collect::<Vec<_>>());
+    let overwrite_unrelated = overwrite_unrelated.unwrap_or(false);
     let (b, o, p) = silver_platter::publish::find_existing_proposed(
         &main_branch,
         &forge,
