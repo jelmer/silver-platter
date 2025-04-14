@@ -1524,7 +1524,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -1984,9 +1984,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-filelike"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8b8fa7c3d2f7852d216243a0a1d94e0228f0a70237d5b944a69b6250ba7d618"
+checksum = "ddebceed43397d516efc64128026fb9ada97c175a219e63bb1e11edb8b61c3a9"
 dependencies = [
  "pyo3",
 ]
