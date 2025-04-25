@@ -139,3 +139,54 @@ impl ToString for DescriptionFormat {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_description_format_from_str() {
+        assert_eq!(
+            DescriptionFormat::from_str("markdown").unwrap(),
+            DescriptionFormat::Markdown
+        );
+        assert_eq!(
+            DescriptionFormat::from_str("html").unwrap(),
+            DescriptionFormat::Html
+        );
+        assert_eq!(
+            DescriptionFormat::from_str("plain").unwrap(),
+            DescriptionFormat::Plain
+        );
+
+        // Test invalid format
+        assert!(DescriptionFormat::from_str("invalid").is_err());
+        let err = DescriptionFormat::from_str("invalid").unwrap_err();
+        assert_eq!(err, "Unknown description format: invalid");
+    }
+
+    #[test]
+    fn test_description_format_to_string() {
+        assert_eq!(DescriptionFormat::Markdown.to_string(), "markdown");
+        assert_eq!(DescriptionFormat::Html.to_string(), "html");
+        assert_eq!(DescriptionFormat::Plain.to_string(), "plain");
+    }
+
+    #[test]
+    fn test_description_format_serialization() {
+        // Test serialization
+        let format = DescriptionFormat::Markdown;
+        let serialized = serde_json::to_string(&format).unwrap();
+        assert_eq!(serialized, "\"markdown\"");
+
+        // Test deserialization
+        let deserialized: DescriptionFormat = serde_json::from_str("\"markdown\"").unwrap();
+        assert_eq!(deserialized, DescriptionFormat::Markdown);
+
+        let deserialized: DescriptionFormat = serde_json::from_str("\"html\"").unwrap();
+        assert_eq!(deserialized, DescriptionFormat::Html);
+
+        let deserialized: DescriptionFormat = serde_json::from_str("\"plain\"").unwrap();
+        assert_eq!(deserialized, DescriptionFormat::Plain);
+    }
+}

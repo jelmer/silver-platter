@@ -874,6 +874,10 @@ fn publish_one(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::Mode;
+    use std::collections::HashMap;
+
     #[test]
     fn test_entry_from_recipe() {
         let td = tempfile::tempdir().unwrap();
@@ -888,7 +892,7 @@ mod tests {
         let recipe = recipe
             .shell("echo hello > hello.txt; echo hello".to_owned())
             .build();
-        let entry = crate::batch::Entry::from_recipe(
+        let entry = super::Entry::from_recipe(
             &recipe,
             td.path(),
             &url::Url::from_directory_path(&remote.path()).unwrap(),
@@ -923,10 +927,137 @@ mod tests {
             name: Some("foo".to_owned()),
         };
         let batch =
-            crate::batch::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path(), None)
+            super::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path(), None)
                 .unwrap();
         assert_eq!(batch.work.len(), 1);
         let entry = batch.work.get("foo").unwrap();
         assert_eq!(entry.description, "hello\n");
+    }
+
+    #[test]
+    fn test_drop_batch_entry() {
+        let td = tempfile::tempdir().unwrap();
+        let remote = tempfile::tempdir().unwrap();
+        breezyshim::controldir::create_branch_convenience(
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            None,
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        let recipe = crate::recipe::RecipeBuilder::new();
+        let recipe = recipe
+            .name("hello".to_owned())
+            .shell("echo hello > hello.txt; echo hello".to_owned())
+            .build();
+        let candidate = crate::candidates::Candidate {
+            url: url::Url::from_directory_path(&remote.path()).unwrap(),
+            subpath: None,
+            default_mode: None,
+            branch: None,
+            name: Some("foo".to_owned()),
+        };
+
+        // Create batch with one entry
+        let batch =
+            super::Batch::from_recipe(&recipe, std::iter::once(&candidate), td.path(), None)
+                .unwrap();
+        assert_eq!(batch.work.len(), 1);
+        assert!(batch.work.contains_key("foo"));
+
+        // Verify the entry directory exists
+        assert!(td.path().join("foo").exists());
+        assert!(td.path().join("batch.yaml").exists());
+
+        // Drop the entry
+        super::drop_batch_entry(td.path(), "foo").unwrap();
+
+        // Verify the entry was removed
+        let loaded_batch = super::load_batch_metadata(td.path()).unwrap().unwrap();
+        assert_eq!(loaded_batch.work.len(), 0);
+        assert!(!loaded_batch.work.contains_key("foo"));
+        assert!(!td.path().join("foo").exists());
+
+        // Test dropping non-existent entry (should not error)
+        super::drop_batch_entry(td.path(), "non-existent").unwrap();
+    }
+
+    #[test]
+    fn test_load_save_batch_metadata() {
+        let td = tempfile::tempdir().unwrap();
+        let absolute_path = td.path().canonicalize().unwrap();
+
+        // Create a basic recipe
+        let recipe = crate::recipe::RecipeBuilder::new()
+            .name("test-batch".to_owned())
+            .shell("echo test".to_owned())
+            .build();
+
+        // Create a batch
+        let mut batch = Batch {
+            version: CURRENT_VERSION,
+            recipe: recipe.clone(),
+            name: "test-batch".to_string(),
+            work: HashMap::new(),
+            basepath: absolute_path.clone(),
+        };
+
+        // Add a sample entry
+        let entry = Entry {
+            local_path: absolute_path.join("test-entry"),
+            subpath: Some(std::path::PathBuf::from("subdir")),
+            target_branch_url: Some(url::Url::parse("https://example.com/repo").unwrap()),
+            description: "Test description".to_string(),
+            commit_message: Some("Test commit message".to_string()),
+            auto_merge: Some(true),
+            mode: Mode::Propose,
+            title: Some("Test title".to_string()),
+            owner: None,
+            labels: Some(vec!["test-label".to_string()]),
+            proposal_url: None,
+            context: serde_yaml::Value::Null,
+        };
+
+        batch.work.insert("test-entry".to_string(), entry);
+
+        // Save batch metadata
+        super::save_batch_metadata(&absolute_path, &batch).unwrap();
+
+        // Verify batch.yaml exists
+        assert!(absolute_path.join("batch.yaml").exists());
+
+        // Load batch metadata
+        let loaded_batch = super::load_batch_metadata(&absolute_path).unwrap().unwrap();
+
+        // Verify loaded batch matches original
+        assert_eq!(loaded_batch.version, batch.version);
+        assert_eq!(loaded_batch.name, batch.name);
+        assert_eq!(loaded_batch.basepath, batch.basepath);
+        assert_eq!(loaded_batch.work.len(), 1);
+
+        let loaded_entry = loaded_batch.work.get("test-entry").unwrap();
+        assert_eq!(loaded_entry.local_path, absolute_path.join("test-entry"));
+        assert_eq!(
+            loaded_entry.subpath,
+            Some(std::path::PathBuf::from("subdir"))
+        );
+        assert_eq!(
+            loaded_entry.target_branch_url,
+            Some(url::Url::parse("https://example.com/repo").unwrap())
+        );
+        assert_eq!(loaded_entry.description, "Test description");
+        assert_eq!(
+            loaded_entry.commit_message,
+            Some("Test commit message".to_string())
+        );
+        assert_eq!(loaded_entry.auto_merge, Some(true));
+        assert_eq!(loaded_entry.mode, Mode::Propose);
+        assert_eq!(loaded_entry.title, Some("Test title".to_string()));
+        assert_eq!(loaded_entry.labels, Some(vec!["test-label".to_string()]));
+
+        // Test loading non-existent batch
+        let non_existent_dir = absolute_path.join("non-existent");
+        std::fs::create_dir(&non_existent_dir).unwrap();
+        let result = super::load_batch_metadata(&non_existent_dir).unwrap();
+        assert!(result.is_none());
     }
 }
