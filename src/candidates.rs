@@ -131,4 +131,87 @@ mod tests {
 
         assert_eq!(candidate.shortname(), "foo");
     }
+
+    #[test]
+    fn test_candidates_new() {
+        let candidates = Candidates::new();
+        assert_eq!(candidates.candidates().len(), 0);
+    }
+
+    #[test]
+    fn test_candidates_from_vec() {
+        let candidate1 = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("dulwich".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let candidate2 = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/silver-platter").unwrap(),
+            name: Some("silver-platter".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let candidates_vec = vec![candidate1, candidate2];
+        let candidates = Candidates::from(candidates_vec);
+
+        assert_eq!(candidates.candidates().len(), 2);
+        assert_eq!(candidates.candidates()[0].name, Some("dulwich".to_string()));
+        assert_eq!(
+            candidates.candidates()[1].name,
+            Some("silver-platter".to_string())
+        );
+    }
+
+    #[test]
+    fn test_candidates_iter() {
+        let candidate1 = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("dulwich".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let candidate2 = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/silver-platter").unwrap(),
+            name: Some("silver-platter".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let candidates = Candidates::from(vec![candidate1, candidate2]);
+
+        let names: Vec<String> = candidates.iter().map(|c| c.name.clone().unwrap()).collect();
+
+        assert_eq!(
+            names,
+            vec!["dulwich".to_string(), "silver-platter".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_try_from_yaml() {
+        let yaml = serde_yaml::from_str::<serde_yaml::Value>(
+            r#"
+        - url: https://github.com/jelmer/dulwich
+          name: dulwich
+        - url: https://github.com/jelmer/silver-platter
+          name: silver-platter
+          branch: main
+        "#,
+        )
+        .unwrap();
+
+        let candidates = Candidates::try_from(yaml).unwrap();
+
+        assert_eq!(candidates.candidates().len(), 2);
+        assert_eq!(candidates.candidates()[0].name, Some("dulwich".to_string()));
+        assert_eq!(candidates.candidates()[1].branch, Some("main".to_string()));
+    }
 }

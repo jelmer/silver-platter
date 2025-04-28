@@ -564,13 +564,13 @@ fn full_branch_url(branch: PyObject) -> PyResult<String> {
 struct MergeProposal(silver_platter::MergeProposal);
 
 #[pyfunction]
-#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated, owner=None, preferred_schemes=None))]
+#[pyo3(signature = (main_branch, forge, name, overwrite_unrelated=None, owner=None, preferred_schemes=None))]
 fn find_existing_proposed(
     py: Python,
     main_branch: PyObject,
     forge: PyObject,
     name: &str,
-    overwrite_unrelated: bool,
+    overwrite_unrelated: Option<bool>,
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
 ) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
@@ -579,6 +579,7 @@ fn find_existing_proposed(
     let preferred_schemes = preferred_schemes
         .as_ref()
         .map(|s| s.iter().map(|s| s.as_ref()).collect::<Vec<_>>());
+    let overwrite_unrelated = overwrite_unrelated.unwrap_or(false);
     let (b, o, p) = silver_platter::publish::find_existing_proposed(
         &main_branch,
         &forge,
@@ -810,7 +811,6 @@ pub(crate) mod debian {
     create_exception!(silver_platter, DputFailure, PyException);
     create_exception!(silver_platter, DebsignFailure, PyException);
 
-    #[cfg(feature = "debian")]
     #[pyfunction]
     pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
         silver_platter::debian::pick_additional_colocated_branches(
@@ -868,7 +868,7 @@ pub(crate) mod debian {
     }
 
     #[pyfunction]
-    #[pyo3(signature = (local_tree, script, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None, update_changelog=None))]
+    #[pyo3(signature = (local_tree, script, *, subpath=None, commit_pending=None, resume_metadata=None, committer=None, extra_env=None, stderr=None, update_changelog=None))]
     pub(crate) fn debian_script_runner(
         py: Python,
         local_tree: PyObject,
@@ -1392,26 +1392,28 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     #[cfg(feature = "debian")]
     {
-        m.add_class::<debian::ChangelogBehaviour>()?;
-        m.add_function(wrap_pyfunction!(debian::get_maintainer_from_env, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::guess_update_changelog, m)?)?;
-        m.add_class::<debian::DebianCommandResult>()?;
-        m.add_function(wrap_pyfunction!(debian::debian_script_runner, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::is_debcargo_package, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::control_files_in_root, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::install_built_package, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::build, m)?)?;
-        m.add_function(wrap_pyfunction!(
+        let debian = PyModule::new_bound(py, "debian")?;
+        debian.add_class::<debian::ChangelogBehaviour>()?;
+        debian.add_function(wrap_pyfunction!(debian::get_maintainer_from_env, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::guess_update_changelog, &debian)?)?;
+        debian.add_class::<debian::DebianCommandResult>()?;
+        debian.add_function(wrap_pyfunction!(debian::debian_script_runner, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::is_debcargo_package, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::control_files_in_root, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::install_built_package, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::build, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(
             debian::pick_additional_colocated_branches,
-            m
+            &debian
         )?)?;
-        m.add_function(wrap_pyfunction!(debian::debsign, m)?)?;
-        m.add_function(wrap_pyfunction!(debian::dput_changes, m)?)?;
-        m.add("DputFailure", py.get_type_bound::<debian::DputFailure>())?;
-        m.add(
+        debian.add_function(wrap_pyfunction!(debian::debsign, &debian)?)?;
+        debian.add_function(wrap_pyfunction!(debian::dput_changes, &debian)?)?;
+        debian.add("DputFailure", py.get_type_bound::<debian::DputFailure>())?;
+        debian.add(
             "DebsignFailure",
             py.get_type_bound::<debian::DebsignFailure>(),
         )?;
+        m.add_submodule(&debian)?;
     }
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
     m.add_function(wrap_pyfunction!(propose_changes, m)?)?;
