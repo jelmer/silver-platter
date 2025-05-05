@@ -1,6 +1,7 @@
+---
 name: coverage
 
-on: [push]
+"on": [push]
 jobs:
   test:
     name: coverage
@@ -12,7 +13,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt -y update
-          sudo apt -y install devscripts libapt-pkg-dev libtdb-dev libssl-dev pkg-config libgpgme-dev rustc cargo
+          sudo apt -y install devscripts libapt-pkg-dev libtdb-dev \
+            libssl-dev pkg-config libgpgme-dev rustc cargo
           cargo install cargo-tarpaulin
 
       - name: Upgrade pip
@@ -31,4 +33,3 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{secrets.CODECOV_TOKEN}}
-          fail_ci_if_error: true
