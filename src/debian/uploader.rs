@@ -62,7 +62,7 @@ impl LastAttemptDatabase {
 #[cfg(feature = "last-attempt-db")]
 impl Default for LastAttemptDatabase {
     fn default() -> Self {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter").unwrap();
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter");
         let last_attempt_path = xdg_dirs.place_data_file("last-upload-attempt.tdb").unwrap();
         Self::open(last_attempt_path.as_path())
     }
