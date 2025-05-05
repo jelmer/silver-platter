@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "silver-platter"
 authors = [{name = "Jelmer Vernooij", email = "jelmer@jelmer.uk"}]
 description = "Large scale VCS change management"
-readme = "README.md"
+readme = "README.python.md"
 license = {text = "GNU GPL v2 or later"}
 keywords = ["git bzr vcs github gitlab launchpad"]
 classifiers = [
