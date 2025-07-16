@@ -990,3 +990,118 @@ pub async fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_server_info() {
+        let server = SvpMcpServer::new();
+        let info = server.get_info();
+        
+        assert_eq!(info.server_info.name, "svp-mcp");
+        assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+        assert!(info.capabilities.tools.is_some());
+        assert_eq!(info.protocol_version, ProtocolVersion::V_2024_11_05);
+    }
+
+    #[test]
+    fn test_server_creation() {
+        let server = SvpMcpServer::new();
+        
+        // Test basic server creation
+        assert!(server._state.try_lock().is_ok());
+        
+        // Test that server info is accessible
+        let info = server.get_info();
+        assert!(!info.server_info.name.is_empty());
+        assert!(!info.server_info.version.is_empty());
+    }
+
+    #[test]
+    fn test_data_structures() {
+        // Test that our data structures can be serialized/deserialized
+        let proposal_info = ProposalInfo {
+            url: Some("https://github.com/example/repo/pull/123".to_string()),
+            status: "open".to_string(),
+            target_branch: Some("main".to_string()),
+            source_branch: Some("feature".to_string()),
+            description: Some("Test PR".to_string()),
+        };
+        
+        let json_str = serde_json::to_string(&proposal_info).unwrap();
+        let parsed: ProposalInfo = serde_json::from_str(&json_str).unwrap();
+        
+        assert_eq!(proposal_info.url, parsed.url);
+        assert_eq!(proposal_info.status, parsed.status);
+        
+        // Test repo info
+        let repo_info = RepoInfo {
+            branch_name: Some("main".to_string()),
+            repository_path: "/path/to/repo".to_string(),
+            has_changes: false,
+        };
+        
+        let json_str = serde_json::to_string(&repo_info).unwrap();
+        let parsed: RepoInfo = serde_json::from_str(&json_str).unwrap();
+        
+        assert_eq!(repo_info.branch_name, parsed.branch_name);
+        assert_eq!(repo_info.repository_path, parsed.repository_path);
+        assert_eq!(repo_info.has_changes, parsed.has_changes);
+        
+        // Test run recipe result
+        let run_result = RunRecipeResult {
+            success: true,
+            branch_name: Some("feature-branch".to_string()),
+            description: Some("Applied changes successfully".to_string()),
+            proposal_url: Some("https://github.com/example/repo/pull/124".to_string()),
+            error: None,
+        };
+        
+        let json_str = serde_json::to_string(&run_result).unwrap();
+        let parsed: RunRecipeResult = serde_json::from_str(&json_str).unwrap();
+        
+        assert_eq!(run_result.success, parsed.success);
+        assert_eq!(run_result.branch_name, parsed.branch_name);
+        assert_eq!(run_result.description, parsed.description);
+        assert_eq!(run_result.proposal_url, parsed.proposal_url);
+    }
+
+    #[test]
+    fn test_json_schema_creation() {
+        // Test that we can create valid JSON schemas
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "test_param": {
+                    "type": "string",
+                    "description": "Test parameter"
+                }
+            },
+            "required": ["test_param"]
+        });
+        
+        let schema_obj = schema.as_object().unwrap();
+        assert!(schema_obj.contains_key("type"));
+        assert!(schema_obj.contains_key("properties"));
+        assert!(schema_obj.contains_key("required"));
+    }
+
+    #[test]
+    fn test_tool_definitions() {
+        // Test that tool definitions are properly structured
+        let server = SvpMcpServer::new();
+        let info = server.get_info();
+        
+        // Check that tools capability is set
+        assert!(info.capabilities.tools.is_some());
+        
+        // Test that server can be created and basic operations work
+        let server2 = SvpMcpServer::new();
+        let info2 = server2.get_info();
+        
+        assert_eq!(info.server_info.name, info2.server_info.name);
+        assert_eq!(info.server_info.version, info2.server_info.version);
+    }
+}
