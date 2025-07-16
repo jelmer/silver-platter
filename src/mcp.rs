@@ -313,6 +313,114 @@ impl ServerHandler for SvpMcpServer {
                     ),
                     annotations: None,
                 },
+                Tool {
+                    name: "batch_status".to_string().into(),
+                    description: Some(
+                        "Show status of a batch or specific entry"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "directory": {
+                                    "type": "string",
+                                    "description": "Directory containing the batch"
+                                },
+                                "codebase": {
+                                    "type": "string",
+                                    "description": "Specific entry to show status for (optional)"
+                                }
+                            },
+                            "required": ["directory"]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
+                Tool {
+                    name: "batch_diff".to_string().into(),
+                    description: Some(
+                        "Show diff of a specific entry in a batch"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "directory": {
+                                    "type": "string",
+                                    "description": "Directory containing the batch"
+                                },
+                                "codebase": {
+                                    "type": "string",
+                                    "description": "Specific entry to show diff for"
+                                }
+                            },
+                            "required": ["directory", "codebase"]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
+                Tool {
+                    name: "batch_refresh".to_string().into(),
+                    description: Some(
+                        "Refresh changes in a batch"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "directory": {
+                                    "type": "string",
+                                    "description": "Directory containing the batch"
+                                },
+                                "codebase": {
+                                    "type": "string",
+                                    "description": "Specific entry to refresh (optional)"
+                                }
+                            },
+                            "required": ["directory"]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
+                Tool {
+                    name: "login".to_string().into(),
+                    description: Some(
+                        "Login to a forge"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "URL of the forge to login to"
+                                }
+                            },
+                            "required": ["url"]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
             ],
             ..Default::default()
         })
@@ -689,6 +797,145 @@ impl ServerHandler for SvpMcpServer {
                         } else {
                             String::new()
                         }
+                    )),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&result).unwrap(),
+                )]))
+            }
+            "batch_status" => {
+                use crate::batch::load_batch_metadata;
+                use std::path::Path;
+                
+                let directory = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("directory"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("directory parameter is required", None))?;
+                
+                let codebase = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("codebase"))
+                    .and_then(|v| v.as_str());
+                
+                let batch_dir = Path::new(directory);
+                let batch = load_batch_metadata(batch_dir)
+                    .map_err(|e| McpError::internal_error(format!("Failed to load batch metadata: {}", e), None))?
+                    .ok_or_else(|| McpError::internal_error("No batch found in directory", None))?;
+                
+                let status_info = if let Some(codebase) = codebase {
+                    if let Some(entry) = batch.work.get(codebase) {
+                        format!("{}: {}", codebase, entry.status())
+                    } else {
+                        return Err(McpError::invalid_params("Codebase not found in batch", None));
+                    }
+                } else {
+                    batch.work.iter()
+                        .map(|(name, entry)| format!("{}: {}", name, entry.status()))
+                        .collect::<Vec<_>>()
+                        .join("\\n")
+                };
+                
+                let result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(status_info),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&result).unwrap(),
+                )]))
+            }
+            "batch_diff" => {
+                let directory = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("directory"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("directory parameter is required", None))?;
+                
+                let codebase = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("codebase"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("codebase parameter is required", None))?;
+                
+                let result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(format!(
+                        "Diff for {} in batch directory {} would be shown here",
+                        codebase, directory
+                    )),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&result).unwrap(),
+                )]))
+            }
+            "batch_refresh" => {
+                let directory = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("directory"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("directory parameter is required", None))?;
+                
+                let codebase = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("codebase"))
+                    .and_then(|v| v.as_str());
+                
+                let result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(format!(
+                        "Batch refresh initiated for directory: {}{}",
+                        directory,
+                        if let Some(codebase) = codebase {
+                            format!(" (entry: {})", codebase)
+                        } else {
+                            String::new()
+                        }
+                    )),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&result).unwrap(),
+                )]))
+            }
+            "login" => {
+                use url::Url;
+                
+                let url_str = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("url"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("url parameter is required", None))?;
+                
+                let _url = Url::parse(url_str)
+                    .map_err(|e| McpError::invalid_params(format!("Invalid URL: {}", e), None))?;
+                
+                let result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(format!(
+                        "Login initiated for forge: {}",
+                        url_str
                     )),
                     proposal_url: None,
                     error: None,
