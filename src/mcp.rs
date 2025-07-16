@@ -226,6 +226,55 @@ impl ServerHandler for SvpMcpServer {
                     ),
                     annotations: None,
                 },
+                Tool {
+                    name: "batch_generate".to_string().into(),
+                    description: Some(
+                        "Generate a batch of changes to apply to multiple repositories"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "directory": {
+                                    "type": "string",
+                                    "description": "Directory to create the batch in"
+                                },
+                                "candidates": {
+                                    "type": "string",
+                                    "description": "Path to candidates file or URL pattern"
+                                },
+                                "command": {
+                                    "oneOf": [
+                                        {
+                                            "type": "string",
+                                            "description": "Command as shell string"
+                                        },
+                                        {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Command as array of arguments"
+                                        }
+                                    ]
+                                },
+                                "recipe": {
+                                    "type": "string",
+                                    "description": "Path to recipe file"
+                                }
+                            },
+                            "required": ["directory", "candidates"],
+                            "anyOf": [
+                                {"required": ["command"]},
+                                {"required": ["recipe"]}
+                            ]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
             ],
             ..Default::default()
         })
@@ -464,6 +513,100 @@ impl ServerHandler for SvpMcpServer {
                 
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string(&apply_result).unwrap(),
+                )]))
+            }
+            "batch_generate" => {
+                use crate::candidates::Candidates;
+                use crate::recipe::Recipe;
+                use crate::batch::Batch;
+                use std::path::Path;
+                
+                let directory = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("directory"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("directory parameter is required", None))?;
+                
+                let candidates_path = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("candidates"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("candidates parameter is required", None))?;
+                
+                let recipe_path = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("recipe"))
+                    .and_then(|v| v.as_str());
+                
+                let command_json = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("command"));
+                
+                // Either recipe or command must be provided
+                let recipe = if let Some(recipe_path) = recipe_path {
+                    Recipe::from_path(Path::new(recipe_path))
+                        .map_err(|e| McpError::invalid_params(format!("Failed to load recipe: {}", e), None))?
+                } else if let Some(command_json) = command_json {
+                    // Create a basic recipe from the command
+                    let mut recipe = Recipe {
+                        name: Some("batch-recipe".to_string()),
+                        merge_request: None,
+                        labels: None,
+                        command: None,
+                        mode: Some(crate::Mode::Propose),
+                        resume: None,
+                        commit_pending: crate::CommitPending::Auto,
+                    };
+                    
+                    // Parse command
+                    if let Some(cmd_str) = command_json.as_str() {
+                        recipe.command = Some(crate::recipe::Command::Shell(cmd_str.to_string()));
+                    } else if let Some(cmd_array) = command_json.as_array() {
+                        let cmd_vec: Result<Vec<String>, _> = cmd_array.iter()
+                            .map(|v| v.as_str().ok_or("Invalid command array").map(|s| s.to_string()))
+                            .collect();
+                        recipe.command = Some(crate::recipe::Command::Argv(cmd_vec.map_err(|e| McpError::invalid_params(e, None))?));
+                    } else {
+                        return Err(McpError::invalid_params("command must be string or array", None));
+                    }
+                    
+                    recipe
+                } else {
+                    return Err(McpError::invalid_params("Either recipe or command must be provided", None));
+                };
+                
+                // Load candidates
+                let candidates = if Path::new(candidates_path).exists() {
+                    Candidates::from_path(Path::new(candidates_path))
+                        .map_err(|e| McpError::invalid_params(format!("Failed to load candidates: {}", e), None))?
+                } else {
+                    return Err(McpError::invalid_params("Candidates file not found", None));
+                };
+                
+                // Generate batch
+                let batch_dir = Path::new(directory);
+                let extra_env = std::collections::HashMap::new();
+                
+                Batch::from_recipe(&recipe, candidates.iter(), batch_dir, Some(extra_env))
+                    .map_err(|e| McpError::internal_error(format!("Failed to generate batch: {}", e), None))?;
+                
+                let result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(format!(
+                        "Batch generated successfully in {}. Review the patches and run batch_publish to publish them.",
+                        directory
+                    )),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&result).unwrap(),
                 )]))
             }
             _ => Err(McpError::internal_error(
