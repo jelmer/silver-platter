@@ -178,6 +178,54 @@ impl ServerHandler for SvpMcpServer {
                     ),
                     annotations: None,
                 },
+                Tool {
+                    name: "apply_changes".to_string().into(),
+                    description: Some(
+                        "Apply a script to make changes in an existing local checkout"
+                            .to_string()
+                            .into(),
+                    ),
+                    input_schema: Arc::new(
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "directory": {
+                                    "type": "string",
+                                    "description": "Directory containing the repository"
+                                },
+                                "command": {
+                                    "oneOf": [
+                                        {
+                                            "type": "string",
+                                            "description": "Command as shell string"
+                                        },
+                                        {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Command as array of arguments"
+                                        }
+                                    ]
+                                },
+                                "diff": {
+                                    "type": "boolean",
+                                    "description": "Show diff of generated changes",
+                                    "default": false
+                                },
+                                "commit_pending": {
+                                    "type": "string",
+                                    "description": "Whether to commit pending changes after script",
+                                    "enum": ["yes", "no", "auto"],
+                                    "default": "auto"
+                                }
+                            },
+                            "required": ["directory", "command"]
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
+                    annotations: None,
+                },
             ],
             ..Default::default()
         })
@@ -308,6 +356,114 @@ impl ServerHandler for SvpMcpServer {
                 
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string(&result_info).unwrap(),
+                )]))
+            }
+            "apply_changes" => {
+                use crate::codemod::script_runner;
+                use crate::recipe::Command;
+                use breezyshim::workingtree;
+                use std::path::Path;
+                
+                let directory = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("directory"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::invalid_params("directory parameter is required", None))?;
+                
+                let command_json = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("command"))
+                    .ok_or_else(|| McpError::invalid_params("command parameter is required", None))?;
+                
+                let show_diff = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("diff"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                
+                let commit_pending_str = params
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("commit_pending"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("auto");
+                
+                let commit_pending = match commit_pending_str {
+                    "yes" => crate::CommitPending::Yes,
+                    "no" => crate::CommitPending::No,
+                    "auto" => crate::CommitPending::Auto,
+                    _ => return Err(McpError::invalid_params("Invalid commit_pending value", None)),
+                };
+                
+                // Parse command
+                let command = if let Some(cmd_str) = command_json.as_str() {
+                    Command::Shell(cmd_str.to_string())
+                } else if let Some(cmd_array) = command_json.as_array() {
+                    let cmd_vec: Result<Vec<String>, _> = cmd_array.iter()
+                        .map(|v| v.as_str().ok_or("Invalid command array").map(|s| s.to_string()))
+                        .collect();
+                    Command::Argv(cmd_vec.map_err(|e| McpError::invalid_params(e, None))?)
+                } else {
+                    return Err(McpError::invalid_params("command must be string or array", None));
+                };
+                
+                // Open the working tree
+                let (local_tree, subpath) = workingtree::open_containing(Path::new(directory))
+                    .map_err(|e| McpError::internal_error(format!("Failed to open working tree: {}", e), None))?;
+                
+                // Check if tree is clean
+                let basis_tree = local_tree.basis_tree()
+                    .map_err(|e| McpError::internal_error(format!("Failed to get basis tree: {}", e), None))?;
+                
+                if let Err(e) = breezyshim::workspace::check_clean_tree(&local_tree, &basis_tree, subpath.as_path()) {
+                    return Err(McpError::internal_error(format!("Working tree is not clean: {}", e), None));
+                }
+                
+                // Run the script
+                let cmd_argv = command.argv();
+                let cmd_parts: Vec<&str> = cmd_argv.iter().map(|s| s.as_str()).collect();
+                let result = script_runner(
+                    &local_tree,
+                    &cmd_parts,
+                    subpath.as_path(),
+                    commit_pending,
+                    None,
+                    None,
+                    None,
+                    std::process::Stdio::null(),
+                ).map_err(|e| McpError::internal_error(format!("Script execution failed: {}", e), None))?;
+                
+                let mut response_parts = vec![];
+                
+                // Add basic result info
+                response_parts.push(format!("Applied changes successfully"));
+                if let Some(description) = &result.description {
+                    response_parts.push(format!("Description: {}", description));
+                }
+                
+                // Add diff if requested
+                if show_diff {
+                    // Get the diff
+                    let _new_basis = local_tree.basis_tree()
+                        .map_err(|e| McpError::internal_error(format!("Failed to get new basis tree: {}", e), None))?;
+                    
+                    // For now, just indicate that diff was requested
+                    response_parts.push("Diff requested but not implemented yet".to_string());
+                }
+                
+                let apply_result = RunRecipeResult {
+                    success: true,
+                    branch_name: None,
+                    description: Some(response_parts.join("\\n")),
+                    proposal_url: None,
+                    error: None,
+                };
+                
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string(&apply_result).unwrap(),
                 )]))
             }
             _ => Err(McpError::internal_error(
