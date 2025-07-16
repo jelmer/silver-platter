@@ -35,6 +35,8 @@ pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
 debian-control = { version = ">=0.1", optional = true }
 rand = "0.9.1"
+rmcp = { version = "0.2.0", features = ["server"], optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
 
 [workspace]
 members = [ "svp-client", "svp-py" ]
@@ -47,6 +49,7 @@ last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["debian"]
 cli = ["dep:clap", "dep:env_logger"]
 pyo3 = ["dep:pyo3"]
+mcp = ["dep:rmcp", "dep:tokio", "cli"]
 
 [dependencies.serde]
 workspace = true

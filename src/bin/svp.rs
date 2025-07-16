@@ -66,6 +66,10 @@ enum Commands {
 
     #[clap(subcommand)]
     Batch(BatchArgs),
+
+    #[cfg(feature = "mcp")]
+    /// Run MCP server for silver-platter
+    Mcp {},
 }
 
 /// Run a script to make a change, and publish (propose/push/etc) it
@@ -839,5 +843,20 @@ fn main() -> Result<(), i32> {
                 codebase,
             } => batch_refresh(directory.as_path(), codebase.as_deref()),
         },
+        #[cfg(feature = "mcp")]
+        Commands::Mcp {} => {
+            use tokio::runtime::Runtime;
+
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
+                match silver_platter::mcp::run_mcp_server().await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        error!("MCP server error: {}", e);
+                        Err(1)
+                    }
+                }
+            })
+        }
     }
 }

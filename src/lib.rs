@@ -30,6 +30,10 @@ pub mod run;
 pub mod utils;
 pub mod vcs;
 pub mod workspace;
+
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 pub use breezyshim::branch::{Branch, GenericBranch};
 pub use breezyshim::controldir::{ControlDir, Prober};
 pub use breezyshim::forge::{Forge, MergeProposal};
