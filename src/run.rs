@@ -6,8 +6,9 @@ use crate::publish::{
 use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
+use breezyshim::tree::WorkingTree;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -18,6 +19,8 @@ mod tests {
     use super::*;
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -661,7 +664,7 @@ exit 0
 /// Open a branch from a URL, with error handling
 ///
 /// Returns a branch on success or error code on failure.
-fn open_branch_with_error_handling(url: &Url) -> Result<Box<dyn Branch>, i32> {
+fn open_branch_with_error_handling(url: &Url) -> Result<GenericBranch, i32> {
     match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
             url, description, ..
@@ -694,7 +697,7 @@ fn open_branch_with_error_handling(url: &Url) -> Result<Box<dyn Branch>, i32> {
 /// Returns tuple of (forge, existing_proposals, resume_branch, overwrite) on success
 /// or error code on failure.
 fn get_forge_and_proposals(
-    main_branch: &dyn Branch,
+    main_branch: &GenericBranch,
     url: &Url,
     name: &str,
     mode: Mode,
@@ -703,7 +706,7 @@ fn get_forge_and_proposals(
     (
         Option<Box<Forge>>,
         Vec<MergeProposal>,
-        Option<Box<dyn Branch>>,
+        Option<GenericBranch>,
         bool,
     ),
     i32,
@@ -765,8 +768,8 @@ fn get_forge_and_proposals(
 ///
 /// Returns workspace on success or error code on failure.
 fn build_workspace(
-    main_branch: Box<dyn Branch>,
-    resume_branch: Option<Box<dyn Branch>>,
+    main_branch: GenericBranch,
+    resume_branch: Option<GenericBranch>,
 ) -> Result<Workspace, i32> {
     let mut builder = Workspace::builder().main_branch(main_branch);
 
@@ -887,6 +890,7 @@ fn publish_workspace_changes(
         None,
         None,
         None,
+        None,
     ) {
         Ok(r) => Ok(r),
         Err(PublishError::UnsupportedForge(_)) => {
@@ -958,7 +962,7 @@ pub fn apply_and_publish(
 
     // Step 2: Get forge and proposals
     let (forge, existing_proposals, mut resume_branch, mut overwrite) =
-        match get_forge_and_proposals(main_branch.as_ref(), url, name, mode, derived_owner) {
+        match get_forge_and_proposals(&main_branch, url, name, mode, derived_owner) {
             Ok(result) => result,
             Err(code) => return code,
         };
@@ -1009,7 +1013,7 @@ pub fn apply_and_publish(
     }
 
     // Enable tag pushing
-    enable_tag_pushing(ws.local_tree().branch().as_ref()).unwrap();
+    enable_tag_pushing(&ws.local_tree().branch()).unwrap();
 
     // Step 6: Prepare callbacks for publishing
     let result_ref = result.clone();

@@ -6,9 +6,10 @@ use crate::publish::{
 use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
+use breezyshim::tree::WorkingTree;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use url::Url;
@@ -18,6 +19,7 @@ mod tests {
     use super::*;
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::WorkingTree;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -337,8 +339,8 @@ pub fn apply_and_publish(
     let (forge, existing_proposals, mut resume_branch): (
         Option<Forge>,
         Vec<MergeProposal>,
-        Option<Box<dyn Branch>>,
-    ) = match get_forge(main_branch.as_ref()) {
+        Option<GenericBranch>,
+    ) = match get_forge(&main_branch) {
         Err(BrzError::UnsupportedForge(e)) => {
             if mode != Mode::Push {
                 error!("{}: {}", url, e);
@@ -349,7 +351,7 @@ pub fn apply_and_publish(
             warn!(
                 "Unsupported forge ({}), will attempt to push to {}",
                 e,
-                crate::vcs::full_branch_url(main_branch.as_ref()),
+                crate::vcs::full_branch_url(&main_branch),
             );
             (None, vec![], None)
         }
@@ -365,15 +367,9 @@ pub fn apply_and_publish(
             return 2;
         }
         Ok(ref forge) => {
-            let (resume_branch, resume_overwrite, existing_proposals) = find_existing_proposed(
-                main_branch.as_ref(),
-                forge,
-                name,
-                false,
-                derived_owner,
-                None,
-            )
-            .unwrap();
+            let (resume_branch, resume_overwrite, existing_proposals) =
+                find_existing_proposed(&main_branch, forge, name, false, derived_owner, None)
+                    .unwrap();
             if let Some(resume_overwrite) = resume_overwrite {
                 overwrite = resume_overwrite;
             }
@@ -413,7 +409,7 @@ pub fn apply_and_publish(
     let mut ws_builder = Workspace::builder();
 
     ws_builder = ws_builder.additional_colocated_branches(
-        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+        crate::debian::pick_additional_colocated_branches(&main_branch),
     );
 
     ws_builder = ws_builder.main_branch(main_branch);
@@ -471,7 +467,7 @@ pub fn apply_and_publish(
         .unwrap();
     }
 
-    enable_tag_pushing(ws.local_tree().branch().as_ref()).unwrap();
+    enable_tag_pushing(&ws.local_tree().branch()).unwrap();
 
     let result_ref = result.clone();
     let get_commit_message = get_commit_message
@@ -501,6 +497,7 @@ pub fn apply_and_publish(
         None,
         None,
         derived_owner,
+        None,
         None,
         None,
         None,

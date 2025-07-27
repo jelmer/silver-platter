@@ -3,7 +3,7 @@
 use crate::debian::{add_changelog_entry, control_files_in_root, guess_update_changelog};
 use crate::CommitPending;
 use breezyshim::error::Error as BrzError;
-use breezyshim::tree::{MutableTree, Tree, WorkingTree};
+use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
 use debian_changelog::get_maintainer_from_env;
 use debian_changelog::ChangeLog;
@@ -196,7 +196,7 @@ pub struct DetailedFailure {
 /// - `script`: Script to run
 /// - `commit_pending`: Whether to commit pending changes
 pub fn script_runner(
-    local_tree: &WorkingTree,
+    local_tree: &dyn WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
     commit_pending: CommitPending,
@@ -341,8 +341,7 @@ pub fn script_runner(
             .map(|(n, v)| (n, v.map(|v| RevisionId::from(v.as_bytes().to_vec()))))
             .collect()
     } else {
-        let mut tags = local_tree
-            .get_tag_dict()
+        let mut tags = local_tree.get_tag_dict()
             .unwrap()
             .into_iter()
             .filter_map(|(n, v)| {

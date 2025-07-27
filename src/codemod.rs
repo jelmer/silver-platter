@@ -1,7 +1,7 @@
 //! Codemod
 use breezyshim::error::Error as BrzError;
-use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
+use breezyshim::WorkingTree;
 use std::collections::HashMap;
 use url::Url;
 
@@ -201,7 +201,7 @@ impl std::fmt::Display for DetailedFailure {
 /// - `script`: Script to run
 /// - `commit_pending`: Whether to commit pending changes
 pub fn script_runner(
-    local_tree: &WorkingTree,
+    local_tree: &dyn WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
     commit_pending: crate::CommitPending,
@@ -288,8 +288,7 @@ pub fn script_runner(
             .map(|(n, v)| (n, v.map(|v| RevisionId::from(v.as_bytes().to_vec()))))
             .collect()
     } else {
-        let mut tags = local_tree
-            .get_tag_dict()
+        let mut tags = local_tree.get_tag_dict()
             .unwrap()
             .into_iter()
             .filter_map(|(n, v)| {
@@ -358,9 +357,9 @@ pub fn script_runner(
 
 #[cfg(test)]
 mod script_runner_tests {
-    use breezyshim::tree::MutableTree;
-
     use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
 
     fn make_executable(script_path: &std::path::Path) {
         #[cfg(unix)]

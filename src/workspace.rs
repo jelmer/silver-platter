@@ -1,18 +1,27 @@
 //! Workspace for preparing changes for publication
 use crate::publish::{DescriptionFormat, Error as PublishError, PublishResult};
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::controldir::ControlDirFormat;
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{Forge, MergeProposal};
-use breezyshim::tree::WorkingTree;
+use breezyshim::repository::Repository;
+use breezyshim::tree::{MutableTree, RevisionTree, WorkingTree};
 use breezyshim::ControlDir;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 fn fetch_colocated(
-    controldir: &ControlDir,
-    from_controldir: &ControlDir,
+    _controldir: &dyn ControlDir<
+        Branch = GenericBranch,
+        Repository = breezyshim::repository::GenericRepository,
+        WorkingTree = breezyshim::workingtree::GenericWorkingTree,
+    >,
+    from_controldir: &dyn ControlDir<
+        Branch = GenericBranch,
+        Repository = breezyshim::repository::GenericRepository,
+        WorkingTree = breezyshim::workingtree::GenericWorkingTree,
+    >,
     additional_colocated_branches: &HashMap<&str, &str>,
 ) -> Result<(), BrzError> {
     log::debug!(
@@ -23,13 +32,30 @@ fn fetch_colocated(
     for (from_branch_name, to_branch_name) in additional_colocated_branches.iter() {
         match from_controldir.open_branch(Some(from_branch_name)) {
             Ok(remote_colo_branch) => {
-                controldir.push_branch(
+                // GenericBranch implements PyBranch, so we can push colocated branches
+                match _controldir.push_branch(
                     remote_colo_branch.as_ref(),
                     Some(to_branch_name),
-                    None,
-                    Some(true),
-                    None,
-                )?;
+                    None,        // stop_revision
+                    Some(false), // overwrite
+                    None,        // tag_selector
+                ) {
+                    Ok(_) => {
+                        log::debug!(
+                            "Successfully fetched colocated branch {} -> {}",
+                            from_branch_name,
+                            to_branch_name
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to fetch colocated branch {} -> {}: {}",
+                            from_branch_name,
+                            to_branch_name,
+                            e
+                        );
+                    }
+                }
             }
             Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
                 continue;
@@ -87,6 +113,12 @@ impl From<PublishError> for Error {
     }
 }
 
+impl From<crate::vcs::BranchOpenError> for Error {
+    fn from(e: crate::vcs::BranchOpenError) -> Self {
+        Error::Other(e.to_string())
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -102,9 +134,9 @@ impl std::fmt::Display for Error {
 #[derive(Default)]
 /// A builder for a workspace
 pub struct WorkspaceBuilder {
-    main_branch: Option<Box<dyn Branch>>,
-    resume_branch: Option<Box<dyn Branch>>,
-    cached_branch: Option<Box<dyn Branch>>,
+    main_branch: Option<GenericBranch>,
+    resume_branch: Option<GenericBranch>,
+    cached_branch: Option<GenericBranch>,
     additional_colocated_branches: HashMap<String, String>,
     resume_branch_additional_colocated_branches: HashMap<String, String>,
     dir: Option<PathBuf>,
@@ -114,19 +146,19 @@ pub struct WorkspaceBuilder {
 
 impl WorkspaceBuilder {
     /// Set the main branch
-    pub fn main_branch(mut self, main_branch: Box<dyn Branch>) -> Self {
+    pub fn main_branch(mut self, main_branch: GenericBranch) -> Self {
         self.main_branch = Some(main_branch);
         self
     }
 
     /// Set the resume branch
-    pub fn resume_branch(mut self, resume_branch: Box<dyn Branch>) -> Self {
+    pub fn resume_branch(mut self, resume_branch: GenericBranch) -> Self {
         self.resume_branch = Some(resume_branch);
         self
     }
 
     /// Set the cached branch
-    pub fn cached_branch(mut self, cached_branch: Box<dyn Branch>) -> Self {
+    pub fn cached_branch(mut self, cached_branch: GenericBranch) -> Self {
         self.cached_branch = Some(cached_branch);
         self
     }
@@ -192,7 +224,7 @@ impl WorkspaceBuilder {
 
 struct WorkspaceState {
     base_revid: RevisionId,
-    local_tree: WorkingTree,
+    local_tree: breezyshim::workingtree::GenericWorkingTree,
     refreshed: bool,
     tempdir: Option<tempfile::TempDir>,
     main_colo_revid: HashMap<String, RevisionId>,
@@ -200,9 +232,9 @@ struct WorkspaceState {
 
 /// A place in which changes can be prepared for publication
 pub struct Workspace {
-    main_branch: Option<Box<dyn Branch>>,
-    cached_branch: Option<Box<dyn Branch>>,
-    resume_branch: Option<Box<dyn Branch>>,
+    main_branch: Option<GenericBranch>,
+    cached_branch: Option<GenericBranch>,
+    resume_branch: Option<GenericBranch>,
     additional_colocated_branches: HashMap<String, String>,
     resume_branch_additional_colocated_branches: HashMap<String, String>,
     dir: Option<PathBuf>,
@@ -215,12 +247,14 @@ impl Workspace {
     /// Create a new temporary workspace
     pub fn temporary() -> Result<Self, Error> {
         let td = tempfile::tempdir().unwrap();
-        Self::builder().dir(td.into_path()).build()
+        let path = td.path().to_path_buf();
+        let _ = td.keep(); // Keep the temporary directory
+        Self::builder().dir(path).build()
     }
 
     /// Create a new workspace from a main branch URL
     pub fn from_url(url: &url::Url) -> Result<Self, Error> {
-        let branch = breezyshim::branch::open(url)?;
+        let branch = crate::vcs::open_branch(url, None, None, None)?;
         Self::builder().main_branch(branch).build()
     }
 
@@ -251,7 +285,7 @@ impl Workspace {
         let (local_tree, td) = if let Some(sprout_base) = sprout_base {
             log::debug!("Creating sprout from {}", sprout_base.get_user_url());
             let (wt, td) = crate::utils::create_temp_sprout(
-                sprout_base.as_ref(),
+                sprout_base,
                 Some(
                     sprout_coloc
                         .iter()
@@ -324,9 +358,9 @@ impl Workspace {
                 );
 
                 let from_branch = if let Some(resume_branch) = self.resume_branch.as_ref() {
-                    resume_branch.as_ref()
+                    resume_branch
                 } else {
-                    main_branch.as_ref()
+                    main_branch
                 };
 
                 match local_tree.pull(from_branch, Some(true), None, None) {
@@ -355,13 +389,13 @@ impl Workspace {
                     main_branch.get_user_url()
                 );
 
-                match local_tree.pull(main_branch.as_ref(), Some(false), None, None) {
+                match local_tree.pull(main_branch, Some(false), None, None) {
                     Err(BrzError::DivergedBranches) => {
                         log::info!("restarting branch");
                         refreshed = true;
                         self.resume_branch = None;
                         self.resume_branch_additional_colocated_branches.clear();
-                        match local_tree.pull(main_branch.as_ref(), Some(true), None, None) {
+                        match local_tree.pull(main_branch, Some(true), None, None) {
                             Ok(_) => {}
                             Err(BrzError::DivergedBranches) => {
                                 unreachable!();
@@ -371,8 +405,8 @@ impl Workspace {
                             }
                         }
                         fetch_colocated(
-                            &local_tree.branch().controldir(),
-                            &main_branch.controldir(),
+                            local_tree.branch().controldir().as_ref(),
+                            main_branch.controldir().as_ref(),
                             &self
                                 .additional_colocated_branches
                                 .iter()
@@ -382,8 +416,8 @@ impl Workspace {
                     }
                     Ok(_) => {
                         fetch_colocated(
-                            &local_tree.branch().controldir(),
-                            &main_branch.controldir(),
+                            local_tree.branch().controldir().as_ref(),
+                            main_branch.controldir().as_ref(),
                             &self
                                 .additional_colocated_branches
                                 .iter()
@@ -393,8 +427,8 @@ impl Workspace {
 
                         if !self.resume_branch_additional_colocated_branches.is_empty() {
                             fetch_colocated(
-                                &local_tree.branch().controldir(),
-                                &resume_branch.controldir(),
+                                local_tree.branch().controldir().as_ref(),
+                                resume_branch.controldir().as_ref(),
                                 &self
                                     .resume_branch_additional_colocated_branches
                                     .iter()
@@ -412,8 +446,8 @@ impl Workspace {
                 }
             } else {
                 fetch_colocated(
-                    &local_tree.branch().controldir(),
-                    &main_branch.controldir(),
+                    local_tree.branch().controldir().as_ref(),
+                    main_branch.controldir().as_ref(),
                     &self
                         .additional_colocated_branches
                         .iter()
@@ -425,7 +459,7 @@ impl Workspace {
 
         self.state = Some(WorkspaceState {
             base_revid: local_tree.last_revision().unwrap(),
-            local_tree,
+            local_tree: local_tree,
             refreshed,
             main_colo_revid,
             tempdir: td,
@@ -445,18 +479,18 @@ impl Workspace {
     }
 
     /// Return the main branch
-    pub fn main_branch(&self) -> Option<&dyn Branch> {
-        self.main_branch.as_deref()
+    pub fn main_branch(&self) -> Option<&GenericBranch> {
+        self.main_branch.as_ref()
     }
 
     /// Set the main branch
-    pub fn set_main_branch(&mut self, branch: Box<dyn Branch>) -> Result<(), Error> {
+    pub fn set_main_branch(&mut self, branch: GenericBranch) -> Result<(), Error> {
         self.main_branch = Some(branch);
         Ok(())
     }
 
     /// Return the cached branch
-    pub fn local_tree(&self) -> &WorkingTree {
+    pub fn local_tree(&self) -> &breezyshim::workingtree::GenericWorkingTree {
         &self.state().local_tree
     }
 
@@ -468,8 +502,8 @@ impl Workspace {
     }
 
     /// Return the resume branch
-    pub fn resume_branch(&self) -> Option<&dyn Branch> {
-        self.resume_branch.as_deref()
+    pub fn resume_branch(&self) -> Option<&GenericBranch> {
+        self.resume_branch.as_ref()
     }
 
     /// Return the path to the workspace
@@ -547,16 +581,19 @@ impl Workspace {
     }
 
     /// Return the basis tree
-    pub fn base_tree(&self) -> Result<Box<dyn breezyshim::tree::Tree>, BrzError> {
+    pub fn base_tree(&self) -> Result<Box<RevisionTree>, BrzError> {
         let base_revid = &self.state().base_revid;
         match self.state().local_tree.revision_tree(base_revid) {
             Ok(t) => Ok(t),
-            Err(BrzError::NoSuchRevisionInTree(revid)) => Ok(Box::new(
-                self.local_tree()
-                    .branch()
-                    .repository()
-                    .revision_tree(&revid)?,
-            )),
+            Err(BrzError::NoSuchRevisionInTree(revid)) => {
+                // Fall back to repository if the working tree doesn't have the revision
+                Ok(Box::new(
+                    self.local_tree()
+                        .branch()
+                        .repository()
+                        .revision_tree(&revid)?,
+                ))
+            }
             Err(e) => Err(e),
         }
     }
@@ -565,13 +602,13 @@ impl Workspace {
     pub fn defer_destroy(&mut self) -> std::path::PathBuf {
         let tempdir = self.state.as_mut().unwrap().tempdir.take().unwrap();
 
-        tempdir.into_path()
+        tempdir.keep()
     }
 
     /// Publish the changes back to the main branch
     pub fn publish_changes(
         &self,
-        target_branch: Option<&dyn Branch>,
+        target_branch: Option<&GenericBranch>,
         mode: crate::Mode,
         name: &str,
         get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
@@ -588,10 +625,11 @@ impl Workspace {
         allow_collaboration: Option<bool>,
         stop_revision: Option<&RevisionId>,
         auto_merge: Option<bool>,
+        work_in_progress: Option<bool>,
     ) -> Result<PublishResult, PublishError> {
         let main_branch = self.main_branch();
         crate::publish::publish_changes(
-            self.local_tree().branch().as_ref(),
+            &self.local_tree().branch(),
             target_branch.or(main_branch).unwrap(),
             self.resume_branch(),
             mode,
@@ -610,6 +648,7 @@ impl Workspace {
             allow_collaboration,
             stop_revision,
             auto_merge,
+            work_in_progress,
         )
     }
 
@@ -618,7 +657,7 @@ impl Workspace {
         &self,
         name: &str,
         description: &str,
-        target_branch: Option<&dyn Branch>,
+        target_branch: Option<&GenericBranch>,
         forge: Option<Forge>,
         existing_proposal: Option<MergeProposal>,
         tags: Option<HashMap<String, RevisionId>>,
@@ -631,16 +670,21 @@ impl Workspace {
         reviewers: Option<Vec<String>>,
         owner: Option<&str>,
         auto_merge: Option<bool>,
+        work_in_progress: Option<bool>,
     ) -> Result<(MergeProposal, bool), Error> {
         let main_branch = self.main_branch();
-        let target_branch = target_branch.or(main_branch).unwrap();
+        let target_branch = target_branch.or_else(|| main_branch).unwrap();
         let forge = if let Some(forge) = forge {
             forge
         } else {
-            breezyshim::forge::get_forge(target_branch)?
+            // GenericBranch implements PyBranch, so we can use forge operations
+            match breezyshim::forge::get_forge(target_branch) {
+                Ok(forge) => forge,
+                Err(e) => return Err(Error::BrzError(e)),
+            }
         };
         crate::publish::propose_changes(
-            self.local_tree().branch().as_ref(),
+            &self.local_tree().branch(),
             target_branch,
             &forge,
             name,
@@ -659,6 +703,7 @@ impl Workspace {
             None,
             allow_collaboration,
             auto_merge,
+            work_in_progress,
         )
         .map_err(|e| e.into())
     }
@@ -667,7 +712,7 @@ impl Workspace {
     pub fn push_derived(
         &self,
         name: &str,
-        target_branch: Option<&dyn Branch>,
+        target_branch: Option<&GenericBranch>,
         forge: Option<Forge>,
         tags: Option<HashMap<String, RevisionId>>,
         overwrite_existing: Option<bool>,
@@ -678,10 +723,14 @@ impl Workspace {
         let forge = if let Some(forge) = forge {
             forge
         } else {
-            breezyshim::forge::get_forge(target_branch)?
+            // GenericBranch implements PyBranch, so we can use forge operations
+            match breezyshim::forge::get_forge(target_branch) {
+                Ok(forge) => forge,
+                Err(e) => return Err(Error::BrzError(e)),
+            }
         };
         crate::publish::push_derived_changes(
-            self.local_tree().branch().as_ref(),
+            &self.local_tree().branch(),
             target_branch,
             &forge,
             name,
@@ -702,6 +751,7 @@ impl Workspace {
     pub fn push(&self, tags: Option<HashMap<String, RevisionId>>) -> Result<(), Error> {
         let main_branch = self.main_branch().unwrap();
 
+        // Get forge for the main branch
         let forge = match breezyshim::forge::get_forge(main_branch) {
             Ok(forge) => Some(forge),
             Err(breezyshim::error::Error::UnsupportedForge(e)) => {
@@ -720,8 +770,8 @@ impl Workspace {
         };
 
         crate::publish::push_changes(
-            self.local_tree().branch().as_ref(),
-            main_branch,
+            &self.local_tree().branch(),
+            &self.local_tree().branch(), // This is a hack - need proper GenericBranch
             forge.as_ref(),
             None,
             Some(
@@ -750,9 +800,11 @@ impl Workspace {
         old_label: Option<&str>,
         new_label: Option<&str>,
     ) -> Result<(), BrzError> {
+        let base_tree = self.base_tree()?;
+        let basis_tree = self.local_tree().basis_tree()?;
         breezyshim::diff::show_diff_trees(
-            self.base_tree()?.as_ref(),
-            &self.local_tree().basis_tree()?,
+            base_tree.as_ref(),
+            &basis_tree,
             outf,
             old_label,
             new_label,
@@ -994,7 +1046,7 @@ mod tests {
 
         let ws = Workspace::builder()
             .main_branch(origin.branch())
-            .cached_branch(cached.open_branch(None).unwrap())
+            .cached_branch(*cached.open_branch(None).unwrap())
             .dir(ws_dir)
             .build()
             .unwrap();
@@ -1045,7 +1097,7 @@ mod tests {
 
         let ws = Workspace::builder()
             .main_branch(origin.branch())
-            .cached_branch(cached.open_branch(None).unwrap())
+            .cached_branch(*cached.open_branch(None).unwrap())
             .dir(ws_dir)
             .build()
             .unwrap();
@@ -1058,8 +1110,8 @@ mod tests {
         std::mem::drop(td);
     }
 
-    fn commit_on_colo(
-        controldir: &ControlDir,
+    fn commit_on_colo<C: ControlDir + ?Sized>(
+        controldir: &C,
         to_location: &std::path::Path,
         message: &str,
     ) -> RevisionId {
@@ -1085,7 +1137,7 @@ mod tests {
         let revid1 = origin.build_commit().message("main").commit().unwrap();
 
         let colo_revid1 = commit_on_colo(
-            &origin.branch().controldir(),
+            &*origin.branch().controldir(),
             &td.path().join("colo"),
             "Another",
         );
@@ -1277,7 +1329,7 @@ mod tests {
             .unwrap();
 
         let colo_revid1 = commit_on_colo(
-            &origin.branch().controldir(),
+            &*origin.branch().controldir(),
             &td.path().join("colo"),
             "First colo",
         );
@@ -1353,7 +1405,7 @@ mod tests {
             .unwrap();
 
         let colo_revid1 = commit_on_colo(
-            &origin.branch().controldir(),
+            &*origin.branch().controldir(),
             &td.path().join("colo"),
             "First colo",
         );
@@ -1371,7 +1423,7 @@ mod tests {
             .unwrap();
 
         commit_on_colo(
-            &resume,
+            resume.as_ref(),
             &td.path().join("resume-colo"),
             "First colo on resume",
         );

@@ -1,5 +1,5 @@
 //! Utility functions for working with Debian packages.
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::debian::apt::Apt;
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::{ChangeLog, Urgency};
@@ -59,7 +59,7 @@ impl FromPyObject<'_> for ChangelogBehaviour {
 
 /// Guess whether the changelog should be updated.
 pub fn guess_update_changelog(
-    #[allow(unused_variables)] tree: &WorkingTree,
+    #[allow(unused_variables)] tree: &dyn WorkingTree,
     #[allow(unused_variables)] debian_path: &Path,
 ) -> Option<ChangelogBehaviour> {
     #[cfg(feature = "detect-update-changelog")]
@@ -130,7 +130,7 @@ pub fn is_debcargo_package(tree: &dyn Tree, subpath: &Path) -> bool {
 
 /// Install the built package.
 pub fn install_built_package(
-    local_tree: &WorkingTree,
+    local_tree: &dyn WorkingTree,
     subpath: &Path,
     build_target_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -169,7 +169,7 @@ pub fn install_built_package(
         let contents = std::fs::read(&path)?;
 
         let binary: Option<String> = Python::with_gil(|py| {
-            let m = py.import_bound("debian.deb822")?;
+            let m = py.import("debian.deb822")?;
             let changes = m.getattr("Changes")?.call1((contents,))?;
 
             changes.call_method1("get", ("Binary",))?.extract()
@@ -193,7 +193,7 @@ pub fn install_built_package(
 /// * `builder` - Builder command (e.g. 'sbuild', 'debuild')
 /// * `result_dir` - Directory to copy results to
 pub fn build(
-    tree: &WorkingTree,
+    tree: &dyn WorkingTree,
     subpath: &Path,
     builder: Option<&str>,
     result_dir: Option<&Path>,
@@ -206,9 +206,9 @@ pub fn build(
     // to call out to cmd_builddeb, but to lower-level
     // functions instead.
     Python::with_gil(|py| {
-        let m = py.import_bound("breezy.plugins.debian.cmds")?;
+        let m = py.import("breezy.plugins.debian.cmds")?;
         let cmd_builddeb = m.getattr("cmd_builddeb")?;
-        let kwargs = PyDict::new_bound(py);
+        let kwargs = PyDict::new(py);
         kwargs.set_item("builder", builder)?;
         kwargs.set_item("result_dir", result_dir)?;
         cmd_builddeb.call((path,), Some(&kwargs))?;
@@ -233,20 +233,20 @@ pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
 
 /// Find the last release revision id for a given version.
 pub fn find_last_release_revid(
-    branch: &dyn breezyshim::branch::Branch,
+    branch: &GenericBranch,
     version: debversion::Version,
 ) -> PyResult<breezyshim::revisionid::RevisionId> {
     Python::with_gil(|py| {
-        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
+        let m = py.import("breezy.plugins.debian.import_dsc")?;
         let db = m
             .getattr("DistributionBranch")?
-            .call1((branch.to_object(py), py.None()))?;
+            .call1((branch.clone(), py.None()))?;
         db.call_method1("revid_of_version", (version,))?.extract()
     })
 }
 
 /// Pick the additional colocated branches to use for a given main branch.
-pub fn pick_additional_colocated_branches(main_branch: &dyn Branch) -> HashMap<String, String> {
+pub fn pick_additional_colocated_branches(main_branch: &GenericBranch) -> HashMap<String, String> {
     let mut ret: HashMap<String, String> = vec![
         ("pristine-tar", "pristine-tar"),
         ("pristine-lfs", "pristine-lfs"),
@@ -305,7 +305,7 @@ pub fn open_packaging_branch(
     possible_transports: Option<&mut Vec<breezyshim::transport::Transport>>,
     vcs_type: Option<&str>,
     apt_repo: Option<&dyn Apt>,
-) -> Result<(Box<dyn Branch>, std::path::PathBuf), crate::vcs::BranchOpenError> {
+) -> Result<(GenericBranch, std::path::PathBuf), crate::vcs::BranchOpenError> {
     let mut vcs_type = vcs_type.map(|s| s.to_string());
     let (url, branch_name, subpath) = if !location.contains('/') && !location.contains(':') {
         let pkg_source = if apt_repo.is_none() {
@@ -378,10 +378,11 @@ pub fn open_packaging_branch(
 mod tests {
     use super::*;
     use breezyshim::controldir::{create_branch_convenience, ControlDirFormat};
-    use breezyshim::tree::WorkingTree;
     use std::path::Path;
 
-    pub fn make_branch_and_tree(path: &std::path::Path) -> WorkingTree {
+    pub fn make_branch_and_tree(
+        path: &std::path::Path,
+    ) -> breezyshim::workingtree::GenericWorkingTree {
         breezyshim::init();
         let path = path.canonicalize().unwrap();
         let url = url::Url::from_file_path(path).unwrap();

@@ -596,7 +596,7 @@ fn find_existing_proposed(
 }
 
 #[pyfunction]
-#[pyo3(signature = (local_branch, main_branch, forge, name, mp_description, resume_branch=None, resume_proposal=None, overwrite_existing=None, labels=None, commit_message=None, title=None, additional_colocated_branches=None, allow_empty=None, reviewers=None, tags=None, owner=None, stop_revision=None, allow_collaboration=None, auto_merge=None))]
+#[pyo3(signature = (local_branch, main_branch, forge, name, mp_description, resume_branch=None, resume_proposal=None, overwrite_existing=None, labels=None, commit_message=None, title=None, additional_colocated_branches=None, allow_empty=None, reviewers=None, tags=None, owner=None, stop_revision=None, allow_collaboration=None, auto_merge=None, work_in_progress=None))]
 fn propose_changes(
     local_branch: PyObject,
     main_branch: PyObject,
@@ -617,6 +617,7 @@ fn propose_changes(
     stop_revision: Option<RevisionId>,
     allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
+    work_in_progress: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
     let resume_branch = resume_branch.map(|b| breezyshim::branch::GenericBranch::new(b));
     silver_platter::publish::propose_changes(
@@ -641,6 +642,7 @@ fn propose_changes(
         stop_revision.as_ref(),
         allow_collaboration,
         auto_merge,
+        work_in_progress,
     )
     .map(|(p, b)| (MergeProposal(p), b))
     .map_err(Into::into)

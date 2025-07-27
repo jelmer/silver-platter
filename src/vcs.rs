@@ -1,8 +1,9 @@
 //! Version control system (VCS) support.
+use breezyshim::branch::GenericBranch;
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::error::Error as BrzError;
 use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, Branch, Prober, Transport,
+    get_transport, join_segment_parameters, split_segment_parameters, Branch, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
 
@@ -272,9 +273,10 @@ impl BranchOpenError {
 pub fn open_branch(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
-    probers: Option<&[&dyn Prober]>,
+    probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
-) -> Result<Box<dyn Branch>, BranchOpenError> {
+) -> Result<GenericBranch, BranchOpenError> {
+
     let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
@@ -287,7 +289,9 @@ pub fn open_branch(
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let dir = open_from_transport(&transport, probers)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
+
     dir.open_branch(name.as_deref())
+        .map(|branch| *branch)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))
 }
 
@@ -297,9 +301,9 @@ pub fn open_branch(
 pub fn open_branch_containing(
     url: &url::Url,
     possible_transports: Option<&mut Vec<Transport>>,
-    probers: Option<&[&dyn Prober]>,
+    probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
-) -> Result<(Box<dyn Branch>, String), BranchOpenError> {
+) -> Result<(GenericBranch, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
 
     let name = if let Some(name) = name {
@@ -319,11 +323,11 @@ pub fn open_branch_containing(
             }
             e => BranchOpenError::from_err(url.clone(), &e),
         })?;
-    Ok((
-        dir.open_branch(name.as_deref())
-            .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?,
-        subpath,
-    ))
+
+    let branch = dir
+        .open_branch(name.as_deref())
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
+    Ok((*branch, subpath))
 }
 
 /// Get the full URL for a branch.

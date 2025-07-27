@@ -110,13 +110,6 @@ impl pyo3::FromPyObject<'_> for Mode {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl pyo3::ToPyObject for Mode {
-    fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
-        self.to_string().to_object(py)
-    }
-}
-
 /// Returns the branch name derived from a script name
 pub fn derived_branch_name(script: &str) -> &str {
     let first_word = script.split(' ').next().unwrap_or("");

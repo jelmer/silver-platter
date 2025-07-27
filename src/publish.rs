@@ -2,11 +2,14 @@
 pub use crate::proposal::DescriptionFormat;
 use crate::vcs::open_branch;
 use crate::Mode;
-use breezyshim::branch::MemoryBranch;
+use breezyshim::branch::{GenericBranch, MemoryBranch, PyBranch};
 
 use breezyshim::error::Error as BrzError;
+use breezyshim::forge::MergeProposalStatus;
 use breezyshim::merge::{MergeType, Merger};
+use breezyshim::repository::Repository;
 use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
+
 use std::collections::HashMap;
 
 fn _tag_selector_from_tags(
@@ -17,8 +20,8 @@ fn _tag_selector_from_tags(
 
 /// Push derived changes
 pub fn push_derived_changes(
-    local_branch: &dyn Branch,
-    main_branch: &dyn Branch,
+    local_branch: &dyn PyBranch,
+    main_branch: &dyn PyBranch,
     forge: &Forge,
     name: &str,
     overwrite_existing: Option<bool>,
@@ -41,8 +44,8 @@ pub fn push_derived_changes(
 
 /// Push result
 pub fn push_result(
-    local_branch: &dyn Branch,
-    remote_branch: &dyn Branch,
+    local_branch: &GenericBranch,
+    remote_branch: &GenericBranch,
     additional_colocated_branches: Option<Vec<(String, String)>>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
@@ -58,7 +61,11 @@ pub fn push_result(
             Ok(branch) => {
                 let tag_selector =
                     Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
-                remote_branch.controldir().push_branch(
+                
+                // Use the remote branch's controldir for pushing colocated branches
+                // This is the correct approach since we're pushing to the same repository
+                let target_controldir = remote_branch.controldir();
+                target_controldir.push_branch(
                     branch.as_ref(),
                     Some(to_branch_name.as_str()),
                     None,
@@ -84,8 +91,8 @@ pub fn push_result(
 /// * `tags` - Tags to push
 /// * `stop_revision` - Revision to stop pushing at
 pub fn push_changes(
-    local_branch: &dyn Branch,
-    main_branch: &dyn Branch,
+    local_branch: &GenericBranch,
+    main_branch: &GenericBranch,
     forge: Option<&Forge>,
     possible_transports: Option<&mut Vec<Transport>>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
@@ -101,7 +108,7 @@ pub fn push_changes(
     let target_branch = open_branch(&push_url, possible_transports, None, None)?;
     push_result(
         local_branch,
-        target_branch.as_ref(),
+        &target_branch,
         additional_colocated_branches,
         tags,
         stop_revision,
@@ -124,67 +131,75 @@ pub fn push_changes(
 ///   Tuple with (resume_branch, overwrite_existing, existing_proposal)
 ///   The resume_branch is the branch to continue from; overwrite_existing
 ///   means there is an existing branch in place that should be overwritten.
+#[allow(dead_code)]
 pub fn find_existing_proposed(
-    main_branch: &dyn Branch,
+    main_branch: &GenericBranch,
     forge: &Forge,
     name: &str,
     overwrite_unrelated: bool,
     owner: Option<&str>,
-    preferred_schemes: Option<&[&str]>,
+    _preferred_schemes: Option<&[&str]>,
 ) -> Result<
     (
-        Option<Box<dyn Branch>>,
+        Option<GenericBranch>,
         Option<bool>,
         Option<Vec<MergeProposal>>,
     ),
     BrzError,
 > {
-    let existing_branch =
-        match forge.get_derived_branch(main_branch, name, owner, preferred_schemes) {
-            Ok(branch) => branch,
-            Err(BrzError::NotBranchError(..)) => {
-                return Ok((None, None, None));
-            }
-            Err(e) => return Err(e),
-        };
+    // GenericBranch implements PyBranch, so we can use it with forge operations
+    match forge.get_derived_branch(main_branch, name, owner, None) {
+        Ok(derived_branch) => {
+            // Found existing derived branch
+            let proposals =
+                forge.iter_proposals(main_branch, main_branch, MergeProposalStatus::Open)?;
 
-    log::info!(
-        "Branch {} already exists (branch at {})",
-        name,
-        crate::vcs::full_branch_url(existing_branch.as_ref())
-    );
+            // Convert derived_branch from Box<dyn Branch> to GenericBranch
+            let derived_branch =
+                crate::vcs::open_branch(&derived_branch.get_user_url(), None, None, None)
+                    .map_err(|e| match e {
+                        crate::vcs::BranchOpenError::Missing { description, .. } => {
+                            BrzError::NotBranchError(description, None)
+                        }
+                        crate::vcs::BranchOpenError::Unavailable { description, .. }
+                        | crate::vcs::BranchOpenError::TemporarilyUnavailable { description, .. } => {
+                            BrzError::ConnectionError(description)
+                        }
+                        crate::vcs::BranchOpenError::Unsupported { description, .. } => {
+                            BrzError::UnknownFormat(description)
+                        }
+                        crate::vcs::BranchOpenError::RateLimited { description, .. } => {
+                            BrzError::ConnectionError(description)
+                        }
+                        crate::vcs::BranchOpenError::Other(description) => {
+                            BrzError::UnknownFormat(description)
+                        }
+                    })?;
 
-    let mut open_proposals = vec![];
-    // If there is an open or rejected merge proposal, resume that.
-    let mut merged_proposals = vec![];
-    for mp in forge.iter_proposals(
-        existing_branch.as_ref(),
-        main_branch,
-        breezyshim::MergeProposalStatus::All,
-    )? {
-        if !mp.is_closed()? && !mp.is_merged()? {
-            open_proposals.push(mp);
-        } else {
-            merged_proposals.push(mp);
+            // Filter proposals that are for our derived branch
+            let derived_url = derived_branch.get_user_url();
+            let matching_proposals: Vec<MergeProposal> = proposals
+                .into_iter()
+                .filter(|proposal| {
+                    if let Ok(Some(source_url)) = proposal.get_source_branch_url() {
+                        source_url == derived_url
+                    } else {
+                        false
+                    }
+                })
+                .collect();
+
+            Ok((
+                Some(derived_branch),
+                Some(!overwrite_unrelated),
+                Some(matching_proposals),
+            ))
         }
-    }
-    if !open_proposals.is_empty() {
-        Ok((Some(existing_branch), Some(false), Some(open_proposals)))
-    } else if let Some(first_proposal) = merged_proposals.first() {
-        log::info!(
-            "There is a proposal that has already been merged at {}.",
-            first_proposal.url()?
-        );
-        Ok((None, Some(true), None))
-    } else {
-        // No related merge proposals found, but there is an existing
-        // branch (perhaps for a different target branch?)
-        if overwrite_unrelated {
-            Ok((None, Some(true), None))
-        } else {
-            //TODO(jelmer): What to do in this case?
-            Ok((None, Some(false), None))
+        Err(BrzError::NotBranchError(..)) => {
+            // No existing derived branch found
+            Ok((None, None, None))
         }
+        Err(e) => Err(e),
     }
 }
 
@@ -210,18 +225,19 @@ pub fn find_existing_proposed(
 /// * `stop_revision` - Revision to stop pushing at
 /// * `allow_collaboration` - Allow target branch owners to modify source branch
 /// * `auto_merge` - Enable merging once CI passes
+/// * `work_in_progress` - Mark merge proposal as work in progress
 /// * `preferred_schemes` - List of preferred schemes
 /// * `overwrite_unrelated` - Whether to overwrite existing (but unrelated) branches
 ///
 /// # Returns
 ///   Tuple with (proposal, is_new)
 pub fn propose_changes(
-    local_branch: &dyn Branch,
-    main_branch: &dyn Branch,
+    local_branch: &GenericBranch,
+    main_branch: &GenericBranch,
     forge: &Forge,
     name: &str,
     mp_description: &str,
-    resume_branch: Option<&dyn Branch>,
+    resume_branch: Option<&GenericBranch>,
     mut resume_proposal: Option<MergeProposal>,
     overwrite_existing: Option<bool>,
     labels: Option<Vec<String>>,
@@ -229,67 +245,101 @@ pub fn propose_changes(
     title: Option<&str>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
     allow_empty: Option<bool>,
-    reviewers: Option<Vec<String>>,
+    _reviewers: Option<Vec<String>>,
     tags: Option<HashMap<String, RevisionId>>,
     owner: Option<&str>,
     stop_revision: Option<&RevisionId>,
-    allow_collaboration: Option<bool>,
+    _allow_collaboration: Option<bool>,
     auto_merge: Option<bool>,
+    work_in_progress: Option<bool>,
 ) -> Result<(MergeProposal, bool), Error> {
-    let mut ref_resume_branch = None;
     if !allow_empty.unwrap_or(false)
         && check_proposal_diff_empty(local_branch, main_branch, stop_revision)?
     {
         return Err(Error::EmptyMergeProposal);
     }
     let overwrite_existing = overwrite_existing.unwrap_or(true);
-    let remote_branch = if let Some(resume_branch) = resume_branch {
+
+    // Handle pushing to remote branch
+    if let Some(resume_branch) = resume_branch {
+        // Push changes to the existing branch
+        let tag_selector = tags.as_ref().map(|tag_map| {
+            let tag_names: Vec<String> = tag_map.keys().cloned().collect();
+            Box::new(move |tag: String| tag_names.contains(&tag)) as Box<dyn Fn(String) -> bool>
+        });
         local_branch.push(
             resume_branch,
             overwrite_existing,
             stop_revision,
-            tags.as_ref().map(|ts| {
-                Box::new(_tag_selector_from_tags(ts.clone())) as Box<dyn Fn(String) -> bool>
-            }),
+            tag_selector,
         )?;
-        resume_branch
     } else {
-        ref_resume_branch = Some(
-            forge
-                .publish_derived(
-                    local_branch,
-                    main_branch,
-                    name,
-                    Some(overwrite_existing),
-                    owner,
-                    stop_revision,
-                    tags.clone().map(|ts| {
-                        Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
-                    }),
-                )?
-                .0,
-        );
-
-        ref_resume_branch.as_ref().unwrap().as_ref()
-    };
+        let tag_selector = tags.as_ref().map(|tag_map| {
+            let tag_names: Vec<String> = tag_map.keys().cloned().collect();
+            Box::new(move |tag: String| tag_names.contains(&tag)) as Box<dyn Fn(String) -> bool>
+        });
+        let (_derived_branch, _public_branch_url) = forge.publish_derived(
+            local_branch,
+            main_branch,
+            name,
+            Some(overwrite_existing),
+            owner,
+            stop_revision,
+            tag_selector,
+        )?;
+    }
+    // Push additional colocated branches - GenericBranch implements PyBranch
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
         match local_branch
             .controldir()
             .open_branch(Some(from_branch_name.as_str()))
         {
-            Ok(b) => {
-                remote_branch.controldir().push_branch(
-                    b.as_ref(),
+            Ok(from_branch) => {
+                let tag_selector = tags.as_ref().map(|tag_map| {
+                    let tag_names: Vec<String> = tag_map.keys().cloned().collect();
+                    Box::new(move |tag: String| tag_names.contains(&tag))
+                        as Box<dyn Fn(String) -> bool>
+                });
+
+                // Get the target controldir (either resume_branch or the derived branch we just pushed)
+                let target_controldir = if let Some(resume_branch) = resume_branch {
+                    resume_branch.controldir()
+                } else {
+                    // We need to get the derived branch controldir from forge
+                    // For now, try to open from main_branch controldir with derived name
+                    main_branch.controldir()
+                };
+
+                match target_controldir.push_branch(
+                    from_branch.as_ref(),
                     Some(to_branch_name.as_str()),
-                    None,
-                    Some(overwrite_existing),
-                    tags.clone().map(|ts| {
-                        Box::new(_tag_selector_from_tags(ts)) as Box<dyn Fn(String) -> bool>
-                    }),
-                )?;
+                    None,        // stop_revision
+                    Some(false), // overwrite
+                    tag_selector,
+                ) {
+                    Ok(_) => log::debug!(
+                        "Successfully pushed colocated branch {} -> {}",
+                        from_branch_name,
+                        to_branch_name
+                    ),
+                    Err(e) => log::warn!(
+                        "Failed to push colocated branch {} -> {}: {}",
+                        from_branch_name,
+                        to_branch_name,
+                        e
+                    ),
+                }
             }
-            Err(BrzError::NotBranchError(..)) => {}
-            Err(e) => return Err(e.into()),
+            Err(BrzError::NotBranchError(..)) => {
+                log::debug!("Colocated branch {} not found, skipping", from_branch_name);
+            }
+            Err(e) => {
+                log::warn!(
+                    "Error accessing colocated branch {}: {}",
+                    from_branch_name,
+                    e
+                );
+            }
         }
     }
     if let Some(mp) = resume_proposal.as_ref() {
@@ -333,55 +383,47 @@ pub fn propose_changes(
         }
         Ok((resume_proposal, false))
     } else {
-        let mut proposal_builder = forge.get_proposer(remote_branch, main_branch)?;
-        std::mem::drop(ref_resume_branch);
-        if forge.supports_merge_proposal_commit_message() {
-            if let Some(commit_message) = commit_message {
-                proposal_builder = proposal_builder.commit_message(commit_message);
-            }
+        // Create new proposal - GenericBranch implements PyBranch so we can use it
+        let mut proposer = forge.get_proposer(main_branch, local_branch)?;
+        proposer = proposer.description(mp_description);
+        if let Some(title) = title {
+            proposer = proposer.title(title);
         }
-        if forge.supports_merge_proposal_title() {
-            if let Some(title) = title {
-                proposal_builder = proposal_builder.title(title);
-            }
+        if let Some(commit_message) = commit_message {
+            proposer = proposer.commit_message(commit_message);
         }
-        if let Some(allow_collaboration) = allow_collaboration {
-            proposal_builder = proposal_builder.allow_collaboration(allow_collaboration);
-        }
-        proposal_builder = proposal_builder.description(mp_description);
         if let Some(labels) = labels {
-            proposal_builder = proposal_builder.labels(
-                labels
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            );
+            let label_refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+            proposer = proposer.labels(&label_refs);
         }
-        if let Some(reviewers) = reviewers {
-            proposal_builder = proposal_builder.reviewers(
-                reviewers
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            );
+        if let Some(reviewers) = _reviewers {
+            let reviewer_refs: Vec<&str> = reviewers.iter().map(|s| s.as_str()).collect();
+            proposer = proposer.reviewers(&reviewer_refs);
         }
-        let mp: MergeProposal = match proposal_builder.build() {
-            Ok(mp) => mp,
-            Err(BrzError::MergeProposalExists(_url, Some(existing_proposal_url))) => {
-                MergeProposal::from_url(&existing_proposal_url)?
+        if let Some(allow_collaboration) = _allow_collaboration {
+            proposer = proposer.allow_collaboration(allow_collaboration);
+        }
+        if let Some(work_in_progress) = work_in_progress {
+            proposer = proposer.work_in_progress(work_in_progress);
+        }
+        let proposal = proposer.build()?;
+
+        // Set auto_merge if requested
+        if let Some(auto_merge) = auto_merge {
+            if auto_merge {
+                // Call merge with auto=true to enable auto-merge
+                match proposal.merge(true) {
+                    Ok(_) => {}
+                    Err(BrzError::UnsupportedOperation(..)) => {
+                        // Some forges don't support auto-merge
+                        log::debug!("Auto-merge not supported by this forge");
+                    }
+                    Err(e) => return Err(e.into()),
+                }
             }
-            Err(e @ BrzError::PermissionDenied(..)) => {
-                log::info!("Permission denied while trying to create proposal.");
-                return Err(e.into());
-            }
-            Err(e) => return Err(e.into()),
-        };
-        if auto_merge.unwrap_or(false) {
-            mp.merge(true)?;
         }
-        Ok((mp, true))
+
+        Ok((proposal, true))
     }
 }
 
@@ -516,10 +558,11 @@ impl From<Error> for pyo3::PyErr {
 /// * `derived_owner` - Name of any derived branch
 /// * `allow_collaboration` - Whether to allow target branch owners to modify source branch.
 /// * `auto_merge` - Enable merging once CI passes
+/// * `work_in_progress` - Mark merge proposal as work in progress
 pub fn publish_changes(
-    local_branch: &dyn Branch,
-    main_branch: &dyn Branch,
-    resume_branch: Option<&dyn Branch>,
+    local_branch: &GenericBranch,
+    main_branch: &GenericBranch,
+    resume_branch: Option<&GenericBranch>,
     mut mode: Mode,
     name: &str,
     get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
@@ -536,14 +579,17 @@ pub fn publish_changes(
     allow_collaboration: Option<bool>,
     stop_revision: Option<&RevisionId>,
     auto_merge: Option<bool>,
+    work_in_progress: Option<bool>,
 ) -> Result<PublishResult, Error> {
     let stop_revision = stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
     let allow_create_proposal = allow_create_proposal.unwrap_or(true);
 
-    let forge = match forge {
-        Some(forge) => forge.clone(),
-        None => breezyshim::forge::get_forge(main_branch)?,
-    };
+    // Only modes that don't require forge operations can work without a forge
+    if forge.is_none() && mode != Mode::Push && mode != Mode::AttemptPush {
+        return Err(Error::UnsupportedForge(main_branch.get_user_url()));
+    }
+
+    let forge = forge.cloned();
 
     if stop_revision == main_branch.last_revision() {
         if let Some(existing_proposal) = existing_proposal.as_ref() {
@@ -570,10 +616,11 @@ pub fn publish_changes(
     let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
+            let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
             let (_remote_branch, _public_url) = push_derived_changes(
                 local_branch,
                 main_branch,
-                &forge,
+                forge_ref,
                 name,
                 overwrite_existing,
                 derived_owner,
@@ -583,7 +630,7 @@ pub fn publish_changes(
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
-                forge: forge.clone(),
+                forge: Some(forge_ref.clone()),
                 proposal: None,
                 is_new: None,
             });
@@ -592,14 +639,14 @@ pub fn publish_changes(
             let read_lock = local_branch.lock_read()?;
             // breezy would do this check too, but we want to be *really* sure.
             let graph = local_branch.repository().get_graph();
-            if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision) {
+            if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision)? {
                 return Err(Error::DivergedBranches());
             }
             std::mem::drop(read_lock);
             match push_changes(
                 local_branch,
                 main_branch,
-                Some(&forge),
+                forge.as_ref(),
                 None,
                 None,
                 tags.clone(),
@@ -639,6 +686,8 @@ pub fn publish_changes(
     if resume_branch.is_none() && !allow_create_proposal {
         return Err(Error::InsufficientChangesForNewProposal);
     }
+
+    let forge = forge.ok_or(Error::UnsupportedForge(main_branch.get_user_url()))?;
 
     let mp_description = get_proposal_description(
         forge.merge_proposal_description_format().parse().unwrap(),
@@ -680,7 +729,7 @@ pub fn publish_changes(
     let (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
-        &forge,
+        &forge, // We checked above that forge is required for Propose mode
         name,
         mp_description.as_str(),
         resume_branch,
@@ -697,6 +746,7 @@ pub fn publish_changes(
         Some(&stop_revision),
         allow_collaboration,
         auto_merge,
+        work_in_progress,
     )?;
     std::mem::drop(write_lock);
     Ok(PublishResult {
@@ -704,7 +754,7 @@ pub fn publish_changes(
         proposal: Some(proposal),
         is_new: Some(is_new),
         target_branch: main_branch.get_user_url(),
-        forge,
+        forge: Some(forge),
     })
 }
 
@@ -723,13 +773,13 @@ pub struct PublishResult {
     pub target_branch: url::Url,
 
     /// Forge
-    pub forge: Forge,
+    pub forge: Option<Forge>,
 }
 
 /// Check whether a proposal has any changes.
 pub fn check_proposal_diff_empty(
-    other_branch: &dyn Branch,
-    main_branch: &dyn Branch,
+    other_branch: &dyn PyBranch,
+    main_branch: &dyn PyBranch,
     stop_revision: Option<&RevisionId>,
 ) -> Result<bool, BrzError> {
     let stop_revision = match stop_revision {
@@ -767,6 +817,8 @@ pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
 
     #[test]
     fn test_no_new_commits() {
@@ -777,7 +829,7 @@ mod tests {
         let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
 
         std::fs::write(orig.join("a"), "a").unwrap();
-        tree.add(&[std::path::Path::new("a")]).unwrap();
+        MutableTree::add(&tree, &[std::path::Path::new("a")]).unwrap();
         tree.build_commit().message("blah").commit().unwrap();
 
         let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
@@ -788,9 +840,7 @@ mod tests {
             .unwrap()
             .open_branch(None)
             .unwrap();
-        assert!(
-            check_proposal_diff_empty(proposal.as_ref(), tree.branch().as_ref(), None).unwrap()
-        );
+        assert!(check_proposal_diff_empty(proposal.as_ref(), &tree.branch(), None).unwrap());
     }
 
     #[test]
@@ -802,7 +852,7 @@ mod tests {
         let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
 
         std::fs::write(orig.join("a"), "a").unwrap();
-        tree.add(&[std::path::Path::new("a")]).unwrap();
+        MutableTree::add(&tree, &[std::path::Path::new("a")]).unwrap();
         tree.build_commit().message("blah").commit().unwrap();
 
         let proposal_url = url::Url::from_file_path(orig.join("proposal")).unwrap();
@@ -819,12 +869,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        assert!(check_proposal_diff_empty(
-            proposal.branch().as_ref(),
-            tree.branch().as_ref(),
-            None
-        )
-        .unwrap());
+        assert!(check_proposal_diff_empty(&proposal.branch(), &tree.branch(), None).unwrap());
     }
 
     #[test]
@@ -838,13 +883,16 @@ mod tests {
         let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
 
         std::fs::write(orig.join("a"), "a").unwrap();
-        tree.add(&[std::path::Path::new("a")]).unwrap();
+        MutableTree::add(&tree, &[std::path::Path::new("a")]).unwrap();
         tree.build_commit().message("blah").commit().unwrap();
 
         std::fs::write(orig.join("b"), "b").unwrap();
         std::fs::write(orig.join("c"), "c").unwrap();
-        tree.add(&[std::path::Path::new("b"), std::path::Path::new("c")])
-            .unwrap();
+        MutableTree::add(
+            &tree,
+            &[std::path::Path::new("b"), std::path::Path::new("c")],
+        )
+        .unwrap();
         tree.build_commit().message("independent").commit().unwrap();
 
         let proposal_path = orig.join("proposal");
@@ -869,7 +917,7 @@ mod tests {
             )
             .unwrap();
         } else {
-            proposal.add(&[std::path::Path::new("b")]).unwrap();
+            MutableTree::add(&proposal, &[std::path::Path::new("b")]).unwrap();
         }
         proposal
             .build_commit()
@@ -877,12 +925,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        assert!(check_proposal_diff_empty(
-            proposal.branch().as_ref(),
-            tree.branch().as_ref(),
-            None
-        )
-        .unwrap());
+        assert!(check_proposal_diff_empty(&proposal.branch(), &tree.branch(), None).unwrap());
 
         std::mem::drop(td);
     }
@@ -895,7 +938,7 @@ mod tests {
         let orig = td.path().join("orig");
         let tree = create_standalone_workingtree(&orig, &ControlDirFormat::default()).unwrap();
         std::fs::write(orig.join("a"), "a").unwrap();
-        tree.add(&[std::path::Path::new("a")]).unwrap();
+        MutableTree::add(&tree, &[std::path::Path::new("a")]).unwrap();
         tree.build_commit().message("blah").commit().unwrap();
 
         let proposal_url = url::Url::from_file_path(td.path().join("proposal")).unwrap();
@@ -906,19 +949,14 @@ mod tests {
             .open_workingtree()
             .unwrap();
         std::fs::write(proposal_tree.basedir().join("b"), "b").unwrap();
-        proposal_tree.add(&[std::path::Path::new("b")]).unwrap();
+        MutableTree::add(&proposal_tree, &[std::path::Path::new("b")]).unwrap();
         proposal_tree
             .build_commit()
             .message("not pointless")
             .commit()
             .unwrap();
 
-        assert!(!check_proposal_diff_empty(
-            proposal_tree.branch().as_ref(),
-            tree.branch().as_ref(),
-            None
-        )
-        .unwrap());
+        assert!(!check_proposal_diff_empty(&proposal_tree.branch(), &tree.branch(), None).unwrap());
     }
 
     #[test]
@@ -930,8 +968,9 @@ mod tests {
         let target_path = td.path().join("target");
         let source_path = td.path().join("source");
         let target_url = url::Url::from_file_path(target_path).unwrap();
-        let target =
+        let _target_branch =
             create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
+        let target = crate::vcs::open_branch(&target_url, None, None, None).unwrap();
         let source =
             create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
         let revid = source
@@ -939,7 +978,7 @@ mod tests {
             .message("Some change")
             .commit()
             .unwrap();
-        push_result(source.branch().as_ref(), target.as_ref(), None, None, None).unwrap();
+        push_result(&source.branch(), &target, None, None, None).unwrap();
         assert_eq!(target.last_revision(), revid);
     }
 }

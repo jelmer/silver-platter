@@ -1,12 +1,14 @@
 //! Upload packages to the Debian archive.
 use crate::vcs::{open_branch, BranchOpenError};
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
 use breezyshim::debian::error::Error as DebianError;
 use breezyshim::error::Error as BrzError;
 use breezyshim::gpg::VerificationResult;
+use breezyshim::repository::Repository;
 use breezyshim::revisionid::RevisionId;
-use breezyshim::tree::{MutableTree, Tree, WorkingTree};
+use breezyshim::tree::{WorkingTree, Tree, MutableTree};
+use breezyshim::workingtree::GenericWorkingTree;
 use debversion::Version;
 use std::collections::HashMap;
 use std::path::Path;
@@ -548,14 +550,17 @@ fn vcswatch_prescan_packages(
     Ok((packages, failures, vcswatch))
 }
 
-fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> Result<RevisionId, BrzError> {
+fn find_last_release_revid(
+    branch: &GenericBranch,
+    version: &Version,
+) -> Result<RevisionId, BrzError> {
     use pyo3::prelude::*;
     pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
-        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
+        let m = py.import("breezy.plugins.debian.import_dsc")?;
         let dbc = m.getattr("DistributionBranch")?;
-        let dbc = dbc.call1((branch.to_object(py), py.None()))?;
+        let dbc = dbc.call1((branch.clone(), py.None()))?;
 
-        dbc.call_method1("revid_of_version", (version.to_object(py),))?
+        dbc.call_method1("revid_of_version", (version.to_string(),))?
             .extract::<RevisionId>()
     })
     .map_err(|e| BrzError::from(e))
@@ -808,7 +813,7 @@ impl From<BrzError> for PrepareUploadError {
 
 /// Prepare a package for upload.
 pub fn prepare_upload_package(
-    local_tree: &WorkingTree,
+    local_tree: &GenericWorkingTree,
     subpath: &std::path::Path,
     pkg: &str,
     last_uploaded_version: Option<&debversion::Version>,
@@ -816,9 +821,9 @@ pub fn prepare_upload_package(
     gpg_strategy: Option<breezyshim::gpg::GPGStrategy>,
     min_commit_age: Option<i64>,
     allowed_committers: Option<&[String]>,
-    apt: Option<&dyn Apt>,
+    _apt: Option<&dyn Apt>,
 ) -> Result<(std::path::PathBuf, Option<String>), PrepareUploadError> {
-    let mut builder = builder.to_string();
+    let _builder = builder.to_string();
     let debian_path = subpath.join("debian");
     #[cfg(feature = "detect-update-changelog")]
     let run_gbp_dch = {
@@ -904,7 +909,7 @@ pub fn prepare_upload_package(
     let lock = local_tree.lock_read();
     let last_release_revid: RevisionId = if let Some(last_uploaded_version) = last_uploaded_version
     {
-        match find_last_release_revid(local_tree.branch().as_ref(), last_uploaded_version) {
+        match find_last_release_revid(&local_tree.branch(), last_uploaded_version) {
             Ok(revid) => revid,
             Err(BrzError::NoSuchTag(..)) => {
                 return Err(PrepareUploadError::LastReleaseRevisionNotFound(
@@ -924,9 +929,8 @@ pub fn prepare_upload_package(
         .iter_lefthand_ancestry(
             &local_tree.branch().last_revision(),
             Some(&[last_release_revid]),
-        )
-        .collect::<Result<Vec<RevisionId>, _>>()
-        .unwrap();
+        )?
+        .collect::<Result<Vec<RevisionId>, _>>()?;
     if revids.is_empty() {
         log::info!("No pending changes");
         return Err(PrepareUploadError::NoUnuploadedChanges(
@@ -1004,7 +1008,7 @@ pub fn prepare_upload_package(
                 .unwrap();
         }
     }
-    let tag_name = match breezyshim::debian::release::release(local_tree, subpath) {
+    let _tag_name = match breezyshim::debian::release::release(local_tree, subpath) {
         Ok(tag_name) => tag_name,
         Err(breezyshim::debian::release::ReleaseError::GeneratedFile) => {
             return Err(PrepareUploadError::GeneratedChangelogFile);
@@ -1014,20 +1018,22 @@ pub fn prepare_upload_package(
         }
     };
     let target_dir = tempfile::tempdir().unwrap();
-    if let Some(last_uploaded_version) = last_uploaded_version {
-        builder = builder.replace(
+    let builder = if let Some(last_uploaded_version) = last_uploaded_version {
+        builder.replace(
             "${LAST_VERSION}",
             last_uploaded_version.to_string().as_str(),
-        );
-    }
+        )
+    } else {
+        builder.to_string()
+    };
     let target_changes = breezyshim::debian::build_helper(
         local_tree,
         subpath,
-        local_tree.branch().as_ref(),
+        &local_tree.branch(),
         target_dir.path(),
         builder.as_str(),
         false,
-        apt,
+        _apt,
     )
     .map_err(|e| match e {
         DebianError::BrzError(o) => PrepareUploadError::BrzError(o),
@@ -1045,7 +1051,7 @@ pub fn prepare_upload_package(
         log::warn!("Failed to sign changes file: {:?}", e);
         PrepareUploadError::SignError(e)
     })?;
-    Ok((source.into(), Some(tag_name)))
+    Ok((source.into(), Some(_tag_name)))
 }
 
 /// Process a package for upload.
@@ -1189,7 +1195,7 @@ pub fn process_package(
     };
     let mut ws_builder = crate::workspace::Workspace::builder();
     ws_builder = ws_builder.additional_colocated_branches(
-        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+        crate::debian::pick_additional_colocated_branches(&main_branch),
     );
     let ws = ws_builder.main_branch(main_branch).build().unwrap();
     if source_name.is_none() {

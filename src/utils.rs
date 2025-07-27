@@ -1,16 +1,17 @@
 //! Utility functions for working with branches.
-use breezyshim::branch::Branch;
-use breezyshim::controldir::ControlDir;
+use breezyshim::branch::{Branch, PyBranch};
 use breezyshim::error::Error as BrzError;
 use breezyshim::merge::{Error as MergeError, MergeType, Merger, MERGE_HOOKS};
+use breezyshim::repository::Repository;
 use breezyshim::tree::WorkingTree;
+use breezyshim::workingtree::GenericWorkingTree;
 use breezyshim::RevisionId;
 use std::collections::HashMap;
 
 /// A temporary sprout of a branch.
 pub struct TempSprout {
     /// The working tree of the sprout.
-    pub workingtree: WorkingTree,
+    pub workingtree: GenericWorkingTree,
 
     /// The temporary directory that the sprout is in.
     pub tempdir: Option<tempfile::TempDir>,
@@ -19,7 +20,7 @@ pub struct TempSprout {
 impl TempSprout {
     /// Create a temporary sprout of a branch.
     pub fn new(
-        branch: &dyn Branch,
+        branch: &dyn PyBranch,
         additional_colocated_branches: Option<HashMap<String, String>>,
     ) -> Result<Self, BrzError> {
         let (wt, td) = create_temp_sprout(branch, additional_colocated_branches, None, None)?;
@@ -31,7 +32,7 @@ impl TempSprout {
 
     /// Create a temporary sprout of a branch in a specific directory.
     pub fn new_in(
-        branch: &dyn Branch,
+        branch: &dyn PyBranch,
         additional_colocated_branches: Option<HashMap<String, String>>,
         dir: &std::path::Path,
     ) -> Result<Self, BrzError> {
@@ -45,7 +46,7 @@ impl TempSprout {
 
     /// Create a temporary sprout of a branch with a specific path.
     pub fn new_in_path(
-        branch: &dyn Branch,
+        branch: &dyn PyBranch,
         additional_colocated_branches: Option<HashMap<String, String>>,
         path: &std::path::Path,
     ) -> Result<Self, BrzError> {
@@ -58,13 +59,13 @@ impl TempSprout {
     }
 
     /// Return the tree of the sprout.
-    pub fn tree(&self) -> &WorkingTree {
+    pub fn tree(&self) -> &dyn WorkingTree {
         &self.workingtree
     }
 }
 
 impl std::ops::Deref for TempSprout {
-    type Target = WorkingTree;
+    type Target = dyn WorkingTree;
 
     fn deref(&self) -> &Self::Target {
         &self.workingtree
@@ -75,27 +76,11 @@ impl std::ops::Deref for TempSprout {
 ///
 /// This attempts to fetch the least amount of history as possible.
 pub fn create_temp_sprout(
-    branch: &dyn Branch,
+    branch: &dyn PyBranch,
     additional_colocated_branches: Option<HashMap<String, String>>,
     dir: Option<&std::path::Path>,
     path: Option<&std::path::Path>,
-) -> Result<(WorkingTree, Option<tempfile::TempDir>), BrzError> {
-    let (to_dir, td) = create_temp_sprout_cd(branch, additional_colocated_branches, dir, path)?;
-
-    let wt = to_dir.open_workingtree()?;
-
-    Ok((wt, td))
-}
-
-/// Create a temporary sprout of a branch.
-///
-/// This attempts to fetch the least amount of history as possible.
-fn create_temp_sprout_cd(
-    branch: &dyn Branch,
-    additional_colocated_branches: Option<HashMap<String, String>>,
-    dir: Option<&std::path::Path>,
-    path: Option<&std::path::Path>,
-) -> Result<(ControlDir, Option<tempfile::TempDir>), BrzError> {
+) -> Result<(GenericWorkingTree, Option<tempfile::TempDir>), BrzError> {
     let (td, path) = if let Some(path) = path {
         // ensure that path is absolute
         assert!(path.is_absolute());
@@ -110,8 +95,6 @@ fn create_temp_sprout_cd(
         (Some(td), path)
     };
 
-    // Only use stacking if the remote repository supports chks because of
-    // https://bugs.launchpad.net/bzr/+bug/375013
     let use_stacking =
         branch.format().supports_stacking() && branch.repository().format().supports_chks();
     let to_url: url::Url = url::Url::from_directory_path(path).unwrap();
@@ -121,41 +104,42 @@ fn create_temp_sprout_cd(
         branch
             .controldir()
             .sprout(to_url, Some(branch), Some(true), Some(use_stacking), None)?;
+
     // TODO(jelmer): Fetch these during the initial clone
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
         let controldir = branch.controldir();
         match controldir.open_branch(Some(from_branch_name.as_str())) {
             Ok(add_branch) => {
                 let local_add_branch = to_dir.create_branch(Some(to_branch_name.as_str()))?;
-                add_branch.push(local_add_branch.as_ref(), false, None, None)?;
-                assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
-            }
-            Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
-                // Ignore branches that don't exist or don't support colocated branches.
-            }
-            Err(BrzError::DependencyNotPresent(e, d)) => {
-                panic!("Need dependency to sprout branch: {} {}", e, d);
+                add_branch.push(
+                    local_add_branch.as_ref(),
+                    false,
+                    None,
+                    Some(Box::new(|_ps| true)),
+                )?;
             }
             Err(err) => {
+                log::warn!("Unable to clone branch {}: {}", from_branch_name, err);
                 return Err(err);
             }
         }
     }
 
-    Ok((to_dir, td))
+    let wt = to_dir.open_workingtree()?;
+    Ok((wt, td))
 }
 
 /// Check if there are any merge conflicts between two branches.
-pub fn merge_conflicts(
-    main_branch: &dyn Branch,
-    other_branch: &dyn Branch,
+pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
+    main_branch: &B1,
+    other_branch: &B2,
     other_revision: Option<&RevisionId>,
 ) -> Result<bool, BrzError> {
     let other_revision = other_revision.map_or_else(|| other_branch.last_revision(), |r| r.clone());
     let other_repository = other_branch.repository();
     let graph = other_repository.get_graph();
 
-    if graph.is_ancestor(&main_branch.last_revision(), &other_revision) {
+    if graph.is_ancestor(&main_branch.last_revision(), &other_revision)? {
         return Ok(false);
     }
 
@@ -213,7 +197,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        let sprout = TempSprout::new(wt.branch().as_ref(), None).unwrap();
+        let sprout = TempSprout::new(&wt.branch(), None).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
         let tree = sprout.tree();
@@ -236,7 +220,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        let sprout = TempSprout::new_in(wt.branch().as_ref(), None, base.path()).unwrap();
+        let sprout = TempSprout::new_in(&wt.branch(), None, base.path()).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
         let tree = sprout.tree();
@@ -260,7 +244,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        let sprout = TempSprout::new_in_path(wt.branch().as_ref(), None, target.path()).unwrap();
+        let sprout = TempSprout::new_in_path(&wt.branch(), None, target.path()).unwrap();
 
         assert_eq!(sprout.last_revision().unwrap(), revid);
         let tree = sprout.tree();
