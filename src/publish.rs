@@ -65,8 +65,8 @@ fn _tag_selector_from_tags(
 
 fn _tag_selector_from_tags_ref(
     tags: &std::collections::HashMap<String, RevisionId>,
-) -> impl Fn(String) -> bool + '_ {
-    move |tag| tags.contains_key(tag.as_str())
+) -> Box<dyn Fn(String) -> bool + '_> {
+    Box::new(move |tag| tags.contains_key(tag.as_str()))
 }
 
 /// Push derived changes
@@ -101,10 +101,12 @@ pub fn push_result(
     tags: Option<&std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<(), BrzError> {
-    let default_tags = std::collections::HashMap::new();
-    let tags = tags.unwrap_or(&default_tags);
-    let tag_selector = Box::new(_tag_selector_from_tags_ref(tags));
-    local_branch.push(remote_branch, false, stop_revision, Some(tag_selector))?;
+    let tag_selector = if let Some(tags) = tags {
+        _tag_selector_from_tags(tags.clone())
+    } else {
+        _tag_selector_from_tags(std::collections::HashMap::new())
+    };
+    local_branch.push(remote_branch, false, stop_revision, Some(Box::new(tag_selector)))?;
 
     if let Some(branches) = additional_colocated_branches {
         for (from_branch_name, to_branch_name) in branches {
@@ -113,7 +115,11 @@ pub fn push_result(
                 .open_branch(Some(from_branch_name.as_str()))
             {
                 Ok(branch) => {
-                    let tag_selector = Box::new(_tag_selector_from_tags_ref(tags));
+                    let tag_selector = if let Some(tags) = tags {
+                        Box::new(_tag_selector_from_tags(tags.clone()))
+                    } else {
+                        Box::new(_tag_selector_from_tags(std::collections::HashMap::new()))
+                    };
 
                     // Use the remote branch's controldir for pushing colocated branches
                     // This is the correct approach since we're pushing to the same repository
@@ -653,7 +659,7 @@ pub fn publish_changes(
 
     // forge will be cloned only when needed for the result
 
-    if stop_revision == main_branch.last_revision() {
+    if *stop_revision == main_branch.last_revision() {
         if let Some(existing_proposal) = existing_proposal.as_ref() {
             log::info!("closing existing merge proposal - no new revisions");
             existing_proposal.close()?;
@@ -661,14 +667,14 @@ pub fn publish_changes(
         return Ok(PublishResult {
             mode,
             target_branch: main_branch.get_user_url(),
-            forge,
+            forge: forge.cloned(),
             proposal: existing_proposal,
             is_new: Some(false),
         });
     }
 
     if let Some(resume_branch) = resume_branch {
-        if resume_branch.last_revision() == stop_revision {
+        if resume_branch.last_revision() == *stop_revision {
             // No new revisions added on this iteration, but changes since main
             // branch. We may not have gotten round to updating/creating the
             // merge proposal last time.
@@ -692,7 +698,7 @@ pub fn publish_changes(
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
-                forge: Some(forge_ref.clone()),
+                forge: forge.cloned(),
                 proposal: None,
                 is_new: None,
             });
@@ -708,7 +714,7 @@ pub fn publish_changes(
             match push_changes(
                 local_branch,
                 main_branch,
-                forge.as_ref(),
+                forge,
                 None,
                 None,
                 tags.clone(),

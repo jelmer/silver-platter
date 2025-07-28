@@ -345,11 +345,12 @@ pub fn script_runner(
         if let Some(committer) = committer {
             builder = builder.committer(committer);
         }
-        new_revision = match builder.commit() {
-            Ok(rev) => rev,
+        match builder.commit() {
+            Ok(rev) => {
+                new_revision = rev;
+            }
             Err(BrzError::PointlessCommit) => {
-                // No changes
-                last_revision
+                // No changes - keep new_revision as last_revision
             }
             Err(e) => return Err(Error::Other(format!("Failed to commit changes: {}", e))),
         };

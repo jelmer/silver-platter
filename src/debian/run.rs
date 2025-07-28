@@ -19,6 +19,7 @@ mod tests {
     use super::*;
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::prelude::MutableTree;
     use breezyshim::WorkingTree;
     use std::path::Path;
     use tempfile::tempdir;

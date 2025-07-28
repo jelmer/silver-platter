@@ -344,12 +344,13 @@ pub fn open_branch_containing(
 /// in some situations.
 pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
     match branch.name() {
-        None | Some("") => branch.get_user_url(),
+        None => branch.get_user_url(),
+        Some(ref name) if name.is_empty() => branch.get_user_url(),
         Some(name) => {
             let (url, mut params) = split_segment_parameters(&branch.get_user_url());
             params.insert(
                 "branch".to_string(),
-                utf8_percent_encode(name, CONTROLS).to_string(),
+                utf8_percent_encode(&name, CONTROLS).to_string(),
             );
             join_segment_parameters(&url, params)
         }

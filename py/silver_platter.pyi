@@ -12,7 +12,6 @@ def full_branch_url(branch: Branch) -> str:
     """
     ...
 
-
 class Workspace:
     """Workspace for creating changes to a branch.
 
@@ -111,10 +110,8 @@ class Workspace:
         """
         ...
 
-
 class EmptyMergeProposal(Exception):
     """Raised when a merge proposal is empty."""
-
 
 class InsufficientChangesForNewProposal(Exception):
     """Raised when there are insufficient changes for a new proposal."""

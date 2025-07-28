@@ -84,6 +84,7 @@ pub fn run_post_check(
 mod tests {
     use super::*;
     use breezyshim::controldir::ControlDirFormat;
+    use breezyshim::prelude::{Branch, MutableTree};
     use std::error::Error as StdError;
     use std::path::Path;
     use tempfile::tempdir;

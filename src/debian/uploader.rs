@@ -7,7 +7,7 @@ use breezyshim::error::Error as BrzError;
 use breezyshim::gpg::VerificationResult;
 use breezyshim::repository::Repository;
 use breezyshim::revisionid::RevisionId;
-use breezyshim::tree::{WorkingTree, Tree, MutableTree};
+use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use breezyshim::workingtree::GenericWorkingTree;
 use debversion::Version;
 use std::collections::HashMap;

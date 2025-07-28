@@ -341,7 +341,8 @@ pub fn script_runner(
             .map(|(n, v)| (n, v.map(|v| RevisionId::from(v.as_bytes().to_vec()))))
             .collect()
     } else {
-        let mut tags = local_tree.get_tag_dict()
+        let mut tags = local_tree
+            .get_tag_dict()
             .unwrap()
             .into_iter()
             .filter_map(|(n, v)| {
