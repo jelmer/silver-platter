@@ -8,10 +8,11 @@ use crate::workspace::Workspace;
 use crate::Mode;
 use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
-use breezyshim::tree::WorkingTree;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
+use breezyshim::tree::WorkingTree;
 use log::{error, info, warn};
 use std::collections::HashMap;
+use std::sync::Arc;
 use url::Url;
 
 #[cfg(test)]
@@ -58,7 +59,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         (td, origin_dir, branch_url)
     }
@@ -340,7 +341,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "failing_script.sh", "#!/bin/sh\nexit 1");
 
         // Run apply_and_publish with a script that will fail
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -396,7 +397,7 @@ exit 0
             create_test_script(&script_dir, "no_change_script.sh", "#!/bin/sh\nexit 0");
 
         // Run apply_and_publish with a script that will succeed but make no changes
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -458,7 +459,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
 
         // Run apply_and_publish with a script and verification
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -518,7 +519,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
 
         // Run apply_and_publish with a script and verification that will fail
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -1016,23 +1017,24 @@ pub fn apply_and_publish(
     enable_tag_pushing(&ws.local_tree().branch()).unwrap();
 
     // Step 6: Prepare callbacks for publishing
-    let result_ref = result.clone();
+    let result = Arc::new(result);
+    let result_ref = Arc::clone(&result);
     let get_commit_message = get_commit_message
         .take()
-        .map(|f| move |ep: Option<&MergeProposal>| -> Option<String> { f(&result_ref, ep) });
+        .map(|f| move |ep: Option<&MergeProposal>| -> Option<String> { f(&*result_ref, ep) });
 
-    let result_ref = result.clone();
+    let result_ref = Arc::clone(&result);
     let get_title_wrapper = Some(move |ep: Option<&MergeProposal>| {
         if let Some(get_title) = get_title {
-            get_title(&result_ref, ep)
+            get_title(&*result_ref, ep)
         } else {
             None
         }
     });
 
     // Step 7: Publish changes
-    let labels_vec = labels.map(|l| l.iter().map(|s| s.to_string()).collect());
-    let allow_create = allow_create_proposal.map(|f| f(&result));
+    let labels_vec = labels.map(|l| l.iter().map(|&s| s.to_string()).collect());
+    let allow_create = allow_create_proposal.map(|f| f(&*result));
 
     let publish_result = match publish_workspace_changes(
         &ws,
