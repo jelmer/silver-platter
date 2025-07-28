@@ -11,6 +11,76 @@ use breezyshim::RevisionId;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Options for publishing changes
+#[derive(Default)]
+pub struct PublishOptions<'a> {
+    /// Target branch to publish to
+    pub target_branch: Option<&'a GenericBranch>,
+    /// Publishing mode
+    pub mode: crate::Mode,
+    /// Name of the branch/proposal
+    pub name: &'a str,
+    /// Forge instance to use
+    pub forge: Option<&'a Forge>,
+    /// Whether to allow creating a new proposal
+    pub allow_create_proposal: bool,
+    /// Labels to apply to the proposal
+    pub labels: Vec<String>,
+    /// Whether to overwrite an existing branch
+    pub overwrite_existing: bool,
+    /// Existing proposal to update
+    pub existing_proposal: Option<MergeProposal>,
+    /// List of reviewers
+    pub reviewers: Vec<String>,
+    /// Tags to push
+    pub tags: Option<HashMap<String, RevisionId>>,
+    /// Owner of derived branch
+    pub derived_owner: Option<&'a str>,
+    /// Whether to allow collaboration
+    pub allow_collaboration: bool,
+    /// Stop at this revision
+    pub stop_revision: Option<&'a RevisionId>,
+    /// Enable auto-merge
+    pub auto_merge: bool,
+    /// Mark as work in progress
+    pub work_in_progress: bool,
+}
+
+impl<'a> PublishOptions<'a> {
+    /// Create new publish options with the given name
+    pub fn new(name: &'a str) -> Self {
+        Self {
+            name,
+            allow_create_proposal: true,
+            ..Default::default()
+        }
+    }
+
+    /// Set the publishing mode
+    pub fn mode(mut self, mode: crate::Mode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Set the forge instance
+    pub fn forge(mut self, forge: &'a Forge) -> Self {
+        self.forge = Some(forge);
+        self
+    }
+
+    /// Set the labels
+    pub fn labels(mut self, labels: Vec<String>) -> Self {
+        self.labels = labels;
+        self
+    }
+
+    /// Set the tags to push
+    pub fn tags(mut self, tags: HashMap<String, RevisionId>) -> Self {
+        self.tags = Some(tags);
+        self
+    }
+}
+
 fn fetch_colocated(
     _controldir: &dyn ControlDir<
         Branch = GenericBranch,
@@ -266,19 +336,16 @@ impl Workspace {
         let mut td: Option<tempfile::TempDir> = None;
         // First, clone the main branch from the most efficient source
         let (sprout_base, sprout_coloc) = if let Some(cache_branch) = self.cached_branch.as_ref() {
-            (
-                Some(cache_branch),
-                self.additional_colocated_branches.clone(),
-            )
+            (Some(cache_branch), &self.additional_colocated_branches)
         } else if let Some(resume_branch) = self.resume_branch.as_ref() {
             (
                 Some(resume_branch),
-                self.resume_branch_additional_colocated_branches.clone(),
+                &self.resume_branch_additional_colocated_branches,
             )
         } else {
             (
                 self.main_branch.as_ref(),
-                self.additional_colocated_branches.clone(),
+                &self.additional_colocated_branches,
             )
         };
 
@@ -289,7 +356,7 @@ impl Workspace {
                 Some(
                     sprout_coloc
                         .iter()
-                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .map(|(k, v)| (k.clone(), v.clone()))
                         .collect(),
                 ),
                 self.dir.as_deref(),
@@ -437,7 +504,7 @@ impl Workspace {
                             )?;
 
                             self.additional_colocated_branches
-                                .extend(self.resume_branch_additional_colocated_branches.clone());
+                                .extend(self.resume_branch_additional_colocated_branches.drain());
                         }
                     }
                     Err(e) => {
@@ -521,12 +588,12 @@ impl Workspace {
 
     /// Return whether there are changes since the base revision
     pub fn changes_since_base(&self) -> bool {
-        Some(self.local_tree().branch().last_revision()) != self.base_revid()
+        self.base_revid() != Some(&self.local_tree().branch().last_revision())
     }
 
     /// Return the base revision id
-    pub fn base_revid(&self) -> Option<RevisionId> {
-        self.state.as_ref().map(|s| s.base_revid.clone())
+    pub fn base_revid(&self) -> Option<&RevisionId> {
+        self.state.as_ref().map(|s| &s.base_revid)
     }
 
     /// Have any branch changes at all been made?
@@ -537,11 +604,8 @@ impl Workspace {
     }
 
     /// Return the additional colocated branches
-    pub fn additional_colocated_branches(&self) -> HashMap<String, String> {
-        self.additional_colocated_branches
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
+    pub fn additional_colocated_branches(&self) -> &HashMap<String, String> {
+        &self.additional_colocated_branches
     }
 
     /// Return the branches that have changed
@@ -576,8 +640,8 @@ impl Workspace {
     }
 
     /// Return the main colocated branch revision ids
-    pub fn main_colo_revid(&self) -> HashMap<String, RevisionId> {
-        self.state().main_colo_revid.clone()
+    pub fn main_colo_revid(&self) -> &HashMap<String, RevisionId> {
+        &self.state().main_colo_revid
     }
 
     /// Return the basis tree
@@ -605,7 +669,41 @@ impl Workspace {
         tempdir.keep()
     }
 
+    /// Publish the changes back to the main branch using builder pattern
+    pub fn publish_changes_with_options(
+        &self,
+        options: PublishOptions,
+        get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
+        get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+        get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+    ) -> Result<PublishResult, PublishError> {
+        let main_branch = self.main_branch();
+        crate::publish::publish_changes(
+            &self.local_tree().branch(),
+            options.target_branch.or(main_branch).unwrap(),
+            self.resume_branch(),
+            options.mode,
+            options.name,
+            get_proposal_description,
+            get_proposal_commit_message,
+            get_proposal_title,
+            options.forge,
+            Some(options.allow_create_proposal),
+            Some(options.labels),
+            Some(options.overwrite_existing),
+            options.existing_proposal,
+            Some(options.reviewers),
+            options.tags,
+            options.derived_owner,
+            Some(options.allow_collaboration),
+            options.stop_revision,
+            Some(options.auto_merge),
+            Some(options.work_in_progress),
+        )
+    }
+
     /// Publish the changes back to the main branch
+    #[deprecated(since = "0.6.0", note = "Use publish_changes_with_options instead")]
     pub fn publish_changes(
         &self,
         target_branch: Option<&GenericBranch>,
@@ -627,28 +725,28 @@ impl Workspace {
         auto_merge: Option<bool>,
         work_in_progress: Option<bool>,
     ) -> Result<PublishResult, PublishError> {
-        let main_branch = self.main_branch();
-        crate::publish::publish_changes(
-            &self.local_tree().branch(),
-            target_branch.or(main_branch).unwrap(),
-            self.resume_branch(),
+        let options = PublishOptions {
+            target_branch,
             mode,
             name,
+            forge,
+            allow_create_proposal: allow_create_proposal.unwrap_or(true),
+            labels: labels.unwrap_or_default(),
+            overwrite_existing: overwrite_existing.unwrap_or(false),
+            existing_proposal,
+            reviewers: reviewers.unwrap_or_default(),
+            tags,
+            derived_owner,
+            allow_collaboration: allow_collaboration.unwrap_or(false),
+            stop_revision,
+            auto_merge: auto_merge.unwrap_or(false),
+            work_in_progress: work_in_progress.unwrap_or(false),
+        };
+        self.publish_changes_with_options(
+            options,
             get_proposal_description,
             get_proposal_commit_message,
             get_proposal_title,
-            forge,
-            allow_create_proposal,
-            labels,
-            overwrite_existing,
-            existing_proposal,
-            reviewers,
-            tags,
-            derived_owner,
-            allow_collaboration,
-            stop_revision,
-            auto_merge,
-            work_in_progress,
         )
     }
 
@@ -786,11 +884,10 @@ impl Workspace {
     }
 
     fn inverse_additional_colocated_branches(&self) -> Vec<(String, String)> {
-        let mut result = vec![];
-        for (k, v) in self.additional_colocated_branches().iter() {
-            result.push((v.to_string(), k.to_string()));
-        }
-        result
+        self.additional_colocated_branches()
+            .iter()
+            .map(|(k, v)| (v.clone(), k.clone()))
+            .collect()
     }
 
     /// Show the diff between the base tree and the local tree
@@ -832,7 +929,7 @@ mod tests {
 
         assert_eq!(
             ws.base_revid(),
-            Some(breezyshim::revisionid::RevisionId::null())
+            Some(&breezyshim::revisionid::RevisionId::null())
         );
 
         // There are changes since the branch is created
@@ -873,7 +970,7 @@ mod tests {
 
         assert_eq!(
             ws.base_revid(),
-            Some(breezyshim::revisionid::RevisionId::null())
+            Some(&breezyshim::revisionid::RevisionId::null())
         );
 
         // There are changes since the branch is created
