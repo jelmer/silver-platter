@@ -61,6 +61,26 @@ impl crate::CodemodResult for CommandResult {
     }
 }
 
+impl From<CommandResult> for DetailedSuccess {
+    fn from(r: CommandResult) -> Self {
+        DetailedSuccess {
+            value: r.value,
+            context: r.context,
+            description: r.description,
+            commit_message: r.commit_message,
+            title: r.title,
+            serialized_context: r.serialized_context,
+            tags: Some(
+                r.tags
+                    .into_iter()
+                    .map(|(k, v)| (k, v.map(|v| v.to_string())))
+                    .collect(),
+            ),
+            target_branch_url: r.target_branch_url,
+        }
+    }
+}
+
 impl From<&CommandResult> for DetailedSuccess {
     fn from(r: &CommandResult) -> Self {
         DetailedSuccess {
@@ -288,7 +308,8 @@ pub fn script_runner(
             .map(|(n, v)| (n, v.map(|v| RevisionId::from(v.as_bytes().to_vec()))))
             .collect()
     } else {
-        let mut tags = local_tree.get_tag_dict()
+        let mut tags = local_tree
+            .get_tag_dict()
             .unwrap()
             .into_iter()
             .filter_map(|(n, v)| {
@@ -328,7 +349,7 @@ pub fn script_runner(
             Ok(rev) => rev,
             Err(BrzError::PointlessCommit) => {
                 // No changes
-                last_revision.clone()
+                last_revision
             }
             Err(e) => return Err(Error::Other(format!("Failed to commit changes: {}", e))),
         };
