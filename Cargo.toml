@@ -36,7 +36,7 @@ pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
 debian-control = { version = ">=0.1", optional = true }
 rand = "0.9.2"
-launchpadlib = "0.4.6"
+launchpadlib = { version = "0.4.6", optional = true }
 
 [workspace]
 members = [ "svp-client", "svp-py" ]
@@ -48,6 +48,7 @@ gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["debian"]
 cli = ["dep:clap", "dep:env_logger"]
+launchpad = ["dep:launchpadlib"]
 pyo3 = ["dep:pyo3"]
 
 [dependencies.serde]

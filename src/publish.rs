@@ -12,51 +12,6 @@ use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 
 use std::collections::HashMap;
 
-/// Options for publishing changes
-#[derive(Default)]
-pub struct PublishOptions<'a> {
-    /// Mode of publishing
-    pub mode: Mode,
-    /// Name of the branch/proposal
-    pub name: &'a str,
-    /// Forge instance
-    pub forge: Option<&'a Forge>,
-    /// Whether to allow creating proposals
-    pub allow_create_proposal: bool,
-    /// Labels for the proposal
-    pub labels: Vec<String>,
-    /// Whether to overwrite existing branches
-    pub overwrite_existing: bool,
-    /// Existing proposal to update
-    pub existing_proposal: Option<MergeProposal>,
-    /// Reviewers for the proposal
-    pub reviewers: Vec<String>,
-    /// Tags to push
-    pub tags: Option<HashMap<String, RevisionId>>,
-    /// Owner of derived branch
-    pub derived_owner: Option<&'a str>,
-    /// Allow collaboration
-    pub allow_collaboration: bool,
-    /// Stop at this revision
-    pub stop_revision: Option<&'a RevisionId>,
-    /// Enable auto-merge
-    pub auto_merge: bool,
-    /// Mark as work in progress
-    pub work_in_progress: bool,
-}
-
-impl<'a> PublishOptions<'a> {
-    /// Create new publish options
-    pub fn new(name: &'a str, mode: Mode) -> Self {
-        Self {
-            name,
-            mode,
-            allow_create_proposal: true,
-            ..Default::default()
-        }
-    }
-}
-
 fn _tag_selector_from_tags(
     tags: std::collections::HashMap<String, RevisionId>,
 ) -> impl Fn(String) -> bool {
@@ -106,7 +61,12 @@ pub fn push_result(
     } else {
         _tag_selector_from_tags(std::collections::HashMap::new())
     };
-    local_branch.push(remote_branch, false, stop_revision, Some(Box::new(tag_selector)))?;
+    local_branch.push(
+        remote_branch,
+        false,
+        stop_revision,
+        Some(Box::new(tag_selector)),
+    )?;
 
     if let Some(branches) = additional_colocated_branches {
         for (from_branch_name, to_branch_name) in branches {
@@ -824,42 +784,6 @@ pub fn publish_changes(
         target_branch: main_branch.get_user_url(),
         forge: Some(forge.clone()),
     })
-}
-
-/// Publish a set of changes using builder pattern.
-///
-/// This is a cleaner alternative to publish_changes with fewer parameters.
-pub fn publish_changes_with_options(
-    local_branch: &GenericBranch,
-    main_branch: &GenericBranch,
-    resume_branch: Option<&GenericBranch>,
-    options: PublishOptions,
-    get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
-    get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
-    get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
-) -> Result<PublishResult, Error> {
-    publish_changes(
-        local_branch,
-        main_branch,
-        resume_branch,
-        options.mode,
-        options.name,
-        get_proposal_description,
-        get_proposal_commit_message,
-        get_proposal_title,
-        options.forge,
-        Some(options.allow_create_proposal),
-        Some(options.labels),
-        Some(options.overwrite_existing),
-        options.existing_proposal,
-        Some(options.reviewers),
-        options.tags,
-        options.derived_owner,
-        Some(options.allow_collaboration),
-        options.stop_revision,
-        Some(options.auto_merge),
-        Some(options.work_in_progress),
-    )
 }
 
 /// Publish result

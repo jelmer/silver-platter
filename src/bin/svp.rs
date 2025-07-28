@@ -509,10 +509,24 @@ pub fn batch_publish(
     }
 }
 
+fn is_launchpad_url(url: &url::Url) -> bool {
+    #[cfg(feature = "launchpad")]
+    {
+        launchpadlib::uris::is_launchpad_url(url)
+    }
+    #[cfg(not(feature = "launchpad"))]
+    {
+        url.host_str() == Some("launchpad.net")
+            || url
+                .host_str()
+                .map_or(false, |h| h.ends_with(".launchpad.net"))
+    }
+}
+
 fn login(url: &url::Url) -> i32 {
     let forge = if url.host_str() == Some("github.com") {
         "github"
-    } else if launchpadlib::uris::is_launchpad_url(url) {
+    } else if is_launchpad_url(url) {
         "launchpad"
     } else {
         "gitlab"

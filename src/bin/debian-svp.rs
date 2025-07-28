@@ -548,7 +548,17 @@ pub fn batch_publish(
 }
 
 fn is_launchpad_url(url: &url::Url) -> bool {
-    launchpadlib::uris::is_launchpad_url(url)
+    #[cfg(feature = "launchpad")]
+    {
+        launchpadlib::uris::is_launchpad_url(url)
+    }
+    #[cfg(not(feature = "launchpad"))]
+    {
+        url.host_str() == Some("launchpad.net")
+            || url
+                .host_str()
+                .map_or(false, |h| h.ends_with(".launchpad.net"))
+    }
 }
 
 fn login(url: &url::Url) -> i32 {
