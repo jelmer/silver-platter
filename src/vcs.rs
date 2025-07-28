@@ -276,13 +276,16 @@ pub fn open_branch(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<GenericBranch, BranchOpenError> {
-
     let (url, params) = split_segment_parameters(url);
 
+    let name_owned;
     let name = if let Some(name) = name {
-        Some(name.to_string())
+        Some(name)
+    } else if let Some(param_name) = params.get("name") {
+        name_owned = param_name.clone();
+        Some(name_owned.as_str())
     } else {
-        params.get("name").map(|s| s.to_string())
+        None
     };
 
     let transport = get_transport(&url, possible_transports)
@@ -290,7 +293,7 @@ pub fn open_branch(
     let dir = open_from_transport(&transport, probers)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
 
-    dir.open_branch(name.as_deref())
+    dir.open_branch(name)
         .map(|branch| *branch)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))
 }
@@ -306,10 +309,14 @@ pub fn open_branch_containing(
 ) -> Result<(GenericBranch, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
 
+    let name_owned;
     let name = if let Some(name) = name {
-        Some(name.to_string())
+        Some(name)
+    } else if let Some(param_name) = params.get("name") {
+        name_owned = param_name.clone();
+        Some(name_owned.as_str())
     } else {
-        params.get("name").map(|s| s.to_string())
+        None
     };
 
     let transport = match get_transport(&url, possible_transports) {
@@ -325,7 +332,7 @@ pub fn open_branch_containing(
         })?;
 
     let branch = dir
-        .open_branch(name.as_deref())
+        .open_branch(name)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     Ok((*branch, subpath))
 }
@@ -336,17 +343,17 @@ pub fn open_branch_containing(
 /// but that currently exclude the branch name
 /// in some situations.
 pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
-    if branch.name().is_none() {
-        return branch.get_user_url();
+    match branch.name() {
+        None | Some("") => branch.get_user_url(),
+        Some(name) => {
+            let (url, mut params) = split_segment_parameters(&branch.get_user_url());
+            params.insert(
+                "branch".to_string(),
+                utf8_percent_encode(name, CONTROLS).to_string(),
+            );
+            join_segment_parameters(&url, params)
+        }
     }
-    let (url, mut params) = split_segment_parameters(&branch.get_user_url());
-    if branch.name().as_deref() != Some("") {
-        params.insert(
-            "branch".to_string(),
-            utf8_percent_encode(branch.name().unwrap().as_str(), CONTROLS).to_string(),
-        );
-    }
-    join_segment_parameters(&url, params)
 }
 
 #[cfg(test)]
