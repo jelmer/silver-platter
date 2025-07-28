@@ -12,9 +12,60 @@ use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 
 use std::collections::HashMap;
 
+/// Options for publishing changes
+#[derive(Default)]
+pub struct PublishOptions<'a> {
+    /// Mode of publishing
+    pub mode: Mode,
+    /// Name of the branch/proposal
+    pub name: &'a str,
+    /// Forge instance
+    pub forge: Option<&'a Forge>,
+    /// Whether to allow creating proposals
+    pub allow_create_proposal: bool,
+    /// Labels for the proposal
+    pub labels: Vec<String>,
+    /// Whether to overwrite existing branches
+    pub overwrite_existing: bool,
+    /// Existing proposal to update
+    pub existing_proposal: Option<MergeProposal>,
+    /// Reviewers for the proposal
+    pub reviewers: Vec<String>,
+    /// Tags to push
+    pub tags: Option<HashMap<String, RevisionId>>,
+    /// Owner of derived branch
+    pub derived_owner: Option<&'a str>,
+    /// Allow collaboration
+    pub allow_collaboration: bool,
+    /// Stop at this revision
+    pub stop_revision: Option<&'a RevisionId>,
+    /// Enable auto-merge
+    pub auto_merge: bool,
+    /// Mark as work in progress
+    pub work_in_progress: bool,
+}
+
+impl<'a> PublishOptions<'a> {
+    /// Create new publish options
+    pub fn new(name: &'a str, mode: Mode) -> Self {
+        Self {
+            name,
+            mode,
+            allow_create_proposal: true,
+            ..Default::default()
+        }
+    }
+}
+
 fn _tag_selector_from_tags(
     tags: std::collections::HashMap<String, RevisionId>,
 ) -> impl Fn(String) -> bool {
+    move |tag| tags.contains_key(tag.as_str())
+}
+
+fn _tag_selector_from_tags_ref(
+    tags: &std::collections::HashMap<String, RevisionId>,
+) -> impl Fn(String) -> bool + '_ {
     move |tag| tags.contains_key(tag.as_str())
 }
 
@@ -46,36 +97,39 @@ pub fn push_derived_changes(
 pub fn push_result(
     local_branch: &GenericBranch,
     remote_branch: &GenericBranch,
-    additional_colocated_branches: Option<Vec<(String, String)>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    additional_colocated_branches: Option<&[(String, String)]>,
+    tags: Option<&std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<(), BrzError> {
-    let tag_selector = Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
+    let default_tags = std::collections::HashMap::new();
+    let tags = tags.unwrap_or(&default_tags);
+    let tag_selector = Box::new(_tag_selector_from_tags_ref(tags));
     local_branch.push(remote_branch, false, stop_revision, Some(tag_selector))?;
 
-    for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
-        match local_branch
-            .controldir()
-            .open_branch(Some(from_branch_name.as_str()))
-        {
-            Ok(branch) => {
-                let tag_selector =
-                    Box::new(_tag_selector_from_tags(tags.clone().unwrap_or_default()));
-                
-                // Use the remote branch's controldir for pushing colocated branches
-                // This is the correct approach since we're pushing to the same repository
-                let target_controldir = remote_branch.controldir();
-                target_controldir.push_branch(
-                    branch.as_ref(),
-                    Some(to_branch_name.as_str()),
-                    None,
-                    Some(false),
-                    Some(tag_selector),
-                )?;
-            }
-            Err(BrzError::NotBranchError(..)) => {}
-            Err(e) => return Err(e),
-        };
+    if let Some(branches) = additional_colocated_branches {
+        for (from_branch_name, to_branch_name) in branches {
+            match local_branch
+                .controldir()
+                .open_branch(Some(from_branch_name.as_str()))
+            {
+                Ok(branch) => {
+                    let tag_selector = Box::new(_tag_selector_from_tags_ref(tags));
+
+                    // Use the remote branch's controldir for pushing colocated branches
+                    // This is the correct approach since we're pushing to the same repository
+                    let target_controldir = remote_branch.controldir();
+                    target_controldir.push_branch(
+                        branch.as_ref(),
+                        Some(to_branch_name.as_str()),
+                        None,
+                        Some(false),
+                        Some(tag_selector),
+                    )?;
+                }
+                Err(BrzError::NotBranchError(..)) => {}
+                Err(e) => return Err(e),
+            };
+        }
     }
     Ok(())
 }
@@ -109,8 +163,8 @@ pub fn push_changes(
     push_result(
         local_branch,
         &target_branch,
-        additional_colocated_branches,
-        tags,
+        additional_colocated_branches.as_deref(),
+        tags.as_ref(),
         stop_revision,
     )
     .map_err(Into::into)
@@ -156,15 +210,15 @@ pub fn find_existing_proposed(
 
             // Convert derived_branch from Box<dyn Branch> to GenericBranch
             let derived_branch =
-                crate::vcs::open_branch(&derived_branch.get_user_url(), None, None, None)
-                    .map_err(|e| match e {
+                crate::vcs::open_branch(&derived_branch.get_user_url(), None, None, None).map_err(
+                    |e| match e {
                         crate::vcs::BranchOpenError::Missing { description, .. } => {
                             BrzError::NotBranchError(description, None)
                         }
                         crate::vcs::BranchOpenError::Unavailable { description, .. }
-                        | crate::vcs::BranchOpenError::TemporarilyUnavailable { description, .. } => {
-                            BrzError::ConnectionError(description)
-                        }
+                        | crate::vcs::BranchOpenError::TemporarilyUnavailable {
+                            description, ..
+                        } => BrzError::ConnectionError(description),
                         crate::vcs::BranchOpenError::Unsupported { description, .. } => {
                             BrzError::UnknownFormat(description)
                         }
@@ -174,7 +228,8 @@ pub fn find_existing_proposed(
                         crate::vcs::BranchOpenError::Other(description) => {
                             BrzError::UnknownFormat(description)
                         }
-                    })?;
+                    },
+                )?;
 
             // Filter proposals that are for our derived branch
             let derived_url = derived_branch.get_user_url();
@@ -581,7 +636,14 @@ pub fn publish_changes(
     auto_merge: Option<bool>,
     work_in_progress: Option<bool>,
 ) -> Result<PublishResult, Error> {
-    let stop_revision = stop_revision.map_or_else(|| local_branch.last_revision(), |r| r.clone());
+    let stop_revision_owned;
+    let stop_revision = match stop_revision {
+        Some(r) => r,
+        None => {
+            stop_revision_owned = local_branch.last_revision();
+            &stop_revision_owned
+        }
+    };
     let allow_create_proposal = allow_create_proposal.unwrap_or(true);
 
     // Only modes that don't require forge operations can work without a forge
@@ -589,7 +651,7 @@ pub fn publish_changes(
         return Err(Error::UnsupportedForge(main_branch.get_user_url()));
     }
 
-    let forge = forge.cloned();
+    // forge will be cloned only when needed for the result
 
     if stop_revision == main_branch.last_revision() {
         if let Some(existing_proposal) = existing_proposal.as_ref() {
@@ -666,7 +728,7 @@ pub fn publish_changes(
                         proposal: None,
                         mode,
                         target_branch: main_branch.get_user_url(),
-                        forge: forge.clone(),
+                        forge: forge.cloned(),
                         is_new: None,
                     });
                 }
@@ -754,8 +816,44 @@ pub fn publish_changes(
         proposal: Some(proposal),
         is_new: Some(is_new),
         target_branch: main_branch.get_user_url(),
-        forge: Some(forge),
+        forge: Some(forge.clone()),
     })
+}
+
+/// Publish a set of changes using builder pattern.
+///
+/// This is a cleaner alternative to publish_changes with fewer parameters.
+pub fn publish_changes_with_options(
+    local_branch: &GenericBranch,
+    main_branch: &GenericBranch,
+    resume_branch: Option<&GenericBranch>,
+    options: PublishOptions,
+    get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
+    get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+    get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+) -> Result<PublishResult, Error> {
+    publish_changes(
+        local_branch,
+        main_branch,
+        resume_branch,
+        options.mode,
+        options.name,
+        get_proposal_description,
+        get_proposal_commit_message,
+        get_proposal_title,
+        options.forge,
+        Some(options.allow_create_proposal),
+        Some(options.labels),
+        Some(options.overwrite_existing),
+        options.existing_proposal,
+        Some(options.reviewers),
+        options.tags,
+        options.derived_owner,
+        Some(options.allow_collaboration),
+        options.stop_revision,
+        Some(options.auto_merge),
+        Some(options.work_in_progress),
+    )
 }
 
 /// Publish result
@@ -782,9 +880,13 @@ pub fn check_proposal_diff_empty(
     main_branch: &dyn PyBranch,
     stop_revision: Option<&RevisionId>,
 ) -> Result<bool, BrzError> {
+    let stop_revision_owned;
     let stop_revision = match stop_revision {
-        Some(rev) => rev.clone(),
-        None => other_branch.last_revision(),
+        Some(rev) => rev,
+        None => {
+            stop_revision_owned = other_branch.last_revision();
+            &stop_revision_owned
+        }
     };
     let main_revid = main_branch.last_revision();
     let other_repository = other_branch.repository();
