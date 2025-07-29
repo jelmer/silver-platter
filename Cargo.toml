@@ -51,6 +51,19 @@ cli = ["dep:clap", "dep:env_logger"]
 launchpad = ["dep:launchpadlib"]
 pyo3 = ["dep:pyo3"]
 
+[package.metadata.all-features]
+# Only test specific feature combinations
+only_include_features = [
+    [],  # No features
+    ["default"],  # Default features
+    ["debian"],  # Just debian
+    ["debian", "gpg"],  # Debian with GPG
+    ["debian", "launchpad"],  # Debian with Launchpad
+    ["debian", "last-attempt-db"],  # Debian with database
+    ["cli"],  # Just CLI
+    ["pyo3"],  # Just Python bindings
+]
+
 [dependencies.serde]
 workspace = true
 features = [ "derive",]
