@@ -1,15 +1,15 @@
-// Allow unknown cfgs for now, since import_exception_bound
-// expects a gil-refs feature that is not defined
-#![allow(unexpected_cfgs)]
 #![allow(clippy::too_many_arguments)]
 
+use breezyshim::branch::PyBranch;
+use breezyshim::tree::PyTree;
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
-use pyo3::{create_exception, import_exception_bound};
+use pyo3::{create_exception, import_exception};
 use silver_platter::codemod::Error as CodemodError;
+use silver_platter::Branch;
+use silver_platter::RevisionId;
 use silver_platter::{CommitPending, Mode};
-use silver_platter::{RevisionId, WorkingTree};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
@@ -68,7 +68,7 @@ create_exception!(
     MissingChangelog,
     pyo3::exceptions::PyException
 );
-import_exception_bound!(breezy.errors, DivergedBranches);
+import_exception!(breezy.errors, DivergedBranches);
 create_exception!(
     silver_platter,
     NoTargetBranch,
@@ -101,38 +101,32 @@ create_exception!(silver_platter, BranchMissing, BranchError);
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
 
-fn json_to_py<'a, 'b, 'py>(py: Python<'py>, value: &'b serde_json::Value) -> Bound<'a, PyAny>
-where
-    'py: 'a,
-{
+fn json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> Bound<'py, pyo3::PyAny> {
     match value {
-        serde_json::Value::Null => py.None().into_bound(py),
-        serde_json::Value::Bool(b) => {
-            let o = pyo3::types::PyBool::new_bound(py, *b).into_py(py);
-            o.into_bound(py)
-        }
+        serde_json::Value::Null => py.None().into_bound(py).into_any(),
+        serde_json::Value::Bool(b) => <pyo3::Bound<'_, pyo3::types::PyBool> as Clone>::clone(
+            &pyo3::types::PyBool::new(py, *b),
+        )
+        .into_any(),
         serde_json::Value::Number(n) => {
-            let n: PyObject = if let Some(n) = n.as_u64() {
-                n.into_py(py)
+            if let Some(n) = n.as_u64() {
+                pyo3::types::PyInt::new(py, n).into_any()
             } else if let Some(n) = n.as_i64() {
-                n.into_py(py)
-            } else if let Some(n) = n.as_f64() {
-                n.into_py(py)
+                pyo3::types::PyInt::new(py, n).into_any()
             } else {
-                unreachable!()
-            };
-            n.into_bound(py)
+                pyo3::types::PyFloat::new(py, n.as_f64().unwrap()).into_any()
+            }
         }
-        serde_json::Value::String(s) => pyo3::types::PyString::new_bound(py, s.as_str()).into_any(),
+        serde_json::Value::String(s) => pyo3::types::PyString::new(py, s).into_any(),
         serde_json::Value::Array(a) => {
-            let list = pyo3::types::PyList::empty_bound(py);
+            let list = pyo3::types::PyList::empty(py);
             for v in a {
                 list.append(json_to_py(py, v)).unwrap();
             }
             list.into_any()
         }
         serde_json::Value::Object(o) => {
-            let dict = pyo3::types::PyDict::new_bound(py);
+            let dict = pyo3::types::PyDict::new(py);
             for (k, v) in o {
                 dict.set_item(k, json_to_py(py, v)).unwrap();
             }
@@ -345,10 +339,7 @@ impl CommandResult {
     }
 
     #[getter]
-    fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
-    where
-        'py: 'a,
-    {
+    fn context<'py>(&self, py: Python<'py>) -> Option<Bound<'py, pyo3::PyAny>> {
         self.0.context.as_ref().map(|c| json_to_py(py, c))
     }
 }
@@ -376,8 +367,9 @@ fn script_runner(
         ]
     };
 
+    let tree = breezyshim::workingtree::GenericWorkingTree(local_tree);
     silver_platter::codemod::script_runner(
-        &WorkingTree::from(local_tree),
+        &tree,
         script
             .iter()
             .map(|s| s.as_str())
@@ -407,7 +399,7 @@ fn script_runner(
             std::process::Stdio::inherit()
         },
     )
-    .map(|result| CommandResult(result).into_py(py))
+    .map(|result| Py::new(py, CommandResult(result)).unwrap().into_any())
     .map_err(|err| match err {
         CodemodError::ScriptMadeNoChanges => ScriptMadeNoChanges::new_err("Script made no changes"),
         CodemodError::ExitCode(code) => {
@@ -442,9 +434,11 @@ fn push_derived_changes(
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<(PyObject, String)> {
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
     let (b, u) = silver_platter::publish::push_derived_changes(
-        &silver_platter::GenericBranch::new(local_branch),
-        &silver_platter::GenericBranch::new(main_branch),
+        &local_branch as &dyn PyBranch,
+        &main_branch as &dyn PyBranch,
         &silver_platter::Forge::from(forge),
         name,
         overwrite_existing,
@@ -452,7 +446,14 @@ fn push_derived_changes(
         tags,
         stop_revision.as_ref(),
     )?;
-    Ok((b.to_object(py), u.to_string()))
+    // The returned branch is a Box<dyn Branch>, but we need a PyObject
+    // We'll use the branch URL to reopen it as a GenericBranch
+    let branch_url = b.get_user_url();
+    use breezyshim::branch::PyBranch;
+    use breezyshim::controldir::open;
+    let controldir = open(&branch_url, None)?;
+    let generic_branch = controldir.open_branch(None)?;
+    Ok((generic_branch.to_object(py), u.to_string()))
 }
 
 #[pyclass]
@@ -511,6 +512,7 @@ impl Candidate {
 #[pyfunction]
 #[pyo3(signature = (local_branch, main_branch, forge=None, possible_transports=None, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_changes(
+    py: Python,
     local_branch: PyObject,
     main_branch: PyObject,
     forge: Option<PyObject>,
@@ -521,9 +523,11 @@ fn push_changes(
 ) -> PyResult<()> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
         possible_transports.map(|t| t.into_iter().map(silver_platter::Transport::new).collect());
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
     silver_platter::publish::push_changes(
-        &silver_platter::GenericBranch::new(local_branch),
-        &silver_platter::GenericBranch::new(main_branch),
+        &local_branch,
+        &main_branch,
         forge.map(silver_platter::Forge::from).as_ref(),
         possible_transports.as_mut(),
         additional_colocated_branches,
@@ -536,28 +540,29 @@ fn push_changes(
 #[pyfunction]
 #[pyo3(signature = (local_branch, remote_branch, additional_colocated_branches=None, tags=None, stop_revision=None))]
 fn push_result(
+    py: Python,
     local_branch: PyObject,
     remote_branch: PyObject,
     additional_colocated_branches: Option<Vec<(String, String)>>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let remote_branch: breezyshim::branch::GenericBranch = remote_branch.extract(py)?;
     silver_platter::publish::push_result(
-        &silver_platter::GenericBranch::new(local_branch),
-        &silver_platter::GenericBranch::new(remote_branch),
-        additional_colocated_branches,
-        tags,
+        &local_branch,
+        &remote_branch,
+        additional_colocated_branches.as_deref(),
+        tags.as_ref(),
         stop_revision.as_ref(),
     )?;
     Ok(())
 }
 
 #[pyfunction]
-fn full_branch_url(branch: PyObject) -> PyResult<String> {
-    Ok(
-        silver_platter::vcs::full_branch_url(&silver_platter::GenericBranch::new(branch))
-            .to_string(),
-    )
+fn full_branch_url(py: Python, branch: PyObject) -> PyResult<String> {
+    let branch: breezyshim::branch::GenericBranch = branch.extract(py)?;
+    Ok(silver_platter::vcs::full_branch_url(&branch).to_string())
 }
 
 #[pyclass]
@@ -574,7 +579,7 @@ fn find_existing_proposed(
     owner: Option<&str>,
     preferred_schemes: Option<Vec<String>>,
 ) -> PyResult<(Option<PyObject>, Option<bool>, Option<Vec<MergeProposal>>)> {
-    let main_branch = silver_platter::GenericBranch::new(main_branch);
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
     let forge = silver_platter::Forge::from(forge);
     let preferred_schemes = preferred_schemes
         .as_ref()
@@ -598,6 +603,7 @@ fn find_existing_proposed(
 #[pyfunction]
 #[pyo3(signature = (local_branch, main_branch, forge, name, mp_description, resume_branch=None, resume_proposal=None, overwrite_existing=None, labels=None, commit_message=None, title=None, additional_colocated_branches=None, allow_empty=None, reviewers=None, tags=None, owner=None, stop_revision=None, allow_collaboration=None, auto_merge=None, work_in_progress=None))]
 fn propose_changes(
+    py: Python,
     local_branch: PyObject,
     main_branch: PyObject,
     forge: &Forge,
@@ -619,16 +625,20 @@ fn propose_changes(
     auto_merge: Option<bool>,
     work_in_progress: Option<bool>,
 ) -> PyResult<(MergeProposal, bool)> {
-    let resume_branch = resume_branch.map(|b| breezyshim::branch::GenericBranch::new(b));
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+    let resume_branch = if let Some(b) = resume_branch {
+        Some(b.extract::<breezyshim::branch::GenericBranch>(py)?)
+    } else {
+        None
+    };
     silver_platter::publish::propose_changes(
-        &breezyshim::branch::GenericBranch::new(local_branch),
-        &breezyshim::branch::GenericBranch::new(main_branch),
+        &local_branch,
+        &main_branch,
         &forge.0,
         name,
         mp_description,
-        resume_branch
-            .as_ref()
-            .map(|b| b as &dyn silver_platter::Branch),
+        resume_branch.as_ref(),
         resume_proposal.as_ref().map(|p| p.0.clone()),
         overwrite_existing,
         labels,
@@ -659,13 +669,17 @@ impl PublishResult {
     }
     #[getter]
     fn forge(&self, py: Python) -> Option<PyObject> {
-        Some(self.0.forge.to_object(py))
+        self.0
+            .forge
+            .as_ref()
+            .map(|f| Py::new(py, Forge(f.clone())).unwrap().into_any())
     }
 }
 
 #[pyfunction]
 #[pyo3(signature = (local_branch, main_branch, mode, name, get_proposal_description, resume_branch=None, get_proposal_commit_message=None, get_proposal_title=None, forge=None, allow_create_proposal=None, labels=None, overwrite_existing=None, existing_proposal=None, reviewers=None, tags=None, derived_owner=None, allow_collaboration=None, stop_revision=None, auto_merge=None))]
 fn publish_changes(
+    py: Python,
     local_branch: PyObject,
     main_branch: PyObject,
     mode: Mode,
@@ -714,13 +728,17 @@ fn publish_changes(
             })
         }
     });
-    let resume_branch = resume_branch.map(breezyshim::branch::GenericBranch::new);
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+    let resume_branch = if let Some(b) = resume_branch {
+        Some(b.extract::<breezyshim::branch::GenericBranch>(py)?)
+    } else {
+        None
+    };
     Ok(PublishResult(silver_platter::publish::publish_changes(
-        &breezyshim::branch::GenericBranch::new(local_branch),
-        &breezyshim::branch::GenericBranch::new(main_branch),
-        resume_branch
-            .as_ref()
-            .map(|b| b as &dyn silver_platter::Branch),
+        &local_branch,
+        &main_branch,
+        resume_branch.as_ref(),
         mode,
         name,
         get_proposal_description,
@@ -737,19 +755,29 @@ fn publish_changes(
         allow_collaboration,
         stop_revision.as_ref(),
         auto_merge,
+        None, // work_in_progress
     )?))
 }
 
 #[pyclass]
-struct DestroyFn(Option<Box<dyn FnOnce() -> std::io::Result<()> + Send>>);
+struct DestroyFn {
+    #[pyo3(get)]
+    destroyed: bool,
+}
 
 #[pymethods]
 impl DestroyFn {
+    #[new]
+    fn new() -> Self {
+        Self { destroyed: false }
+    }
+
     fn __call__(&mut self) -> PyResult<()> {
-        if let Some(f) = self.0.take() {
-            Ok(f()?)
-        } else {
+        if self.destroyed {
             Err(PyRuntimeError::new_err("Already called"))
+        } else {
+            self.destroyed = true;
+            Ok(())
         }
     }
 }
@@ -762,9 +790,9 @@ impl DestroyFn {
 /// Raises:
 ///   PreCheckFailed: If the pre-check failed
 #[pyfunction]
-fn run_pre_check(tree: PyObject, script: &str) -> PyResult<()> {
-    let tree = WorkingTree::from(tree);
-    silver_platter::checks::run_pre_check(tree, script).map_err(|e| match e {
+fn run_pre_check(_py: Python, tree: PyObject, script: &str) -> PyResult<()> {
+    let tree = breezyshim::workingtree::GenericWorkingTree(tree);
+    silver_platter::checks::run_pre_check(&tree, script).map_err(|e| match e {
         silver_platter::checks::PreCheckFailed => PreCheckFailed::new_err(()),
     })
 }
@@ -779,8 +807,8 @@ fn run_pre_check(tree: PyObject, script: &str) -> PyResult<()> {
 ///   PreCheckFailed: If the pre-check failed
 #[pyfunction]
 fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyResult<()> {
-    let tree = WorkingTree::from(tree);
-    silver_platter::checks::run_post_check(tree, script, &since_revid).map_err(|e| match e {
+    let tree = breezyshim::workingtree::GenericWorkingTree(tree);
+    silver_platter::checks::run_post_check(&tree, script, &since_revid).map_err(|e| match e {
         silver_platter::checks::PostCheckFailed => PostCheckFailed::new_err(()),
     })
 }
@@ -788,12 +816,13 @@ fn run_post_check(tree: PyObject, script: &str, since_revid: RevisionId) -> PyRe
 #[pyfunction]
 #[pyo3(signature = (local_branch, target_branch, stop_revision=None))]
 fn check_proposal_diff(
+    py: Python,
     local_branch: PyObject,
     target_branch: PyObject,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
-    let local_branch = breezyshim::branch::GenericBranch::new(local_branch);
-    let target_branch = breezyshim::branch::GenericBranch::new(target_branch);
+    let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
+    let target_branch: breezyshim::branch::GenericBranch = target_branch.extract(py)?;
     if silver_platter::publish::check_proposal_diff_empty(
         &local_branch,
         &target_branch,
@@ -814,10 +843,14 @@ pub(crate) mod debian {
     create_exception!(silver_platter, DebsignFailure, PyException);
 
     #[pyfunction]
-    pub fn pick_additional_colocated_branches(main_branch: PyObject) -> HashMap<String, String> {
-        silver_platter::debian::pick_additional_colocated_branches(
-            &breezyshim::branch::GenericBranch::new(main_branch),
-        )
+    pub fn pick_additional_colocated_branches(
+        py: Python,
+        main_branch: PyObject,
+    ) -> PyResult<HashMap<String, String>> {
+        let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+        Ok(silver_platter::debian::pick_additional_colocated_branches(
+            &main_branch,
+        ))
     }
 
     #[pyclass]
@@ -861,10 +894,7 @@ pub(crate) mod debian {
         }
 
         #[getter]
-        fn context<'a, 'py>(&self, py: Python<'py>) -> Option<Bound<'a, PyAny>>
-        where
-            'py: 'a,
-        {
+        fn context<'py>(&self, py: Python<'py>) -> Option<Bound<'py, pyo3::PyAny>> {
             self.0.context.as_ref().map(|c| json_to_py(py, c))
         }
     }
@@ -893,8 +923,9 @@ pub(crate) mod debian {
             ]
         };
 
+        let tree = breezyshim::workingtree::GenericWorkingTree(local_tree);
         silver_platter::debian::codemod::script_runner(
-            &WorkingTree::from(local_tree),
+            &tree,
             script
                 .iter()
                 .map(|s| s.as_str())
@@ -926,7 +957,7 @@ pub(crate) mod debian {
             },
             update_changelog,
         )
-        .map(|result| DebianCommandResult(result).into_py(py))
+        .map(|result| Py::new(py, DebianCommandResult(result)).unwrap().into())
         .map_err(|err| match err {
             DebianCodemodError::ScriptMadeNoChanges => {
                 ScriptMadeNoChanges::new_err("Script made no changes")
@@ -1001,7 +1032,7 @@ pub(crate) mod debian {
 
     #[pyfunction]
     pub(crate) fn is_debcargo_package(tree: PyObject, path: &str) -> PyResult<bool> {
-        let tree = WorkingTree::from(tree);
+        let tree = breezyshim::workingtree::GenericWorkingTree(tree);
         Ok(silver_platter::debian::is_debcargo_package(
             &tree,
             std::path::Path::new(path),
@@ -1010,7 +1041,7 @@ pub(crate) mod debian {
 
     #[pyfunction]
     pub(crate) fn control_files_in_root(tree: PyObject, path: &str) -> PyResult<bool> {
-        let tree = WorkingTree::from(tree);
+        let tree = breezyshim::workingtree::GenericWorkingTree(tree);
         Ok(silver_platter::debian::control_files_in_root(
             &tree,
             std::path::Path::new(path),
@@ -1038,7 +1069,7 @@ pub(crate) mod debian {
         tree: PyObject,
         debian_path: &str,
     ) -> Option<ChangelogBehaviour> {
-        let tree = WorkingTree::from(tree);
+        let tree = breezyshim::workingtree::GenericWorkingTree(tree);
         silver_platter::debian::guess_update_changelog(&tree, std::path::Path::new(debian_path))
             .map(ChangelogBehaviour)
     }
@@ -1051,7 +1082,7 @@ pub(crate) mod debian {
         builder: Option<&str>,
         result_dir: Option<PathBuf>,
     ) -> PyResult<()> {
-        let tree = WorkingTree::from(tree);
+        let tree = breezyshim::workingtree::GenericWorkingTree(tree);
         silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
     }
 
@@ -1061,7 +1092,7 @@ pub(crate) mod debian {
         subpath: std::path::PathBuf,
         build_target_dir: std::path::PathBuf,
     ) -> PyResult<()> {
-        let local_tree = WorkingTree::from(local_tree);
+        let local_tree = breezyshim::workingtree::GenericWorkingTree(local_tree);
         silver_platter::debian::install_built_package(
             &local_tree,
             subpath.as_path(),
@@ -1084,20 +1115,23 @@ pub(crate) mod debian {
 #[pyfunction]
 #[pyo3(signature = (main_branch, other_branch, other_revision=None))]
 fn merge_conflicts(
+    py: Python,
     main_branch: PyObject,
     other_branch: PyObject,
     other_revision: Option<RevisionId>,
 ) -> PyResult<bool> {
+    let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+    let other_branch: breezyshim::branch::GenericBranch = other_branch.extract(py)?;
     Ok(silver_platter::utils::merge_conflicts(
-        &breezyshim::branch::GenericBranch::new(main_branch),
-        &breezyshim::branch::GenericBranch::new(other_branch),
+        &main_branch,
+        &other_branch,
         other_revision.as_ref(),
     )?)
 }
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
-    import_exception_bound!(breezy.errors, UnknownFormat);
-    import_exception_bound!(breezy.errors, PermissionDenied);
+    import_exception!(breezy.errors, UnknownFormat);
+    import_exception!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
@@ -1136,7 +1170,7 @@ impl Workspace {
 
     #[getter]
     fn base_revid(&self) -> Option<RevisionId> {
-        self.0.base_revid()
+        self.0.base_revid().cloned()
     }
 
     #[new]
@@ -1155,21 +1189,18 @@ impl Workspace {
         let mut builder = silver_platter::workspace::Workspace::builder();
 
         if let Some(main_branch) = main_branch {
-            builder = builder.main_branch(Box::new(breezyshim::branch::GenericBranch::new(
-                main_branch,
-            )));
+            let branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+            builder = builder.main_branch(branch);
         }
 
         if let Some(resume_branch) = resume_branch {
-            builder = builder.resume_branch(Box::new(breezyshim::branch::GenericBranch::new(
-                resume_branch,
-            )));
+            let branch: breezyshim::branch::GenericBranch = resume_branch.extract(py)?;
+            builder = builder.resume_branch(branch);
         }
 
         if let Some(cached_branch) = cached_branch {
-            builder = builder.cached_branch(Box::new(breezyshim::branch::GenericBranch::new(
-                cached_branch,
-            )));
+            let branch: breezyshim::branch::GenericBranch = cached_branch.extract(py)?;
+            builder = builder.cached_branch(branch);
         }
 
         if let Some(additional_colocated_branches) = additional_colocated_branches {
@@ -1250,8 +1281,8 @@ impl Workspace {
     }
 
     #[getter]
-    fn main_branch(&self, py: Python) -> PyObject {
-        self.0.main_branch().to_object(py)
+    fn main_branch(&self, py: Python) -> Option<PyObject> {
+        self.0.main_branch().map(|b| b.to_object(py))
     }
 
     #[getter]
@@ -1349,37 +1380,25 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(select_preferred_probers, m)?)?;
     m.add_function(wrap_pyfunction!(select_probers, m)?)?;
     m.add_function(wrap_pyfunction!(_open_branch, m)?)?;
-    m.add(
-        "ScriptMadeNoChanges",
-        py.get_type_bound::<ScriptMadeNoChanges>(),
-    )?;
-    m.add("ScriptFailed", py.get_type_bound::<ScriptFailed>())?;
-    m.add("ScriptNotFound", py.get_type_bound::<ScriptNotFound>())?;
-    m.add("DetailedFailure", py.get_type_bound::<DetailedFailure>())?;
-    m.add("MissingChangelog", py.get_type_bound::<MissingChangelog>())?;
-    m.add("NoTargetBranch", py.get_type_bound::<NoTargetBranch>())?;
+    m.add("ScriptMadeNoChanges", py.get_type::<ScriptMadeNoChanges>())?;
+    m.add("ScriptFailed", py.get_type::<ScriptFailed>())?;
+    m.add("ScriptNotFound", py.get_type::<ScriptNotFound>())?;
+    m.add("DetailedFailure", py.get_type::<DetailedFailure>())?;
+    m.add("MissingChangelog", py.get_type::<MissingChangelog>())?;
+    m.add("NoTargetBranch", py.get_type::<NoTargetBranch>())?;
     m.add(
         "ResultFileFormatError",
-        py.get_type_bound::<ResultFileFormatError>(),
+        py.get_type::<ResultFileFormatError>(),
     )?;
-    m.add("BranchError", py.get_type_bound::<BranchError>())?;
-    m.add(
-        "BranchUnsupported",
-        py.get_type_bound::<BranchUnsupported>(),
-    )?;
+    m.add("BranchError", py.get_type::<BranchError>())?;
+    m.add("BranchUnsupported", py.get_type::<BranchUnsupported>())?;
     m.add(
         "BranchTemporarilyUnavailable",
-        py.get_type_bound::<BranchTemporarilyUnavailable>(),
+        py.get_type::<BranchTemporarilyUnavailable>(),
     )?;
-    m.add(
-        "BranchUnavailable",
-        py.get_type_bound::<BranchUnavailable>(),
-    )?;
-    m.add(
-        "BranchRateLimited",
-        py.get_type_bound::<BranchRateLimited>(),
-    )?;
-    m.add("BranchMissing", py.get_type_bound::<BranchMissing>())?;
+    m.add("BranchUnavailable", py.get_type::<BranchUnavailable>())?;
+    m.add("BranchRateLimited", py.get_type::<BranchRateLimited>())?;
+    m.add("BranchMissing", py.get_type::<BranchMissing>())?;
 
     m.add_class::<CommandResult>()?;
     m.add_class::<Recipe>()?;
@@ -1394,7 +1413,7 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(merge_conflicts, m)?)?;
     #[cfg(feature = "debian")]
     {
-        let debian = PyModule::new_bound(py, "debian")?;
+        let debian = PyModule::new(py, "debian")?;
         debian.add_class::<debian::ChangelogBehaviour>()?;
         debian.add_function(wrap_pyfunction!(debian::get_maintainer_from_env, &debian)?)?;
         debian.add_function(wrap_pyfunction!(debian::guess_update_changelog, &debian)?)?;
@@ -1410,11 +1429,8 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         )?)?;
         debian.add_function(wrap_pyfunction!(debian::debsign, &debian)?)?;
         debian.add_function(wrap_pyfunction!(debian::dput_changes, &debian)?)?;
-        debian.add("DputFailure", py.get_type_bound::<debian::DputFailure>())?;
-        debian.add(
-            "DebsignFailure",
-            py.get_type_bound::<debian::DebsignFailure>(),
-        )?;
+        debian.add("DputFailure", py.get_type::<debian::DputFailure>())?;
+        debian.add("DebsignFailure", py.get_type::<debian::DebsignFailure>())?;
         m.add_submodule(&debian)?;
     }
     m.add_function(wrap_pyfunction!(find_existing_proposed, m)?)?;
@@ -1423,21 +1439,18 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PublishResult>()?;
     m.add(
         "InsufficientChangesForNewProposal",
-        py.get_type_bound::<InsufficientChangesForNewProposal>(),
+        py.get_type::<InsufficientChangesForNewProposal>(),
     )?;
     m.add(
         "UnrelatedBranchExists",
-        py.get_type_bound::<UnrelatedBranchExists>(),
+        py.get_type::<UnrelatedBranchExists>(),
     )?;
     m.add_function(wrap_pyfunction!(run_pre_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_post_check, m)?)?;
     m.add_function(wrap_pyfunction!(check_proposal_diff, m)?)?;
-    m.add("PostCheckFailed", py.get_type_bound::<PostCheckFailed>())?;
-    m.add("PreCheckFailed", py.get_type_bound::<PreCheckFailed>())?;
-    m.add(
-        "EmptyMergeProposal",
-        py.get_type_bound::<EmptyMergeProposal>(),
-    )?;
+    m.add("PostCheckFailed", py.get_type::<PostCheckFailed>())?;
+    m.add("PreCheckFailed", py.get_type::<PreCheckFailed>())?;
+    m.add("EmptyMergeProposal", py.get_type::<EmptyMergeProposal>())?;
 
     m.add("MODE_PUSH", "push")?;
     m.add("MODE_ATTEMPT_PUSH", "attempt-push")?;
@@ -1452,7 +1465,10 @@ fn _svp_rs(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         .iter()
         .map(|i| i.parse::<i32>().unwrap())
         .collect::<Vec<_>>();
-    m.add("__version__", pyo3::types::PyTuple::new_bound(py, tuple))?;
+    m.add(
+        "__version__",
+        pyo3::types::PyTuple::new(py, tuple)?.into_any(),
+    )?;
 
     Ok(())
 }
