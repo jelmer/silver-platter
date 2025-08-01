@@ -2,7 +2,7 @@
 import sys
 
 from setuptools import setup
-from setuptools_rust import Binding, RustBin, RustExtension
+from setuptools_rust import Binding, RustExtension
 
 features = []
 
@@ -18,20 +18,6 @@ rust_extensions = [
         args=["--no-default-features"],
         features=features + ["extension-module"],
     ),
-    RustBin(
-        "svp",
-        "Cargo.toml",
-        features=features,
-    ),
 ]
-
-if "debian" in features:
-    rust_extensions.append(
-        RustBin(
-            "debian-svp",
-            "Cargo.toml",
-            features=features + ["debian"],
-        )
-    )
 
 setup(rust_extensions=rust_extensions)
