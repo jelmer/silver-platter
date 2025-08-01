@@ -19,7 +19,7 @@ impl fmt::Display for PreCheckFailed {
 impl Error for PreCheckFailed {}
 
 /// Run check to see if the package should be uploaded
-pub fn run_pre_check(tree: WorkingTree, script: &str) -> Result<(), PreCheckFailed> {
+pub fn run_pre_check(tree: &dyn WorkingTree, script: &str) -> Result<(), PreCheckFailed> {
     let path = tree.abspath(std::path::Path::new("")).unwrap();
     let status = Command::new("sh")
         .arg("-c")
@@ -53,7 +53,7 @@ impl Error for PostCheckFailed {}
 
 /// Post-build check if the package should be uploaded
 pub fn run_post_check(
-    tree: WorkingTree,
+    tree: &dyn WorkingTree,
     script: &str,
     since_revid: &RevisionId,
 ) -> Result<(), PostCheckFailed> {
@@ -84,6 +84,7 @@ pub fn run_post_check(
 mod tests {
     use super::*;
     use breezyshim::controldir::ControlDirFormat;
+    use breezyshim::prelude::{Branch, MutableTree};
     use std::error::Error as StdError;
     use std::path::Path;
     use tempfile::tempdir;
@@ -118,7 +119,7 @@ mod tests {
         .unwrap();
 
         // Run a successful script
-        let result = run_pre_check(wt, "exit 0");
+        let result = run_pre_check(&wt, "exit 0");
         assert!(result.is_ok());
     }
 
@@ -132,7 +133,7 @@ mod tests {
         .unwrap();
 
         // Run a failing script
-        let result = run_pre_check(wt, "exit 1");
+        let result = run_pre_check(&wt, "exit 1");
         assert!(result.is_err());
         assert_eq!(result.err().unwrap(), PreCheckFailed);
     }
@@ -147,7 +148,7 @@ mod tests {
         .unwrap();
 
         // Run a nonexistent command
-        let result = run_pre_check(wt, "nonexistent_command_12345");
+        let result = run_pre_check(&wt, "nonexistent_command_12345");
         assert!(result.is_err());
         assert_eq!(result.err().unwrap(), PreCheckFailed);
     }
@@ -163,7 +164,7 @@ mod tests {
 
         // Create a test file and check if it exists
         let script = "touch test_file.txt && test -f test_file.txt";
-        let result = run_pre_check(wt.clone(), script);
+        let result = run_pre_check(&wt, script);
         assert!(result.is_ok());
 
         // Verify the file was created in the working tree
@@ -183,7 +184,7 @@ mod tests {
 
         // Run multiple commands in a script
         let script = "mkdir -p test_dir && cd test_dir && touch test_file.txt && cd .. && test -f test_dir/test_file.txt";
-        let result = run_pre_check(wt.clone(), script);
+        let result = run_pre_check(&wt, script);
         assert!(result.is_ok());
 
         // Verify the directory and file were created
@@ -207,7 +208,7 @@ mod tests {
         let revid = wt.branch().last_revision();
 
         // Run a successful script
-        let result = run_post_check(wt, "exit 0", &revid);
+        let result = run_post_check(&wt, "exit 0", &revid);
         assert!(result.is_ok());
     }
 
@@ -223,7 +224,7 @@ mod tests {
         let revid = wt.branch().last_revision();
 
         // Run a failing script
-        let result = run_post_check(wt, "exit 1", &revid);
+        let result = run_post_check(&wt, "exit 1", &revid);
         assert!(result.is_err());
         assert_eq!(result.err().unwrap(), PostCheckFailed);
     }
@@ -240,7 +241,7 @@ mod tests {
         let revid = wt.branch().last_revision();
 
         // Verify that SINCE_REVID environment variable contains the revision ID
-        let result = run_post_check(wt, "test \"$SINCE_REVID\" = \"null:\"", &revid);
+        let result = run_post_check(&wt, "test \"$SINCE_REVID\" = \"null:\"", &revid);
         assert!(result.is_ok());
     }
 
@@ -269,7 +270,7 @@ mod tests {
 
         // Create a post-check script that creates a file with the revision ID
         let script = "echo $SINCE_REVID > revid.txt && test -f revid.txt";
-        let result = run_post_check(wt.clone(), script, &revid);
+        let result = run_post_check(&wt, script, &revid);
         assert!(result.is_ok());
 
         // Verify the file was created and contains the revision ID
@@ -291,7 +292,7 @@ mod tests {
         let revid = wt.branch().last_revision();
 
         // Run a nonexistent command
-        let result = run_post_check(wt, "nonexistent_command_12345", &revid);
+        let result = run_post_check(&wt, "nonexistent_command_12345", &revid);
         assert!(result.is_err());
         assert_eq!(result.err().unwrap(), PostCheckFailed);
     }

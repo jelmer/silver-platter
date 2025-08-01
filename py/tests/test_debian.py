@@ -1,4 +1,3 @@
-
 #!/usr/bin/python
 # Copyright (C) 2024 Jelmer Vernooij
 #
@@ -21,9 +20,7 @@ from breezy.tests import TestCaseWithTransport
 
 from silver_platter import debian  # type: ignore
 
-pick_additional_colocated_branches = (
-    debian.pick_additional_colocated_branches
-)
+pick_additional_colocated_branches = debian.pick_additional_colocated_branches
 
 
 class AdditionalColocatedBranchesTests(TestCaseWithTransport):

@@ -1,7 +1,7 @@
 //! Codemod
 use breezyshim::error::Error as BrzError;
-use breezyshim::tree::WorkingTree;
 use breezyshim::RevisionId;
+use breezyshim::WorkingTree;
 use std::collections::HashMap;
 use url::Url;
 
@@ -58,6 +58,26 @@ impl crate::CodemodResult for CommandResult {
 
     fn tags(&self) -> Vec<(String, Option<RevisionId>)> {
         self.tags.clone()
+    }
+}
+
+impl From<CommandResult> for DetailedSuccess {
+    fn from(r: CommandResult) -> Self {
+        DetailedSuccess {
+            value: r.value,
+            context: r.context,
+            description: r.description,
+            commit_message: r.commit_message,
+            title: r.title,
+            serialized_context: r.serialized_context,
+            tags: Some(
+                r.tags
+                    .into_iter()
+                    .map(|(k, v)| (k, v.map(|v| v.to_string())))
+                    .collect(),
+            ),
+            target_branch_url: r.target_branch_url,
+        }
     }
 }
 
@@ -201,7 +221,7 @@ impl std::fmt::Display for DetailedFailure {
 /// - `script`: Script to run
 /// - `commit_pending`: Whether to commit pending changes
 pub fn script_runner(
-    local_tree: &WorkingTree,
+    local_tree: &dyn WorkingTree,
     script: &[&str],
     subpath: &std::path::Path,
     commit_pending: crate::CommitPending,
@@ -325,11 +345,12 @@ pub fn script_runner(
         if let Some(committer) = committer {
             builder = builder.committer(committer);
         }
-        new_revision = match builder.commit() {
-            Ok(rev) => rev,
+        match builder.commit() {
+            Ok(rev) => {
+                new_revision = rev;
+            }
             Err(BrzError::PointlessCommit) => {
-                // No changes
-                last_revision.clone()
+                // No changes - keep new_revision as last_revision
             }
             Err(e) => return Err(Error::Other(format!("Failed to commit changes: {}", e))),
         };
@@ -358,9 +379,9 @@ pub fn script_runner(
 
 #[cfg(test)]
 mod script_runner_tests {
-    use breezyshim::tree::MutableTree;
-
     use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
 
     fn make_executable(script_path: &std::path::Path) {
         #[cfg(unix)]

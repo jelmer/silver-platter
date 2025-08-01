@@ -1,6 +1,6 @@
 //! Merge proposal related functions
 use crate::vcs::{full_branch_url, open_branch};
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
 pub use breezyshim::forge::MergeProposal;
 pub use breezyshim::forge::MergeProposalStatus;
@@ -52,9 +52,9 @@ pub fn iter_conflicted(
 ) -> impl Iterator<
     Item = (
         Url,
-        Box<dyn Branch + '_>,
+        GenericBranch,
         String,
-        Box<dyn Branch + '_>,
+        GenericBranch,
         Forge,
         MergeProposal,
         bool,
@@ -90,7 +90,7 @@ pub fn iter_conflicted(
                 let subpath = "";
 
                 Some((
-                    full_branch_url(resume_branch.as_ref()),
+                    full_branch_url(&resume_branch),
                     main_branch,
                     subpath.to_string(),
                     resume_branch,

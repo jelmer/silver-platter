@@ -18,8 +18,8 @@ This package contains Python bindings for silver platter.
 
 The core class is the ``Workspace`` context manager, which exists in two forms:
 
- * ``silver_platter.workspace.Workspace`` (for generic projects)
- * ``silver_platter.debian.Workspace`` (for Debian packages)
+* ``silver_platter.workspace.Workspace`` (for generic projects)
+* ``silver_platter.debian.Workspace`` (for Debian packages)
 
 An example, adding a new entry to a changelog file in the ``dulwich`` Debian
 package and creating a merge proposal with that change:

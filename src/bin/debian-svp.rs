@@ -1,5 +1,7 @@
+use breezyshim::prelude::Repository;
 use breezyshim::workingtree;
 use breezyshim::workspace::{check_clean_tree, reset_tree};
+use breezyshim::{Branch, WorkingTree};
 use clap::{Args, Parser, Subcommand};
 use log::{error, info};
 use silver_platter::candidates::Candidates;
@@ -545,14 +547,24 @@ pub fn batch_publish(
     }
 }
 
-fn login(url: &url::Url) -> i32 {
-    let lp_uris = breezyshim::launchpad::uris().unwrap();
+fn is_launchpad_url(url: &url::Url) -> bool {
+    #[cfg(feature = "launchpad")]
+    {
+        launchpadlib::uris::is_launchpad_url(url)
+    }
+    #[cfg(not(feature = "launchpad"))]
+    {
+        url.host_str() == Some("launchpad.net")
+            || url
+                .host_str()
+                .map_or(false, |h| h.ends_with(".launchpad.net"))
+    }
+}
 
+fn login(url: &url::Url) -> i32 {
     let forge = if url.host_str() == Some("github.com") {
         "github"
-    } else if lp_uris.iter().any(|(_key, root)| {
-        url.host_str() == Some(root) || url.host_str() == Some(root.trim_end_matches('/'))
-    }) {
+    } else if is_launchpad_url(url) {
         "launchpad"
     } else {
         "gitlab"

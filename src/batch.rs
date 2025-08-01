@@ -8,8 +8,9 @@ use crate::recipe::Recipe;
 use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
+use breezyshim::tree::MutableTree;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::Write;
@@ -329,17 +330,18 @@ impl Entry {
     }
 
     /// Get the local working tree for this entry.
-    pub fn working_tree(&self) -> Result<breezyshim::tree::WorkingTree, BrzError> {
+    pub fn working_tree(&self) -> Result<Box<dyn breezyshim::tree::WorkingTree>, BrzError> {
         breezyshim::workingtree::open(&self.local_path)
+            .map(|wt| Box::new(wt) as Box<dyn breezyshim::tree::WorkingTree>)
     }
 
     /// Get the target branch for this entry.
-    pub fn target_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
+    pub fn target_branch(&self) -> Result<GenericBranch, BranchOpenError> {
         open_branch(self.target_branch_url.as_ref().unwrap(), None, None, None)
     }
 
     /// Get the local branch for this entry.
-    pub fn local_branch(&self) -> Result<Box<dyn Branch>, BranchOpenError> {
+    pub fn local_branch(&self) -> Result<GenericBranch, BranchOpenError> {
         let url = match url::Url::from_directory_path(&self.local_path) {
             Ok(url) => url,
             Err(_) => {
@@ -478,7 +480,7 @@ impl Entry {
 
         let result = publish_one(
             target_branch_url,
-            &self.working_tree().unwrap(),
+            self.working_tree().unwrap().as_ref(),
             batch_name,
             self.mode,
             self.proposal_url.as_ref(),
@@ -721,7 +723,7 @@ pub fn load_batch_metadata(directory: &Path) -> Result<Option<Batch>, Error> {
 /// Publish a single batch entry.
 fn publish_one(
     url: &url::Url,
-    local_tree: &breezyshim::tree::WorkingTree,
+    local_tree: &dyn breezyshim::tree::WorkingTree,
     batch_name: &str,
     mode: Mode,
     existing_proposal_url: Option<&url::Url>,
@@ -743,7 +745,7 @@ fn publish_one(
     };
 
     let (forge, existing_proposal, mut resume_branch) =
-        match breezyshim::forge::get_forge(main_branch.as_ref()) {
+        match breezyshim::forge::get_forge(&main_branch) {
             Ok(f) => {
                 let (existing_proposal, resume_branch) = if let Some(existing_proposal_url) =
                     existing_proposal_url
@@ -782,7 +784,7 @@ fn publish_one(
                 log::warn!(
                     "Unsupported forge ({}), will attempt to push to {}",
                     e,
-                    crate::vcs::full_branch_url(main_branch.as_ref()),
+                    crate::vcs::full_branch_url(&main_branch),
                 );
                 (None, None, None)
             }
@@ -803,12 +805,12 @@ fn publish_one(
 
     let local_branch = local_tree.branch();
 
-    crate::publish::enable_tag_pushing(local_branch.as_ref()).unwrap();
+    crate::publish::enable_tag_pushing(&local_branch).unwrap();
 
     let publish_result = match crate::publish::publish_changes(
-        local_branch.as_ref(),
-        main_branch.as_ref(),
-        resume_branch.as_ref().map(|b| b.as_ref()),
+        &local_branch,
+        &main_branch,
+        resume_branch.as_ref(),
         mode,
         batch_name,
         |_df, _ep| description.unwrap().to_string(),
@@ -825,6 +827,7 @@ fn publish_one(
         None,
         None,
         auto_merge,
+        None,
     ) {
         Ok(r) => r,
         Err(e) => match e {

@@ -6,11 +6,13 @@ use crate::publish::{
 use crate::vcs::{open_branch, BranchOpenError};
 use crate::workspace::Workspace;
 use crate::Mode;
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::error::Error as BrzError;
 use breezyshim::forge::{get_forge, Forge, MergeProposal};
+use breezyshim::tree::WorkingTree;
 use log::{error, info, warn};
 use std::collections::HashMap;
+use std::sync::Arc;
 use url::Url;
 
 #[cfg(test)]
@@ -18,6 +20,8 @@ mod tests {
     use super::*;
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -55,7 +59,7 @@ mod tests {
             .commit()
             .unwrap();
 
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         (td, origin_dir, branch_url)
     }
@@ -337,7 +341,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "failing_script.sh", "#!/bin/sh\nexit 1");
 
         // Run apply_and_publish with a script that will fail
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -393,7 +397,7 @@ exit 0
             create_test_script(&script_dir, "no_change_script.sh", "#!/bin/sh\nexit 0");
 
         // Run apply_and_publish with a script that will succeed but make no changes
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -455,7 +459,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
 
         // Run apply_and_publish with a script and verification
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -515,7 +519,7 @@ exit 0
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
 
         // Run apply_and_publish with a script and verification that will fail
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+        let branch_url = Url::from_directory_path(&origin_dir).unwrap();
 
         // Adding type annotations to help the compiler
         let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
@@ -661,7 +665,7 @@ exit 0
 /// Open a branch from a URL, with error handling
 ///
 /// Returns a branch on success or error code on failure.
-fn open_branch_with_error_handling(url: &Url) -> Result<Box<dyn Branch>, i32> {
+fn open_branch_with_error_handling(url: &Url) -> Result<GenericBranch, i32> {
     match open_branch(url, None, None, None) {
         Err(BranchOpenError::Unavailable {
             url, description, ..
@@ -694,7 +698,7 @@ fn open_branch_with_error_handling(url: &Url) -> Result<Box<dyn Branch>, i32> {
 /// Returns tuple of (forge, existing_proposals, resume_branch, overwrite) on success
 /// or error code on failure.
 fn get_forge_and_proposals(
-    main_branch: &dyn Branch,
+    main_branch: &GenericBranch,
     url: &Url,
     name: &str,
     mode: Mode,
@@ -703,7 +707,7 @@ fn get_forge_and_proposals(
     (
         Option<Box<Forge>>,
         Vec<MergeProposal>,
-        Option<Box<dyn Branch>>,
+        Option<GenericBranch>,
         bool,
     ),
     i32,
@@ -765,8 +769,8 @@ fn get_forge_and_proposals(
 ///
 /// Returns workspace on success or error code on failure.
 fn build_workspace(
-    main_branch: Box<dyn Branch>,
-    resume_branch: Option<Box<dyn Branch>>,
+    main_branch: GenericBranch,
+    resume_branch: Option<GenericBranch>,
 ) -> Result<Workspace, i32> {
     let mut builder = Workspace::builder().main_branch(main_branch);
 
@@ -887,6 +891,7 @@ fn publish_workspace_changes(
         None,
         None,
         None,
+        None,
     ) {
         Ok(r) => Ok(r),
         Err(PublishError::UnsupportedForge(_)) => {
@@ -958,7 +963,7 @@ pub fn apply_and_publish(
 
     // Step 2: Get forge and proposals
     let (forge, existing_proposals, mut resume_branch, mut overwrite) =
-        match get_forge_and_proposals(main_branch.as_ref(), url, name, mode, derived_owner) {
+        match get_forge_and_proposals(&main_branch, url, name, mode, derived_owner) {
             Ok(result) => result,
             Err(code) => return code,
         };
@@ -1009,26 +1014,27 @@ pub fn apply_and_publish(
     }
 
     // Enable tag pushing
-    enable_tag_pushing(ws.local_tree().branch().as_ref()).unwrap();
+    enable_tag_pushing(&ws.local_tree().branch()).unwrap();
 
     // Step 6: Prepare callbacks for publishing
-    let result_ref = result.clone();
+    let result = Arc::new(result);
+    let result_ref = Arc::clone(&result);
     let get_commit_message = get_commit_message
         .take()
-        .map(|f| move |ep: Option<&MergeProposal>| -> Option<String> { f(&result_ref, ep) });
+        .map(|f| move |ep: Option<&MergeProposal>| -> Option<String> { f(&*result_ref, ep) });
 
-    let result_ref = result.clone();
+    let result_ref = Arc::clone(&result);
     let get_title_wrapper = Some(move |ep: Option<&MergeProposal>| {
         if let Some(get_title) = get_title {
-            get_title(&result_ref, ep)
+            get_title(&*result_ref, ep)
         } else {
             None
         }
     });
 
     // Step 7: Publish changes
-    let labels_vec = labels.map(|l| l.iter().map(|s| s.to_string()).collect());
-    let allow_create = allow_create_proposal.map(|f| f(&result));
+    let labels_vec = labels.map(|l| l.iter().map(|&s| s.to_string()).collect());
+    let allow_create = allow_create_proposal.map(|f| f(&*result));
 
     let publish_result = match publish_workspace_changes(
         &ws,

@@ -17,8 +17,8 @@ have conflicts due to upstream changes.
 Silver-Platter powers the [Debian Janitor](https://janitor.debian.org/) and
 [Kali Janitor](https://janitor.kali.org/). However, it is an independent project
 and can be used fine as a standalone tool. The UI is still a bit rough around
-the edges, I'd be grateful for any feedback from people using it - please file bugs in
-the issue tracker at https://github.com/jelmer/silver-platter/issues/new.
+the edges, I'd be grateful for any feedback from people using it - please file
+bugs in the issue tracker at <https://github.com/jelmer/silver-platter/issues/new>.
 
 ## Getting started
 
@@ -191,8 +191,9 @@ specified.
 
 Some Debian-specific example recipes are provided in `examples/debian/`:
 
-* *lintian-fixes.yaml*: Run the [lintian-brush](https://packages.debian.org/lintian-brush) command to
-  fix common issues reported by [lintian](https://salsa.debian.org/qa/lintian).
+* *lintian-fixes.yaml*: Run the
+  [lintian-brush](https://packages.debian.org/lintian-brush)
+  command to fix common issues reported by [lintian](https://salsa.debian.org/qa/lintian).
 * *new-upstream-release.yaml*: Merge in a new upstream release.
 * *multi-arch-hints.yaml*: Apply multi-arch hints.
 * *orphan.yaml*: Mark a package as orphaned, update its Maintainer
