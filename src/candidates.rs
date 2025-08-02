@@ -24,14 +24,17 @@ pub struct Candidate {
 
 impl Candidate {
     /// Return the short name of the candidate.
-    pub fn shortname(&self) -> String {
-        self.name.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
-            self.url
-                .path_segments()
-                .and_then(|segments| segments.last())
-                .unwrap_or("unknown")
-                .to_string()
-        })
+    pub fn shortname(&self) -> std::borrow::Cow<str> {
+        match &self.name {
+            Some(name) => std::borrow::Cow::Borrowed(name),
+            None => std::borrow::Cow::Owned(
+                self.url
+                    .path_segments()
+                    .and_then(|segments| segments.last())
+                    .unwrap_or("unknown")
+                    .to_string(),
+            ),
+        }
     }
 }
 

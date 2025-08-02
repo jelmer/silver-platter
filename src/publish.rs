@@ -285,8 +285,7 @@ pub fn propose_changes(
     if let Some(resume_branch) = resume_branch {
         // Push changes to the existing branch
         let tag_selector = tags.as_ref().map(|tag_map| {
-            let tag_names: Vec<String> = tag_map.keys().cloned().collect();
-            Box::new(move |tag: String| tag_names.contains(&tag)) as Box<dyn Fn(String) -> bool>
+            Box::new(_tag_selector_from_tags(tag_map.clone())) as Box<dyn Fn(String) -> bool>
         });
         local_branch.push(
             resume_branch,
@@ -296,8 +295,7 @@ pub fn propose_changes(
         )?;
     } else {
         let tag_selector = tags.as_ref().map(|tag_map| {
-            let tag_names: Vec<String> = tag_map.keys().cloned().collect();
-            Box::new(move |tag: String| tag_names.contains(&tag)) as Box<dyn Fn(String) -> bool>
+            Box::new(_tag_selector_from_tags(tag_map.clone())) as Box<dyn Fn(String) -> bool>
         });
         let (_derived_branch, _public_branch_url) = forge.publish_derived(
             local_branch,
@@ -317,8 +315,7 @@ pub fn propose_changes(
         {
             Ok(from_branch) => {
                 let tag_selector = tags.as_ref().map(|tag_map| {
-                    let tag_names: Vec<String> = tag_map.keys().cloned().collect();
-                    Box::new(move |tag: String| tag_names.contains(&tag))
+                    Box::new(_tag_selector_from_tags(tag_map.clone()))
                         as Box<dyn Fn(String) -> bool>
                 });
 
@@ -567,6 +564,151 @@ impl From<Error> for pyo3::PyErr {
 /// * `mode` - Mode to use ('push', 'push-derived', 'propose')
 /// * `name` - Branch name to push
 /// * `get_proposal_description` - Function to retrieve proposal description
+/// Builder for publishing changes
+pub struct PublishBuilder<'a> {
+    local_branch: &'a GenericBranch,
+    main_branch: &'a GenericBranch,
+    resume_branch: Option<&'a GenericBranch>,
+    mode: Mode,
+    name: &'a str,
+    forge: Option<&'a Forge>,
+    allow_create_proposal: Option<bool>,
+    labels: Option<Vec<String>>,
+    overwrite_existing: Option<bool>,
+    existing_proposal: Option<MergeProposal>,
+    reviewers: Option<Vec<String>>,
+    tags: Option<HashMap<String, RevisionId>>,
+    derived_owner: Option<&'a str>,
+    allow_collaboration: Option<bool>,
+    stop_revision: Option<&'a RevisionId>,
+    auto_merge: Option<bool>,
+    work_in_progress: Option<bool>,
+}
+
+impl<'a> PublishBuilder<'a> {
+    pub fn new(
+        local_branch: &'a GenericBranch,
+        main_branch: &'a GenericBranch,
+        name: &'a str,
+        mode: Mode,
+    ) -> Self {
+        Self {
+            local_branch,
+            main_branch,
+            resume_branch: None,
+            mode,
+            name,
+            forge: None,
+            allow_create_proposal: None,
+            labels: None,
+            overwrite_existing: None,
+            existing_proposal: None,
+            reviewers: None,
+            tags: None,
+            derived_owner: None,
+            allow_collaboration: None,
+            stop_revision: None,
+            auto_merge: None,
+            work_in_progress: None,
+        }
+    }
+
+    pub fn resume_branch(mut self, branch: &'a GenericBranch) -> Self {
+        self.resume_branch = Some(branch);
+        self
+    }
+
+    pub fn forge(mut self, forge: &'a Forge) -> Self {
+        self.forge = Some(forge);
+        self
+    }
+
+    pub fn allow_create_proposal(mut self, allow: bool) -> Self {
+        self.allow_create_proposal = Some(allow);
+        self
+    }
+
+    pub fn labels(mut self, labels: Vec<String>) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+
+    pub fn overwrite_existing(mut self, overwrite: bool) -> Self {
+        self.overwrite_existing = Some(overwrite);
+        self
+    }
+
+    pub fn existing_proposal(mut self, proposal: MergeProposal) -> Self {
+        self.existing_proposal = Some(proposal);
+        self
+    }
+
+    pub fn reviewers(mut self, reviewers: Vec<String>) -> Self {
+        self.reviewers = Some(reviewers);
+        self
+    }
+
+    pub fn tags(mut self, tags: HashMap<String, RevisionId>) -> Self {
+        self.tags = Some(tags);
+        self
+    }
+
+    pub fn derived_owner(mut self, owner: &'a str) -> Self {
+        self.derived_owner = Some(owner);
+        self
+    }
+
+    pub fn allow_collaboration(mut self, allow: bool) -> Self {
+        self.allow_collaboration = Some(allow);
+        self
+    }
+
+    pub fn stop_revision(mut self, revision: &'a RevisionId) -> Self {
+        self.stop_revision = Some(revision);
+        self
+    }
+
+    pub fn auto_merge(mut self, auto: bool) -> Self {
+        self.auto_merge = Some(auto);
+        self
+    }
+
+    pub fn work_in_progress(mut self, wip: bool) -> Self {
+        self.work_in_progress = Some(wip);
+        self
+    }
+
+    pub fn publish(
+        self,
+        get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
+        get_proposal_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+        get_proposal_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
+    ) -> Result<PublishResult, Error> {
+        publish_changes(
+            self.local_branch,
+            self.main_branch,
+            self.resume_branch,
+            self.mode,
+            self.name,
+            get_proposal_description,
+            get_proposal_commit_message,
+            get_proposal_title,
+            self.forge,
+            self.allow_create_proposal,
+            self.labels,
+            self.overwrite_existing,
+            self.existing_proposal,
+            self.reviewers,
+            self.tags,
+            self.derived_owner,
+            self.allow_collaboration,
+            self.stop_revision,
+            self.auto_merge,
+            self.work_in_progress,
+        )
+    }
+}
+
 /// * `get_proposal_commit_message` - Function to retrieve proposal commit message
 /// * `get_proposal_title` - Function to retrieve proposal title
 /// * `forge` - Forge, if known

@@ -935,6 +935,106 @@ fn publish_workspace_changes(
     }
 }
 
+/// Builder for apply_and_publish operation
+pub struct ApplyAndPublishBuilder<'a> {
+    pub url: &'a Url,
+    pub name: &'a str,
+    pub command: &'a [&'a str],
+    pub mode: Mode,
+    pub commit_pending: crate::CommitPending,
+    pub labels: Option<&'a [&'a str]>,
+    pub diff: bool,
+    pub verify_command: Option<&'a str>,
+    pub derived_owner: Option<&'a str>,
+    pub refresh: bool,
+    pub extra_env: Option<HashMap<String, String>>,
+}
+
+impl<'a> ApplyAndPublishBuilder<'a> {
+    pub fn new(url: &'a Url, name: &'a str, command: &'a [&'a str], mode: Mode) -> Self {
+        Self {
+            url,
+            name,
+            command,
+            mode,
+            commit_pending: crate::CommitPending::Auto,
+            labels: None,
+            diff: false,
+            verify_command: None,
+            derived_owner: None,
+            refresh: false,
+            extra_env: None,
+        }
+    }
+
+    pub fn commit_pending(mut self, commit_pending: crate::CommitPending) -> Self {
+        self.commit_pending = commit_pending;
+        self
+    }
+
+    pub fn labels(mut self, labels: &'a [&'a str]) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+
+    pub fn diff(mut self, diff: bool) -> Self {
+        self.diff = diff;
+        self
+    }
+
+    pub fn verify_command(mut self, command: &'a str) -> Self {
+        self.verify_command = Some(command);
+        self
+    }
+
+    pub fn derived_owner(mut self, owner: &'a str) -> Self {
+        self.derived_owner = Some(owner);
+        self
+    }
+
+    pub fn refresh(mut self, refresh: bool) -> Self {
+        self.refresh = refresh;
+        self
+    }
+
+    pub fn extra_env(mut self, env: HashMap<String, String>) -> Self {
+        self.extra_env = Some(env);
+        self
+    }
+
+    pub fn apply_and_publish(
+        self,
+        allow_create_proposal: Option<impl FnOnce(&CommandResult) -> bool>,
+        get_commit_message: Option<
+            impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>,
+        >,
+        get_title: Option<impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>>,
+        get_description: impl FnOnce(
+            &CommandResult,
+            DescriptionFormat,
+            Option<&MergeProposal>,
+        ) -> String,
+    ) -> i32 {
+        apply_and_publish(
+            self.url,
+            self.name,
+            self.command,
+            self.mode,
+            self.commit_pending,
+            self.labels,
+            self.diff,
+            self.verify_command,
+            self.derived_owner,
+            self.refresh,
+            allow_create_proposal,
+            get_commit_message,
+            get_title,
+            get_description,
+            self.extra_env,
+        )
+    }
+}
+
 /// Apply a codemod script and publish the changes as a merge proposal.
 pub fn apply_and_publish(
     url: &Url,
