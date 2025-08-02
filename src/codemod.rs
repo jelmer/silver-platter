@@ -39,6 +39,23 @@ pub struct CommandResult {
     pub new_revision: RevisionId,
 }
 
+impl Default for CommandResult {
+    fn default() -> Self {
+        Self {
+            value: None,
+            context: None,
+            description: None,
+            serialized_context: None,
+            commit_message: None,
+            title: None,
+            tags: Vec::new(),
+            target_branch_url: None,
+            old_revision: RevisionId::null(),
+            new_revision: RevisionId::null(),
+        }
+    }
+}
+
 impl crate::CodemodResult for CommandResult {
     fn context(&self) -> serde_json::Value {
         self.context.clone().unwrap_or_default()
@@ -375,6 +392,99 @@ pub fn script_runner(
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })
+}
+
+#[cfg(test)]
+mod command_result_tests {
+    use super::*;
+    use crate::CodemodResult;
+
+    #[test]
+    fn test_command_result_context_with_value() {
+        let result = CommandResult {
+            context: Some(serde_json::json!({"key": "value"})),
+            ..Default::default()
+        };
+
+        assert_eq!(result.context(), serde_json::json!({"key": "value"}));
+    }
+
+    #[test]
+    fn test_command_result_context_none() {
+        let result = CommandResult {
+            context: None,
+            ..Default::default()
+        };
+
+        // Should return default (null) when context is None
+        assert_eq!(result.context(), serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_command_result_value() {
+        let result = CommandResult {
+            value: Some(42),
+            ..Default::default()
+        };
+
+        assert_eq!(result.value(), Some(42));
+    }
+
+    #[test]
+    fn test_command_result_description() {
+        let result = CommandResult {
+            description: Some("Test description".to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(result.description(), Some("Test description".to_string()));
+    }
+
+    #[test]
+    fn test_command_result_description_none() {
+        let result = CommandResult {
+            description: None,
+            ..Default::default()
+        };
+
+        assert_eq!(result.description(), None);
+    }
+
+    #[test]
+    fn test_command_result_target_branch_url() {
+        let url = url::Url::parse("https://github.com/test/repo").unwrap();
+        let result = CommandResult {
+            target_branch_url: Some(url.clone()),
+            ..Default::default()
+        };
+
+        assert_eq!(result.target_branch_url(), Some(url));
+    }
+
+    #[test]
+    fn test_command_result_tags() {
+        let tags = vec![
+            ("v1.0".to_string(), Some(RevisionId::from(b"rev1".to_vec()))),
+            ("v2.0".to_string(), None),
+        ];
+        let result = CommandResult {
+            tags: tags.clone(),
+            ..Default::default()
+        };
+
+        assert_eq!(result.tags(), tags);
+    }
+
+    #[test]
+    fn test_command_result_default() {
+        let result = CommandResult::default();
+
+        assert_eq!(result.context(), serde_json::Value::Null);
+        assert_eq!(result.value(), None);
+        assert_eq!(result.target_branch_url(), None);
+        assert_eq!(result.description(), None);
+        assert!(result.tags().is_empty());
+    }
 }
 
 #[cfg(test)]
