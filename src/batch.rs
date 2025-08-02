@@ -577,9 +577,9 @@ impl Batch {
         };
 
         for candidate in candidates {
-            let basename: String = candidate.shortname();
+            let basename = candidate.shortname();
 
-            let mut name = basename.clone();
+            let mut name = basename.to_string();
 
             // TODO(jelmer): Search by URL rather than by name?
             if let Some(entry) = batch.work.get(name.as_str()) {

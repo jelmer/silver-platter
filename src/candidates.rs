@@ -24,14 +24,17 @@ pub struct Candidate {
 
 impl Candidate {
     /// Return the short name of the candidate.
-    pub fn shortname(&self) -> String {
-        self.name.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
-            self.url
-                .path_segments()
-                .and_then(|segments| segments.last())
-                .unwrap_or("unknown")
-                .to_string()
-        })
+    pub fn shortname(&self) -> std::borrow::Cow<str> {
+        match &self.name {
+            Some(name) => std::borrow::Cow::Borrowed(name),
+            None => std::borrow::Cow::Owned(
+                self.url
+                    .path_segments()
+                    .and_then(|segments| segments.last())
+                    .unwrap_or("unknown")
+                    .to_string(),
+            ),
+        }
     }
 }
 
@@ -130,6 +133,60 @@ mod tests {
         };
 
         assert_eq!(candidate.shortname(), "foo");
+    }
+
+    #[test]
+    fn test_shortname_cow_behavior() {
+        use std::borrow::Cow;
+
+        // Test borrowed case (when name exists)
+        let candidate_with_name = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("myproject".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let shortname = candidate_with_name.shortname();
+        assert!(matches!(shortname, Cow::Borrowed(_)));
+        assert_eq!(shortname, "myproject");
+
+        // Test owned case (when name is None)
+        let candidate_without_name = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let shortname = candidate_without_name.shortname();
+        assert!(matches!(shortname, Cow::Owned(_)));
+        assert_eq!(shortname, "dulwich");
+    }
+
+    #[test]
+    fn test_shortname_edge_cases() {
+        // Test URL without path segments
+        let candidate_no_path = Candidate {
+            url: url::Url::parse("https://github.com/").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+        assert_eq!(candidate_no_path.shortname(), "unknown");
+
+        // Test URL with trailing slash
+        let candidate_trailing_slash = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/project/").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+        assert_eq!(candidate_trailing_slash.shortname(), "project");
     }
 
     #[test]

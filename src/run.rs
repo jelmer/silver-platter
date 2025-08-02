@@ -660,6 +660,76 @@ exit 0
             "Invalid command should return error code 2"
         );
     }
+
+    #[test]
+    fn test_apply_and_publish_builder_construction() {
+        let url = Url::parse("https://github.com/test/repo").unwrap();
+        let command = ["script.sh", "arg1"];
+
+        // Test basic builder construction
+        let builder = ApplyAndPublishBuilder::new(&url, "test-branch", &command, Mode::Push);
+
+        // Verify fields are set correctly
+        assert_eq!(builder.url, &url);
+        assert_eq!(builder.name, "test-branch");
+        assert_eq!(builder.command, &command);
+        assert_eq!(builder.mode, Mode::Push);
+        assert_eq!(builder.commit_pending, CommitPending::Auto);
+        assert!(builder.labels.is_none());
+        assert!(!builder.diff);
+        assert!(builder.verify_command.is_none());
+        assert!(builder.derived_owner.is_none());
+        assert!(!builder.refresh);
+        assert!(builder.extra_env.is_none());
+    }
+
+    #[test]
+    fn test_apply_and_publish_builder_chaining() {
+        let url = Url::parse("https://github.com/test/repo").unwrap();
+        let command = ["script.sh"];
+        let labels = ["bug", "feature"];
+        let mut env = HashMap::new();
+        env.insert("KEY".to_string(), "VALUE".to_string());
+
+        // Test method chaining
+        let builder = ApplyAndPublishBuilder::new(&url, "test-branch", &command, Mode::Propose)
+            .commit_pending(CommitPending::Yes)
+            .labels(&labels)
+            .diff(true)
+            .verify_command("make test")
+            .derived_owner("derived-user")
+            .refresh(true)
+            .extra_env(env.clone());
+
+        // Verify all fields are set
+        assert_eq!(builder.commit_pending, CommitPending::Yes);
+        assert_eq!(builder.labels, Some(&labels[..]));
+        assert!(builder.diff);
+        assert_eq!(builder.verify_command, Some("make test"));
+        assert_eq!(builder.derived_owner, Some("derived-user"));
+        assert!(builder.refresh);
+        assert_eq!(builder.extra_env, Some(env));
+    }
+
+    #[test]
+    fn test_apply_and_publish_builder_modes() {
+        let url = Url::parse("https://github.com/test/repo").unwrap();
+        let command = ["script.sh"];
+
+        // Test with different modes
+        let modes = vec![
+            Mode::Push,
+            Mode::Propose,
+            Mode::AttemptPush,
+            Mode::PushDerived,
+            Mode::Bts,
+        ];
+
+        for mode in modes {
+            let builder = ApplyAndPublishBuilder::new(&url, "test-branch", &command, mode);
+            assert_eq!(builder.mode, mode);
+        }
+    }
 }
 
 /// Open a branch from a URL, with error handling
@@ -932,6 +1002,135 @@ fn publish_workspace_changes(
         Err(PublishError::NoTargetBranch) => {
             unreachable!();
         }
+    }
+}
+
+/// Builder for apply_and_publish operation
+pub struct ApplyAndPublishBuilder<'a> {
+    /// The URL of the repository to work on
+    pub url: &'a Url,
+    /// The name of the branch or proposal
+    pub name: &'a str,
+    /// The command to execute for applying changes
+    pub command: &'a [&'a str],
+    /// The publish mode (push-derived, propose, etc.)
+    pub mode: Mode,
+    /// How to handle pending commits
+    pub commit_pending: crate::CommitPending,
+    /// Labels to apply to the merge proposal
+    pub labels: Option<&'a [&'a str]>,
+    /// Whether to show diff output
+    pub diff: bool,
+    /// Optional verification command to run
+    pub verify_command: Option<&'a str>,
+    /// The derived owner for the published branch
+    pub derived_owner: Option<&'a str>,
+    /// Whether to refresh the local branch before applying changes
+    pub refresh: bool,
+    /// Additional environment variables for command execution
+    pub extra_env: Option<HashMap<String, String>>,
+}
+
+impl<'a> ApplyAndPublishBuilder<'a> {
+    /// Creates a new ApplyAndPublishBuilder with the required parameters.
+    pub fn new(url: &'a Url, name: &'a str, command: &'a [&'a str], mode: Mode) -> Self {
+        Self {
+            url,
+            name,
+            command,
+            mode,
+            commit_pending: crate::CommitPending::Auto,
+            labels: None,
+            diff: false,
+            verify_command: None,
+            derived_owner: None,
+            refresh: false,
+            extra_env: None,
+        }
+    }
+
+    /// Sets how to handle pending commits.
+    pub fn commit_pending(mut self, commit_pending: crate::CommitPending) -> Self {
+        self.commit_pending = commit_pending;
+        self
+    }
+
+    /// Sets the labels to apply to the merge proposal.
+    pub fn labels(mut self, labels: &'a [&'a str]) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+
+    /// Sets whether to show diff output.
+    pub fn diff(mut self, diff: bool) -> Self {
+        self.diff = diff;
+        self
+    }
+
+    /// Sets the verification command to run after applying changes.
+    pub fn verify_command(mut self, command: &'a str) -> Self {
+        self.verify_command = Some(command);
+        self
+    }
+
+    /// Sets the derived owner for the published branch.
+    pub fn derived_owner(mut self, owner: &'a str) -> Self {
+        self.derived_owner = Some(owner);
+        self
+    }
+
+    /// Sets whether to refresh the local branch before applying changes.
+    pub fn refresh(mut self, refresh: bool) -> Self {
+        self.refresh = refresh;
+        self
+    }
+
+    /// Sets additional environment variables for the command execution.
+    pub fn extra_env(mut self, env: HashMap<String, String>) -> Self {
+        self.extra_env = Some(env);
+        self
+    }
+
+    /// Applies the codemod and publishes the changes as a merge proposal.
+    ///
+    /// # Arguments
+    /// * `allow_create_proposal` - Function to determine if a new proposal should be created
+    /// * `get_commit_message` - Function to generate the commit message
+    /// * `get_title` - Function to generate the proposal title
+    /// * `get_description` - Function to generate the proposal description
+    ///
+    /// # Returns
+    /// The exit code of the operation (0 for success)
+    pub fn apply_and_publish(
+        self,
+        allow_create_proposal: Option<impl FnOnce(&CommandResult) -> bool>,
+        get_commit_message: Option<
+            impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>,
+        >,
+        get_title: Option<impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>>,
+        get_description: impl FnOnce(
+            &CommandResult,
+            DescriptionFormat,
+            Option<&MergeProposal>,
+        ) -> String,
+    ) -> i32 {
+        apply_and_publish(
+            self.url,
+            self.name,
+            self.command,
+            self.mode,
+            self.commit_pending,
+            self.labels,
+            self.diff,
+            self.verify_command,
+            self.derived_owner,
+            self.refresh,
+            allow_create_proposal,
+            get_commit_message,
+            get_title,
+            get_description,
+            self.extra_env,
+        )
     }
 }
 

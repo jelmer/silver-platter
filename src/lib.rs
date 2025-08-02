@@ -64,15 +64,16 @@ pub enum Mode {
     Bts,
 }
 
-impl ToString for Mode {
-    fn to_string(&self) -> String {
-        match self {
-            Mode::Push => "push".to_string(),
-            Mode::Propose => "propose".to_string(),
-            Mode::AttemptPush => "attempt-push".to_string(),
-            Mode::PushDerived => "push-derived".to_string(),
-            Mode::Bts => "bts".to_string(),
-        }
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Mode::Push => "push",
+            Mode::Propose => "propose",
+            Mode::AttemptPush => "attempt-push",
+            Mode::PushDerived => "push-derived",
+            Mode::Bts => "bts",
+        };
+        write!(f, "{}", s)
     }
 }
 
