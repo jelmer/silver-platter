@@ -577,7 +577,13 @@ impl Batch {
         };
 
         for candidate in candidates {
-            let basename = candidate.shortname();
+            let basename = match candidate.shortname() {
+                Ok(name) => name,
+                Err(e) => {
+                    log::warn!("Skipping candidate {}: {:?}", candidate.url, e);
+                    continue;
+                }
+            };
 
             let mut name = basename.to_string();
 

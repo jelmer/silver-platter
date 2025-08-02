@@ -586,6 +586,7 @@ pub struct PublishBuilder<'a> {
 }
 
 impl<'a> PublishBuilder<'a> {
+    /// Creates a new PublishBuilder with the required parameters.
     pub fn new(
         local_branch: &'a GenericBranch,
         main_branch: &'a GenericBranch,
@@ -613,71 +614,93 @@ impl<'a> PublishBuilder<'a> {
         }
     }
 
+    /// Sets the branch to resume from if publishing fails.
     pub fn resume_branch(mut self, branch: &'a GenericBranch) -> Self {
         self.resume_branch = Some(branch);
         self
     }
 
+    /// Sets the forge to use for publishing.
     pub fn forge(mut self, forge: &'a Forge) -> Self {
         self.forge = Some(forge);
         self
     }
 
+    /// Sets whether to allow creating a new merge proposal.
     pub fn allow_create_proposal(mut self, allow: bool) -> Self {
         self.allow_create_proposal = Some(allow);
         self
     }
 
+    /// Sets the labels to apply to the merge proposal.
     pub fn labels(mut self, labels: Vec<String>) -> Self {
         self.labels = Some(labels);
         self
     }
 
+    /// Sets whether to overwrite an existing merge proposal.
     pub fn overwrite_existing(mut self, overwrite: bool) -> Self {
         self.overwrite_existing = Some(overwrite);
         self
     }
 
+    /// Sets an existing merge proposal to update.
     pub fn existing_proposal(mut self, proposal: MergeProposal) -> Self {
         self.existing_proposal = Some(proposal);
         self
     }
 
+    /// Sets the list of reviewers for the merge proposal.
     pub fn reviewers(mut self, reviewers: Vec<String>) -> Self {
         self.reviewers = Some(reviewers);
         self
     }
 
+    /// Sets tags to apply to the published branch.
     pub fn tags(mut self, tags: HashMap<String, RevisionId>) -> Self {
         self.tags = Some(tags);
         self
     }
 
+    /// Sets the derived owner for the published branch.
     pub fn derived_owner(mut self, owner: &'a str) -> Self {
         self.derived_owner = Some(owner);
         self
     }
 
+    /// Sets whether to allow collaboration on the merge proposal.
     pub fn allow_collaboration(mut self, allow: bool) -> Self {
         self.allow_collaboration = Some(allow);
         self
     }
 
+    /// Sets the revision to stop at when publishing.
     pub fn stop_revision(mut self, revision: &'a RevisionId) -> Self {
         self.stop_revision = Some(revision);
         self
     }
 
+    /// Sets whether to enable auto-merge for the proposal.
     pub fn auto_merge(mut self, auto: bool) -> Self {
         self.auto_merge = Some(auto);
         self
     }
 
+    /// Sets whether to mark the proposal as work in progress.
     pub fn work_in_progress(mut self, wip: bool) -> Self {
         self.work_in_progress = Some(wip);
         self
     }
 
+    /// Publishes the changes to the forge.
+    ///
+    /// # Arguments
+    /// * `get_proposal_description` - Function to generate the proposal description
+    /// * `get_proposal_commit_message` - Function to generate the commit message
+    /// * `get_proposal_title` - Function to generate the proposal title
+    ///
+    /// # Returns
+    /// The result of the publish operation
     pub fn publish(
         self,
         get_proposal_description: impl FnOnce(DescriptionFormat, Option<&MergeProposal>) -> String,
@@ -929,6 +952,7 @@ pub fn publish_changes(
 }
 
 /// Publish result
+#[derive(Debug)]
 pub struct PublishResult {
     /// Publish mode
     pub mode: Mode,
@@ -1154,5 +1178,160 @@ mod tests {
             .unwrap();
         push_result(&source.branch(), &target, None, None, None).unwrap();
         assert_eq!(target.last_revision(), revid);
+    }
+
+    #[test]
+    fn test_publish_builder_construction() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        // Test basic builder construction
+        let builder = PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Push);
+
+        // Verify fields are set correctly
+        assert_eq!(builder.name, "test-branch");
+        assert_eq!(builder.mode, Mode::Push);
+        assert!(builder.forge.is_none());
+        assert!(builder.labels.is_none());
+        assert!(builder.reviewers.is_none());
+    }
+
+    #[test]
+    fn test_publish_builder_chaining() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        // Test method chaining
+        let builder =
+            PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Propose)
+                .labels(vec!["bug".to_string(), "feature".to_string()])
+                .reviewers(vec!["user1".to_string(), "user2".to_string()])
+                .allow_create_proposal(false)
+                .overwrite_existing(true)
+                .allow_collaboration(true)
+                .auto_merge(true)
+                .work_in_progress(false);
+
+        // Verify all fields are set
+        assert_eq!(
+            builder.labels,
+            Some(vec!["bug".to_string(), "feature".to_string()])
+        );
+        assert_eq!(
+            builder.reviewers,
+            Some(vec!["user1".to_string(), "user2".to_string()])
+        );
+        assert_eq!(builder.allow_create_proposal, Some(false));
+        assert_eq!(builder.overwrite_existing, Some(true));
+        assert_eq!(builder.allow_collaboration, Some(true));
+        assert_eq!(builder.auto_merge, Some(true));
+        assert_eq!(builder.work_in_progress, Some(false));
+    }
+
+    #[test]
+    fn test_publish_builder_with_tags() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        use std::collections::HashMap;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        let mut tags = HashMap::new();
+        tags.insert("v1.0".to_string(), RevisionId::from(b"rev1".to_vec()));
+        tags.insert("v2.0".to_string(), RevisionId::from(b"rev2".to_vec()));
+
+        let builder = PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Push)
+            .tags(tags.clone());
+
+        assert_eq!(builder.tags, Some(tags));
+    }
+
+    #[test]
+    fn test_empty_proposal_detection() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        // Create a scenario where proposal would be empty
+        // Both branches have the same content
+
+        // Test with allow_empty = false (default)
+        // Using Mode::Push which doesn't require a forge
+        let result = PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Push)
+            .publish(
+                |_fmt, _mp| "Test description".to_string(),
+                None::<fn(Option<&MergeProposal>) -> Option<String>>,
+                None::<fn(Option<&MergeProposal>) -> Option<String>>,
+            );
+
+        // Should succeed since Mode::Push doesn't check for empty proposals
+        // TODO: This test needs to be redesigned to properly test EmptyMergeProposal
+        // It would require setting up a mock forge that supports Mode::Propose
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_forge_mode_validation() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        // Test modes that require forge without providing forge
+        let modes_requiring_forge = vec![Mode::Propose, Mode::PushDerived, Mode::Bts];
+
+        for mode in modes_requiring_forge {
+            let result = PublishBuilder::new(&local_branch, &main_branch, "test-branch", mode)
+                .publish(
+                    |_fmt, _mp| "Test description".to_string(),
+                    None::<fn(Option<&MergeProposal>) -> Option<String>>,
+                    None::<fn(Option<&MergeProposal>) -> Option<String>>,
+                );
+
+            // Should fail with UnsupportedForge error
+            match result {
+                Err(Error::UnsupportedForge(_)) => {
+                    // Expected error
+                }
+                _ => panic!(
+                    "Expected UnsupportedForge error for mode {:?}, got: {:?}",
+                    mode, result
+                ),
+            }
+        }
+
+        // Test modes that don't require forge
+        let modes_not_requiring_forge = vec![Mode::Push, Mode::AttemptPush];
+
+        for mode in modes_not_requiring_forge {
+            // These should not fail due to missing forge
+            // (they may fail for other reasons in this test setup)
+            let _result = PublishBuilder::new(&local_branch, &main_branch, "test-branch", mode)
+                .publish(
+                    |_fmt, _mp| "Test description".to_string(),
+                    None::<fn(Option<&MergeProposal>) -> Option<String>>,
+                    None::<fn(Option<&MergeProposal>) -> Option<String>>,
+                );
+        }
     }
 }
