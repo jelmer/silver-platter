@@ -577,9 +577,15 @@ impl Batch {
         };
 
         for candidate in candidates {
-            let basename: String = candidate.shortname();
+            let basename = match candidate.shortname() {
+                Ok(name) => name,
+                Err(e) => {
+                    log::warn!("Skipping candidate {}: {:?}", candidate.url, e);
+                    continue;
+                }
+            };
 
-            let mut name = basename.clone();
+            let mut name = basename.to_string();
 
             // TODO(jelmer): Search by URL rather than by name?
             if let Some(entry) = batch.work.get(name.as_str()) {

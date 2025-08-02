@@ -2,6 +2,26 @@
 use crate::Mode;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Error type for shortname extraction
+pub enum ShortnameError {
+    /// URL has no path segments
+    NoPathSegments,
+    /// No non-empty path segments found
+    NoValidSegments,
+}
+
+impl std::fmt::Display for ShortnameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShortnameError::NoPathSegments => write!(f, "URL has no path segments"),
+            ShortnameError::NoValidSegments => write!(f, "No non-empty path segments found"),
+        }
+    }
+}
+
+impl std::error::Error for ShortnameError {}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// A candidate for a package.
 pub struct Candidate {
@@ -24,14 +44,25 @@ pub struct Candidate {
 
 impl Candidate {
     /// Return the short name of the candidate.
-    pub fn shortname(&self) -> String {
-        self.name.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
-            self.url
-                .path_segments()
-                .and_then(|segments| segments.last())
-                .unwrap_or("unknown")
-                .to_string()
-        })
+    pub fn shortname(&self) -> Result<std::borrow::Cow<str>, ShortnameError> {
+        match &self.name {
+            Some(name) => Ok(std::borrow::Cow::Borrowed(name)),
+            None => {
+                if let Some(segments) = self.url.path_segments() {
+                    let segments: Vec<_> = segments.collect();
+
+                    // Find the last non-empty segment
+                    let last_non_empty = segments.iter().rev().find(|s| !s.is_empty());
+
+                    match last_non_empty {
+                        Some(segment) => Ok(std::borrow::Cow::Owned(segment.to_string())),
+                        None => Err(ShortnameError::NoValidSegments),
+                    }
+                } else {
+                    Err(ShortnameError::NoPathSegments)
+                }
+            }
+        }
     }
 }
 
@@ -116,7 +147,7 @@ mod tests {
             default_mode: None,
         };
 
-        assert_eq!(candidate.shortname(), "dulwich");
+        assert_eq!(candidate.shortname().unwrap(), "dulwich");
     }
 
     #[test]
@@ -129,7 +160,65 @@ mod tests {
             default_mode: None,
         };
 
-        assert_eq!(candidate.shortname(), "foo");
+        assert_eq!(candidate.shortname().unwrap(), "foo");
+    }
+
+    #[test]
+    fn test_shortname_cow_behavior() {
+        use std::borrow::Cow;
+
+        // Test borrowed case (when name exists)
+        let candidate_with_name = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: Some("myproject".to_string()),
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let shortname = candidate_with_name.shortname().unwrap();
+        assert!(matches!(shortname, Cow::Borrowed(_)));
+        assert_eq!(shortname, "myproject");
+
+        // Test owned case (when name is None)
+        let candidate_without_name = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/dulwich").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+
+        let shortname = candidate_without_name.shortname().unwrap();
+        assert!(matches!(shortname, Cow::Owned(_)));
+        assert_eq!(shortname, "dulwich");
+    }
+
+    #[test]
+    fn test_shortname_edge_cases() {
+        // Test URL without path segments
+        let candidate_no_path = Candidate {
+            url: url::Url::parse("https://github.com/").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+        assert!(candidate_no_path.shortname().is_err());
+        assert_eq!(
+            candidate_no_path.shortname().unwrap_err(),
+            ShortnameError::NoValidSegments
+        );
+
+        // Test URL with trailing slash
+        let candidate_trailing_slash = Candidate {
+            url: url::Url::parse("https://github.com/jelmer/project/").unwrap(),
+            name: None,
+            branch: None,
+            subpath: None,
+            default_mode: None,
+        };
+        assert_eq!(candidate_trailing_slash.shortname().unwrap(), "project");
     }
 
     #[test]
