@@ -37,6 +37,9 @@ pub struct Candidate {
     /// The subpath to use.
     pub subpath: Option<std::path::PathBuf>,
 
+    /// Multiple paths to process separately (for monorepos).
+    pub paths: Option<Vec<String>>,
+
     #[serde(rename = "default-mode")]
     /// The default mode to use.
     pub default_mode: Option<Mode>,
@@ -144,6 +147,7 @@ mod tests {
             name: None,
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -157,6 +161,7 @@ mod tests {
             name: Some("foo".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -173,6 +178,7 @@ mod tests {
             name: Some("myproject".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -186,6 +192,7 @@ mod tests {
             name: None,
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -202,6 +209,7 @@ mod tests {
             name: None,
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
         assert!(candidate_no_path.shortname().is_err());
@@ -216,6 +224,7 @@ mod tests {
             name: None,
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
         assert_eq!(candidate_trailing_slash.shortname().unwrap(), "project");
@@ -234,6 +243,7 @@ mod tests {
             name: Some("dulwich".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -242,6 +252,7 @@ mod tests {
             name: Some("silver-platter".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -263,6 +274,7 @@ mod tests {
             name: Some("dulwich".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -271,6 +283,7 @@ mod tests {
             name: Some("silver-platter".to_string()),
             branch: None,
             subpath: None,
+            paths: None,
             default_mode: None,
         };
 
@@ -302,5 +315,35 @@ mod tests {
         assert_eq!(candidates.candidates().len(), 2);
         assert_eq!(candidates.candidates()[0].name, Some("dulwich".to_string()));
         assert_eq!(candidates.candidates()[1].branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_candidate_with_paths() {
+        let td = tempfile::tempdir().unwrap();
+        let path = td.path().join("candidates.yaml");
+        std::fs::write(
+            &path,
+            r#"---
+    - url: https://github.com/org/monorepo
+      name: monorepo
+      paths:
+        - frontend
+        - backend
+        - docs
+    "#,
+        )
+        .unwrap();
+        let candidates = Candidates::from_path(&path).unwrap();
+        assert_eq!(candidates.candidates().len(), 1);
+        let candidate = &candidates.candidates()[0];
+        assert_eq!(candidate.name, Some("monorepo".to_string()));
+        assert_eq!(
+            candidate.paths,
+            Some(vec![
+                "frontend".to_string(),
+                "backend".to_string(),
+                "docs".to_string()
+            ])
+        );
     }
 }

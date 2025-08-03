@@ -563,7 +563,7 @@ fn find_last_release_revid(
         dbc.call_method1("revid_of_version", (version.to_string(),))?
             .extract::<RevisionId>()
     })
-    .map_err(|e| BrzError::from(e))
+    .map_err(BrzError::from)
 }
 
 /// Select packages from the apt repository.

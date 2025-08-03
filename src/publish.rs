@@ -818,7 +818,7 @@ pub fn publish_changes(
                 overwrite_existing,
                 derived_owner,
                 tags,
-                Some(&stop_revision),
+                Some(stop_revision),
             )?;
             return Ok(PublishResult {
                 mode,
@@ -832,7 +832,7 @@ pub fn publish_changes(
             let read_lock = local_branch.lock_read()?;
             // breezy would do this check too, but we want to be *really* sure.
             let graph = local_branch.repository().get_graph();
-            if !graph.is_ancestor(&main_branch.last_revision(), &stop_revision)? {
+            if !graph.is_ancestor(&main_branch.last_revision(), stop_revision)? {
                 return Err(Error::DivergedBranches());
             }
             std::mem::drop(read_lock);
@@ -843,7 +843,7 @@ pub fn publish_changes(
                 None,
                 None,
                 tags.clone(),
-                Some(&stop_revision),
+                Some(stop_revision),
             ) {
                 Err(e @ Error::PermissionDenied) => {
                     if mode == Mode::AttemptPush {
@@ -922,7 +922,7 @@ pub fn publish_changes(
     let (proposal, is_new) = propose_changes(
         local_branch,
         main_branch,
-        &forge, // We checked above that forge is required for Propose mode
+        forge, // We checked above that forge is required for Propose mode
         name,
         mp_description.as_str(),
         resume_branch,
@@ -936,7 +936,7 @@ pub fn publish_changes(
         reviewers,
         tags,
         derived_owner,
-        Some(&stop_revision),
+        Some(stop_revision),
         allow_collaboration,
         auto_merge,
         work_in_progress,
@@ -993,7 +993,7 @@ pub fn check_proposal_diff_empty(
     let revision_graph = other_repository.get_graph();
     let tree_branch = MemoryBranch::new(&other_repository, None, &main_revid);
     let mut merger = Merger::new(&tree_branch, &main_tree, &revision_graph);
-    merger.set_other_revision(&stop_revision, other_branch)?;
+    merger.set_other_revision(stop_revision, other_branch)?;
     if merger.find_base()?.is_none() {
         merger.set_base_revision(&RevisionId::null(), other_branch)?;
     }

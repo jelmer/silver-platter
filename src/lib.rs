@@ -179,6 +179,32 @@ impl CommitPending {
     }
 }
 
+/// The result of a codemod
+pub trait CodemodResult {
+    /// Context
+    fn context(&self) -> serde_json::Value;
+
+    /// Returns the value of the result
+    fn value(&self) -> Option<u32>;
+
+    /// Returns the URL of the target branch
+    fn target_branch_url(&self) -> Option<url::Url>;
+
+    /// Returns the description of the result
+    fn description(&self) -> Option<String>;
+
+    /// Returns the tags of the result
+    fn tags(&self) -> Vec<(String, Option<RevisionId>)>;
+
+    /// Returns the context as a Tera context
+    fn tera_context(&self) -> tera::Context {
+        tera::Context::from_value(self.context()).unwrap()
+    }
+}
+
+/// The version of the library
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,29 +284,3 @@ mod tests {
         assert_eq!(Mode::Bts.to_string(), "bts");
     }
 }
-
-/// The result of a codemod
-pub trait CodemodResult {
-    /// Context
-    fn context(&self) -> serde_json::Value;
-
-    /// Returns the value of the result
-    fn value(&self) -> Option<u32>;
-
-    /// Returns the URL of the target branch
-    fn target_branch_url(&self) -> Option<url::Url>;
-
-    /// Returns the description of the result
-    fn description(&self) -> Option<String>;
-
-    /// Returns the tags of the result
-    fn tags(&self) -> Vec<(String, Option<RevisionId>)>;
-
-    /// Returns the context as a Tera context
-    fn tera_context(&self) -> tera::Context {
-        tera::Context::from_value(self.context()).unwrap()
-    }
-}
-
-/// The version of the library
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");

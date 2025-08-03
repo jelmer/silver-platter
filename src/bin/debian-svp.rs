@@ -416,7 +416,7 @@ fn run(args: &RunArgs) -> i32 {
                 }
             }
         }
-        return result.description.clone();
+        result.description.clone()
     };
 
     let mut retcode = 0;
@@ -557,7 +557,7 @@ fn is_launchpad_url(url: &url::Url) -> bool {
         url.host_str() == Some("launchpad.net")
             || url
                 .host_str()
-                .map_or(false, |h| h.ends_with(".launchpad.net"))
+                .is_some_and(|h| h.ends_with(".launchpad.net"))
     }
 }
 

@@ -223,10 +223,7 @@ pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
     cmd.current_dir(path);
     let status = cmd.status()?;
     if !status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("gbp dch failed: {}", status),
-        ));
+        return Err(std::io::Error::other(format!("gbp dch failed: {}", status)));
     }
     Ok(())
 }

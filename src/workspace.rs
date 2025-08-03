@@ -456,7 +456,7 @@ impl Workspace {
 
         self.state = Some(WorkspaceState {
             base_revid: local_tree.last_revision().unwrap(),
-            local_tree: local_tree,
+            local_tree,
             refreshed,
             main_colo_revid,
             tempdir: td,
@@ -667,7 +667,7 @@ impl Workspace {
         work_in_progress: Option<bool>,
     ) -> Result<(MergeProposal, bool), Error> {
         let main_branch = self.main_branch();
-        let target_branch = target_branch.or_else(|| main_branch).unwrap();
+        let target_branch = target_branch.or(main_branch).unwrap();
         let forge = if let Some(forge) = forge {
             forge
         } else {
