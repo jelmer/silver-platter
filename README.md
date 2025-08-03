@@ -1,6 +1,8 @@
 # Silver-Platter
 
-<img src="https://github.com/jelmer/silver-platter/blob/master/logo.png" alt="Silver-Platter logo" align="center" width="200px"/>
+<div align="center">
+  <img src="https://github.com/jelmer/silver-platter/blob/master/logo.png" alt="Silver-Platter logo" width="200px"/>
+</div>
 
 Silver-Platter makes it possible to contribute automatable changes to source
 code in a version control system
@@ -20,7 +22,27 @@ and can be used fine as a standalone tool. The UI is still a bit rough around
 the edges, I'd be grateful for any feedback from people using it - please file
 bugs in the issue tracker at <https://github.com/jelmer/silver-platter/issues/new>.
 
-## Getting started
+## Installation
+
+### From Source (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/jelmer/silver-platter
+cd silver-platter
+
+# Build and install using Cargo
+cargo build --release
+cargo install --path .
+```
+
+### Prerequisites
+
+- Rust toolchain (install via [rustup](https://rustup.rs/))
+- Git and/or Bazaar (depending on repositories you work with)
+- Python 3.9+ (for the Python bindings, optional)
+
+## Getting Started
 
 To log in to a code-hosting site, use ``svp login``:
 
@@ -58,7 +80,6 @@ For the example above, we could create a ``framwork.yaml`` with the following
 contents:
 
 ```yaml
-
 ---
 name: framwork
 command: |-
@@ -75,28 +96,24 @@ merge-request:
 To execute this recipe, run:
 
 ```shell
-
 svp run --recipe=framwork.yaml https://github.com/jelmer/dulwich
 ```
 
-See `example.yaml` for an example recipe with plenty of comments.
+See `recipe.example.yaml` for an example recipe with plenty of comments.
 
 In addition, you can run a particular recipe over a set of repositories by
 specifying a candidate list.
 For example, if *candidates.yaml* looked like this:
 
 ```yaml
-
 ---
 - url: https://github.com/dulwich/dulwich
 - url: https://github.com/jelmer/xandikos
-
 ```
 
 then the following command would process each repository in turn:
 
 ```shell
-
 svp run --recipe=framwork.yaml --candidates=candidates.yaml
 ```
 
@@ -144,7 +161,7 @@ like to review or modify the diffs before sending them out:
 
 ```shell
 
-svp batch generate --recipe=framwork.yaml --candidates=candidate.syml framwork
+svp batch generate --recipe=framwork.yaml --candidates=candidates.yaml framwork
 ```
 
 This will then create a directory called "framwork", with a file called
@@ -290,13 +307,36 @@ And to log into a new hosting site, simply run ``svp login BASE-URL``, e.g.:
 svp login https://launchpad.net/
 ```
 
-## Exit status
+## Command Reference
+
+### Main Commands
+
+- `svp run` - Run a codemod on one or more repositories
+- `svp apply` - Apply changes to a local checkout without publishing
+- `svp forges` - List known code hosting platforms  
+- `svp login` - Authenticate with a hosting platform
+- `svp proposals` - List your merge proposals
+- `svp batch generate` - Generate batch changes for review
+- `svp batch publish` - Publish reviewed batch changes
+
+### Exit Codes
 
 ``svp run`` will exit 0 if no changes have been made, 1 if at least one
 repository has been changed and 2 in case of trouble.
 
-## Python API
+## Documentation
 
-Other than the command-line API, silver-platter also has a Python API,
-with a package published [on PyPI](https://pypi.org/project/silver-platter/).
-See [README.python.md](README.python.md) for more details.
+- [Python API](README.python.md) - Using Silver-Platter as a Python library  
+- [Codemod Protocol](codemod-protocol.md) - Writing codemods that work with Silver-Platter
+- [Recipe Examples](examples/recipes/) - Common recipe patterns
+- [Development Notes](devnotes/) - Architecture and design documentation
+
+## Contributing
+
+Contributions are welcome! Please see our [Code of Conduct](CODE_OF_CONDUCT.md) and
+feel free to [file issues](https://github.com/jelmer/silver-platter/issues/new) or submit pull requests.
+
+## License
+
+Silver-Platter is licensed under the GNU General Public License v3.0 or later.
+See [LICENSE](LICENSE) for details.
