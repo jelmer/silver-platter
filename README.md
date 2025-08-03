@@ -100,6 +100,43 @@ then the following command would process each repository in turn:
 svp run --recipe=framwork.yaml --candidates=candidates.yaml
 ```
 
+## Monorepo Support
+
+Silver-Platter supports creating multiple pull requests for different paths within a single repository (monorepos). This is useful when you want to apply changes to specific subdirectories and create separate pull requests for each.
+
+To use monorepo support, specify the `--paths` option with comma-separated paths:
+
+```shell
+svp run --mode=propose --paths=frontend,backend ./update-deps.sh https://github.com/org/monorepo
+```
+
+This will:
+1. Run the script in each specified subdirectory (`frontend` and `backend`)
+2. Create separate branches with path-specific suffixes (`update-deps-frontend`, `update-deps-backend`)
+3. Only include changes within each respective directory
+4. Create separate pull requests for each path
+
+The script will be executed with the working directory set to each specified path, and only files within that path will be committed and included in the pull request.
+
+### Using Paths in Candidates
+
+You can also specify paths directly in your candidates.yaml file for repositories that should be processed as monorepos:
+
+```yaml
+---
+- url: https://github.com/org/monorepo
+  name: monorepo
+  paths:
+    - frontend
+    - backend
+    - docs
+- url: https://github.com/org/single-repo
+  name: single-repo
+  # No paths specified, will be processed normally
+```
+
+When a candidate has `paths` specified, silver-platter will automatically create separate pull requests for each path. The CLI `--paths` option will be ignored for candidates that have their own `paths` defined.
+
 ## Batch Mode
 
 Use batch mode when you're going to make a large number of changes and would

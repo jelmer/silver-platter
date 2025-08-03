@@ -549,7 +549,7 @@ impl Batch {
                     "Not a directory",
                 )));
             }
-            if let Ok(entries) = std::fs::read_dir(&directory) {
+            if let Ok(entries) = std::fs::read_dir(directory) {
                 if entries.count() > 0 {
                     return Err(Error::Io(std::io::Error::new(
                         std::io::ErrorKind::AlreadyExists,
@@ -558,7 +558,7 @@ impl Batch {
                 }
             }
         } else {
-            std::fs::create_dir_all(&directory)?;
+            std::fs::create_dir_all(directory)?;
         }
 
         // make sure directory is an absolute path
@@ -590,11 +590,7 @@ impl Batch {
             // TODO(jelmer): Search by URL rather than by name?
             if let Some(entry) = batch.work.get(name.as_str()) {
                 if entry.target_branch_url.as_ref() == Some(&candidate.url) {
-                    log::info!(
-                        "Skipping {} ({}) (already in batch)",
-                        name,
-                        candidate.url.to_string()
-                    );
+                    log::info!("Skipping {} ({}) (already in batch)", name, candidate.url);
                     continue;
                 }
             }
@@ -904,8 +900,8 @@ mod tests {
         let entry = super::Entry::from_recipe(
             &recipe,
             td.path(),
-            &url::Url::from_directory_path(&remote.path()).unwrap(),
-            &std::path::Path::new(""),
+            &url::Url::from_directory_path(remote.path()).unwrap(),
+            std::path::Path::new(""),
             None,
             None,
         )
@@ -929,8 +925,9 @@ mod tests {
             .shell("echo hello > hello.txt; echo hello".to_owned())
             .build();
         let candidate = crate::candidates::Candidate {
-            url: url::Url::from_directory_path(&remote.path()).unwrap(),
+            url: url::Url::from_directory_path(remote.path()).unwrap(),
             subpath: None,
+            paths: None,
             default_mode: None,
             branch: None,
             name: Some("foo".to_owned()),
@@ -959,8 +956,9 @@ mod tests {
             .shell("echo hello > hello.txt; echo hello".to_owned())
             .build();
         let candidate = crate::candidates::Candidate {
-            url: url::Url::from_directory_path(&remote.path()).unwrap(),
+            url: url::Url::from_directory_path(remote.path()).unwrap(),
             subpath: None,
+            paths: None,
             default_mode: None,
             branch: None,
             name: Some("foo".to_owned()),

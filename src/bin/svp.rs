@@ -127,6 +127,11 @@ struct RunArgs {
     /// Enable automatic merge when CI passes
     #[arg(long)]
     auto_merge: bool,
+
+    /// Paths within the repository to process separately (for monorepos)
+    /// Multiple paths can be specified as comma-separated values
+    #[arg(long, value_delimiter = ',')]
+    paths: Option<Vec<String>>,
 }
 
 /// Operate on multiple repositories at once
@@ -201,15 +206,32 @@ fn run(args: &RunArgs) -> i32 {
         );
     }
 
-    let mut urls = vec![];
+    // Collect all targets (either single URL or candidates)
+    #[derive(Debug)]
+    struct Target {
+        url: url::Url,
+        paths: Option<Vec<String>>,
+    }
+
+    let mut targets = vec![];
 
     if let Some(url) = args.url.as_ref() {
-        urls.push(url.clone());
+        targets.push(Target {
+            url: url.clone(),
+            paths: args.paths.clone(),
+        });
     }
 
     if let Some(candidates) = args.candidates.as_ref() {
         let candidates = Candidates::from_path(candidates.as_path()).unwrap();
-        urls.extend(candidates.iter().map(|c| c.url.clone()));
+        for candidate in candidates.iter() {
+            // Use paths from candidate if present, otherwise fall back to CLI args
+            let paths = candidate.paths.clone().or_else(|| args.paths.clone());
+            targets.push(Target {
+                url: candidate.url.clone(),
+                paths,
+            });
+        }
     }
 
     let commit_pending = if let Some(commit_pending) = args.commit_pending {
@@ -338,30 +360,70 @@ fn run(args: &RunArgs) -> i32 {
         .as_ref()
         .map(|labels| labels.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
-    for url in urls {
-        let result = silver_platter::run::apply_and_publish(
-            &url,
-            branch.as_str(),
-            command
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .as_slice(),
-            mode,
-            commit_pending,
-            labels_ref.as_deref(),
-            args.diff,
-            args.verify_command.as_deref(),
-            args.derived_owner.as_deref(),
-            refresh,
-            Some(allow_create_proposal),
-            Some(get_commit_message),
-            Some(get_title),
-            get_description,
-            Some(extra_env.clone()),
-            auto_merge,
-        );
-        retcode = std::cmp::max(retcode, result)
+    for target in targets {
+        let paths = target.paths.as_deref().unwrap_or(&[]);
+        if paths.is_empty() {
+            // No paths specified - run as before
+            let result = silver_platter::run::apply_and_publish(
+                &target.url,
+                branch.as_str(),
+                command
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                mode,
+                commit_pending,
+                labels_ref.as_deref(),
+                args.diff,
+                args.verify_command.as_deref(),
+                args.derived_owner.as_deref(),
+                refresh,
+                Some(allow_create_proposal),
+                Some(get_commit_message),
+                Some(get_title),
+                get_description,
+                Some(extra_env.clone()),
+                auto_merge,
+                None,
+            );
+            retcode = std::cmp::max(retcode, result);
+        } else {
+            // Process each path separately
+            for path in paths {
+                // Create a branch name with path suffix
+                let path_branch = if path.contains('/') {
+                    format!("{}-{}", branch, path.replace('/', "-"))
+                } else {
+                    format!("{}-{}", branch, path)
+                };
+
+                let result = silver_platter::run::apply_and_publish(
+                    &target.url,
+                    path_branch.as_str(),
+                    command
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    mode,
+                    commit_pending,
+                    labels_ref.as_deref(),
+                    args.diff,
+                    args.verify_command.as_deref(),
+                    args.derived_owner.as_deref(),
+                    refresh,
+                    Some(allow_create_proposal),
+                    Some(get_commit_message),
+                    Some(get_title),
+                    get_description,
+                    Some(extra_env.clone()),
+                    auto_merge,
+                    Some(std::path::Path::new(path)),
+                );
+                retcode = std::cmp::max(retcode, result);
+            }
+        }
     }
 
     retcode
@@ -537,7 +599,7 @@ fn is_launchpad_url(url: &url::Url) -> bool {
         url.host_str() == Some("launchpad.net")
             || url
                 .host_str()
-                .map_or(false, |h| h.ends_with(".launchpad.net"))
+                .is_some_and(|h| h.ends_with(".launchpad.net"))
     }
 }
 

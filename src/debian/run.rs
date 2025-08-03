@@ -14,277 +14,6 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use url::Url;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::CommitPending;
-    use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
-    use breezyshim::prelude::MutableTree;
-    use breezyshim::WorkingTree;
-    use std::path::Path;
-    use tempfile::tempdir;
-
-    // Helper that creates a simple test script file
-    fn create_test_script(dir_path: &Path, script_name: &str, content: &str) -> std::path::PathBuf {
-        let script_path = dir_path.join(script_name);
-        std::fs::write(&script_path, content).unwrap();
-
-        // Make script executable on Unix systems
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&script_path).unwrap().permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&script_path, perms).unwrap();
-        }
-
-        script_path
-    }
-
-    // Helper function to create a simple Debian package structure
-    fn create_test_debian_package(tree_path: &Path) {
-        // Create debian directory structure
-        std::fs::create_dir_all(tree_path.join("debian")).unwrap();
-
-        // Create a simple debian/control file
-        std::fs::write(
-            tree_path.join("debian/control"),
-            r#"Source: test-package
-Section: devel
-Priority: optional
-Maintainer: Test Maintainer <test@example.com>
-Build-Depends: debhelper-compat (= 13)
-Standards-Version: 4.5.1
-
-Package: test-package
-Architecture: all
-Depends: ${misc:Depends}
-Description: Test package for unit tests
- This is a test package used for unit testing.
-"#,
-        )
-        .unwrap();
-
-        // Create a simple debian/changelog file
-        std::fs::write(
-            tree_path.join("debian/changelog"),
-            r#"test-package (0.1) unstable; urgency=medium
-
-  * Initial release.
-
- -- Test Maintainer <test@example.com>  Thu, 01 Jan 2024 00:00:00 +0000
-"#,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_apply_and_publish_script_error() {
-        // Create a test directory structure
-        let td = tempdir().unwrap();
-        let origin_dir = td.path().join("origin");
-
-        // Create a standalone working tree
-        let tree =
-            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
-
-        // Create a basic Debian package
-        create_test_debian_package(&origin_dir);
-        tree.add(&[
-            Path::new("debian"),
-            Path::new("debian/control"),
-            Path::new("debian/changelog"),
-        ])
-        .unwrap();
-        tree.build_commit()
-            .message("Initial commit")
-            .commit()
-            .unwrap();
-
-        // Create a script that will fail
-        let script_dir = td.path().join("scripts");
-        std::fs::create_dir(&script_dir).unwrap();
-        let script_path = create_test_script(&script_dir, "failing_script.sh", "#!/bin/sh\nexit 1");
-
-        // Run apply_and_publish with a script that will fail
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
-
-        // Adding type annotations to help the compiler
-        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
-        let get_commit_message: Option<
-            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
-        > = None;
-        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
-
-        // The function should return error code 2 when the script fails
-        let result = apply_and_publish(
-            &branch_url,
-            "test-script",
-            &[script_path.to_str().unwrap()],
-            Mode::Push,
-            CommitPending::Auto,
-            None,
-            false,
-            None,
-            false,
-            allow_create_proposal,
-            get_commit_message,
-            get_title,
-            |_, _, _| "Test description".to_string(),
-            None,
-            false,
-            None,
-            None,
-            false,
-            None,
-        );
-
-        assert_eq!(result, 2, "Script failure should return exit code 2");
-    }
-
-    #[test]
-    fn test_apply_and_publish_no_changes() {
-        // Create a test directory structure
-        let td = tempdir().unwrap();
-        let origin_dir = td.path().join("origin");
-
-        // Create a standalone working tree
-        let tree =
-            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
-
-        // Create a basic Debian package
-        create_test_debian_package(&origin_dir);
-        tree.add(&[
-            Path::new("debian"),
-            Path::new("debian/control"),
-            Path::new("debian/changelog"),
-        ])
-        .unwrap();
-        tree.build_commit()
-            .message("Initial commit")
-            .commit()
-            .unwrap();
-
-        // Create a script that will succeed but make no changes
-        let script_dir = td.path().join("scripts");
-        std::fs::create_dir(&script_dir).unwrap();
-        let script_path =
-            create_test_script(&script_dir, "no_change_script.sh", "#!/bin/sh\nexit 0");
-
-        // Run apply_and_publish with a script that will succeed but make no changes
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
-
-        // Adding type annotations to help the compiler
-        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
-        let get_commit_message: Option<
-            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
-        > = None;
-        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
-
-        // The function should return error code 0 when the script makes no changes
-        let result = apply_and_publish(
-            &branch_url,
-            "test-script",
-            &[script_path.to_str().unwrap()],
-            Mode::Push,
-            CommitPending::Auto,
-            None,
-            false,
-            None,
-            false,
-            allow_create_proposal,
-            get_commit_message,
-            get_title,
-            |_, _, _| "Test description".to_string(),
-            None,
-            false,
-            None,
-            None,
-            false,
-            None,
-        );
-
-        assert_eq!(
-            result, 0,
-            "Script with no changes should return exit code 0"
-        );
-    }
-
-    #[test]
-    fn test_apply_and_publish_update_changelog() {
-        // Create a test directory structure
-        let td = tempdir().unwrap();
-        let origin_dir = td.path().join("origin");
-
-        // Create a standalone working tree
-        let tree =
-            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
-
-        // Create a basic Debian package
-        create_test_debian_package(&origin_dir);
-        tree.add(&[
-            Path::new("debian"),
-            Path::new("debian/control"),
-            Path::new("debian/changelog"),
-        ])
-        .unwrap();
-        tree.build_commit()
-            .message("Initial commit")
-            .commit()
-            .unwrap();
-
-        // Create a script that will echo a test message (simulating a successful change)
-        let script_dir = td.path().join("scripts");
-        std::fs::create_dir(&script_dir).unwrap();
-        let script_content = r#"#!/bin/sh
-echo "Making a simple change"
-echo "test content" > test.txt
-exit 0
-"#;
-        let script_path = create_test_script(&script_dir, "test_script.sh", script_content);
-
-        // Run apply_and_publish with update_changelog=true
-        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
-
-        // Adding type annotations to help the compiler
-        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
-        let get_commit_message: Option<
-            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
-        > = None;
-        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
-
-        // The function should return error code 1 (we can't do a full test since it would require
-        // setting up forge functionality, but we can at least verify it gets past the script running part)
-        let result = apply_and_publish(
-            &branch_url,
-            "test-script",
-            &[script_path.to_str().unwrap()],
-            Mode::Push,
-            CommitPending::Auto,
-            None,
-            false,
-            None,
-            false,
-            allow_create_proposal,
-            get_commit_message,
-            get_title,
-            |_, _, _| "Test description".to_string(),
-            Some(true), // Update changelog
-            false,
-            None,
-            None,
-            false,
-            None,
-        );
-
-        // The expected result is 1 since we can't actually do a merge proposal in the test
-        assert!(
-            result == 1 || result == 2,
-            "Script with changes should proceed through script execution"
-        );
-    }
-}
-
 /// Run the given command and publish the changes as a merge proposal.
 pub fn apply_and_publish(
     url: &Url,
@@ -575,4 +304,275 @@ pub fn apply_and_publish(
     }
 
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CommitPending;
+    use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::prelude::MutableTree;
+    use breezyshim::WorkingTree;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    // Helper that creates a simple test script file
+    fn create_test_script(dir_path: &Path, script_name: &str, content: &str) -> std::path::PathBuf {
+        let script_path = dir_path.join(script_name);
+        std::fs::write(&script_path, content).unwrap();
+
+        // Make script executable on Unix systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&script_path, perms).unwrap();
+        }
+
+        script_path
+    }
+
+    // Helper function to create a simple Debian package structure
+    fn create_test_debian_package(tree_path: &Path) {
+        // Create debian directory structure
+        std::fs::create_dir_all(tree_path.join("debian")).unwrap();
+
+        // Create a simple debian/control file
+        std::fs::write(
+            tree_path.join("debian/control"),
+            r#"Source: test-package
+Section: devel
+Priority: optional
+Maintainer: Test Maintainer <test@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+
+Package: test-package
+Architecture: all
+Depends: ${misc:Depends}
+Description: Test package for unit tests
+ This is a test package used for unit testing.
+"#,
+        )
+        .unwrap();
+
+        // Create a simple debian/changelog file
+        std::fs::write(
+            tree_path.join("debian/changelog"),
+            r#"test-package (0.1) unstable; urgency=medium
+
+  * Initial release.
+
+ -- Test Maintainer <test@example.com>  Thu, 01 Jan 2024 00:00:00 +0000
+"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_apply_and_publish_script_error() {
+        // Create a test directory structure
+        let td = tempdir().unwrap();
+        let origin_dir = td.path().join("origin");
+
+        // Create a standalone working tree
+        let tree =
+            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
+
+        // Create a basic Debian package
+        create_test_debian_package(&origin_dir);
+        tree.add(&[
+            Path::new("debian"),
+            Path::new("debian/control"),
+            Path::new("debian/changelog"),
+        ])
+        .unwrap();
+        tree.build_commit()
+            .message("Initial commit")
+            .commit()
+            .unwrap();
+
+        // Create a script that will fail
+        let script_dir = td.path().join("scripts");
+        std::fs::create_dir(&script_dir).unwrap();
+        let script_path = create_test_script(&script_dir, "failing_script.sh", "#!/bin/sh\nexit 1");
+
+        // Run apply_and_publish with a script that will fail
+        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+
+        // Adding type annotations to help the compiler
+        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
+        let get_commit_message: Option<
+            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
+        > = None;
+        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
+
+        // The function should return error code 2 when the script fails
+        let result = apply_and_publish(
+            &branch_url,
+            "test-script",
+            &[script_path.to_str().unwrap()],
+            Mode::Push,
+            CommitPending::Auto,
+            None,
+            false,
+            None,
+            false,
+            allow_create_proposal,
+            get_commit_message,
+            get_title,
+            |_, _, _| "Test description".to_string(),
+            None,
+            false,
+            None,
+            None,
+            false,
+            None,
+        );
+
+        assert_eq!(result, 2, "Script failure should return exit code 2");
+    }
+
+    #[test]
+    fn test_apply_and_publish_no_changes() {
+        // Create a test directory structure
+        let td = tempdir().unwrap();
+        let origin_dir = td.path().join("origin");
+
+        // Create a standalone working tree
+        let tree =
+            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
+
+        // Create a basic Debian package
+        create_test_debian_package(&origin_dir);
+        tree.add(&[
+            Path::new("debian"),
+            Path::new("debian/control"),
+            Path::new("debian/changelog"),
+        ])
+        .unwrap();
+        tree.build_commit()
+            .message("Initial commit")
+            .commit()
+            .unwrap();
+
+        // Create a script that will succeed but make no changes
+        let script_dir = td.path().join("scripts");
+        std::fs::create_dir(&script_dir).unwrap();
+        let script_path =
+            create_test_script(&script_dir, "no_change_script.sh", "#!/bin/sh\nexit 0");
+
+        // Run apply_and_publish with a script that will succeed but make no changes
+        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+
+        // Adding type annotations to help the compiler
+        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
+        let get_commit_message: Option<
+            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
+        > = None;
+        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
+
+        // The function should return error code 0 when the script makes no changes
+        let result = apply_and_publish(
+            &branch_url,
+            "test-script",
+            &[script_path.to_str().unwrap()],
+            Mode::Push,
+            CommitPending::Auto,
+            None,
+            false,
+            None,
+            false,
+            allow_create_proposal,
+            get_commit_message,
+            get_title,
+            |_, _, _| "Test description".to_string(),
+            None,
+            false,
+            None,
+            None,
+            false,
+            None,
+        );
+
+        assert_eq!(
+            result, 0,
+            "Script with no changes should return exit code 0"
+        );
+    }
+
+    #[test]
+    fn test_apply_and_publish_update_changelog() {
+        // Create a test directory structure
+        let td = tempdir().unwrap();
+        let origin_dir = td.path().join("origin");
+
+        // Create a standalone working tree
+        let tree =
+            create_standalone_workingtree(&origin_dir, &ControlDirFormat::default()).unwrap();
+
+        // Create a basic Debian package
+        create_test_debian_package(&origin_dir);
+        tree.add(&[
+            Path::new("debian"),
+            Path::new("debian/control"),
+            Path::new("debian/changelog"),
+        ])
+        .unwrap();
+        tree.build_commit()
+            .message("Initial commit")
+            .commit()
+            .unwrap();
+
+        // Create a script that will echo a test message (simulating a successful change)
+        let script_dir = td.path().join("scripts");
+        std::fs::create_dir(&script_dir).unwrap();
+        let script_content = r#"#!/bin/sh
+echo "Making a simple change"
+echo "test content" > test.txt
+exit 0
+"#;
+        let script_path = create_test_script(&script_dir, "test_script.sh", script_content);
+
+        // Run apply_and_publish with update_changelog=true
+        let branch_url = Url::from_directory_path(origin_dir.clone()).unwrap();
+
+        // Adding type annotations to help the compiler
+        let allow_create_proposal: Option<fn(&CommandResult) -> bool> = None;
+        let get_commit_message: Option<
+            fn(&CommandResult, Option<&MergeProposal>) -> Option<String>,
+        > = None;
+        let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
+
+        // The function should return error code 1 (we can't do a full test since it would require
+        // setting up forge functionality, but we can at least verify it gets past the script running part)
+        let result = apply_and_publish(
+            &branch_url,
+            "test-script",
+            &[script_path.to_str().unwrap()],
+            Mode::Push,
+            CommitPending::Auto,
+            None,
+            false,
+            None,
+            false,
+            allow_create_proposal,
+            get_commit_message,
+            get_title,
+            |_, _, _| "Test description".to_string(),
+            Some(true), // Update changelog
+            false,
+            None,
+            None,
+            false,
+            None,
+        );
+
+        // The expected result is 1 since we can't actually do a merge proposal in the test
+        assert!(
+            result == 1 || result == 2,
+            "Script with changes should proceed through script execution"
+        );
+    }
 }

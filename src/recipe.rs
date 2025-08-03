@@ -134,6 +134,12 @@ pub struct RecipeBuilder {
     recipe: Recipe,
 }
 
+impl Default for RecipeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecipeBuilder {
     /// Create a new recipe builder
     pub fn new() -> Self {
