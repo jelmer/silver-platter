@@ -367,6 +367,7 @@ exit 0
             get_title,
             |_, _, _| "Test description".to_string(),
             None,
+            false,
         );
 
         assert_eq!(result, 2, "Script failure should return exit code 2");
@@ -423,6 +424,7 @@ exit 0
             get_title,
             |_, _, _| "Test description".to_string(),
             None,
+            false,
         );
 
         assert_eq!(
@@ -486,6 +488,7 @@ exit 0
             get_title,
             |_, _, _| "Test description".to_string(),
             None,
+            false,
         );
 
         assert_eq!(result, 2, "Script with changes should return exit code 2");
@@ -545,6 +548,7 @@ exit 0
             get_title,
             |_, _, _| "Test description".to_string(),
             None,
+            false,
         );
 
         assert_eq!(result, 2, "Verification failure should return exit code 2");
@@ -729,6 +733,24 @@ exit 0
             let builder = ApplyAndPublishBuilder::new(&url, "test-branch", &command, mode);
             assert_eq!(builder.mode, mode);
         }
+    }
+
+    #[test]
+    fn test_apply_and_publish_builder_auto_merge() {
+        let url = Url::parse("https://github.com/test/repo").unwrap();
+        let command = ["script.sh"];
+
+        // Test default auto_merge is false
+        let builder = ApplyAndPublishBuilder::new(&url, "test-branch", &command, Mode::Propose);
+        assert!(!builder.auto_merge);
+
+        // Test setting auto_merge to true
+        let builder = builder.auto_merge(true);
+        assert!(builder.auto_merge);
+
+        // Test setting auto_merge to false
+        let builder = builder.auto_merge(false);
+        assert!(!builder.auto_merge);
     }
 }
 
@@ -942,6 +964,7 @@ fn publish_workspace_changes(
     get_commit_message: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
     get_title: Option<impl FnOnce(Option<&MergeProposal>) -> Option<String>>,
     get_description: impl FnOnce(&CommandResult, DescriptionFormat, Option<&MergeProposal>) -> String,
+    auto_merge: bool,
 ) -> Result<crate::publish::PublishResult, i32> {
     match workspace.publish_changes(
         None,
@@ -960,7 +983,7 @@ fn publish_workspace_changes(
         derived_owner,
         None,
         None,
-        None,
+        Some(auto_merge),
         None,
     ) {
         Ok(r) => Ok(r),
@@ -1029,6 +1052,8 @@ pub struct ApplyAndPublishBuilder<'a> {
     pub refresh: bool,
     /// Additional environment variables for command execution
     pub extra_env: Option<HashMap<String, String>>,
+    /// Whether to enable automatic merge when CI passes
+    pub auto_merge: bool,
 }
 
 impl<'a> ApplyAndPublishBuilder<'a> {
@@ -1046,6 +1071,7 @@ impl<'a> ApplyAndPublishBuilder<'a> {
             derived_owner: None,
             refresh: false,
             extra_env: None,
+            auto_merge: false,
         }
     }
 
@@ -1091,6 +1117,12 @@ impl<'a> ApplyAndPublishBuilder<'a> {
         self
     }
 
+    /// Sets whether to enable automatic merge when CI passes.
+    pub fn auto_merge(mut self, auto_merge: bool) -> Self {
+        self.auto_merge = auto_merge;
+        self
+    }
+
     /// Applies the codemod and publishes the changes as a merge proposal.
     ///
     /// # Arguments
@@ -1130,6 +1162,7 @@ impl<'a> ApplyAndPublishBuilder<'a> {
             get_title,
             get_description,
             self.extra_env,
+            self.auto_merge,
         )
     }
 }
@@ -1153,6 +1186,7 @@ pub fn apply_and_publish(
     get_title: Option<impl FnOnce(&CommandResult, Option<&MergeProposal>) -> Option<String>>,
     get_description: impl FnOnce(&CommandResult, DescriptionFormat, Option<&MergeProposal>) -> String,
     extra_env: Option<HashMap<String, String>>,
+    auto_merge: bool,
 ) -> i32 {
     // Step 1: Open the main branch
     let main_branch = match open_branch_with_error_handling(url) {
@@ -1249,6 +1283,7 @@ pub fn apply_and_publish(
         get_commit_message,
         get_title_wrapper,
         get_description,
+        auto_merge,
     ) {
         Ok(result) => result,
         Err(code) => return code,
