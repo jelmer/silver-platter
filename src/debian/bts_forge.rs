@@ -791,9 +791,21 @@ impl BTSForge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breezyshim::controldir::{create_branch_convenience, ControlDirFormat};
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn create_test_branch() -> (TempDir, Box<dyn breezyshim::branch::Branch>) {
+        breezyshim::init();
+        let td = tempfile::tempdir().unwrap();
+        let path = td.path().canonicalize().unwrap();
+        let url = url::Url::from_file_path(path).unwrap();
+        let branch = create_branch_convenience(&url, None, &ControlDirFormat::default()).unwrap();
+        (td, branch)
+    }
 
     #[test]
-    fn test_bts_merge_proposal() {
+    fn test_bts_merge_proposal_creation() {
         let mp = BTSMergeProposal::new(
             123456,
             "https://example.com/source".parse().unwrap(),
@@ -811,10 +823,58 @@ mod tests {
             mp.get_url().unwrap().as_str(),
             "https://bugs.debian.org/123456"
         );
+        assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Open);
+        assert_eq!(mp.tags.len(), 0);
+        assert_eq!(mp.user_tags.len(), 0);
     }
 
     #[test]
-    fn test_bts_merge_proposal_status() {
+    fn test_bts_merge_proposal_urls() {
+        let mp = BTSMergeProposal::new(
+            987654,
+            "https://salsa.debian.org/user/repo".parse().unwrap(),
+            "https://salsa.debian.org/maintainer/repo".parse().unwrap(),
+            "Important security fix".to_string(),
+            "This patch addresses CVE-2023-12345".to_string(),
+        );
+
+        assert_eq!(
+            mp.get_source_branch_url().unwrap(),
+            Some("https://salsa.debian.org/user/repo".parse().unwrap())
+        );
+        assert_eq!(
+            mp.get_target_branch_url().unwrap(),
+            Some("https://salsa.debian.org/maintainer/repo".parse().unwrap())
+        );
+        assert_eq!(
+            mp.get_web_url().unwrap(),
+            Some("https://bugs.debian.org/987654".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn test_bts_merge_proposal_description_updates() {
+        let mut mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Initial title".to_string(),
+            "Initial description".to_string(),
+        );
+
+        assert_eq!(mp.get_description().unwrap(), "Initial description");
+
+        // Update description
+        mp.set_description("Updated description with more details")
+            .unwrap();
+        assert_eq!(
+            mp.get_description().unwrap(),
+            "Updated description with more details"
+        );
+    }
+
+    #[test]
+    fn test_bts_merge_proposal_status_transitions() {
         let mut mp = BTSMergeProposal::new(
             123456,
             "https://example.com/source".parse().unwrap(),
@@ -823,14 +883,28 @@ mod tests {
             "Description".to_string(),
         );
 
+        // Test initial status
         assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Open);
 
+        // Test closing
         mp.set_status(MergeProposalStatus::Closed).unwrap();
         assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Closed);
+
+        // Test reopening
+        mp.set_status(MergeProposalStatus::Open).unwrap();
+        assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Open);
+
+        // Test close() method
+        mp.close().unwrap();
+        assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Closed);
+
+        // Test reopen() method
+        mp.reopen().unwrap();
+        assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Open);
     }
 
     #[test]
-    fn test_bts_merge_proposal_labels() {
+    fn test_bts_merge_proposal_merge_operations() {
         let mut mp = BTSMergeProposal::new(
             123456,
             "https://example.com/source".parse().unwrap(),
@@ -839,18 +913,62 @@ mod tests {
             "Description".to_string(),
         );
 
+        // Test merge operations that should fail for BTS
+        assert!(mp.merge(None).is_err());
+        assert!(mp.merge(Some("maintainer@example.com")).is_err());
+
+        // Test merge status queries
+        assert!(!mp.is_merged().unwrap());
+        assert!(!mp.can_be_merged().unwrap());
+        assert!(mp.get_merged_by().unwrap().is_none());
+        assert!(mp.get_merged_at().unwrap().is_none());
+        assert!(mp.get_merged_revision_id().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_bts_merge_proposal_labels_comprehensive() {
+        let mut mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Fix typo".to_string(),
+            "Description".to_string(),
+        );
+
+        // Test adding multiple labels
         mp.add_label("patch").unwrap();
         mp.add_label("minor").unwrap();
-        assert_eq!(mp.tags.len(), 2);
+        mp.add_label("documentation").unwrap();
+        mp.add_label("easy").unwrap();
+
+        assert_eq!(mp.tags.len(), 4);
+        assert!(mp.tags.contains(&"patch".to_string()));
+        assert!(mp.tags.contains(&"minor".to_string()));
+        assert!(mp.tags.contains(&"documentation".to_string()));
+        assert!(mp.tags.contains(&"easy".to_string()));
+
+        // Test removing specific label
+        mp.remove_label("minor").unwrap();
+        assert_eq!(mp.tags.len(), 3);
+        assert!(!mp.tags.contains(&"minor".to_string()));
         assert!(mp.tags.contains(&"patch".to_string()));
 
-        mp.remove_label("minor").unwrap();
-        assert_eq!(mp.tags.len(), 1);
-        assert!(!mp.tags.contains(&"minor".to_string()));
+        // Test removing non-existent label (should not panic)
+        mp.remove_label("non-existent").unwrap();
+        assert_eq!(mp.tags.len(), 3);
+
+        // Test adding duplicate label
+        mp.add_label("patch").unwrap();
+        assert_eq!(mp.tags.len(), 4); // Should add duplicate
+
+        // Test removing one instance of duplicate
+        mp.remove_label("patch").unwrap();
+        assert_eq!(mp.tags.len(), 3);
+        assert!(mp.tags.contains(&"patch".to_string())); // One instance should remain
     }
 
     #[test]
-    fn test_bts_merge_proposal_user_tags() {
+    fn test_bts_merge_proposal_user_tags_advanced() {
         let mut mp = BTSMergeProposal::new(
             123456,
             "https://example.com/source".parse().unwrap(),
@@ -859,58 +977,215 @@ mod tests {
             "Description".to_string(),
         );
 
-        mp.add_user_tags("user@example.com", vec!["silver-platter".to_string()]);
-        assert_eq!(mp.user_tags.len(), 1);
+        // Test adding user tags for different users
+        mp.add_user_tags(
+            "user1@example.com",
+            vec!["silver-platter".to_string(), "automated".to_string()],
+        );
+        mp.add_user_tags("user2@debian.org", vec!["manual-review".to_string()]);
+        mp.add_user_tags(
+            "maintainer@pkg.org",
+            vec!["approved".to_string(), "ready-to-merge".to_string()],
+        );
+
+        assert_eq!(mp.user_tags.len(), 3);
+
+        // Test retrieving user tags
         assert_eq!(
-            mp.user_tags.get("user@example.com").unwrap(),
-            &vec!["silver-platter".to_string()]
+            mp.user_tags.get("user1@example.com").unwrap(),
+            &vec!["silver-platter".to_string(), "automated".to_string()]
+        );
+        assert_eq!(
+            mp.user_tags.get("user2@debian.org").unwrap(),
+            &vec!["manual-review".to_string()]
+        );
+        assert_eq!(
+            mp.user_tags.get("maintainer@pkg.org").unwrap(),
+            &vec!["approved".to_string(), "ready-to-merge".to_string()]
+        );
+
+        // Test overwriting user tags
+        mp.add_user_tags("user1@example.com", vec!["updated-tag".to_string()]);
+        assert_eq!(
+            mp.user_tags.get("user1@example.com").unwrap(),
+            &vec!["updated-tag".to_string()]
+        );
+        assert_eq!(mp.user_tags.len(), 3); // Count should remain the same
+
+        // Test empty user tags
+        mp.add_user_tags("empty@example.com", vec![]);
+        assert_eq!(
+            mp.user_tags.get("empty@example.com").unwrap(),
+            &Vec::<String>::new()
         );
     }
 
     #[test]
-    fn test_bts_forge() {
-        let forge = BTSForge::new(Some("test-package".to_string()));
-        assert_eq!(forge.name(), "debian-bts");
+    fn test_bts_forge_creation_and_properties() {
+        // Test forge with package name
+        let forge_with_pkg = BTSForge::new(Some("test-package".to_string()));
+        assert_eq!(forge_with_pkg.name(), "debian-bts");
+        assert_eq!(
+            forge_with_pkg.package_name,
+            Some("test-package".to_string())
+        );
+
+        // Test forge without package name
+        let forge_no_pkg = BTSForge::new(None);
+        assert_eq!(forge_no_pkg.name(), "debian-bts");
+        assert_eq!(forge_no_pkg.package_name, None);
     }
 
     #[test]
-    fn test_bts_forge_no_package() {
-        let forge = BTSForge::new(None);
-        assert_eq!(forge.name(), "debian-bts");
-    }
-
-    #[test]
-    fn test_bts_forge_hosts() {
-        use breezyshim::controldir::{create_branch_convenience, ControlDirFormat};
-        let td = tempfile::tempdir().unwrap();
-        let url = url::Url::from_file_path(td.path()).unwrap();
-        let branch = create_branch_convenience(&url, None, &ControlDirFormat::default()).unwrap();
-
+    fn test_bts_forge_hosts_branches() {
+        let (_td, branch) = create_test_branch();
         let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // BTS doesn't host branches, so should always return false
         assert!(!forge.hosts(&*branch));
     }
 
     #[test]
-    fn test_bts_forge_get_proposal_by_url() {
+    fn test_bts_forge_user_operations() {
         let forge = BTSForge::new(Some("test-package".to_string()));
 
-        let url: Url = "https://bugs.debian.org/123456".parse().unwrap();
-        let proposal = forge.get_proposal_by_url(&url).unwrap();
+        // Test user URL operations (should fail)
+        assert!(forge.get_user_url("testuser").is_err());
+
+        // Test get_user (should succeed with maintainer info)
+        assert!(forge.get_user().is_ok());
+    }
+
+    #[test]
+    fn test_bts_forge_proposal_by_url() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test valid BTS URL
+        let valid_url: Url = "https://bugs.debian.org/123456".parse().unwrap();
+        let proposal = forge.get_proposal_by_url(&valid_url).unwrap();
+        assert_eq!(proposal.bug_number, 123456);
         assert_eq!(
             proposal.get_url().unwrap().as_str(),
             "https://bugs.debian.org/123456"
         );
 
+        // Test another valid URL
+        let another_url: Url = "https://bugs.debian.org/987654".parse().unwrap();
+        let another_proposal = forge.get_proposal_by_url(&another_url).unwrap();
+        assert_eq!(another_proposal.bug_number, 987654);
+
+        // Test invalid URLs
         let invalid_url: Url = "https://bugs.debian.org/invalid".parse().unwrap();
         assert!(forge.get_proposal_by_url(&invalid_url).is_err());
+
+        let wrong_domain: Url = "https://github.com/user/repo/issues/123".parse().unwrap();
+        assert!(forge.get_proposal_by_url(&wrong_domain).is_err());
+
+        let empty_path: Url = "https://bugs.debian.org/".parse().unwrap();
+        assert!(forge.get_proposal_by_url(&empty_path).is_err());
     }
 
     #[test]
-    fn test_file_bug_with_patch_email_format() {
+    fn test_bts_forge_publish_operations() {
+        let (_td, branch) = create_test_branch();
         let forge = BTSForge::new(Some("test-package".to_string()));
 
-        // This test just ensures the method runs without panic
-        // Actual email sending is not tested as it's marked TODO
+        // BTS doesn't support publishing branches
+        let result = forge.publish_derived(&branch, &branch, "test-branch", None, None, None, None);
+        assert!(result.is_err());
+
+        // BTS doesn't support getting derived branches
+        let derived = forge
+            .get_derived_branch(&*branch, "test-branch", None)
+            .unwrap();
+        assert!(derived.is_none());
+    }
+
+    #[test]
+    fn test_bts_forge_find_bugs_by_user_tags() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test with package name
+        let result =
+            forge.find_bugs_by_user_tags("user@example.com", &["silver-platter".to_string()]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Vec::<u32>::new()); // Should return empty for mock
+
+        // Test with multiple tags
+        let result = forge.find_bugs_by_user_tags(
+            "user@example.com",
+            &[
+                "silver-platter".to_string(),
+                "automated".to_string(),
+                "patch".to_string(),
+            ],
+        );
+        assert!(result.is_ok());
+
+        // Test forge without package name
+        let forge_no_pkg = BTSForge::new(None);
+        let result = forge_no_pkg
+            .find_bugs_by_user_tags("user@example.com", &["silver-platter".to_string()]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn test_bts_forge_silver_platter_bugs() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        let result = forge.get_silver_platter_bugs("test-package");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0); // Should return empty for mock
+    }
+
+    #[test]
+    fn test_bts_forge_iter_proposals() {
+        let (_td1, branch1) = create_test_branch();
+        let (_td2, branch2) = create_test_branch();
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test with various statuses
+        let open_proposals = forge.iter_proposals(&*branch1, &*branch2, MergeProposalStatus::Open);
+        assert!(open_proposals.is_ok());
+
+        let closed_proposals =
+            forge.iter_proposals(&*branch1, &*branch2, MergeProposalStatus::Closed);
+        assert!(closed_proposals.is_ok());
+
+        // Test forge without package name
+        let forge_no_pkg = BTSForge::new(None);
+        let no_pkg_proposals =
+            forge_no_pkg.iter_proposals(&*branch1, &*branch2, MergeProposalStatus::Open);
+        assert!(no_pkg_proposals.is_ok());
+        assert_eq!(no_pkg_proposals.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_bts_forge_iter_my_proposals() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test without status filter
+        let all_proposals = forge.iter_my_proposals(None, None);
+        assert!(all_proposals.is_ok());
+
+        // Test with status filter
+        let open_proposals = forge.iter_my_proposals(Some(MergeProposalStatus::Open), None);
+        assert!(open_proposals.is_ok());
+
+        let closed_proposals = forge.iter_my_proposals(Some(MergeProposalStatus::Closed), None);
+        assert!(closed_proposals.is_ok());
+
+        // Test with author filter
+        let author_proposals = forge.iter_my_proposals(None, Some("author@example.com"));
+        assert!(author_proposals.is_ok());
+    }
+
+    #[test]
+    fn test_file_bug_with_patch_comprehensive() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test basic bug filing
         let result = forge.file_bug_with_patch(
             "test-package",
             "Fix important bug",
@@ -919,9 +1194,301 @@ mod tests {
             vec!["patch".to_string()],
             Some(("Test User".to_string(), "test@example.com".to_string())),
         );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 999999);
+
+        // Test with multiple tags
+        let result = forge.file_bug_with_patch(
+            "another-package",
+            "Security fix",
+            "This addresses a security vulnerability",
+            "--- a/security.c\n+++ b/security.c\n@@ -10,1 +10,1 @@\n-vulnerable_code()\n+secure_code()",
+            vec!["patch".to_string(), "security".to_string(), "urgent".to_string()],
+            Some(("Security Team".to_string(), "security@debian.org".to_string())),
+        );
+        assert!(result.is_ok());
+
+        // Test with no tags
+        let result = forge.file_bug_with_patch(
+            "minimal-package",
+            "Simple fix",
+            "A simple fix",
+            "--- a/simple.txt\n+++ b/simple.txt\n@@ -1 +1 @@\n-wrong\n+right",
+            vec![],
+            None, // Use default maintainer
+        );
+        assert!(result.is_ok());
+
+        // Test with empty patch
+        let result = forge.file_bug_with_patch(
+            "test-package",
+            "Documentation only",
+            "This is a documentation-only change",
+            "",
+            vec!["documentation".to_string()],
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_patch_generation_and_diff() {
+        let (_td1, branch1) = create_test_branch();
+        let (_td2, branch2) = create_test_branch();
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test patch generation between branches
+        let result = forge.generate_patch_from_branches(&*branch1, &*branch2);
+        assert!(result.is_ok());
+        let patch = result.unwrap();
+        assert!(patch.is_empty() || patch.contains("@@")); // Empty or contains diff markers
+    }
+
+    #[test]
+    fn test_patch_application_checking() {
+        let (_td, branch) = create_test_branch();
+        let mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Fix typo".to_string(),
+            "Description".to_string(),
+        );
+
+        // Test patch application check (should handle missing package gracefully)
+        let result = mp.check_patch_applied(&branch);
+        assert!(result.is_ok());
+        assert!(!result.unwrap()); // Should return false for non-applicable patches
+    }
+
+    #[test]
+    fn test_error_handling_edge_cases() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test bug conversion with invalid numbers
+        let result = forge.get_bug_as_merge_proposal(0);
+        assert!(result.is_ok()); // Should handle gracefully
+
+        let result = forge.get_bug_as_merge_proposal(u32::MAX);
+        assert!(result.is_ok()); // Should handle gracefully
+
+        // Test user email extraction
+        let result = forge.get_user_email();
+        assert!(result.is_ok());
+
+        // Test search with empty package name
+        let forge_no_pkg = BTSForge::new(None);
+        let result = forge_no_pkg.search_bugs_by_package_and_tags("", &[]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_merge_proposal_edge_cases() {
+        // Test with very long descriptions
+        let long_description = "A".repeat(10000);
+        let mut mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Long description test".to_string(),
+            long_description.clone(),
+        );
+
+        assert_eq!(mp.get_description().unwrap(), long_description);
+
+        // Test with special characters in descriptions
+        let special_description = "Description with émojis 🚀 and spëcial chars: <>\"'&";
+        mp.set_description(special_description).unwrap();
+        assert_eq!(mp.get_description().unwrap(), special_description);
+
+        // Test with empty strings
+        mp.set_description("").unwrap();
+        assert_eq!(mp.get_description().unwrap(), "");
+    }
+
+    #[test]
+    fn test_comment_functionality() {
+        let mut mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Test proposal".to_string(),
+            "Test description".to_string(),
+        );
+
+        // Test posting comments
+        assert!(mp.post_comment("This is a test comment").is_ok());
+        assert!(mp.post_comment("Another comment with more details").is_ok());
+        assert!(mp.post_comment("").is_ok()); // Empty comment should work
+
+        // Test posting comment with special characters
+        assert!(mp
+            .post_comment("Comment with émojis 🎉 and special chars: <>&\"'")
+            .is_ok());
+
+        // Test very long comment
+        let long_comment = "Long comment: ".to_string() + &"X".repeat(5000);
+        assert!(mp.post_comment(&long_comment).is_ok());
+    }
+
+    #[test]
+    fn test_create_proposal_comprehensive() {
+        let (_td1, source_branch) = create_test_branch();
+        let (_td2, target_branch) = create_test_branch();
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test creating proposal with all parameters
+        let result = forge.create_proposal(
+            &*source_branch,
+            &*target_branch,
+            "Comprehensive test proposal",
+            "This is a comprehensive test of the create_proposal functionality",
+            None, // prerequisite_branch
+            Some(vec![
+                "patch".to_string(),
+                "test".to_string(),
+                "automated".to_string(),
+            ]),
+            Some("Custom commit message"),
+            false, // work_in_progress
+            false, // allow_collaboration
+            Some(vec![
+                "reviewer1@example.com".to_string(),
+                "reviewer2@example.com".to_string(),
+            ]),
+            Some(DescriptionFormat::Markdown),
+            None,        // staging_branch_url
+            Some(false), // auto_merge
+        );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 999999); // Dummy bug number
+        let proposal = result.unwrap();
+        assert_eq!(proposal.bug_number, 999999); // Mock returns this
+        assert_eq!(
+            proposal.get_title().unwrap(),
+            Some("Comprehensive test proposal".to_string())
+        );
+
+        // Test creating proposal with minimal parameters
+        let result = forge.create_proposal(
+            &*source_branch,
+            &*target_branch,
+            "Minimal proposal",
+            "Minimal description",
+            None,
+            None,
+            None,
+            false,
+            false,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_proposal_without_package() {
+        let (_td1, source_branch) = create_test_branch();
+        let (_td2, target_branch) = create_test_branch();
+        let forge = BTSForge::new(None); // No package name
+
+        // Should fail without package name
+        let result = forge.create_proposal(
+            &*source_branch,
+            &*target_branch,
+            "Test proposal",
+            "Test description",
+            None,
+            None,
+            None,
+            false,
+            false,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_proposal_operations_get_methods() {
+        let (_td1, branch1) = create_test_branch();
+        let (_td2, branch2) = create_test_branch();
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test get_proposal method
+        let result = forge.get_proposal(&*branch1, &*branch2);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none()); // Should return None for mock
+    }
+
+    #[test]
+    fn test_large_scale_operations() {
+        let forge = BTSForge::new(Some("test-package".to_string()));
+
+        // Test handling many user tags
+        let mut mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "Large scale test".to_string(),
+            "Testing large scale operations".to_string(),
+        );
+
+        // Add many user tags
+        for i in 0..100 {
+            mp.add_user_tags(
+                &format!("user{}@example.com", i),
+                vec![
+                    format!("tag{}", i),
+                    "silver-platter".to_string(),
+                    format!("category{}", i % 10),
+                ],
+            );
+        }
+        assert_eq!(mp.user_tags.len(), 100);
+
+        // Add many labels
+        for i in 0..50 {
+            mp.add_label(&format!("label{}", i)).unwrap();
+        }
+        assert_eq!(mp.tags.len(), 50);
+
+        // Test searching with many tags
+        let many_tags: Vec<String> = (0..20).map(|i| format!("tag{}", i)).collect();
+        let result = forge.find_bugs_by_user_tags("user@example.com", &many_tags);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unicode_and_special_characters() {
+        let forge = BTSForge::new(Some("тест-пакет".to_string())); // Cyrillic package name
+
+        // Test Unicode in bug filing
+        let result = forge.file_bug_with_patch(
+            "пакет-unicode",
+            "Исправление ошибки",
+            "Это описание содержит Unicode символы: 🐛➡️✅",
+            "--- a/файл.txt\n+++ b/файл.txt\n@@ -1 +1 @@\n-старое\n+новое",
+            vec!["патч".to_string(), "unicode".to_string()],
+            Some(("Тест Юзер".to_string(), "test@example.com".to_string())),
+        );
+        assert!(result.is_ok());
+
+        // Test Unicode in merge proposal
+        let mp = BTSMergeProposal::new(
+            123456,
+            "https://example.com/source".parse().unwrap(),
+            "https://example.com/target".parse().unwrap(),
+            "修复错误".to_string(),             // Chinese characters
+            "この説明は日本語です".to_string(), // Japanese characters
+        );
+
+        assert_eq!(mp.get_title().unwrap(), Some("修复错误".to_string()));
+        assert_eq!(mp.get_description().unwrap(), "この説明は日本語です");
     }
 }
 
