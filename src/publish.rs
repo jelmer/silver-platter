@@ -1334,4 +1334,28 @@ mod tests {
                 );
         }
     }
+
+    #[test]
+    fn test_publish_builder_auto_merge() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), &ControlDirFormat::default()).unwrap();
+        let local_branch = tree.branch();
+        let main_branch = tree.branch();
+
+        // Test default auto_merge is None
+        let builder =
+            PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Propose);
+        assert_eq!(builder.auto_merge, None);
+
+        // Test setting auto_merge to true
+        let builder = builder.auto_merge(true);
+        assert_eq!(builder.auto_merge, Some(true));
+
+        // Test setting auto_merge to false
+        let builder = builder.auto_merge(false);
+        assert_eq!(builder.auto_merge, Some(false));
+    }
 }

@@ -123,6 +123,10 @@ struct RunArgs {
     /// Mode for publishing
     #[arg(long)]
     mode: Option<silver_platter::Mode>,
+
+    /// Enable automatic merge when CI passes
+    #[arg(long)]
+    auto_merge: bool,
 }
 
 /// Operate on multiple repositories at once
@@ -241,6 +245,19 @@ fn run(args: &RunArgs) -> i32 {
         silver_platter::Mode::Propose
     };
 
+    // Determine auto_merge setting
+    let auto_merge = if args.auto_merge {
+        true
+    } else if let Some(recipe) = &recipe {
+        if let Some(merge_request) = recipe.merge_request.as_ref() {
+            merge_request.auto_merge.unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let mut refresh = args.refresh;
 
     if let Some(ref recipe) = recipe {
@@ -342,6 +359,7 @@ fn run(args: &RunArgs) -> i32 {
             Some(get_title),
             get_description,
             Some(extra_env.clone()),
+            auto_merge,
         );
         retcode = std::cmp::max(retcode, result)
     }

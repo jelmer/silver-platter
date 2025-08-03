@@ -460,4 +460,67 @@ merge-request:
             .unwrap();
         assert_eq!(desc, None);
     }
+
+    #[test]
+    fn test_merge_request_auto_merge() {
+        // Test default value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: None,
+        };
+        assert_eq!(merge_request.auto_merge, None);
+
+        // Test explicit true value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(true),
+        };
+        assert_eq!(merge_request.auto_merge, Some(true));
+
+        // Test explicit false value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(false),
+        };
+        assert_eq!(merge_request.auto_merge, Some(false));
+    }
+
+    #[test]
+    fn test_merge_request_auto_merge_serialization() {
+        use serde_yaml;
+
+        // Test serialization with auto_merge: true
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(true),
+        };
+        let yaml = serde_yaml::to_string(&merge_request).unwrap();
+        assert!(yaml.contains("auto-merge: true"));
+
+        // Test deserialization
+        let yaml_content = r#"
+auto-merge: true
+"#;
+        let merge_request: MergeRequest = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(merge_request.auto_merge, Some(true));
+
+        // Test deserialization with false
+        let yaml_content = r#"
+auto-merge: false
+"#;
+        let merge_request: MergeRequest = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(merge_request.auto_merge, Some(false));
+    }
 }
