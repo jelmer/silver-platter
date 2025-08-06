@@ -35,6 +35,9 @@ gpgme = { version = "0.11.0", optional = true }
 pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
 debian-control = { version = ">=0.1", optional = true }
+debbugs = { version = "0.1.5", optional = true }
+lettre = { version = "0.11", optional = true, default-features = false, features = ["smtp-transport", "tokio1-native-tls", "hostname", "builder"] }
+which = { version = "6", optional = true }
 rand = "0.9.2"
 launchpadlib = { version = "0.4.6", optional = true }
 
@@ -43,7 +46,7 @@ members = [ "svp-client", "svp-py" ]
 
 [features]
 default = ["debian", "detect-update-changelog", "cli"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "dep:debbugs", "dep:lettre", "dep:which", "breezyshim/debian", "dep:debian-analyzer"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["debian"]
