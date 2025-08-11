@@ -179,7 +179,7 @@ checksum = "f98db91f21981e10935802bd24043c92b5a03fe69fc622b2ff2ee01b884457d0"
 dependencies = [
  "chrono",
  "ctor",
- "deb822-lossless 0.3.1",
+ "deb822-lossless 0.3.2",
  "debian-changelog",
  "debian-control",
  "debversion",
@@ -577,9 +577,9 @@ dependencies = [
 
 [[package]]
 name = "deb822-lossless"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "318c7cbdb7ea56e14e022b787a3a7e792a94950fb066ba95947dec0e4cc796f4"
+checksum = "a5951cecf7d07d18215a0acb204cfa3de9b060245fe6f2e691de4f89fcd18a3d"
 dependencies = [
  "pyo3",
  "regex",
@@ -596,7 +596,7 @@ dependencies = [
  "breezyshim",
  "chrono",
  "configparser",
- "deb822-lossless 0.3.1",
+ "deb822-lossless 0.3.2",
  "debian-changelog",
  "debian-control",
  "debian-copyright",
@@ -642,13 +642,13 @@ dependencies = [
 
 [[package]]
 name = "debian-control"
-version = "0.1.47"
+version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ac14c4d571734ef24973d1e736a2524c0e7dac2e58229d6109f17ada37cf8fd"
+checksum = "3351d6fb92a49b0d49aae155f438e25950e8f10eed7984f1e4742807848ccebf"
 dependencies = [
  "chrono",
  "deb822-fast",
- "deb822-lossless 0.3.1",
+ "deb822-lossless 0.3.2",
  "debversion",
  "pyo3",
  "regex",
