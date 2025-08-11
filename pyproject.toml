@@ -52,7 +52,7 @@ testing = [
     "brz-debian",
 ]
 dev = [
-    "ruff==0.12.7"
+    "ruff==0.12.8"
 ]
 
 [tool.setuptools.packages.find]
