@@ -47,7 +47,7 @@ pub struct Candidate {
 
 impl Candidate {
     /// Return the short name of the candidate.
-    pub fn shortname(&self) -> Result<std::borrow::Cow<str>, ShortnameError> {
+    pub fn shortname(&self) -> Result<std::borrow::Cow<'_, str>, ShortnameError> {
         match &self.name {
             Some(name) => Ok(std::borrow::Cow::Borrowed(name)),
             None => {
