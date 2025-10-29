@@ -99,12 +99,12 @@ impl std::fmt::Display for BranchOpenError {
 #[cfg(feature = "pyo3")]
 impl From<BranchOpenError> for pyo3::PyErr {
     fn from(e: BranchOpenError) -> Self {
-        use pyo3::import_exception_bound;
-        import_exception_bound!(silver_platter, BranchUnsupported);
-        import_exception_bound!(silver_platter, BranchTemporarilyUnavailable);
-        import_exception_bound!(silver_platter, BranchUnavailable);
-        import_exception_bound!(silver_platter, BranchRateLimited);
-        import_exception_bound!(silver_platter, BranchMissing);
+        use pyo3::import_exception;
+        import_exception!(silver_platter, BranchUnsupported);
+        import_exception!(silver_platter, BranchTemporarilyUnavailable);
+        import_exception!(silver_platter, BranchUnavailable);
+        import_exception!(silver_platter, BranchRateLimited);
+        import_exception!(silver_platter, BranchMissing);
 
         use pyo3::exceptions::PyRuntimeError;
         match e {

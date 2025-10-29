@@ -520,19 +520,19 @@ impl std::fmt::Display for Error {
 #[cfg(feature = "pyo3")]
 impl From<Error> for pyo3::PyErr {
     fn from(e: Error) -> Self {
-        use pyo3::import_exception_bound;
+        use pyo3::import_exception;
         use pyo3::prelude::*;
-        import_exception_bound!(breezy.errors, NotBranchError);
-        import_exception_bound!(breezy.errors, UnsupportedOperation);
-        import_exception_bound!(breezy.errors, MergeProposalExists);
-        import_exception_bound!(breezy.errors, PermissionDenied);
-        import_exception_bound!(breezy.errors, DivergedBranches);
-        import_exception_bound!(breezy.forge, UnsupportedForge);
-        import_exception_bound!(breezy.forge, ForgeLoginRequired);
-        import_exception_bound!(silver_platter, EmptyMergeProposal);
-        import_exception_bound!(silver_platter, UnrelatedBranchExists);
-        import_exception_bound!(silver_platter, InsufficientChangesForNewProposal);
-        import_exception_bound!(silver_platter, NoTargetBranch);
+        import_exception!(breezy.errors, NotBranchError);
+        import_exception!(breezy.errors, UnsupportedOperation);
+        import_exception!(breezy.errors, MergeProposalExists);
+        import_exception!(breezy.errors, PermissionDenied);
+        import_exception!(breezy.errors, DivergedBranches);
+        import_exception!(breezy.forge, UnsupportedForge);
+        import_exception!(breezy.forge, ForgeLoginRequired);
+        import_exception!(silver_platter, EmptyMergeProposal);
+        import_exception!(silver_platter, UnrelatedBranchExists);
+        import_exception!(silver_platter, InsufficientChangesForNewProposal);
+        import_exception!(silver_platter, NoTargetBranch);
 
         match e {
             Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),

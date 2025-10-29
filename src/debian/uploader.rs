@@ -555,7 +555,7 @@ fn find_last_release_revid(
     version: &Version,
 ) -> Result<RevisionId, BrzError> {
     use pyo3::prelude::*;
-    pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
+    pyo3::Python::attach(|py| -> PyResult<RevisionId> {
         let m = py.import("breezy.plugins.debian.import_dsc")?;
         let dbc = m.getattr("DistributionBranch")?;
         let dbc = dbc.call1((branch.clone(), py.None()))?;
