@@ -168,7 +168,7 @@ pub fn install_built_package(
         let path = entry.path();
         let contents = std::fs::read(&path)?;
 
-        let binary: Option<String> = Python::with_gil(|py| {
+        let binary: Option<String> = Python::attach(|py| {
             let m = py.import("debian.deb822")?;
             let changes = m.getattr("Changes")?.call1((contents,))?;
 
@@ -205,7 +205,7 @@ pub fn build(
     // TODO(jelmer): Refactor brz-debian so it's not necessary
     // to call out to cmd_builddeb, but to lower-level
     // functions instead.
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let m = py.import("breezy.plugins.debian.cmds")?;
         let cmd_builddeb = m.getattr("cmd_builddeb")?;
         let kwargs = PyDict::new(py);
@@ -233,7 +233,7 @@ pub fn find_last_release_revid(
     branch: &GenericBranch,
     version: debversion::Version,
 ) -> PyResult<breezyshim::revisionid::RevisionId> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let m = py.import("breezy.plugins.debian.import_dsc")?;
         let db = m
             .getattr("DistributionBranch")?
