@@ -7,6 +7,8 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+#[cfg(not(feature = "detect-update-changelog"))]
+use pyo3::Borrowed;
 
 use std::path::Path;
 
@@ -46,8 +48,10 @@ pub struct ChangelogBehaviour {
 pub use debian_analyzer::detect_gbp_dch::ChangelogBehaviour;
 
 #[cfg(not(feature = "detect-update-changelog"))]
-impl FromPyObject<'_> for ChangelogBehaviour {
-    fn extract_bound(obj: &Bound<PyAny>) -> PyResult<Self> {
+impl<'py> FromPyObject<'_, 'py> for ChangelogBehaviour {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, 'py, PyAny>) -> Result<Self, Self::Error> {
         let update_changelog = obj.getattr("update_changelog")?.extract()?;
         let explanation = obj.getattr("explanation")?.extract()?;
         Ok(ChangelogBehaviour {

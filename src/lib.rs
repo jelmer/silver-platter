@@ -93,9 +93,10 @@ impl std::str::FromStr for Mode {
 }
 
 #[cfg(feature = "pyo3")]
-impl pyo3::FromPyObject<'_> for Mode {
-    fn extract_bound(ob: &pyo3::Bound<pyo3::PyAny>) -> pyo3::PyResult<Self> {
-        use pyo3::prelude::*;
+impl pyo3::FromPyObject<'_, '_> for Mode {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'_, '_, pyo3::PyAny>) -> Result<Self, Self::Error> {
         let s: std::borrow::Cow<str> = ob.extract()?;
         match s.as_ref() {
             "push" => Ok(Mode::Push),
