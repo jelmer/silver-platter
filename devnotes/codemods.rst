@@ -1,66 +1,19 @@
-The core of silver-platter are changer commands, which get run in version
-control checkouts to make changes.
+Codemod Protocol
+================
 
-Commands will be run in a clean VCS checkout, where they can make changes as
-they deem fit. Changes should ideally be committed; by default pending changes
-will be discarded (but silver-platter will warn about them, and --autocommit
-can specified).
+The codemod protocol documentation has been moved to the main documentation.
 
-However, if commands just make changes and don't touch the VCS at all,
-silver-platter will function in "autocommit" mode and create a single commit on
-their behalf with a reasonable commit message.
+Please see: `../codemod-protocol.md <../codemod-protocol.md>`_
 
-Flags can be specified on the command-line or in a recipe:
+That document contains the authoritative specification for writing codemods
+that work with Silver-Platter, including:
 
- * name (if not specified, taken from filename?)
- * command to run
- * merge proposal commit message (with jinja2 templating)
- * merge proposal description, markdown/plain (with jinja2 templating)
- * whether the command can resume
- * mode ('push', 'attempt-push', 'propose') - defaults to 'attempt-push'
- * optional propose threshold, with minimum value before merge proposals
-   are created
- * whether to autocommit (defaults to true?)
- * optional URL to target (if different from base URL)
+* Command execution model
+* Environment variables
+* Exit codes and error handling  
+* Result JSON format
+* Debian-specific features
+* Complete examples
 
-The command should exit with code 0 when successful, and 1 otherwise. In
-the case of failure, the branch is discarded.
-
-If it is known that the command supports resuming, then a previous branch
-may be loaded if present. The SVP_RESUME environment variable
-will be set to a path to a JSON file with the previous runs metadata.
-The command is expected to import any metadata about the older changes
-and carry it forward.
-If resuming is not supported then all older changes will be discarded
-(and possibly made again by the command).
-
-Environment variables that will be set:
-
- * SVP_API: Silver-platter API major version number. Currently set to 1
- * COMMITTER: Set to a committer identity (optional)
- * SVP_RESUME: Set to a file path with JSON results from the last run,
-   if available and if --resume is enabled.
- * SVP_RESULT: Set to a (optional) path that should be created by the command
-     with extra details
-
-The output JSON should include the following fields:
-
- * description: Optional one-line text description of the error or changes made
- * value: Optional integer with an indicator of the value of the changes made
- * tags: Optional list of names of tags that should be included with the change
-   (autodetected if not specified)
- * context: Optional command-specific result data, made available
-        during template expansion
- * target-branch-url: URL for branch to target, if different from original URL
- * versions: Dictionary with software used. Project name as key,
-        version as value.
-
-Debian operations
------------------
-
-For Debian branches, branches will be provided named according to DEP-13.
-The following environment variables will be set as well:
-
- * DEB_SOURCE: Source package name
- * DEB_UPDATE_CHANGELOG: Set to either update_changelog/leave_changelog (optional)
- * ALLOW_REFORMATTING: boolean indicating whether reformatting is allowed
+For implementation details specific to Silver-Platter's internals, see
+the codemod module in the source code at ``src/codemod.rs``.

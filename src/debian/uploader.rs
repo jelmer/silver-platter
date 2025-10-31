@@ -1,12 +1,14 @@
 //! Upload packages to the Debian archive.
 use crate::vcs::{open_branch, BranchOpenError};
-use breezyshim::branch::Branch;
+use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::debian::apt::{Apt, LocalApt, RemoteApt};
 use breezyshim::debian::error::Error as DebianError;
 use breezyshim::error::Error as BrzError;
 use breezyshim::gpg::VerificationResult;
+use breezyshim::repository::Repository;
 use breezyshim::revisionid::RevisionId;
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
+use breezyshim::workingtree::GenericWorkingTree;
 use debversion::Version;
 use std::collections::HashMap;
 use std::path::Path;
@@ -62,14 +64,41 @@ impl LastAttemptDatabase {
 #[cfg(feature = "last-attempt-db")]
 impl Default for LastAttemptDatabase {
     fn default() -> Self {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter").unwrap();
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter");
         let last_attempt_path = xdg_dirs.place_data_file("last-upload-attempt.tdb").unwrap();
         Self::open(last_attempt_path.as_path())
     }
 }
 
+/// Errors that can occur when signing a package.
+#[derive(Debug)]
+pub enum SignError {
+    /// debsign failed
+    Failed(String),
+
+    /// I/O error
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for SignError {
+    fn from(e: std::io::Error) -> Self {
+        SignError::IOError(e)
+    }
+}
+
+impl std::fmt::Display for SignError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SignError::Failed(s) => write!(f, "Failed to sign: {}", s),
+            SignError::IOError(e) => write!(f, "I/O error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for SignError {}
+
 /// debsign a changes file
-pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
+pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
     let mut args = vec!["debsign".to_string()];
     if let Some(keyid) = keyid {
         args.push(format!("-k{}", keyid));
@@ -81,27 +110,52 @@ pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), std::io::Error> {
         .status()?;
 
     if !status.success() {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "debsign failed",
-        ))
+        Err(SignError::Failed("debsign failed".to_string()))
     } else {
         Ok(())
     }
 }
 
+/// Errors that can occur when uploading a package.
+#[derive(Debug)]
+pub enum UploadError {
+    /// Upload failed
+    Failed(String),
+
+    /// I/O error
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for UploadError {
+    fn from(e: std::io::Error) -> Self {
+        UploadError::IOError(e)
+    }
+}
+
+impl std::fmt::Display for UploadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            UploadError::Failed(s) => write!(f, "Failed to upload: {}", s),
+            UploadError::IOError(e) => write!(f, "I/O error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for UploadError {}
+
 /// dput a changes file
-pub fn dput_changes(path: &Path) -> Result<(), std::io::Error> {
-    let status = std::process::Command::new("dput")
+pub fn dput_changes(path: &Path, host: Option<&str>) -> Result<(), UploadError> {
+    let mut binding = std::process::Command::new("dput");
+    let mut cmd = binding.current_dir(path.parent().unwrap());
+    if let Some(host) = host {
+        cmd = cmd.arg(host)
+    };
+    let status = cmd
         .arg(path.file_name().unwrap().to_string_lossy().to_string())
-        .current_dir(path.parent().unwrap())
         .status()?;
 
     if !status.success() {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "dput failed",
-        ))
+        Err(UploadError::Failed("dput failed".to_string()))
     } else {
         Ok(())
     }
@@ -496,17 +550,20 @@ fn vcswatch_prescan_packages(
     Ok((packages, failures, vcswatch))
 }
 
-fn find_last_release_revid(branch: &dyn Branch, version: &Version) -> Result<RevisionId, BrzError> {
+fn find_last_release_revid(
+    branch: &GenericBranch,
+    version: &Version,
+) -> Result<RevisionId, BrzError> {
     use pyo3::prelude::*;
     pyo3::Python::with_gil(|py| -> PyResult<RevisionId> {
-        let m = py.import_bound("breezy.plugins.debian.import_dsc")?;
+        let m = py.import("breezy.plugins.debian.import_dsc")?;
         let dbc = m.getattr("DistributionBranch")?;
-        let dbc = dbc.call1((branch.to_object(py), py.None()))?;
+        let dbc = dbc.call1((branch.clone(), py.None()))?;
 
-        dbc.call_method1("revid_of_version", (version.to_object(py),))?
+        dbc.call_method1("revid_of_version", (version.to_string(),))?
             .extract::<RevisionId>()
     })
-    .map_err(|e| BrzError::from(e))
+    .map_err(BrzError::from)
 }
 
 /// Select packages from the apt repository.
@@ -595,7 +652,7 @@ pub fn main(
     if shuffle {
         use rand::seq::SliceRandom;
         // Shuffle packages vec
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         packages.shuffle(&mut rng);
     }
 
@@ -740,6 +797,9 @@ pub enum PrepareUploadError {
 
     /// There is a missing nested tree
     MissingNestedTree(std::path::PathBuf),
+
+    /// Sign error
+    SignError(SignError),
 }
 
 impl From<BrzError> for PrepareUploadError {
@@ -753,7 +813,7 @@ impl From<BrzError> for PrepareUploadError {
 
 /// Prepare a package for upload.
 pub fn prepare_upload_package(
-    local_tree: &WorkingTree,
+    local_tree: &GenericWorkingTree,
     subpath: &std::path::Path,
     pkg: &str,
     last_uploaded_version: Option<&debversion::Version>,
@@ -761,9 +821,9 @@ pub fn prepare_upload_package(
     gpg_strategy: Option<breezyshim::gpg::GPGStrategy>,
     min_commit_age: Option<i64>,
     allowed_committers: Option<&[String]>,
-    apt: Option<&dyn Apt>,
+    _apt: Option<&dyn Apt>,
 ) -> Result<(std::path::PathBuf, Option<String>), PrepareUploadError> {
-    let mut builder = builder.to_string();
+    let _builder = builder.to_string();
     let debian_path = subpath.join("debian");
     #[cfg(feature = "detect-update-changelog")]
     let run_gbp_dch = {
@@ -849,7 +909,7 @@ pub fn prepare_upload_package(
     let lock = local_tree.lock_read();
     let last_release_revid: RevisionId = if let Some(last_uploaded_version) = last_uploaded_version
     {
-        match find_last_release_revid(local_tree.branch().as_ref(), last_uploaded_version) {
+        match find_last_release_revid(&local_tree.branch(), last_uploaded_version) {
             Ok(revid) => revid,
             Err(BrzError::NoSuchTag(..)) => {
                 return Err(PrepareUploadError::LastReleaseRevisionNotFound(
@@ -869,9 +929,8 @@ pub fn prepare_upload_package(
         .iter_lefthand_ancestry(
             &local_tree.branch().last_revision(),
             Some(&[last_release_revid]),
-        )
-        .collect::<Result<Vec<RevisionId>, _>>()
-        .unwrap();
+        )?
+        .collect::<Result<Vec<RevisionId>, _>>()?;
     if revids.is_empty() {
         log::info!("No pending changes");
         return Err(PrepareUploadError::NoUnuploadedChanges(
@@ -949,7 +1008,7 @@ pub fn prepare_upload_package(
                 .unwrap();
         }
     }
-    let tag_name = match breezyshim::debian::release::release(local_tree, subpath) {
+    let _tag_name = match breezyshim::debian::release::release(local_tree, subpath) {
         Ok(tag_name) => tag_name,
         Err(breezyshim::debian::release::ReleaseError::GeneratedFile) => {
             return Err(PrepareUploadError::GeneratedChangelogFile);
@@ -959,20 +1018,22 @@ pub fn prepare_upload_package(
         }
     };
     let target_dir = tempfile::tempdir().unwrap();
-    if let Some(last_uploaded_version) = last_uploaded_version {
-        builder = builder.replace(
+    let builder = if let Some(last_uploaded_version) = last_uploaded_version {
+        builder.replace(
             "${LAST_VERSION}",
             last_uploaded_version.to_string().as_str(),
-        );
-    }
+        )
+    } else {
+        builder.to_string()
+    };
     let target_changes = breezyshim::debian::build_helper(
         local_tree,
         subpath,
-        local_tree.branch().as_ref(),
+        &local_tree.branch(),
         target_dir.path(),
         builder.as_str(),
         false,
-        apt,
+        _apt,
     )
     .map_err(|e| match e {
         DebianError::BrzError(o) => PrepareUploadError::BrzError(o),
@@ -986,8 +1047,11 @@ pub fn prepare_upload_package(
         e => PrepareUploadError::DebianError(e),
     })?;
     let source = target_changes.get("source").unwrap();
-    debsign(std::path::Path::new(&source), None).unwrap();
-    Ok((source.into(), Some(tag_name)))
+    debsign(std::path::Path::new(&source), None).map_err(|e| {
+        log::warn!("Failed to sign changes file: {:?}", e);
+        PrepareUploadError::SignError(e)
+    })?;
+    Ok((source.into(), Some(_tag_name)))
 }
 
 /// Process a package for upload.
@@ -1131,7 +1195,7 @@ pub fn process_package(
     };
     let mut ws_builder = crate::workspace::Workspace::builder();
     ws_builder = ws_builder.additional_colocated_branches(
-        crate::debian::pick_additional_colocated_branches(main_branch.as_ref()),
+        crate::debian::pick_additional_colocated_branches(&main_branch),
     );
     let ws = ws_builder.main_branch(main_branch).build().unwrap();
     if source_name.is_none() {
@@ -1380,6 +1444,13 @@ pub fn process_package(
                 )),
             ));
         }
+        Err(PrepareUploadError::SignError(e)) => {
+            log::warn!("{}: Failed to sign changes file: {:?}", source_name, e);
+            return Err(UploadPackageError::ProcessingFailure(
+                "sign-error".to_string(),
+                Some(format!("{:?}", e)),
+            ));
+        }
     };
 
     if let Some(verify_command) = verify_command {
@@ -1453,7 +1524,10 @@ pub fn process_package(
             ));
         }
     }
-    dput_changes(&target_changes).unwrap();
+    dput_changes(&target_changes, None).map_err(|e| {
+        log::error!("{}: Error uploading: {}", source_name, e);
+        UploadPackageError::ProcessingFailure("upload-error".to_string(), Some(format!("{:?}", e)))
+    })?;
     if diff {
         ws.show_diff(Box::new(std::io::stdout()), None, None)
             .unwrap();

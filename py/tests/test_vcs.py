@@ -1,5 +1,5 @@
-#!/usr/bin/python3
-# Copyright (C) 2018 Jelmer Vernooij
+#!/usr/bin/python
+# Copyright (C) 2024 Jelmer Vernooij
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,10 +16,21 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import os
-import sys
 
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+from breezy.tests import TestCaseWithTransport
 
-from silver_platter.debian.__main__ import main  # noqa: E402
+from silver_platter import BranchMissing, _open_branch
 
-sys.exit(main())
+
+class OpenBranchTests(TestCaseWithTransport):
+    def test_simple(self):
+        a = self.make_branch("target")
+        b = _open_branch(a.base)
+        self.assertEqual(a.base, b.base)
+
+    def test_missing(self):
+        url = f"file://{os.getcwd()}/nonexistent"
+        e = self.assertRaises(BranchMissing, _open_branch, url)
+        self.assertIsInstance(e.url, str)
+        self.assertIsInstance(e.message, str)
+        self.assertEqual(e.url, url)

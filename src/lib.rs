@@ -13,6 +13,9 @@
 //! have conflicts due to upstream changes.
 
 #![deny(missing_docs)]
+// Allow unknown cfgs for now, since import_exception_bound
+// expects a gil-refs feature that is not defined
+#![allow(unexpected_cfgs)]
 pub mod batch;
 pub mod candidates;
 pub mod checks;
@@ -61,15 +64,16 @@ pub enum Mode {
     Bts,
 }
 
-impl ToString for Mode {
-    fn to_string(&self) -> String {
-        match self {
-            Mode::Push => "push".to_string(),
-            Mode::Propose => "propose".to_string(),
-            Mode::AttemptPush => "attempt-push".to_string(),
-            Mode::PushDerived => "push-derived".to_string(),
-            Mode::Bts => "bts".to_string(),
-        }
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Mode::Push => "push",
+            Mode::Propose => "propose",
+            Mode::AttemptPush => "attempt-push",
+            Mode::PushDerived => "push-derived",
+            Mode::Bts => "bts",
+        };
+        write!(f, "{}", s)
     }
 }
 
@@ -104,13 +108,6 @@ impl pyo3::FromPyObject<'_> for Mode {
                 s
             ),))),
         }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl pyo3::ToPyObject for Mode {
-    fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
-        self.to_string().to_object(py)
     }
 }
 
@@ -207,3 +204,83 @@ pub trait CodemodResult {
 
 /// The version of the library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_derived_branch_name() {
+        assert_eq!(derived_branch_name("script.py"), "script");
+        assert_eq!(derived_branch_name("path/to/script.py"), "script");
+        assert_eq!(derived_branch_name("/absolute/path/to/script.py"), "script");
+        assert_eq!(derived_branch_name("script.py arg1 arg2"), "script");
+        assert_eq!(derived_branch_name(""), "");
+        assert_eq!(derived_branch_name("script"), "script");
+        assert_eq!(derived_branch_name("no-extension."), "no-extension");
+    }
+
+    #[test]
+    fn test_commit_pending_from_str() {
+        assert_eq!(
+            CommitPending::from_str("auto").unwrap(),
+            CommitPending::Auto
+        );
+        assert_eq!(CommitPending::from_str("yes").unwrap(), CommitPending::Yes);
+        assert_eq!(CommitPending::from_str("no").unwrap(), CommitPending::No);
+
+        let err = CommitPending::from_str("invalid").unwrap_err();
+        assert_eq!(err, "Unknown commit-pending value: invalid");
+    }
+
+    #[test]
+    fn test_commit_pending_serialization() {
+        // Test serialization
+        let auto_json = serde_json::to_string(&CommitPending::Auto).unwrap();
+        let yes_json = serde_json::to_string(&CommitPending::Yes).unwrap();
+        let no_json = serde_json::to_string(&CommitPending::No).unwrap();
+
+        assert_eq!(auto_json, "null");
+        assert_eq!(yes_json, "true");
+        assert_eq!(no_json, "false");
+
+        // Test deserialization
+        let auto: CommitPending = serde_json::from_str("null").unwrap();
+        let yes: CommitPending = serde_json::from_str("true").unwrap();
+        let no: CommitPending = serde_json::from_str("false").unwrap();
+
+        assert_eq!(auto, CommitPending::Auto);
+        assert_eq!(yes, CommitPending::Yes);
+        assert_eq!(no, CommitPending::No);
+    }
+
+    #[test]
+    fn test_commit_pending_is_default() {
+        assert!(CommitPending::Auto.is_default());
+        assert!(!CommitPending::Yes.is_default());
+        assert!(!CommitPending::No.is_default());
+    }
+
+    #[test]
+    fn test_mode_from_str() {
+        assert_eq!(Mode::from_str("push").unwrap(), Mode::Push);
+        assert_eq!(Mode::from_str("propose").unwrap(), Mode::Propose);
+        assert_eq!(Mode::from_str("attempt").unwrap(), Mode::AttemptPush);
+        assert_eq!(Mode::from_str("attempt-push").unwrap(), Mode::AttemptPush);
+        assert_eq!(Mode::from_str("push-derived").unwrap(), Mode::PushDerived);
+        assert_eq!(Mode::from_str("bts").unwrap(), Mode::Bts);
+
+        let err = Mode::from_str("invalid").unwrap_err();
+        assert_eq!(err, "Unknown mode: invalid");
+    }
+
+    #[test]
+    fn test_mode_to_string() {
+        assert_eq!(Mode::Push.to_string(), "push");
+        assert_eq!(Mode::Propose.to_string(), "propose");
+        assert_eq!(Mode::AttemptPush.to_string(), "attempt-push");
+        assert_eq!(Mode::PushDerived.to_string(), "push-derived");
+        assert_eq!(Mode::Bts.to_string(), "bts");
+    }
+}

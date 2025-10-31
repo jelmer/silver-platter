@@ -134,6 +134,12 @@ pub struct RecipeBuilder {
     recipe: Recipe,
 }
 
+impl Default for RecipeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecipeBuilder {
     /// Create a new recipe builder
     pub fn new() -> Self {
@@ -333,5 +339,194 @@ merge-request:
             recipe.command.unwrap().argv(),
             vec!["echo".to_string(), "hello".to_string()]
         );
+    }
+
+    #[test]
+    fn test_builder_with_optional_fields() {
+        let recipe = RecipeBuilder::new()
+            .name("test".to_string())
+            .command(Command::Argv(vec!["echo".to_string(), "hello".to_string()]))
+            .mode(Mode::Propose)
+            .label("test-label".to_string())
+            .label("another-label".to_string())
+            .resume(true)
+            .commit_pending(crate::CommitPending::Yes)
+            .build();
+
+        assert_eq!(recipe.name, Some("test".to_string()));
+        assert_eq!(
+            recipe.labels,
+            Some(vec!["test-label".to_string(), "another-label".to_string()])
+        );
+        assert_eq!(recipe.resume, Some(true));
+        assert_eq!(recipe.commit_pending, crate::CommitPending::Yes);
+    }
+
+    #[test]
+    fn test_command_shell() {
+        let shell_command = Command::Shell("echo hello".to_string());
+
+        // Test shell() method
+        assert_eq!(shell_command.shell(), "echo hello");
+
+        // Test argv() method for shell command
+        assert_eq!(
+            shell_command.argv(),
+            vec!["sh".to_string(), "-c".to_string(), "echo hello".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_command_argv() {
+        let argv_command = Command::Argv(vec!["echo".to_string(), "hello".to_string()]);
+
+        // Test shell() method for argv command
+        assert_eq!(argv_command.shell(), "echo hello");
+
+        // Test argv() method
+        assert_eq!(
+            argv_command.argv(),
+            vec!["echo".to_string(), "hello".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_merge_request_render() {
+        let merge_request = MergeRequest {
+            commit_message: Some("Commit: {{ var }}".to_string()),
+            title: Some("Title: {{ var }}".to_string()),
+            propose_threshold: None,
+            auto_merge: None,
+            description: [
+                (
+                    Some(DescriptionFormat::Markdown),
+                    "Markdown: {{ var }}".to_string(),
+                ),
+                (
+                    Some(DescriptionFormat::Plain),
+                    "Plain: {{ var }}".to_string(),
+                ),
+                (None, "Default: {{ var }}".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        let mut context = tera::Context::new();
+        context.insert("var", "test-value");
+
+        // Test rendering commit message
+        let commit_message = merge_request.render_commit_message(&context).unwrap();
+        assert_eq!(commit_message, Some("Commit: test-value".to_string()));
+
+        // Test rendering title
+        let title = merge_request.render_title(&context).unwrap();
+        assert_eq!(title, Some("Title: test-value".to_string()));
+
+        // Test rendering description with specific format
+        let markdown_desc = merge_request
+            .render_description(DescriptionFormat::Markdown, &context)
+            .unwrap();
+        assert_eq!(markdown_desc, Some("Markdown: test-value".to_string()));
+
+        // Test rendering description with another format
+        let plain_desc = merge_request
+            .render_description(DescriptionFormat::Plain, &context)
+            .unwrap();
+        assert_eq!(plain_desc, Some("Plain: test-value".to_string()));
+
+        // Test rendering description with format not defined (should fall back to default)
+        let html_desc = merge_request
+            .render_description(DescriptionFormat::Html, &context)
+            .unwrap();
+        assert_eq!(html_desc, Some("Default: test-value".to_string()));
+    }
+
+    #[test]
+    fn test_merge_request_no_templates() {
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            auto_merge: None,
+            description: HashMap::new(),
+        };
+
+        let context = tera::Context::new();
+
+        // Test rendering with no templates
+        let commit_message = merge_request.render_commit_message(&context).unwrap();
+        assert_eq!(commit_message, None);
+
+        let title = merge_request.render_title(&context).unwrap();
+        assert_eq!(title, None);
+
+        let desc = merge_request
+            .render_description(DescriptionFormat::Markdown, &context)
+            .unwrap();
+        assert_eq!(desc, None);
+    }
+
+    #[test]
+    fn test_merge_request_auto_merge() {
+        // Test default value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: None,
+        };
+        assert_eq!(merge_request.auto_merge, None);
+
+        // Test explicit true value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(true),
+        };
+        assert_eq!(merge_request.auto_merge, Some(true));
+
+        // Test explicit false value
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(false),
+        };
+        assert_eq!(merge_request.auto_merge, Some(false));
+    }
+
+    #[test]
+    fn test_merge_request_auto_merge_serialization() {
+        use serde_yaml;
+
+        // Test serialization with auto_merge: true
+        let merge_request = MergeRequest {
+            commit_message: None,
+            title: None,
+            propose_threshold: None,
+            description: std::collections::HashMap::new(),
+            auto_merge: Some(true),
+        };
+        let yaml = serde_yaml::to_string(&merge_request).unwrap();
+        assert!(yaml.contains("auto-merge: true"));
+
+        // Test deserialization
+        let yaml_content = r#"
+auto-merge: true
+"#;
+        let merge_request: MergeRequest = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(merge_request.auto_merge, Some(true));
+
+        // Test deserialization with false
+        let yaml_content = r#"
+auto-merge: false
+"#;
+        let merge_request: MergeRequest = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(merge_request.auto_merge, Some(false));
     }
 }

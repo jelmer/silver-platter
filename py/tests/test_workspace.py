@@ -15,7 +15,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import os
 import shutil
 
 from breezy.revision import NULL_REVISION
@@ -32,7 +31,7 @@ class TestWorkspace(TestCaseWithTransport):
             self.assertFalse(ws.any_branch_changes())
             self.assertFalse(ws.changes_since_base())
             ws.local_tree.commit("A change")
-            self.assertEqual(ws.path, os.path.join(ws.local_tree.basedir, "."))
+            self.assertEqual(str(ws.path), ws.local_tree.basedir)
             self.assertTrue(ws.changes_since_main())
             self.assertTrue(ws.changes_since_base())
             self.assertTrue(ws.any_branch_changes())
