@@ -490,8 +490,10 @@ mod command_result_tests {
 #[cfg(test)]
 mod script_runner_tests {
     use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::testing::TestEnv;
     use breezyshim::tree::MutableTree;
     use breezyshim::WorkingTree;
+    use serial_test::serial;
 
     fn make_executable(script_path: &std::path::Path) {
         #[cfg(unix)]
@@ -505,7 +507,9 @@ mod script_runner_tests {
     }
 
     #[test]
+    #[serial]
     fn test_no_api() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree = create_standalone_workingtree(&d, "bzr").unwrap();
@@ -547,7 +551,9 @@ echo Did a thing
     }
 
     #[test]
+    #[serial]
     fn test_api() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree = create_standalone_workingtree(&d, "bzr").unwrap();
@@ -589,7 +595,9 @@ echo '{"description": "Did a thing", "code": "success"}' > $SVP_RESULT
     }
 
     #[test]
+    #[serial]
     fn test_new_file() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree = create_standalone_workingtree(&d, "bzr").unwrap();
@@ -632,7 +640,9 @@ echo Did a thing
     }
 
     #[test]
+    #[serial]
     fn test_no_changes() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let d = td.path().join("t");
         let tree =

@@ -816,9 +816,13 @@ mod tests {
     use super::*;
 
     use breezyshim::controldir::ControlDirFormat;
+    use breezyshim::testing::TestEnv;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_create_workspace() {
+        let _test_env = TestEnv::new();
         let mut ws = Workspace::builder().build().unwrap();
 
         assert_eq!(ws.local_tree().branch().name().as_ref().unwrap(), "");
@@ -883,7 +887,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_nascent() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let origin = breezyshim::controldir::create_standalone_workingtree(
             &td.path().join("origin"),
@@ -927,7 +933,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_without_main() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let ws = Workspace::builder()
@@ -959,7 +967,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_basic() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1008,7 +1018,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_cached_branch_up_to_date() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1053,7 +1065,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_cached_branch_out_of_date() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1119,7 +1133,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_colocated() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1183,7 +1199,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resume_continue() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1243,7 +1261,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resume_discard() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1306,7 +1326,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resume_continue_with_unchanged_colocated() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1382,7 +1404,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resume_discard_with_unchanged_colocated() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(
@@ -1468,7 +1492,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_defer_destroy() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
 
         let origin = breezyshim::controldir::create_standalone_workingtree(

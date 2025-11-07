@@ -312,7 +312,9 @@ mod tests {
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
     use breezyshim::prelude::MutableTree;
+    use breezyshim::testing::TestEnv;
     use breezyshim::WorkingTree;
+    use serial_test::serial;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -371,7 +373,9 @@ Description: Test package for unit tests
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_script_error() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -435,7 +439,9 @@ Description: Test package for unit tests
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_no_changes() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -503,7 +509,9 @@ Description: Test package for unit tests
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_update_changelog() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
