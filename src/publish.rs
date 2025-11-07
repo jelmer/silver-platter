@@ -1015,11 +1015,15 @@ pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breezyshim::testing::TestEnv;
     use breezyshim::tree::MutableTree;
     use breezyshim::WorkingTree;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_no_new_commits() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1042,7 +1046,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_no_op_commits() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1071,7 +1077,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_indep() {
+        let _test_env = TestEnv::new();
         use breezyshim::bazaar::tree::MutableInventoryTree;
         use breezyshim::bazaar::FileId;
         use breezyshim::controldir::create_standalone_workingtree;
@@ -1129,7 +1137,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_changes() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1158,7 +1168,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_push_result() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::{
             create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
         };

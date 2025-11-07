@@ -85,6 +85,8 @@ mod tests {
     use super::*;
     use breezyshim::controldir::ControlDirFormat;
     use breezyshim::prelude::{Branch, MutableTree};
+    use breezyshim::testing::TestEnv;
+    use serial_test::serial;
     use std::error::Error as StdError;
     use std::path::Path;
     use tempfile::tempdir;
@@ -246,7 +248,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_post_check_with_file_operations() {
+        let _test_env = TestEnv::new();
         let td = tempdir().unwrap();
         let wt = breezyshim::controldir::create_standalone_workingtree(
             td.path(),

@@ -881,10 +881,14 @@ fn publish_one(
 mod tests {
     use super::*;
     use crate::Mode;
+    use breezyshim::testing::TestEnv;
+    use serial_test::serial;
     use std::collections::HashMap;
 
     #[test]
+    #[serial]
     fn test_entry_from_recipe() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
         breezyshim::controldir::create_branch_convenience(
@@ -910,7 +914,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_batch_from_recipe() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
         breezyshim::controldir::create_branch_convenience(
@@ -941,7 +947,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_drop_batch_entry() {
+        let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
         breezyshim::controldir::create_branch_convenience(
