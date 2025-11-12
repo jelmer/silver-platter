@@ -779,6 +779,7 @@ fn main() -> Result<(), i32> {
                 silver_platter::debian::build(
                     &local_tree,
                     &subpath,
+                    &local_tree.branch(),
                     Some(builder),
                     build_target_dir.as_deref(),
                 )

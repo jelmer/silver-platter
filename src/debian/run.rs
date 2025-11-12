@@ -191,6 +191,7 @@ pub fn apply_and_publish(
         crate::debian::build(
             ws.local_tree(),
             subpath,
+            ws.main_branch().unwrap(),
             builder.as_deref(),
             build_target_dir.as_deref(),
         )
