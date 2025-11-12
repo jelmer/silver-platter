@@ -17,7 +17,7 @@ extension-module = ["pyo3/extension-module"]
 default = ["debian"]
 
 [dependencies]
-silver-platter = { path = "..", default-features = false, features = ["pyo3", "detect-update-changelog"] }
+silver-platter = { path = "..", default-features = false, features = ["detect-update-changelog"] }
 pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
 tera = { workspace = true }
