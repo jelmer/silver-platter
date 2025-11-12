@@ -2753,7 +2753,6 @@ dependencies = [
  "libc",
  "log",
  "percent-encoding",
- "pyo3",
  "rand 0.9.2",
  "regex",
  "reqwest",
