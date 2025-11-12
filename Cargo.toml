@@ -12,10 +12,10 @@ categories = ["development-tools"]
 
 [dependencies]
 tempfile = "3"
-serde_yaml = ">=0.9"
-log = ">=0.4"
+serde_yaml = "0.9"
+log = "0.4"
 percent-encoding = "2"
-chrono = ">=0.4"
+chrono = "0.4"
 regex = "1"
 debian-changelog = { workspace = true }
 tera.workspace = true
@@ -24,17 +24,17 @@ shlex = "1"
 env_logger = { workspace = true, optional = true }
 trivialdb = { version = "0.1.7", optional = true }
 flate2 = { version = "1", optional = true }
-reqwest = { version = ">=0.12", optional = true, features = ["blocking"] }
-lazy-regex = ">=2"
+reqwest = { version = ">=0.12,<0.13", optional = true, features = ["blocking"] }
+lazy-regex = "3"
 libc = "0.2"
 xdg = { version = "3.0", optional = true }
-debian-analyzer = { version = ">=0.159.2", optional = true }
+debian-analyzer = { version = "0.160", optional = true }
 gpgme = { version = "0.11.0", optional = true }
 pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
-debian-control = { version = ">=0.1", optional = true }
+debian-control = { version = "0.2", optional = true }
 rand = "0.9.2"
-launchpadlib = { version = "0.4.6", optional = true }
+launchpadlib = { version = ">=0.4.6,<0.6", optional = true }
 
 [workspace]
 members = [ "svp-client", "svp-py" ]
