@@ -83,8 +83,6 @@ features = [ "serde",]
 serial_test = "3"
 
 [workspace.dependencies]
-pyo3 = "0.27"
-pyo3-log = ">=0.11"
 serde_json = "1"
 tera = "1"
 serde = "1"
