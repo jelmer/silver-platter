@@ -652,7 +652,8 @@ fn push_changes(
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
-    )?;
+    )
+    .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))?;
     Ok(())
 }
 
@@ -774,7 +775,7 @@ fn propose_changes(
         work_in_progress,
     )
     .map(|(p, b)| (MergeProposal(p), b))
-    .map_err(|e| PyPublishError(e).into())
+    .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))
 }
 
 #[pyclass]
@@ -854,28 +855,31 @@ fn publish_changes(
     } else {
         None
     };
-    Ok(PublishResult(silver_platter::publish::publish_changes(
-        &local_branch,
-        &main_branch,
-        resume_branch.as_ref(),
-        mode.0,
-        name,
-        get_proposal_description,
-        get_proposal_commit_message,
-        get_proposal_title,
-        forge.map(|f| &f.0),
-        allow_create_proposal,
-        labels,
-        overwrite_existing,
-        existing_proposal.map(|p| p.0.clone()),
-        reviewers,
-        tags,
-        derived_owner,
-        allow_collaboration,
-        stop_revision.as_ref(),
-        auto_merge,
-        None, // work_in_progress
-    )?))
+    Ok(PublishResult(
+        silver_platter::publish::publish_changes(
+            &local_branch,
+            &main_branch,
+            resume_branch.as_ref(),
+            mode.0,
+            name,
+            get_proposal_description,
+            get_proposal_commit_message,
+            get_proposal_title,
+            forge.map(|f| &f.0),
+            allow_create_proposal,
+            labels,
+            overwrite_existing,
+            existing_proposal.map(|p| p.0.clone()),
+            reviewers,
+            tags,
+            derived_owner,
+            allow_collaboration,
+            stop_revision.as_ref(),
+            auto_merge,
+            None, // work_in_progress
+        )
+        .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))?,
+    ))
 }
 
 #[pyclass]
@@ -956,6 +960,7 @@ fn check_proposal_diff(
 #[cfg(feature = "debian")]
 pub(crate) mod debian {
     use super::*;
+    use breezyshim::WorkingTree;
     use silver_platter::debian::codemod::Error as DebianCodemodError;
 
     create_exception!(silver_platter, DputFailure, PyException);
@@ -1202,7 +1207,16 @@ pub(crate) mod debian {
         result_dir: Option<PathBuf>,
     ) -> PyResult<()> {
         let tree = breezyshim::workingtree::GenericWorkingTree(tree);
-        silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
+        let branch = tree.branch();
+        silver_platter::debian::build(
+            &tree,
+            subpath.as_path(),
+            &branch,
+            builder,
+            result_dir.as_deref(),
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Build failed: {}", e)))?;
+        Ok(())
     }
 
     #[pyfunction]
@@ -1488,7 +1502,9 @@ fn _open_branch(py: Python, url: &str, name: Option<&str>) -> PyResult<Py<PyAny>
     let url = url
         .parse()
         .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?;
-    Ok(silver_platter::vcs::open_branch(&url, None, None, name)?.to_object(py))
+    Ok(silver_platter::vcs::open_branch(&url, None, None, name)
+        .map_err(|e| Into::<PyErr>::into(PyBranchOpenError(e)))?
+        .to_object(py))
 }
 
 #[pymodule(name = "silver_platter")]
