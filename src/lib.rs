@@ -92,26 +92,6 @@ impl std::str::FromStr for Mode {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl pyo3::FromPyObject<'_, '_> for Mode {
-    type Error = pyo3::PyErr;
-
-    fn extract(ob: pyo3::Borrowed<'_, '_, pyo3::PyAny>) -> Result<Self, Self::Error> {
-        let s: std::borrow::Cow<str> = ob.extract()?;
-        match s.as_ref() {
-            "push" => Ok(Mode::Push),
-            "propose" => Ok(Mode::Propose),
-            "attempt-push" => Ok(Mode::AttemptPush),
-            "push-derived" => Ok(Mode::PushDerived),
-            "bts" => Ok(Mode::Bts),
-            _ => Err(pyo3::exceptions::PyValueError::new_err((format!(
-                "Unknown mode: {}",
-                s
-            ),))),
-        }
-    }
-}
-
 /// Returns the branch name derived from a script name
 pub fn derived_branch_name(script: &str) -> &str {
     let first_word = script.split(' ').next().unwrap_or("");

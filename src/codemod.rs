@@ -281,6 +281,7 @@ pub fn script_runner(
     let mut command = std::process::Command::new(script[0]);
     command.args(&script[1..]);
     command.envs(env);
+    command.stdin(std::process::Stdio::null());
     command.stdout(std::process::Stdio::piped());
     command.stderr(stderr);
     command.current_dir(local_tree.abspath(subpath).unwrap());

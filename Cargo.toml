@@ -30,7 +30,6 @@ libc = "0.2"
 xdg = { version = "3.0", optional = true }
 debian-analyzer = { version = "0.160", optional = true }
 gpgme = { version = "0.11.0", optional = true }
-pyo3 = { optional = true, workspace = true }
 lazy_static = "1.5.0"
 debian-control = { version = "0.2", optional = true }
 rand = "0.9.2"
@@ -41,13 +40,12 @@ members = [ "svp-client", "svp-py" ]
 
 [features]
 default = ["debian", "detect-update-changelog", "cli"]
-debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:pyo3", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer", "dep:xdg"]
+debian = ["dep:debversion", "dep:flate2", "dep:reqwest", "dep:debian-control", "breezyshim/debian", "dep:debian-analyzer", "dep:xdg"]
 gpg = ["dep:gpgme"]
 last-attempt-db = ["dep:trivialdb"]
 detect-update-changelog = ["debian"]
 cli = ["dep:clap", "dep:env_logger"]
 launchpad = ["dep:launchpadlib"]
-pyo3 = ["dep:pyo3"]
 
 [package.metadata.all-features]
 # Only test specific feature combinations
@@ -59,7 +57,6 @@ only_include_features = [
     ["debian", "launchpad"],  # Debian with Launchpad
     ["debian", "last-attempt-db"],  # Debian with database
     ["cli"],  # Just CLI
-    ["pyo3"],  # Just Python bindings
 ]
 
 [dependencies.serde]
@@ -86,8 +83,6 @@ features = [ "serde",]
 serial_test = "3"
 
 [workspace.dependencies]
-pyo3 = "0.27"
-pyo3-log = ">=0.11"
 serde_json = "1"
 tera = "1"
 serde = "1"

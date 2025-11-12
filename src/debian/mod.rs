@@ -3,12 +3,8 @@ use breezyshim::branch::{Branch, GenericBranch};
 use breezyshim::debian::apt::Apt;
 use breezyshim::tree::{MutableTree, Tree, WorkingTree};
 use debian_changelog::{ChangeLog, Urgency};
+use debian_control::changes::Changes;
 use std::collections::HashMap;
-
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-#[cfg(not(feature = "detect-update-changelog"))]
-use pyo3::Borrowed;
 
 use std::path::Path;
 
@@ -46,20 +42,6 @@ pub struct ChangelogBehaviour {
 
 #[cfg(feature = "detect-update-changelog")]
 pub use debian_analyzer::detect_gbp_dch::ChangelogBehaviour;
-
-#[cfg(not(feature = "detect-update-changelog"))]
-impl<'py> FromPyObject<'_, 'py> for ChangelogBehaviour {
-    type Error = PyErr;
-
-    fn extract(obj: Borrowed<'_, 'py, PyAny>) -> Result<Self, Self::Error> {
-        let update_changelog = obj.getattr("update_changelog")?.extract()?;
-        let explanation = obj.getattr("explanation")?.extract()?;
-        Ok(ChangelogBehaviour {
-            update_changelog,
-            explanation,
-        })
-    }
-}
 
 /// Guess whether the changelog should be updated.
 pub fn guess_update_changelog(
@@ -170,14 +152,18 @@ pub fn install_built_package(
         }
 
         let path = entry.path();
-        let contents = std::fs::read(&path)?;
+        let contents = std::fs::read_to_string(&path)?;
 
-        let binary: Option<String> = Python::attach(|py| {
-            let m = py.import("debian.deb822")?;
-            let changes = m.getattr("Changes")?.call1((contents,))?;
+        let parse_result = Changes::parse(&contents);
+        if !parse_result.errors().is_empty() {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse changes file: {:?}", parse_result.errors()),
+            )));
+        }
+        let changes = parse_result.tree();
 
-            changes.call_method1("get", ("Binary",))?.extract()
-        })?;
+        let binary = changes.binary();
 
         if binary.is_some() {
             std::process::Command::new("debi")
@@ -194,30 +180,24 @@ pub fn install_built_package(
 /// # Arguments
 /// * `tree` - Working tree
 /// * `subpath` - Subpath to build in
+/// * `branch` - Branch
 /// * `builder` - Builder command (e.g. 'sbuild', 'debuild')
 /// * `result_dir` - Directory to copy results to
 pub fn build(
-    tree: &dyn WorkingTree,
+    tree: &breezyshim::workingtree::GenericWorkingTree,
     subpath: &Path,
+    branch: &breezyshim::branch::GenericBranch,
     builder: Option<&str>,
     result_dir: Option<&Path>,
-) -> PyResult<()> {
+) -> Result<std::collections::HashMap<String, std::path::PathBuf>, breezyshim::debian::error::Error>
+{
     let builder = builder.unwrap_or(DEFAULT_BUILDER);
+    let result_dir = result_dir.unwrap_or_else(|| Path::new(".."));
 
-    let path = tree.abspath(subpath).unwrap();
-
-    // TODO(jelmer): Refactor brz-debian so it's not necessary
-    // to call out to cmd_builddeb, but to lower-level
-    // functions instead.
-    Python::attach(|py| {
-        let m = py.import("breezy.plugins.debian.cmds")?;
-        let cmd_builddeb = m.getattr("cmd_builddeb")?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("builder", builder)?;
-        kwargs.set_item("result_dir", result_dir)?;
-        cmd_builddeb.call((path,), Some(&kwargs))?;
-        Ok(())
-    })
+    breezyshim::debian::build_helper(
+        tree, subpath, branch, result_dir, builder, false, // guess_upstream_branch_url
+        None,  // apt_repo
+    )
 }
 
 /// Run `gbp dch` in a directory.
@@ -236,14 +216,9 @@ pub fn gbp_dch(path: &std::path::Path) -> Result<(), std::io::Error> {
 pub fn find_last_release_revid(
     branch: &GenericBranch,
     version: debversion::Version,
-) -> PyResult<breezyshim::revisionid::RevisionId> {
-    Python::attach(|py| {
-        let m = py.import("breezy.plugins.debian.import_dsc")?;
-        let db = m
-            .getattr("DistributionBranch")?
-            .call1((branch.clone(), py.None()))?;
-        db.call_method1("revid_of_version", (version,))?.extract()
-    })
+) -> Result<breezyshim::revisionid::RevisionId, breezyshim::debian::error::Error> {
+    let db = breezyshim::debian::import_dsc::DistributionBranch::new(branch, branch, None, None);
+    db.revid_of_version(&version)
 }
 
 /// Pick the additional colocated branches to use for a given main branch.

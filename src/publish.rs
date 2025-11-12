@@ -517,44 +517,6 @@ impl std::fmt::Display for Error {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl From<Error> for pyo3::PyErr {
-    fn from(e: Error) -> Self {
-        use pyo3::import_exception;
-        use pyo3::prelude::*;
-        import_exception!(breezy.errors, NotBranchError);
-        import_exception!(breezy.errors, UnsupportedOperation);
-        import_exception!(breezy.errors, MergeProposalExists);
-        import_exception!(breezy.errors, PermissionDenied);
-        import_exception!(breezy.errors, DivergedBranches);
-        import_exception!(breezy.forge, UnsupportedForge);
-        import_exception!(breezy.forge, ForgeLoginRequired);
-        import_exception!(silver_platter, EmptyMergeProposal);
-        import_exception!(silver_platter, UnrelatedBranchExists);
-        import_exception!(silver_platter, InsufficientChangesForNewProposal);
-        import_exception!(silver_platter, NoTargetBranch);
-
-        match e {
-            Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
-            Error::Other(e) => e.into(),
-            Error::BranchOpenError(e) => e.into(),
-            Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
-            Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
-            Error::UnrelatedBranchExists => {
-                PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
-            }
-            Error::PermissionDenied => PyErr::new::<PermissionDenied, _>("PermissionDenied"),
-            Error::EmptyMergeProposal => PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal"),
-            Error::InsufficientChangesForNewProposal => {
-                PyErr::new::<InsufficientChangesForNewProposal, _>(
-                    "InsufficientChangesForNewProposal",
-                )
-            }
-            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
-        }
-    }
-}
-
 /// Publish a set of changes.
 ///
 /// # Arguments
