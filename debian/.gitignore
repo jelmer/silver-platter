@@ -1,1 +1,10 @@
 cargo_home/.package-cache
+cargo_home/.package-cache-mutate
+cargo_home/.global-cache
+cargo_registry/
+.debhelper/
+silver-platter
+*.substvars
+*.log
+files
+debhelper-build-stamp

@@ -3,7 +3,7 @@
 export CARGO_HOME=$(shell pwd)/debian/cargo_home
 
 %:
-	dh $@ --with python3 --buildsystem=pybuild
+	dh $@ --buildsystem=rust
 
 override_dh_auto_clean:
 	mv Cargo.lock.saved Cargo.lock || true
