@@ -1,8 +1,8 @@
-silver-platter (0.6.1-1) UNRELEASED; urgency=medium
+silver-platter (0.7.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Thu, 30 Oct 2025 23:57:35 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 26 Nov 2025 15:18:17 +0000
 
 silver-platter (0.5.44-1) unstable; urgency=low
 
