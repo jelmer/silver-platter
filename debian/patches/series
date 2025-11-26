@@ -1,2 +1,6 @@
 relax-lazy-static
 relax-reqwest
+newer-lazy-regex
+older-xdg
+older-rand
+newer-launchpadlib

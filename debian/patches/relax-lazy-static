@@ -2,12 +2,12 @@ Index: silver-platter/Cargo.toml
 ===================================================================
 --- silver-platter.orig/Cargo.toml
 +++ silver-platter/Cargo.toml
-@@ -31,7 +31,7 @@ debian-analyzer = { version = ">=0.158.8
- #debian-analyzer = { path = "../lintian-brush/analyzer", optional = true }
+@@ -31,7 +31,7 @@ xdg = "3.0"
+ debian-analyzer = { version = ">=0.159.2", optional = true }
  gpgme = { version = "0.11.0", optional = true }
  pyo3 = { optional = true, workspace = true }
 -lazy_static = "1.5.0"
 +lazy_static = ">=1.4.0"
  debian-control = { version = ">=0.1", optional = true }
- rand = "0.8.5"
- 
+ rand = "0.9.2"
+ launchpadlib = { version = "0.4.6", optional = true }
