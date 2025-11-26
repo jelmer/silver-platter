@@ -1,6 +1,7 @@
 silver-platter (0.7.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * Add lintian overrides for embedded libyaml - see #932634.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 26 Nov 2025 15:18:17 +0000
 

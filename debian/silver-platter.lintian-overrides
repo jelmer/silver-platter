@@ -1,0 +1,3 @@
+# Remove this once #932634 is fixed
+silver-platter: embedded-library libyaml [usr/bin/debian-svp]
+silver-platter: embedded-library libyaml [usr/bin/svp]
