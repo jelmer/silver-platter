@@ -94,7 +94,7 @@ pub fn add_changelog_entry(
         .chain(summary[1..].iter().map(|l| format!("  {}", l)))
         .collect::<Vec<_>>();
 
-    cl.auto_add_change(
+    cl.try_auto_add_change(
         summary
             .iter()
             .map(|l| l.as_str())
@@ -103,7 +103,8 @@ pub fn add_changelog_entry(
         maintainer.unwrap(),
         timestamp,
         urgency,
-    );
+    )
+    .unwrap();
     tree.put_file_bytes_non_atomic(path, cl.to_string().as_bytes())
         .unwrap();
 }
