@@ -1575,9 +1575,9 @@ dependencies = [
 
 [[package]]
 name = "launchpadlib"
-version = "0.5.3"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d7ea8dcc3b9f05d1bb422a4b0041ad79994faa5000e806ba1576dd9b9df7bca"
+checksum = "6708dc101b04d328ae9c61a5560b18ef3dfc98ed39c4a6eec3389097f78481c5"
 dependencies = [
  "chrono",
  "debversion",
@@ -3430,9 +3430,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "wadl"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "289ef5a1ae1bfce466d46663945372ae57744357b2b47c69fa91335ce0c9e939"
+checksum = "555a6dbe8d4ee0f0d6fc2eb0de593338ff80dcd4bd0a777225d38b6ab12a81bd"
 dependencies = [
  "form_urlencoded",
  "html2md",
