@@ -613,7 +613,6 @@ mod tests {
 
     // Helper that creates a test repository
     fn create_test_repo() -> (tempfile::TempDir, std::path::PathBuf, url::Url) {
-        let _test_env = TestEnv::new();
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
 
