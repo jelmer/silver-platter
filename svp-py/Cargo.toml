@@ -7,7 +7,6 @@ license = "Apache-2.0"
 repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 publish = false
-test = false
 
 [lib]
 crate-type = ["cdylib"]
