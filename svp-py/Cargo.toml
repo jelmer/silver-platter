@@ -7,6 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/jelmer/silver-platter.git"
 homepage = "https://github.com/jelmer/silver-platter"
 publish = false
+test = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -18,7 +19,7 @@ default = ["debian"]
 
 [dependencies]
 silver-platter = { path = "..", default-features = false, features = ["detect-update-changelog"] }
-pyo3 = "0.27"
+pyo3 = ">=0.27,<0.29"
 pyo3-log = ">=0.11"
 tera = { workspace = true }
 serde_json = { workspace = true }
