@@ -891,7 +891,7 @@ mod tests {
         let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
-        breezyshim::controldir::create_branch_convenience(
+        breezyshim::controldir::create_branch_convenience_as_generic(
             &url::Url::from_directory_path(remote.path()).unwrap(),
             None,
             &breezyshim::controldir::ControlDirFormat::default(),
@@ -919,7 +919,7 @@ mod tests {
         let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
-        breezyshim::controldir::create_branch_convenience(
+        breezyshim::controldir::create_branch_convenience_as_generic(
             &url::Url::from_directory_path(remote.path()).unwrap(),
             None,
             &breezyshim::controldir::ControlDirFormat::default(),
@@ -952,7 +952,7 @@ mod tests {
         let _test_env = TestEnv::new();
         let td = tempfile::tempdir().unwrap();
         let remote = tempfile::tempdir().unwrap();
-        breezyshim::controldir::create_branch_convenience(
+        breezyshim::controldir::create_branch_convenience_as_generic(
             &url::Url::from_directory_path(remote.path()).unwrap(),
             None,
             &breezyshim::controldir::ControlDirFormat::default(),

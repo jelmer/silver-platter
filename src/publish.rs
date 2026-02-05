@@ -167,35 +167,11 @@ pub fn find_existing_proposed(
     ),
     BrzError,
 > {
-    // GenericBranch implements PyBranch, so we can use it with forge operations
-    match forge.get_derived_branch(main_branch, name, owner, None) {
+    match forge.get_derived_branch_as_generic(main_branch, name, owner, None) {
         Ok(derived_branch) => {
             // Found existing derived branch
             let proposals =
                 forge.iter_proposals(main_branch, main_branch, MergeProposalStatus::Open)?;
-
-            // Convert derived_branch from Box<dyn Branch> to GenericBranch
-            let derived_branch =
-                crate::vcs::open_branch(&derived_branch.get_user_url(), None, None, None).map_err(
-                    |e| match e {
-                        crate::vcs::BranchOpenError::Missing { description, .. } => {
-                            BrzError::NotBranchError(description, None)
-                        }
-                        crate::vcs::BranchOpenError::Unavailable { description, .. }
-                        | crate::vcs::BranchOpenError::TemporarilyUnavailable {
-                            description, ..
-                        } => BrzError::ConnectionError(description),
-                        crate::vcs::BranchOpenError::Unsupported { description, .. } => {
-                            BrzError::UnknownFormat(description)
-                        }
-                        crate::vcs::BranchOpenError::RateLimited { description, .. } => {
-                            BrzError::ConnectionError(description)
-                        }
-                        crate::vcs::BranchOpenError::Other(description) => {
-                            BrzError::UnknownFormat(description)
-                        }
-                    },
-                )?;
 
             // Filter proposals that are for our derived branch
             let derived_url = derived_branch.get_user_url();
@@ -1134,14 +1110,15 @@ mod tests {
     fn test_push_result() {
         let _test_env = TestEnv::new();
         use breezyshim::controldir::{
-            create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
+            create_branch_convenience_as_generic, create_standalone_workingtree, ControlDirFormat,
         };
         let td = tempfile::tempdir().unwrap();
         let target_path = td.path().join("target");
         let source_path = td.path().join("source");
         let target_url = url::Url::from_file_path(target_path).unwrap();
         let _target_branch =
-            create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
+            create_branch_convenience_as_generic(&target_url, None, &ControlDirFormat::default())
+                .unwrap();
         let target = crate::vcs::open_branch(&target_url, None, None, None).unwrap();
         let source =
             create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();
