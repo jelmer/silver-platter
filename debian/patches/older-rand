@@ -2,20 +2,20 @@ Index: silver-platter/Cargo.toml
 ===================================================================
 --- silver-platter.orig/Cargo.toml
 +++ silver-platter/Cargo.toml
-@@ -33,7 +33,7 @@ gpgme = { version = "0.11.0", optional =
- pyo3 = { optional = true, workspace = true }
- lazy_static = ">=1.4.0"
- debian-control = { version = ">=0.1", optional = true }
+@@ -32,7 +32,7 @@ debian-analyzer = { version = "0.160.14"
+ gpgme = { version = "0.11.0", optional = true }
+ lazy_static = "1.5.0"
+ debian-control = { version = ">=0.2,<0.4", optional = true }
 -rand = "0.9.2"
 +rand = "0.8"
- launchpadlib = { version = "0.4.6", optional = true }
+ launchpadlib = { version = ">=0.4.6,<0.6", optional = true }
  
  [workspace]
 Index: silver-platter/src/debian/uploader.rs
 ===================================================================
 --- silver-platter.orig/src/debian/uploader.rs
 +++ silver-platter/src/debian/uploader.rs
-@@ -652,7 +652,7 @@ pub fn main(
+@@ -645,7 +645,7 @@ pub fn main(
      if shuffle {
          use rand::seq::SliceRandom;
          // Shuffle packages vec
