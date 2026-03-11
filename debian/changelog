@@ -1,3 +1,9 @@
+silver-platter (0.7.0-3) UNRELEASED; urgency=medium
+
+  * Update watch file to use GitHub tags instead of PyPI.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 11 Mar 2026 21:01:33 +0000
+
 silver-platter (0.7.0-2) unstable; urgency=medium
 
   * New upstream release.
