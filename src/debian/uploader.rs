@@ -554,16 +554,9 @@ fn find_last_release_revid(
     branch: &GenericBranch,
     version: &Version,
 ) -> Result<RevisionId, BrzError> {
-    use pyo3::prelude::*;
-    pyo3::Python::attach(|py| -> PyResult<RevisionId> {
-        let m = py.import("breezy.plugins.debian.import_dsc")?;
-        let dbc = m.getattr("DistributionBranch")?;
-        let dbc = dbc.call1((branch.clone(), py.None()))?;
-
-        dbc.call_method1("revid_of_version", (version.to_string(),))?
-            .extract::<RevisionId>()
-    })
-    .map_err(BrzError::from)
+    let db = breezyshim::debian::import_dsc::DistributionBranch::new(branch, branch, None, None);
+    db.revid_of_version(version)
+        .map_err(|e| BrzError::UnknownFormat(format!("Failed to find revid for version: {}", e)))
 }
 
 /// Select packages from the apt repository.

@@ -167,35 +167,11 @@ pub fn find_existing_proposed(
     ),
     BrzError,
 > {
-    // GenericBranch implements PyBranch, so we can use it with forge operations
-    match forge.get_derived_branch(main_branch, name, owner, None) {
+    match forge.get_derived_branch_as_generic(main_branch, name, owner, None) {
         Ok(derived_branch) => {
             // Found existing derived branch
             let proposals =
                 forge.iter_proposals(main_branch, main_branch, MergeProposalStatus::Open)?;
-
-            // Convert derived_branch from Box<dyn Branch> to GenericBranch
-            let derived_branch =
-                crate::vcs::open_branch(&derived_branch.get_user_url(), None, None, None).map_err(
-                    |e| match e {
-                        crate::vcs::BranchOpenError::Missing { description, .. } => {
-                            BrzError::NotBranchError(description, None)
-                        }
-                        crate::vcs::BranchOpenError::Unavailable { description, .. }
-                        | crate::vcs::BranchOpenError::TemporarilyUnavailable {
-                            description, ..
-                        } => BrzError::ConnectionError(description),
-                        crate::vcs::BranchOpenError::Unsupported { description, .. } => {
-                            BrzError::UnknownFormat(description)
-                        }
-                        crate::vcs::BranchOpenError::RateLimited { description, .. } => {
-                            BrzError::ConnectionError(description)
-                        }
-                        crate::vcs::BranchOpenError::Other(description) => {
-                            BrzError::UnknownFormat(description)
-                        }
-                    },
-                )?;
 
             // Filter proposals that are for our derived branch
             let derived_url = derived_branch.get_user_url();
@@ -513,44 +489,6 @@ impl std::fmt::Display for Error {
                 write!(f, "Insufficient changes for new proposal")
             }
             Error::NoTargetBranch => write!(f, "No target branch"),
-        }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl From<Error> for pyo3::PyErr {
-    fn from(e: Error) -> Self {
-        use pyo3::import_exception;
-        use pyo3::prelude::*;
-        import_exception!(breezy.errors, NotBranchError);
-        import_exception!(breezy.errors, UnsupportedOperation);
-        import_exception!(breezy.errors, MergeProposalExists);
-        import_exception!(breezy.errors, PermissionDenied);
-        import_exception!(breezy.errors, DivergedBranches);
-        import_exception!(breezy.forge, UnsupportedForge);
-        import_exception!(breezy.forge, ForgeLoginRequired);
-        import_exception!(silver_platter, EmptyMergeProposal);
-        import_exception!(silver_platter, UnrelatedBranchExists);
-        import_exception!(silver_platter, InsufficientChangesForNewProposal);
-        import_exception!(silver_platter, NoTargetBranch);
-
-        match e {
-            Error::DivergedBranches() => PyErr::new::<DivergedBranches, _>("DivergedBranches"),
-            Error::Other(e) => e.into(),
-            Error::BranchOpenError(e) => e.into(),
-            Error::UnsupportedForge(u) => PyErr::new::<UnsupportedForge, _>(u.to_string()),
-            Error::ForgeLoginRequired => PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired"),
-            Error::UnrelatedBranchExists => {
-                PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
-            }
-            Error::PermissionDenied => PyErr::new::<PermissionDenied, _>("PermissionDenied"),
-            Error::EmptyMergeProposal => PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal"),
-            Error::InsufficientChangesForNewProposal => {
-                PyErr::new::<InsufficientChangesForNewProposal, _>(
-                    "InsufficientChangesForNewProposal",
-                )
-            }
-            Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
         }
     }
 }
@@ -1015,11 +953,15 @@ pub fn enable_tag_pushing(branch: &dyn Branch) -> Result<(), BrzError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breezyshim::testing::TestEnv;
     use breezyshim::tree::MutableTree;
     use breezyshim::WorkingTree;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_no_new_commits() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1042,7 +984,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_no_op_commits() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1071,7 +1015,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_indep() {
+        let _test_env = TestEnv::new();
         use breezyshim::bazaar::tree::MutableInventoryTree;
         use breezyshim::bazaar::FileId;
         use breezyshim::controldir::create_standalone_workingtree;
@@ -1129,7 +1075,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_changes() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::create_standalone_workingtree;
         use breezyshim::controldir::ControlDirFormat;
         let td = tempfile::tempdir().unwrap();
@@ -1158,16 +1106,19 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_push_result() {
+        let _test_env = TestEnv::new();
         use breezyshim::controldir::{
-            create_branch_convenience, create_standalone_workingtree, ControlDirFormat,
+            create_branch_convenience_as_generic, create_standalone_workingtree, ControlDirFormat,
         };
         let td = tempfile::tempdir().unwrap();
         let target_path = td.path().join("target");
         let source_path = td.path().join("source");
         let target_url = url::Url::from_file_path(target_path).unwrap();
         let _target_branch =
-            create_branch_convenience(&target_url, None, &ControlDirFormat::default()).unwrap();
+            create_branch_convenience_as_generic(&target_url, None, &ControlDirFormat::default())
+                .unwrap();
         let target = crate::vcs::open_branch(&target_url, None, None, None).unwrap();
         let source =
             create_standalone_workingtree(&source_path, &ControlDirFormat::default()).unwrap();

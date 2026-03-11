@@ -181,9 +181,13 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breezyshim::testing::TestEnv;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_sprout() {
+        let _test_env = TestEnv::new();
         let base = tempfile::tempdir().unwrap();
         let wt = breezyshim::controldir::create_standalone_workingtree(
             base.path(),
@@ -206,7 +210,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_sprout_in() {
+        let _test_env = TestEnv::new();
         let base = tempfile::tempdir().unwrap();
         let wt = breezyshim::controldir::create_standalone_workingtree(
             base.path(),
@@ -229,7 +235,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_sprout_in_path() {
+        let _test_env = TestEnv::new();
         let base = tempfile::tempdir().unwrap();
         let target = tempfile::tempdir().unwrap();
         let wt = breezyshim::controldir::create_standalone_workingtree(

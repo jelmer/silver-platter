@@ -96,42 +96,6 @@ impl std::fmt::Display for BranchOpenError {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl From<BranchOpenError> for pyo3::PyErr {
-    fn from(e: BranchOpenError) -> Self {
-        use pyo3::import_exception;
-        import_exception!(silver_platter, BranchUnsupported);
-        import_exception!(silver_platter, BranchTemporarilyUnavailable);
-        import_exception!(silver_platter, BranchUnavailable);
-        import_exception!(silver_platter, BranchRateLimited);
-        import_exception!(silver_platter, BranchMissing);
-
-        use pyo3::exceptions::PyRuntimeError;
-        match e {
-            BranchOpenError::Unsupported {
-                url,
-                description,
-                vcs,
-            } => BranchUnsupported::new_err((url.to_string(), description, vcs)),
-            BranchOpenError::Missing { url, description } => {
-                BranchMissing::new_err((url.to_string(), description))
-            }
-            BranchOpenError::RateLimited {
-                url,
-                description,
-                retry_after,
-            } => BranchRateLimited::new_err((url.to_string(), description, retry_after)),
-            BranchOpenError::Unavailable { url, description } => {
-                BranchUnavailable::new_err((url.to_string(), description))
-            }
-            BranchOpenError::TemporarilyUnavailable { url, description } => {
-                BranchTemporarilyUnavailable::new_err((url.to_string(), description))
-            }
-            BranchOpenError::Other(e) => PyRuntimeError::new_err((e,)),
-        }
-    }
-}
-
 impl BranchOpenError {
     /// Convert a BrzError to a BranchOpenError.
     pub fn from_err(url: url::Url, e: &BrzError) -> Self {
