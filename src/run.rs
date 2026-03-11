@@ -587,8 +587,10 @@ mod tests {
     use super::*;
     use crate::CommitPending;
     use breezyshim::controldir::{create_standalone_workingtree, ControlDirFormat};
+    use breezyshim::testing::TestEnv;
     use breezyshim::tree::MutableTree;
     use breezyshim::WorkingTree;
+    use serial_test::serial;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -632,7 +634,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_open_branch_with_error_handling_success() {
+        let _test_env = TestEnv::new();
         let (_td, origin_dir, _) = create_test_repo();
 
         // Test successful branch opening
@@ -657,7 +661,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_script_success() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create a script that will succeed with changes
@@ -693,7 +699,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_script_no_changes() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create a script that will succeed but make no changes
@@ -734,7 +742,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_script_error() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create a script that will fail
@@ -767,7 +777,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_verification_success() {
+        let _test_env = TestEnv::new();
         let (_td, origin_dir, _) = create_test_repo();
 
         // Open branch and build workspace
@@ -791,7 +803,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_verification_failure() {
+        let _test_env = TestEnv::new();
         let (_td, origin_dir, _) = create_test_repo();
 
         // Open branch and build workspace
@@ -820,7 +834,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_build_workspace() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Open branch
@@ -843,7 +859,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_build_workspace_with_resume_branch() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create another branch to use as resume branch
@@ -888,7 +906,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_script_error() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -945,7 +965,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_no_changes() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -1006,7 +1028,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_with_verification() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -1068,7 +1092,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_with_verification_failure() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -1129,7 +1155,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_script_with_extra_env() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create a script that uses an environment variable
@@ -1184,7 +1212,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_verification_with_complex_command() {
+        let _test_env = TestEnv::new();
         let (_td, origin_dir, _) = create_test_repo();
 
         // Open branch and build workspace
@@ -1215,7 +1245,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_verification_with_invalid_command() {
+        let _test_env = TestEnv::new();
         let (_td, origin_dir, _) = create_test_repo();
 
         // Open branch and build workspace
@@ -1329,7 +1361,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_apply_and_publish_with_subpath() {
+        let _test_env = TestEnv::new();
         // Create a test directory structure
         let td = tempdir().unwrap();
         let origin_dir = td.path().join("origin");
@@ -1411,7 +1445,9 @@ exit 0
     }
 
     #[test]
+    #[serial]
     fn test_run_script_with_subpath() {
+        let _test_env = TestEnv::new();
         let (td, origin_dir, _) = create_test_repo();
 
         // Create subdirectory structure

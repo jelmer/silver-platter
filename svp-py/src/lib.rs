@@ -98,6 +98,125 @@ create_exception!(silver_platter, BranchUnavailable, BranchError);
 create_exception!(silver_platter, BranchRateLimited, BranchError);
 create_exception!(silver_platter, BranchMissing, BranchError);
 
+// Newtype wrappers for PyO3 trait implementations
+
+/// Wrapper for Mode to implement PyO3 traits
+#[derive(Debug, Clone)]
+pub struct PyMode(pub Mode);
+
+impl<'py> FromPyObject<'_, 'py> for PyMode {
+    type Error = PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'_, 'py, PyAny>) -> Result<Self, Self::Error> {
+        let s: std::borrow::Cow<str> = ob.extract()?;
+        match s.as_ref() {
+            "push" => Ok(PyMode(Mode::Push)),
+            "propose" => Ok(PyMode(Mode::Propose)),
+            "attempt-push" => Ok(PyMode(Mode::AttemptPush)),
+            "push-derived" => Ok(PyMode(Mode::PushDerived)),
+            "bts" => Ok(PyMode(Mode::Bts)),
+            _ => Err(PyValueError::new_err(format!("Unknown mode: {}", s))),
+        }
+    }
+}
+
+impl From<PyMode> for Mode {
+    fn from(m: PyMode) -> Self {
+        m.0
+    }
+}
+
+impl From<Mode> for PyMode {
+    fn from(m: Mode) -> Self {
+        PyMode(m)
+    }
+}
+
+/// Wrapper for BranchOpenError to convert to PyErr
+pub struct PyBranchOpenError(pub silver_platter::vcs::BranchOpenError);
+
+impl From<PyBranchOpenError> for PyErr {
+    fn from(e: PyBranchOpenError) -> Self {
+        match e.0 {
+            silver_platter::vcs::BranchOpenError::Unsupported {
+                url,
+                description,
+                vcs,
+            } => BranchUnsupported::new_err((url.to_string(), description, vcs)),
+            silver_platter::vcs::BranchOpenError::Missing { url, description } => {
+                BranchMissing::new_err((url.to_string(), description))
+            }
+            silver_platter::vcs::BranchOpenError::RateLimited {
+                url,
+                description,
+                retry_after,
+            } => BranchRateLimited::new_err((url.to_string(), description, retry_after)),
+            silver_platter::vcs::BranchOpenError::Unavailable { url, description } => {
+                BranchUnavailable::new_err((url.to_string(), description))
+            }
+            silver_platter::vcs::BranchOpenError::TemporarilyUnavailable { url, description } => {
+                BranchTemporarilyUnavailable::new_err((url.to_string(), description))
+            }
+            silver_platter::vcs::BranchOpenError::Other(e) => PyRuntimeError::new_err(e),
+        }
+    }
+}
+
+impl From<silver_platter::vcs::BranchOpenError> for PyBranchOpenError {
+    fn from(e: silver_platter::vcs::BranchOpenError) -> Self {
+        PyBranchOpenError(e)
+    }
+}
+
+/// Wrapper for publish::Error to convert to PyErr
+pub struct PyPublishError(pub silver_platter::publish::Error);
+
+impl From<PyPublishError> for PyErr {
+    fn from(e: PyPublishError) -> Self {
+        import_exception!(breezy.errors, NotBranchError);
+        import_exception!(breezy.errors, UnsupportedOperation);
+        import_exception!(breezy.errors, MergeProposalExists);
+        import_exception!(breezy.errors, PermissionDenied);
+        import_exception!(breezy.forge, UnsupportedForge);
+        import_exception!(breezy.forge, ForgeLoginRequired);
+
+        match e.0 {
+            silver_platter::publish::Error::DivergedBranches() => {
+                PyErr::new::<DivergedBranches, _>("DivergedBranches")
+            }
+            silver_platter::publish::Error::Other(e) => e.into(),
+            silver_platter::publish::Error::BranchOpenError(e) => PyBranchOpenError(e).into(),
+            silver_platter::publish::Error::UnsupportedForge(u) => {
+                PyErr::new::<UnsupportedForge, _>(u.to_string())
+            }
+            silver_platter::publish::Error::ForgeLoginRequired => {
+                PyErr::new::<ForgeLoginRequired, _>("ForgeLoginRequired")
+            }
+            silver_platter::publish::Error::UnrelatedBranchExists => {
+                PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
+            }
+            silver_platter::publish::Error::PermissionDenied => {
+                PyErr::new::<PermissionDenied, _>("PermissionDenied")
+            }
+            silver_platter::publish::Error::EmptyMergeProposal => {
+                PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal")
+            }
+            silver_platter::publish::Error::InsufficientChangesForNewProposal => {
+                PyErr::new::<InsufficientChangesForNewProposal, _>(
+                    "InsufficientChangesForNewProposal",
+                )
+            }
+            silver_platter::publish::Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
+        }
+    }
+}
+
+impl From<silver_platter::publish::Error> for PyPublishError {
+    fn from(e: silver_platter::publish::Error) -> Self {
+        PyPublishError(e)
+    }
+}
+
 #[pyclass]
 struct Recipe(silver_platter::recipe::Recipe);
 
@@ -533,7 +652,8 @@ fn push_changes(
         additional_colocated_branches,
         tags,
         stop_revision.as_ref(),
-    )?;
+    )
+    .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))?;
     Ok(())
 }
 
@@ -655,7 +775,7 @@ fn propose_changes(
         work_in_progress,
     )
     .map(|(p, b)| (MergeProposal(p), b))
-    .map_err(Into::into)
+    .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))
 }
 
 #[pyclass]
@@ -682,7 +802,7 @@ fn publish_changes(
     py: Python,
     local_branch: Py<PyAny>,
     main_branch: Py<PyAny>,
-    mode: Mode,
+    mode: PyMode,
     name: &str,
     get_proposal_description: Py<PyAny>,
     resume_branch: Option<Py<PyAny>>,
@@ -735,28 +855,31 @@ fn publish_changes(
     } else {
         None
     };
-    Ok(PublishResult(silver_platter::publish::publish_changes(
-        &local_branch,
-        &main_branch,
-        resume_branch.as_ref(),
-        mode,
-        name,
-        get_proposal_description,
-        get_proposal_commit_message,
-        get_proposal_title,
-        forge.map(|f| &f.0),
-        allow_create_proposal,
-        labels,
-        overwrite_existing,
-        existing_proposal.map(|p| p.0.clone()),
-        reviewers,
-        tags,
-        derived_owner,
-        allow_collaboration,
-        stop_revision.as_ref(),
-        auto_merge,
-        None, // work_in_progress
-    )?))
+    Ok(PublishResult(
+        silver_platter::publish::publish_changes(
+            &local_branch,
+            &main_branch,
+            resume_branch.as_ref(),
+            mode.0,
+            name,
+            get_proposal_description,
+            get_proposal_commit_message,
+            get_proposal_title,
+            forge.map(|f| &f.0),
+            allow_create_proposal,
+            labels,
+            overwrite_existing,
+            existing_proposal.map(|p| p.0.clone()),
+            reviewers,
+            tags,
+            derived_owner,
+            allow_collaboration,
+            stop_revision.as_ref(),
+            auto_merge,
+            None, // work_in_progress
+        )
+        .map_err(|e| Into::<PyErr>::into(PyPublishError(e)))?,
+    ))
 }
 
 #[pyclass]
@@ -837,6 +960,7 @@ fn check_proposal_diff(
 #[cfg(feature = "debian")]
 pub(crate) mod debian {
     use super::*;
+    use breezyshim::WorkingTree;
     use silver_platter::debian::codemod::Error as DebianCodemodError;
 
     create_exception!(silver_platter, DputFailure, PyException);
@@ -1083,7 +1207,16 @@ pub(crate) mod debian {
         result_dir: Option<PathBuf>,
     ) -> PyResult<()> {
         let tree = breezyshim::workingtree::GenericWorkingTree(tree);
-        silver_platter::debian::build(&tree, subpath.as_path(), builder, result_dir.as_deref())
+        let branch = tree.branch();
+        silver_platter::debian::build(
+            &tree,
+            subpath.as_path(),
+            &branch,
+            builder,
+            result_dir.as_deref(),
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Build failed: {}", e)))?;
+        Ok(())
     }
 
     #[pyfunction]
@@ -1369,7 +1502,9 @@ fn _open_branch(py: Python, url: &str, name: Option<&str>) -> PyResult<Py<PyAny>
     let url = url
         .parse()
         .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?;
-    Ok(silver_platter::vcs::open_branch(&url, None, None, name)?.to_object(py))
+    Ok(silver_platter::vcs::open_branch(&url, None, None, name)
+        .map_err(|e| Into::<PyErr>::into(PyBranchOpenError(e)))?
+        .to_object(py))
 }
 
 #[pymodule(name = "silver_platter")]
