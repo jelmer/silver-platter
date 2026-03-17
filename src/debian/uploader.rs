@@ -163,26 +163,26 @@ pub fn dput_changes(path: &Path, host: Option<&str>) -> Result<(), UploadError> 
 
 #[cfg(feature = "gpg")]
 /// Get the key IDs for Debian maintainers.
-pub fn get_maintainer_keys(context: &mut gpgme::Context) -> Result<Vec<String>, gpgme::Error> {
-    context.import("/usr/share/keyrings/debian-keyring.gpg")?;
+pub fn get_maintainer_keys(
+    keyring_path: &std::path::Path,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    use sequoia_openpgp::cert::prelude::*;
+    use sequoia_openpgp::parse::Parse;
+    use std::fs::File;
 
+    let file = File::open(keyring_path)?;
     let mut ids = vec![];
 
-    for key in context.keys()? {
-        if let Err(err) = key {
-            eprintln!("Error getting key: {}", err);
-            continue;
-        }
-
-        let key = key.unwrap();
-
-        if let Ok(key_id) = key.id() {
-            ids.push(key_id.to_string());
-        }
-
-        for subkey in key.subkeys() {
-            if let Ok(subkey_id) = subkey.id() {
-                ids.push(subkey_id.to_string());
+    for cert in CertParser::from_reader(file)? {
+        match cert {
+            Ok(cert) => {
+                ids.push(cert.keyid().to_hex());
+                for subkey in cert.keys().subkeys() {
+                    ids.push(subkey.key().keyid().to_hex());
+                }
+            }
+            Err(err) => {
+                eprintln!("Error parsing key: {}", err);
             }
         }
     }
@@ -1240,8 +1240,10 @@ pub fn process_package(
         } else {
             #[cfg(feature = "gpg")]
             {
-                let mut context = gpgme::Context::from_protocol(gpgme::Protocol::OpenPgp).unwrap();
-                get_maintainer_keys(&mut context).unwrap()
+                get_maintainer_keys(std::path::Path::new(
+                    "/usr/share/keyrings/debian-keyring.gpg",
+                ))
+                .unwrap()
             }
             #[cfg(not(feature = "gpg"))]
             {
@@ -1527,4 +1529,61 @@ pub fn process_package(
     }
     std::mem::drop(ws);
     Ok(())
+}
+
+#[cfg(all(test, feature = "gpg"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_maintainer_keys_from_keyring() {
+        use sequoia_openpgp::cert::prelude::*;
+        use sequoia_openpgp::serialize::Serialize;
+
+        // Generate two test certificates
+        let (cert1, _) = CertBuilder::general_purpose(Some("Test User <test@example.com>"))
+            .generate()
+            .unwrap();
+        let (cert2, _) = CertBuilder::general_purpose(Some("Other User <other@example.com>"))
+            .generate()
+            .unwrap();
+
+        // Write them to a temporary keyring file
+        let dir = tempfile::tempdir().unwrap();
+        let keyring_path = dir.path().join("test-keyring.gpg");
+        {
+            let mut file = std::fs::File::create(&keyring_path).unwrap();
+            cert1.export(&mut file).unwrap();
+            cert2.export(&mut file).unwrap();
+        }
+
+        let keys = get_maintainer_keys(&keyring_path).unwrap();
+
+        // Should contain the primary key ID and subkey IDs for both certs
+        assert!(keys.contains(&cert1.keyid().to_hex()));
+        assert!(keys.contains(&cert2.keyid().to_hex()));
+
+        // Each general_purpose cert has one subkey, so we expect at least 4 key IDs
+        assert!(
+            keys.len() >= 4,
+            "Expected at least 4 key IDs, got {}",
+            keys.len()
+        );
+    }
+
+    #[test]
+    fn test_get_maintainer_keys_nonexistent_file() {
+        let result = get_maintainer_keys(std::path::Path::new("/nonexistent/keyring.gpg"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_maintainer_keys_empty_keyring() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring_path = dir.path().join("empty-keyring.gpg");
+        std::fs::write(&keyring_path, b"").unwrap();
+
+        let keys = get_maintainer_keys(&keyring_path).unwrap();
+        assert!(keys.is_empty());
+    }
 }
