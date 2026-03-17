@@ -2,7 +2,13 @@ Index: silver-platter/Cargo.toml
 ===================================================================
 --- silver-platter.orig/Cargo.toml
 +++ silver-platter/Cargo.toml
-@@ -32,7 +32,7 @@ debian-analyzer = { version = "0.160.14"
+@@ -27,12 +27,12 @@ flate2 = { version = "1", optional = tru
+ reqwest = { version = ">=0.12,<0.14", optional = true, features = ["blocking"] }
+ lazy-regex = "3"
+ libc = "0.2"
+-xdg = { version = "2", optional = true }
++xdg = { version = "2", optional = true }
+ debian-analyzer = { version = "0.160.14", optional = true }
  gpgme = { version = "0.11.0", optional = true }
  lazy_static = "1.5.0"
  debian-control = { version = ">=0.2,<0.4", optional = true }
@@ -15,6 +21,15 @@ Index: silver-platter/src/debian/uploader.rs
 ===================================================================
 --- silver-platter.orig/src/debian/uploader.rs
 +++ silver-platter/src/debian/uploader.rs
+@@ -64,7 +64,7 @@ impl LastAttemptDatabase {
+ #[cfg(feature = "last-attempt-db")]
+ impl Default for LastAttemptDatabase {
+     fn default() -> Self {
+-        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter").unwrap();
++        let xdg_dirs = xdg::BaseDirectories::with_prefix("silver-platter");
+         let last_attempt_path = xdg_dirs.place_data_file("last-upload-attempt.tdb").unwrap();
+         Self::open(last_attempt_path.as_path())
+     }
 @@ -645,7 +645,7 @@ pub fn main(
      if shuffle {
          use rand::seq::SliceRandom;
