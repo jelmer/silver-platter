@@ -78,6 +78,50 @@ struct RunRequest {
     commit_pending: Option<String>,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct BatchPublishRequest {
+    /// Path to the batch directory
+    #[schemars(description = "Path to the batch directory containing batch.yaml")]
+    directory: String,
+
+    /// Specific codebase entry to publish (publishes all if omitted)
+    #[schemars(description = "Name of a specific codebase entry to publish")]
+    codebase: Option<String>,
+
+    /// Whether to refresh changes before publishing
+    #[schemars(description = "Whether to refresh changes before publishing")]
+    refresh: Option<bool>,
+
+    /// Whether to overwrite existing branches
+    #[schemars(description = "Whether to overwrite existing remote branches")]
+    overwrite: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct BatchRefreshRequest {
+    /// Path to the batch directory
+    #[schemars(description = "Path to the batch directory containing batch.yaml")]
+    directory: String,
+
+    /// Specific codebase entry to refresh (refreshes all if omitted)
+    #[schemars(description = "Name of a specific codebase entry to refresh")]
+    codebase: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct ListConflictedRequest {
+    /// Branch name to search for conflicted proposals
+    #[schemars(description = "Branch name to search for conflicted proposals")]
+    branch_name: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct CloseProposalRequest {
+    /// URL of the merge proposal to close
+    #[schemars(description = "URL of the merge proposal to close")]
+    url: String,
+}
+
 impl Default for SvpMcpServer {
     fn default() -> Self {
         Self::new()
@@ -453,6 +497,280 @@ impl SvpMcpServer {
 
         Ok(rmcp::model::CallToolResult::success(vec![
             rmcp::model::Content::text(info.join("\n")),
+        ]))
+    }
+
+    #[tool(
+        description = "Publish a batch or specific entry, creating merge proposals or pushing changes"
+    )]
+    fn batch_publish(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            BatchPublishRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let directory = std::path::Path::new(&req.directory)
+            .canonicalize()
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Invalid directory: {}", e),
+                    None,
+                )
+            })?;
+
+        let mut batch = crate::batch::load_batch_metadata(&directory)
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INTERNAL_ERROR,
+                    format!("Failed to load batch metadata: {}", e),
+                    None,
+                )
+            })?
+            .ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("No batch.yaml found in {}", directory.display()),
+                    None,
+                )
+            })?;
+
+        let refresh = req.refresh.unwrap_or(false);
+        let overwrite = if req.overwrite.unwrap_or(false) {
+            Some(true)
+        } else {
+            None
+        };
+
+        let mut lines = Vec::new();
+        let mut errors = 0;
+        let batch_name = batch.name.clone();
+
+        if let Some(codebase) = &req.codebase {
+            let entry = batch.get_mut(codebase).ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Entry '{}' not found in batch", codebase),
+                    None,
+                )
+            })?;
+            match entry.publish(&batch_name, refresh, overwrite) {
+                Ok(result) => {
+                    lines.push(format!("{}: published (mode: {})", codebase, result.mode));
+                    if let Some(proposal) = &result.proposal {
+                        if let Ok(url) = proposal.url() {
+                            lines.push(format!("  Proposal: {}", url));
+                        }
+                    }
+                }
+                Err(e) => {
+                    lines.push(format!("{}: failed - {}", codebase, e));
+                    errors += 1;
+                }
+            }
+        } else {
+            let names: Vec<String> = batch.work.keys().cloned().collect();
+            for name in &names {
+                let entry = batch.get_mut(name).unwrap();
+                match entry.publish(&batch_name, refresh, overwrite) {
+                    Ok(result) => {
+                        lines.push(format!("{}: published (mode: {})", name, result.mode));
+                        if let Some(proposal) = &result.proposal {
+                            if let Ok(url) = proposal.url() {
+                                lines.push(format!("  Proposal: {}", url));
+                            }
+                        }
+                    }
+                    Err(crate::publish::Error::EmptyMergeProposal) => {
+                        lines.push(format!("{}: no changes left, removed", name));
+                        batch.remove(name).ok();
+                    }
+                    Err(e) => {
+                        lines.push(format!("{}: failed - {}", name, e));
+                        errors += 1;
+                    }
+                }
+            }
+        }
+
+        crate::batch::save_batch_metadata(&directory, &batch).map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Failed to save batch metadata: {}", e),
+                None,
+            )
+        })?;
+
+        if batch.work.is_empty() {
+            lines.push(format!(
+                "\nNo work left in batch; you can remove {}",
+                directory.display()
+            ));
+        }
+
+        if errors > 0 {
+            lines.insert(0, format!("{} entries failed to publish", errors));
+        }
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(lines.join("\n")),
+        ]))
+    }
+
+    #[tool(description = "Refresh changes in a batch by re-running the recipe script on entries")]
+    fn batch_refresh(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            BatchRefreshRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let directory = std::path::Path::new(&req.directory)
+            .canonicalize()
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Invalid directory: {}", e),
+                    None,
+                )
+            })?;
+
+        let mut batch = crate::batch::load_batch_metadata(&directory)
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INTERNAL_ERROR,
+                    format!("Failed to load batch metadata: {}", e),
+                    None,
+                )
+            })?
+            .ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("No batch.yaml found in {}", directory.display()),
+                    None,
+                )
+            })?;
+
+        let mut lines = Vec::new();
+        let mut errors = 0;
+
+        if let Some(codebase) = &req.codebase {
+            let entry = batch.work.get_mut(codebase.as_str()).ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Entry '{}' not found in batch", codebase),
+                    None,
+                )
+            })?;
+            match entry.refresh(&batch.recipe, None) {
+                Ok(()) => lines.push(format!("{}: refreshed", codebase)),
+                Err(e) => {
+                    lines.push(format!("{}: failed - {}", codebase, e));
+                    errors += 1;
+                }
+            }
+        } else {
+            let names: Vec<String> = batch.work.keys().cloned().collect();
+            for name in &names {
+                let entry = batch.work.get_mut(name.as_str()).unwrap();
+                match entry.refresh(&batch.recipe, None) {
+                    Ok(()) => lines.push(format!("{}: refreshed", name)),
+                    Err(e) => {
+                        lines.push(format!("{}: failed - {}", name, e));
+                        errors += 1;
+                    }
+                }
+            }
+        }
+
+        crate::batch::save_batch_metadata(&directory, &batch).map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Failed to save batch metadata: {}", e),
+                None,
+            )
+        })?;
+
+        if errors > 0 {
+            lines.insert(0, format!("{} entries failed to refresh", errors));
+        }
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(lines.join("\n")),
+        ]))
+    }
+
+    #[tool(
+        description = "List open merge proposals that have merge conflicts for a given branch name"
+    )]
+    fn list_conflicted(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            ListConflictedRequest,
+        >,
+    ) -> String {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let mut lines = Vec::new();
+        for (url, _main_branch, _subpath, _resume_branch, _forge, mp, _) in
+            crate::proposal::iter_conflicted(&req.branch_name)
+        {
+            let mp_url = mp.url().unwrap_or(url);
+            lines.push(mp_url.to_string());
+        }
+
+        if lines.is_empty() {
+            format!(
+                "No conflicted proposals found for branch '{}'.",
+                req.branch_name
+            )
+        } else {
+            format!(
+                "Conflicted proposals for branch '{}':\n{}",
+                req.branch_name,
+                lines.join("\n")
+            )
+        }
+    }
+
+    #[tool(description = "Close a merge proposal by its URL")]
+    fn close_proposal(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            CloseProposalRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let url: url::Url = req.url.parse().map_err(|e: url::ParseError| {
+            rmcp::ErrorData::new(rmcp::model::ErrorCode::INVALID_PARAMS, e.to_string(), None)
+        })?;
+
+        let proposal = breezyshim::forge::get_proposal_by_url(&url).map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Failed to get proposal: {}", e),
+                None,
+            )
+        })?;
+
+        proposal.close().map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Failed to close proposal: {}", e),
+                None,
+            )
+        })?;
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(format!("Proposal {} closed.", url)),
         ]))
     }
 }
