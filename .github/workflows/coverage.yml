@@ -14,7 +14,7 @@ jobs:
         run: |
           sudo apt -y update
           sudo apt -y install devscripts libapt-pkg-dev libtdb-dev \
-            libssl-dev pkg-config libgpgme-dev rustc cargo
+            libssl-dev pkg-config nettle-dev clang rustc cargo
           cargo install cargo-tarpaulin
 
       - name: Upgrade pip
