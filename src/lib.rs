@@ -22,6 +22,8 @@ pub mod checks;
 pub mod codemod;
 #[cfg(feature = "debian")]
 pub mod debian;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod probers;
 pub mod proposal;
 pub mod publish;
