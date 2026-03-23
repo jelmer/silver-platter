@@ -2,6 +2,7 @@
 //!
 //! Exposes silver-platter functionality as MCP tools over stdio.
 
+use breezyshim::tree::WorkingTree as _;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::schemars;
@@ -19,6 +20,39 @@ struct ListProposalsRequest {
     /// Status filter: "open", "merged", or "closed"
     #[schemars(description = "Filter proposals by status: open, merged, or closed")]
     status: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct GetProposalRequest {
+    /// URL of the merge proposal
+    #[schemars(description = "URL of the merge proposal to inspect")]
+    url: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct BatchStatusRequest {
+    /// Path to the batch directory
+    #[schemars(description = "Path to the batch directory containing batch.yaml")]
+    directory: String,
+
+    /// Specific codebase entry to check
+    #[schemars(description = "Name of a specific codebase entry to check status for")]
+    codebase: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct ApplyRequest {
+    /// Shell command to run in the checkout
+    #[schemars(description = "Shell command to run in the working directory")]
+    command: String,
+
+    /// Path to the working directory (defaults to current directory)
+    #[schemars(description = "Path to the working directory to apply changes in")]
+    directory: Option<String>,
+
+    /// Whether to commit pending changes: auto, yes, or no
+    #[schemars(description = "Whether to commit pending changes: auto, yes, or no")]
+    commit_pending: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -212,6 +246,214 @@ impl SvpMcpServer {
                 rmcp::model::Content::text(format!("Command failed with exit code {}", retcode)),
             ]))
         }
+    }
+
+    #[tool(description = "Get details about a specific merge proposal by its URL")]
+    fn get_proposal(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            GetProposalRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let url: url::Url = req.url.parse().map_err(|e: url::ParseError| {
+            rmcp::ErrorData::new(rmcp::model::ErrorCode::INVALID_PARAMS, e.to_string(), None)
+        })?;
+
+        let proposal = breezyshim::forge::get_proposal_by_url(&url).map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Failed to get proposal: {}", e),
+                None,
+            )
+        })?;
+
+        let mut info = Vec::new();
+        info.push(format!("URL: {}", proposal.url().unwrap()));
+
+        if let Ok(Some(title)) = proposal.get_title() {
+            info.push(format!("Title: {}", title));
+        }
+
+        if let Ok(Some(description)) = proposal.get_description() {
+            info.push(format!("Description: {}", description));
+        }
+
+        if let Ok(merged) = proposal.is_merged() {
+            if merged {
+                info.push("Status: Merged".to_string());
+            } else if let Ok(closed) = proposal.is_closed() {
+                if closed {
+                    info.push("Status: Closed".to_string());
+                } else {
+                    info.push("Status: Open".to_string());
+                }
+            }
+        }
+
+        if let Ok(Some(source_url)) = proposal.get_source_branch_url() {
+            info.push(format!("Source branch: {}", source_url));
+        }
+
+        if let Ok(Some(target_url)) = proposal.get_target_branch_url() {
+            info.push(format!("Target branch: {}", target_url));
+        }
+
+        if let Ok(mergeable) = proposal.can_be_merged() {
+            info.push(format!("Can be merged: {}", mergeable));
+        }
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(info.join("\n")),
+        ]))
+    }
+
+    #[tool(description = "Show status of a batch directory or specific entry within it")]
+    fn batch_status(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            BatchStatusRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let directory = std::path::Path::new(&req.directory)
+            .canonicalize()
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Invalid directory: {}", e),
+                    None,
+                )
+            })?;
+
+        let batch = crate::batch::load_batch_metadata(&directory)
+            .map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INTERNAL_ERROR,
+                    format!("Failed to load batch metadata: {}", e),
+                    None,
+                )
+            })?
+            .ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("No batch.yaml found in {}", directory.display()),
+                    None,
+                )
+            })?;
+
+        let mut lines = Vec::new();
+        lines.push(format!("Batch: {}", batch.name));
+        lines.push(format!("Entries: {}", batch.work.len()));
+        lines.push(String::new());
+
+        if let Some(codebase) = &req.codebase {
+            let entry = batch.work.get(codebase.as_str()).ok_or_else(|| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!("Entry '{}' not found in batch", codebase),
+                    None,
+                )
+            })?;
+            lines.push(format!("{}: {}", codebase, entry.status()));
+        } else {
+            for (name, entry) in batch.work.iter() {
+                lines.push(format!("{}: {}", name, entry.status()));
+            }
+        }
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(lines.join("\n")),
+        ]))
+    }
+
+    #[tool(description = "Apply a codemod script to an existing local checkout without publishing")]
+    fn apply(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(req): rmcp::handler::server::wrapper::Parameters<
+            ApplyRequest,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        breezyshim::init();
+        breezyshim::plugin::load_plugins();
+
+        let directory = req
+            .directory
+            .as_deref()
+            .map(std::path::Path::new)
+            .unwrap_or_else(|| std::path::Path::new("."));
+
+        let command = shlex::split(&req.command).ok_or_else(|| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INVALID_PARAMS,
+                "Invalid shell command".to_string(),
+                None,
+            )
+        })?;
+
+        let commit_pending: crate::CommitPending = if let Some(cp_str) = &req.commit_pending {
+            cp_str.parse().map_err(|e: String| {
+                rmcp::ErrorData::new(rmcp::model::ErrorCode::INVALID_PARAMS, e, None)
+            })?
+        } else {
+            crate::CommitPending::Auto
+        };
+
+        let (local_tree, subpath) =
+            breezyshim::workingtree::open_containing(directory).map_err(|e| {
+                rmcp::ErrorData::new(
+                    rmcp::model::ErrorCode::INTERNAL_ERROR,
+                    format!("Failed to open working tree: {}", e),
+                    None,
+                )
+            })?;
+
+        breezyshim::workspace::check_clean_tree(
+            &local_tree,
+            &local_tree.basis_tree().unwrap(),
+            subpath.as_path(),
+        )
+        .map_err(|e| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Working tree is not clean: {}", e),
+                None,
+            )
+        })?;
+
+        let result = crate::codemod::script_runner(
+            &local_tree,
+            &command.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            subpath.as_path(),
+            commit_pending,
+            None,
+            None,
+            None,
+            std::process::Stdio::inherit(),
+        )
+        .map_err(|e| {
+            breezyshim::workspace::reset_tree(&local_tree, None, Some(subpath.as_path())).ok();
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                format!("Script failed: {}", e),
+                None,
+            )
+        })?;
+
+        let mut info = Vec::new();
+        if let Some(description) = &result.description {
+            info.push(format!("Description: {}", description));
+        }
+        info.push(format!("Old revision: {}", result.old_revision));
+        info.push(format!("New revision: {}", result.new_revision));
+
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::Content::text(info.join("\n")),
+        ]))
     }
 }
 
