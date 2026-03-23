@@ -68,6 +68,10 @@ enum Commands {
 
     #[clap(subcommand)]
     Batch(BatchArgs),
+
+    /// Start an MCP (Model Context Protocol) server over stdio
+    #[cfg(feature = "mcp")]
+    Mcp {},
 }
 
 /// Run a script to make a change, and publish (propose/push/etc) it
@@ -766,6 +770,14 @@ fn main() -> Result<(), i32> {
             }
             Ok(())
         }
+        #[cfg(feature = "mcp")]
+        Commands::Mcp {} => tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(silver_platter::mcp::serve_stdio())
+            .map_err(|e| {
+                error!("MCP server error: {}", e);
+                1
+            }),
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,
