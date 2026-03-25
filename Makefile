@@ -29,4 +29,8 @@ testsuite:: build-inplace
 	PYTHONPATH=$(shell pwd)/py python3 -m unittest tests.test_suite
 
 testsuite::
-	cargo test-all-features
+	cargo test --no-default-features
+	cargo test --no-default-features --features cli
+	cargo test --no-default-features --features debian
+	cargo test
+	cargo test --all-features

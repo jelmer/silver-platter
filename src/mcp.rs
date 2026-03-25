@@ -794,3 +794,36 @@ pub async fn serve_stdio() -> Result<(), Box<dyn std::error::Error>> {
     service.waiting().await?;
     Ok(())
 }
+
+/// Run the MCP server over HTTP/SSE.
+#[cfg(feature = "mcp-sse")]
+pub async fn serve_sse(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use rmcp::transport::streamable_http_server::{
+        session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+    };
+    use std::sync::Arc;
+
+    let ct = tokio_util::sync::CancellationToken::new();
+
+    let config = StreamableHttpServerConfig {
+        stateful_mode: true,
+        json_response: false,
+        sse_keep_alive: Some(std::time::Duration::from_secs(15)),
+        sse_retry: Some(std::time::Duration::from_secs(3)),
+        cancellation_token: ct.clone(),
+    };
+
+    let service = StreamableHttpService::new(
+        || Ok(SvpMcpServer::new()),
+        Arc::new(LocalSessionManager::default()),
+        config,
+    );
+
+    let router = axum::Router::new().nest_service("/mcp", service);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    log::info!("MCP SSE server listening on {}", addr);
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async move { ct.cancelled().await })
+        .await?;
+    Ok(())
+}

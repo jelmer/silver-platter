@@ -25,7 +25,6 @@ jobs:
         run: |
           sudo apt -y update
           sudo apt -y install devscripts libapt-pkg-dev libtdb-dev libssl-dev pkg-config nettle-dev clang
-          cargo install cargo-all-features
       - name: Upgrade pip
         run: python -m pip install --upgrade pip setuptools_rust setuptools
       - name: Install breezy
@@ -34,8 +33,24 @@ jobs:
         run: cargo build --verbose
         env:
           RUSTFLAGS: -Dwarnings
-      - name: Run tests
-        run: cargo test-all-features
+      - name: Test (no features)
+        run: cargo test --no-default-features
+        env:
+          RUSTFLAGS: -Dwarnings
+      - name: Test (cli, no debian)
+        run: cargo test --no-default-features --features cli
+        env:
+          RUSTFLAGS: -Dwarnings
+      - name: Test (debian, no cli)
+        run: cargo test --no-default-features --features debian
+        env:
+          RUSTFLAGS: -Dwarnings
+      - name: Test (default features)
+        run: cargo test
+        env:
+          RUSTFLAGS: -Dwarnings
+      - name: Test (all features)
+        run: cargo test --all-features
         env:
           RUSTFLAGS: -Dwarnings
       - name: Check formatting

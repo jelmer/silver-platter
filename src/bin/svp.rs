@@ -69,9 +69,15 @@ enum Commands {
     #[clap(subcommand)]
     Batch(BatchArgs),
 
-    /// Start an MCP (Model Context Protocol) server over stdio
+    /// Start an MCP (Model Context Protocol) server
     #[cfg(feature = "mcp")]
-    Mcp {},
+    Mcp {
+        /// Listen address for HTTP/SSE transport (e.g. "127.0.0.1:8080").
+        /// If not specified, uses stdio transport.
+        #[cfg(feature = "mcp-sse")]
+        #[arg(long)]
+        sse: Option<String>,
+    },
 }
 
 /// Run a script to make a change, and publish (propose/push/etc) it
@@ -771,13 +777,28 @@ fn main() -> Result<(), i32> {
             Ok(())
         }
         #[cfg(feature = "mcp")]
-        Commands::Mcp {} => tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(silver_platter::mcp::serve_stdio())
-            .map_err(|e| {
-                error!("MCP server error: {}", e);
-                1
-            }),
+        Commands::Mcp {
+            #[cfg(feature = "mcp-sse")]
+            sse,
+        } => {
+            #[cfg(feature = "mcp-sse")]
+            if let Some(addr) = sse {
+                return tokio::runtime::Runtime::new()
+                    .unwrap()
+                    .block_on(silver_platter::mcp::serve_sse(addr))
+                    .map_err(|e| {
+                        error!("MCP SSE server error: {}", e);
+                        1
+                    });
+            }
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(silver_platter::mcp::serve_stdio())
+                .map_err(|e| {
+                    error!("MCP server error: {}", e);
+                    1
+                })
+        }
         Commands::Batch(args) => match args {
             BatchArgs::Generate {
                 recipe,
