@@ -1,6 +1,6 @@
 //! Publishing changes
 pub use crate::proposal::DescriptionFormat;
-use crate::vcs::open_branch;
+use crate::vcs::{open_branch, BranchOpenError};
 use crate::Mode;
 use breezyshim::branch::{GenericBranch, MemoryBranch, PyBranch};
 
@@ -197,6 +197,51 @@ pub fn find_existing_proposed(
             Ok((None, None, None))
         }
         Err(e) => Err(e),
+    }
+}
+
+/// Like [`find_existing_proposed`] but classifies the raw `BrzError`
+/// result through [`BranchOpenError::from_err`] so the caller can
+/// distinguish rate-limits, unavailable hosts, and missing branches
+/// from generic errors without re-implementing the mapping. Returns
+/// `Ok((None, None, None))` when no existing proposal is found, same
+/// as [`find_existing_proposed`].
+///
+/// Use this variant when you need to act on [`BranchOpenError::RateLimited`]
+/// — e.g. a scheduler that wants to honour `retry_after` and skip the
+/// forge for a while.
+pub fn find_existing_proposed_classified(
+    main_branch: &GenericBranch,
+    forge: &Forge,
+    name: &str,
+    overwrite_unrelated: bool,
+    owner: Option<&str>,
+    preferred_schemes: Option<&[&str]>,
+) -> Result<
+    (
+        Option<GenericBranch>,
+        Option<bool>,
+        Option<Vec<MergeProposal>>,
+    ),
+    BranchOpenError,
+> {
+    match find_existing_proposed(
+        main_branch,
+        forge,
+        name,
+        overwrite_unrelated,
+        owner,
+        preferred_schemes,
+    ) {
+        Ok(x) => Ok(x),
+        Err(e) => {
+            // Pick the main branch URL as the context for the error.
+            // The forge calls that failed were working against this
+            // branch, so attributing a rate-limit to its host is the
+            // behaviour a scheduler actually wants.
+            let url = main_branch.get_user_url();
+            Err(BranchOpenError::from_err(url, &e))
+        }
     }
 }
 
