@@ -147,6 +147,9 @@ pub enum Error {
 
     /// Error with workspace
     Workspace(crate::workspace::Error),
+
+    /// Recipe is missing a required field
+    MissingRecipeField(&'static str),
 }
 
 impl From<crate::workspace::Error> for Error {
@@ -194,6 +197,9 @@ impl std::fmt::Display for Error {
             Error::Yaml(e) => write!(f, "YAML error: {}", e),
             Error::Tera(e) => write!(f, "Tera error: {}", e),
             Error::Workspace(e) => write!(f, "Workspace error: {}", e),
+            Error::MissingRecipeField(field) => {
+                write!(f, "Recipe is missing required field: {}", field)
+            }
         }
     }
 }
@@ -227,12 +233,13 @@ impl Entry {
             ws.main_branch().unwrap().get_user_url()
         );
 
+        let command = recipe
+            .command
+            .as_ref()
+            .ok_or(Error::MissingRecipeField("command"))?;
         let result = match script_runner(
             ws.local_tree(),
-            recipe
-                .command
-                .as_ref()
-                .unwrap()
+            command
                 .argv()
                 .iter()
                 .map(|s| s.as_str())
@@ -265,9 +272,9 @@ impl Entry {
             description
         } else if let Some(ref mr) = recipe.merge_request {
             mr.render_description(DescriptionFormat::Markdown, &tera_context)?
-                .unwrap()
+                .ok_or(Error::MissingRecipeField("merge_request.description"))?
         } else {
-            panic!("No description provided");
+            return Err(Error::MissingRecipeField("merge_request.description"));
         };
         let commit_message = if let Some(commit_message) = result.commit_message {
             Some(commit_message)
@@ -381,12 +388,13 @@ impl Entry {
             ws.local_tree().last_revision().unwrap()
         );
 
+        let command = recipe
+            .command
+            .as_ref()
+            .ok_or(Error::MissingRecipeField("command"))?;
         let result = match script_runner(
             ws.local_tree(),
-            recipe
-                .command
-                .as_ref()
-                .unwrap()
+            command
                 .argv()
                 .iter()
                 .map(|s| s.as_str())
