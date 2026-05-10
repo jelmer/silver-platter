@@ -41,7 +41,7 @@ pub struct ChangelogBehaviour {
 }
 
 #[cfg(feature = "detect-update-changelog")]
-pub use debian_analyzer::detect_gbp_dch::ChangelogBehaviour;
+pub use debian_workbench::detect_gbp_dch::ChangelogBehaviour;
 
 /// Guess whether the changelog should be updated.
 pub fn guess_update_changelog(
@@ -50,7 +50,7 @@ pub fn guess_update_changelog(
 ) -> Option<ChangelogBehaviour> {
     #[cfg(feature = "detect-update-changelog")]
     {
-        debian_analyzer::detect_gbp_dch::guess_update_changelog(tree, debian_path, None)
+        debian_workbench::detect_gbp_dch::guess_update_changelog(tree, debian_path, None)
     }
     #[cfg(not(feature = "detect-update-changelog"))]
     {
@@ -304,7 +304,7 @@ pub fn open_packaging_branch(
             }
         };
 
-        match debian_analyzer::vcs::vcs_field(&pkg_source) {
+        match debian_workbench::vcs::vcs_field(&pkg_source) {
             Some((new_vcs_type, vcs_url)) => {
                 vcs_type = Some(new_vcs_type);
                 let parsed_vcs: debian_control::vcs::ParsedVcs = vcs_url.parse().unwrap();
@@ -536,7 +536,7 @@ mod tests {
             None,
         );
         assert_eq!(
-            r#"lintian-brush (0.36) UNRELEASED; urgency=low
+            r#"lintian-brush (0.36) UNRELEASED; urgency=medium
 
   * Add a foo
 
