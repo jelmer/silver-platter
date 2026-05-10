@@ -496,6 +496,9 @@ pub enum Error {
     /// Permission denied
     PermissionDenied,
 
+    /// Target branch is read-only (push not possible via this transport)
+    ReadOnly,
+
     /// No target branch
     NoTargetBranch,
 }
@@ -506,6 +509,7 @@ impl From<BrzError> for Error {
             BrzError::DivergedBranches => Error::DivergedBranches(),
             BrzError::NotBranchError(..) => Error::UnrelatedBranchExists,
             BrzError::PermissionDenied(..) => Error::PermissionDenied,
+            BrzError::ReadOnly => Error::ReadOnly,
             BrzError::UnsupportedForge(s) => Error::UnsupportedForge(s),
             BrzError::ForgeLoginRequired => Error::ForgeLoginRequired,
             _ => Error::Other(e),
@@ -529,6 +533,7 @@ impl std::fmt::Display for Error {
             Error::BranchOpenError(e) => write!(f, "{}", e),
             Error::EmptyMergeProposal => write!(f, "Empty merge proposal"),
             Error::PermissionDenied => write!(f, "Permission denied"),
+            Error::ReadOnly => write!(f, "Read-only"),
             Error::UnrelatedBranchExists => write!(f, "Unrelated branch exists"),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
@@ -789,9 +794,9 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
-    let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
+            let write_lock = main_branch.lock_write()?;
             let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
             let (_remote_branch, _public_url) = push_derived_changes(
                 local_branch,
@@ -803,6 +808,7 @@ pub fn publish_changes(
                 tags,
                 Some(stop_revision),
             )?;
+            std::mem::drop(write_lock);
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
@@ -834,6 +840,14 @@ pub fn publish_changes(
                         mode = Mode::Propose;
                     } else {
                         log::info!("permission denied during push");
+                        return Err(e);
+                    }
+                }
+                Err(e @ Error::ReadOnly) => {
+                    if mode == Mode::AttemptPush {
+                        log::info!("push target is read-only, falling back to propose");
+                        mode = Mode::Propose;
+                    } else {
                         return Err(e);
                     }
                 }
@@ -924,7 +938,6 @@ pub fn publish_changes(
         auto_merge,
         work_in_progress,
     )?;
-    std::mem::drop(write_lock);
     Ok(PublishResult {
         mode,
         proposal: Some(proposal),
