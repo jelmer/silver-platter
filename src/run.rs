@@ -282,6 +282,10 @@ fn publish_workspace_changes(
             error!("Permission denied to create merge proposal.");
             Err(2)
         }
+        Err(PublishError::ReadOnly) => {
+            error!("Target branch is read-only.");
+            Err(2)
+        }
         Err(PublishError::NoTargetBranch) => {
             unreachable!();
         }
