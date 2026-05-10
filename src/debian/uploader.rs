@@ -820,7 +820,7 @@ pub fn prepare_upload_package(
     let debian_path = subpath.join("debian");
     #[cfg(feature = "detect-update-changelog")]
     let run_gbp_dch = {
-        let cl_behaviour = debian_analyzer::detect_gbp_dch::guess_update_changelog(
+        let cl_behaviour = debian_workbench::detect_gbp_dch::guess_update_changelog(
             local_tree,
             debian_path.as_path(),
             None,
@@ -849,22 +849,22 @@ pub fn prepare_upload_package(
             .commit()
             .unwrap();
     }
-    let (cl, _top_level) = debian_analyzer::changelog::find_changelog(
+    let (cl, _top_level) = debian_workbench::changelog::find_changelog(
         local_tree,
         std::path::Path::new(""),
         Some(false),
     )
     .map_err(|e| match e {
-        debian_analyzer::changelog::FindChangelogError::MissingChangelog(..) => {
+        debian_workbench::changelog::FindChangelogError::MissingChangelog(..) => {
             PrepareUploadError::MissingChangelog
         }
-        debian_analyzer::changelog::FindChangelogError::AddChangelog(..) => {
+        debian_workbench::changelog::FindChangelogError::AddChangelog(..) => {
             panic!("changelog not versioned - should never happen");
         }
-        debian_analyzer::changelog::FindChangelogError::ChangelogParseError(reason) => {
+        debian_workbench::changelog::FindChangelogError::ChangelogParseError(reason) => {
             PrepareUploadError::ChangelogParseError(reason)
         }
-        debian_analyzer::changelog::FindChangelogError::BrzError(o) => {
+        debian_workbench::changelog::FindChangelogError::BrzError(o) => {
             PrepareUploadError::BrzError(o)
         }
     })?;
@@ -885,7 +885,7 @@ pub fn prepare_upload_package(
         }
 
         if let Some(previous_version_in_branch) =
-            debian_analyzer::changelog::find_previous_upload(&cl)
+            debian_workbench::changelog::find_previous_upload(&cl)
         {
             if *last_uploaded_version > previous_version_in_branch {
                 return Err(PrepareUploadError::LastUploadMoreRecent(
@@ -1086,7 +1086,7 @@ pub fn process_package(
             }
         };
         if vcs_type.is_none() || vcs_url.is_none() {
-            (vcs_type, vcs_url) = match debian_analyzer::vcs::vcs_field(&pkg_source) {
+            (vcs_type, vcs_url) = match debian_workbench::vcs::vcs_field(&pkg_source) {
                 Some((t, u)) => (Some(t), Some(u)),
                 None => {
                     log::info!(
