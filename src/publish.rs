@@ -36,7 +36,7 @@ pub fn push_derived_changes(
     stop_revision: Option<&RevisionId>,
 ) -> Result<(Box<dyn Branch>, url::Url), BrzError> {
     let tags = tags.unwrap_or_default();
-    let (remote_branch, public_branch_url) = forge.publish_derived(
+    let (remote_branch, public_branch_url) = forge.publish_derived_as_generic_branch(
         local_branch,
         main_branch,
         name,
@@ -318,7 +318,7 @@ pub fn propose_changes(
         let tag_selector = tags.as_ref().map(|tag_map| {
             Box::new(_tag_selector_from_tags(tag_map.clone())) as Box<dyn Fn(String) -> bool>
         });
-        let (_derived_branch, _public_branch_url) = forge.publish_derived(
+        let (_derived_branch, _public_branch_url) = forge.publish_derived_as_generic_branch(
             local_branch,
             main_branch,
             name,
