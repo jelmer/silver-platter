@@ -555,24 +555,19 @@ fn push_derived_changes(
 ) -> PyResult<(Py<PyAny>, String)> {
     let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
     let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
+    let forge = forge.extract::<crate::Forge>(py)?;
     let (b, u) = silver_platter::publish::push_derived_changes(
-        &local_branch as &dyn PyBranch,
-        &main_branch as &dyn PyBranch,
-        &silver_platter::Forge::from(forge),
+        &local_branch,
+        &main_branch,
+        &forge.0,
         name,
         overwrite_existing,
         owner,
         tags,
         stop_revision.as_ref(),
-    )?;
-    // The returned branch is a Box<dyn Branch>, but we need a PyObject
-    // We'll use the branch URL to reopen it as a GenericBranch
-    let branch_url = b.get_user_url();
-    use breezyshim::branch::PyBranch;
-    use breezyshim::controldir::open;
-    let controldir = open(&branch_url, None)?;
-    let generic_branch = controldir.open_branch(None)?;
-    Ok((generic_branch.to_object(py), u.to_string()))
+    )
+    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok((b.to_object(py), u.to_string()))
 }
 
 #[pyclass]

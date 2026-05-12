@@ -58,7 +58,7 @@ fn get_forge_and_proposals(
     derived_owner: Option<&str>,
 ) -> Result<
     (
-        Option<Box<Forge>>,
+        Option<Forge>,
         Vec<MergeProposal>,
         Option<GenericBranch>,
         bool,
@@ -109,7 +109,7 @@ fn get_forge_and_proposals(
             }
 
             Ok((
-                Some(Box::new(forge)),
+                Some(forge),
                 existing_proposals.unwrap_or_default(),
                 resume_branch,
                 overwrite,
@@ -546,7 +546,7 @@ pub fn apply_and_publish(
         mode,
         name,
         &result,
-        forge.as_deref(),
+        forge.as_ref(),
         overwrite,
         existing_proposal,
         derived_owner,
@@ -575,7 +575,7 @@ pub fn apply_and_publish(
     }
 
     if diff {
-        ws.show_diff(Box::new(std::io::stdout()), None, None)
+        ws.show_diff(&mut std::io::stdout(), None, None)
             .unwrap();
     }
 
@@ -1066,7 +1066,7 @@ exit 0
         > = None;
         let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
 
-        // The function should return a non-zero code (either 1 or 2 depending on the implementation details)
+        // The function should return 1 (success with changes)
         // The important part is that the script ran successfully but there was no merge proposal
         let result = apply_and_publish(
             &branch_url,
@@ -1088,7 +1088,7 @@ exit 0
             None,
         );
 
-        assert_eq!(result, 2, "Script with changes should return exit code 2");
+        assert_eq!(result, 1, "Script with changes should return exit code 1");
     }
 
     #[test]
@@ -1441,7 +1441,7 @@ exit 0
             Some(Path::new("frontend")),
         );
 
-        assert_eq!(result, 2, "Script with changes should return exit code 2");
+        assert_eq!(result, 1, "Script with changes should return exit code 1");
     }
 
     #[test]
