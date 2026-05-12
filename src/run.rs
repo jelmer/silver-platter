@@ -579,8 +579,7 @@ pub fn apply_and_publish(
     }
 
     if diff {
-        ws.show_diff(&mut std::io::stdout(), None, None)
-            .unwrap();
+        ws.show_diff(&mut std::io::stdout(), None, None).unwrap();
     }
 
     1
