@@ -1524,8 +1524,7 @@ pub fn process_package(
         UploadPackageError::ProcessingFailure("upload-error".to_string(), Some(format!("{:?}", e)))
     })?;
     if diff {
-        ws.show_diff(&mut std::io::stdout(), None, None)
-            .unwrap();
+        ws.show_diff(&mut std::io::stdout(), None, None).unwrap();
     }
     std::mem::drop(ws);
     Ok(())
