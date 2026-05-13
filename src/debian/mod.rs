@@ -536,7 +536,7 @@ mod tests {
             None,
         );
         assert_eq!(
-            r#"lintian-brush (0.36) UNRELEASED; urgency=low
+            r#"lintian-brush (0.36) UNRELEASED; urgency=medium
 
   * Add a foo
 
