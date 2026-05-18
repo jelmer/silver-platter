@@ -34,9 +34,9 @@ pub fn push_derived_changes(
     owner: Option<&str>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
-) -> Result<(Box<dyn Branch>, url::Url), BrzError> {
+) -> Result<(GenericBranch, url::Url), BrzError> {
     let tags = tags.unwrap_or_default();
-    let (remote_branch, public_branch_url) = forge.publish_derived(
+    let (remote_branch, public_branch_url) = forge.publish_derived_as_generic_branch(
         local_branch,
         main_branch,
         name,
@@ -318,7 +318,7 @@ pub fn propose_changes(
         let tag_selector = tags.as_ref().map(|tag_map| {
             Box::new(_tag_selector_from_tags(tag_map.clone())) as Box<dyn Fn(String) -> bool>
         });
-        let (_derived_branch, _public_branch_url) = forge.publish_derived(
+        let (_derived_branch, _public_branch_url) = forge.publish_derived_as_generic_branch(
             local_branch,
             main_branch,
             name,
@@ -789,9 +789,9 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
-    let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
+            let _write_lock = main_branch.lock_write()?;
             let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
             let (_remote_branch, _public_url) = push_derived_changes(
                 local_branch,
@@ -863,6 +863,7 @@ pub fn publish_changes(
         return Err(Error::InsufficientChangesForNewProposal);
     }
 
+    let _write_lock = main_branch.lock_write()?;
     let forge = forge.ok_or(Error::UnsupportedForge(main_branch.get_user_url()))?;
 
     let mp_description = get_proposal_description(
@@ -924,7 +925,6 @@ pub fn publish_changes(
         auto_merge,
         work_in_progress,
     )?;
-    std::mem::drop(write_lock);
     Ok(PublishResult {
         mode,
         proposal: Some(proposal),
