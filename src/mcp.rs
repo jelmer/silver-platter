@@ -805,13 +805,7 @@ pub async fn serve_sse(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let ct = tokio_util::sync::CancellationToken::new();
 
-    let config = StreamableHttpServerConfig {
-        stateful_mode: true,
-        json_response: false,
-        sse_keep_alive: Some(std::time::Duration::from_secs(15)),
-        sse_retry: Some(std::time::Duration::from_secs(3)),
-        cancellation_token: ct.clone(),
-    };
+    let config = StreamableHttpServerConfig::default().with_cancellation_token(ct.clone());
 
     let service = StreamableHttpService::new(
         || Ok(SvpMcpServer::new()),
