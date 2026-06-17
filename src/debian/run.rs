@@ -265,6 +265,10 @@ pub fn apply_and_publish(
             error!("Permission denied to create merge proposal.");
             return 2;
         }
+        Err(PublishError::ReadOnly) => {
+            error!("Target branch is read-only.");
+            return 2;
+        }
         Err(PublishError::Other(e)) => {
             error!("Failed to publish changes: {}", e);
             return 2;
