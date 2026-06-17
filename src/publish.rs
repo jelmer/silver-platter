@@ -34,9 +34,9 @@ pub fn push_derived_changes(
     owner: Option<&str>,
     tags: Option<std::collections::HashMap<String, RevisionId>>,
     stop_revision: Option<&RevisionId>,
-) -> Result<(Box<dyn Branch>, url::Url), BrzError> {
+) -> Result<(GenericBranch, url::Url), BrzError> {
     let tags = tags.unwrap_or_default();
-    let (remote_branch, public_branch_url) = forge.publish_derived(
+    let (remote_branch, public_branch_url) = forge.publish_derived_as_generic_branch(
         local_branch,
         main_branch,
         name,
@@ -302,7 +302,9 @@ pub fn propose_changes(
     }
     let overwrite_existing = overwrite_existing.unwrap_or(true);
 
-    // Handle pushing to remote branch
+    // The fork branch returned by publish_derived; None in the resume path.
+    let derived_branch: Option<GenericBranch>;
+
     if let Some(resume_branch) = resume_branch {
         // Push changes to the existing branch
         let tag_selector = tags.as_ref().map(|tag_map| {
@@ -314,11 +316,12 @@ pub fn propose_changes(
             stop_revision,
             tag_selector,
         )?;
+        derived_branch = None;
     } else {
         let tag_selector = tags.as_ref().map(|tag_map| {
             Box::new(_tag_selector_from_tags(tag_map.clone())) as Box<dyn Fn(String) -> bool>
         });
-        let (_derived_branch, _public_branch_url) = forge.publish_derived(
+        let (branch, _public_branch_url) = forge.publish_derived_as_generic_branch(
             local_branch,
             main_branch,
             name,
@@ -327,7 +330,16 @@ pub fn propose_changes(
             stop_revision,
             tag_selector,
         )?;
+        derived_branch = Some(branch);
     }
+
+    // Branch to propose from: the fork (derived_branch) if we just created
+    // one, otherwise the resume branch, otherwise the local branch.
+    let source_branch: &dyn PyBranch = derived_branch
+        .as_ref()
+        .map(|b| b as &dyn PyBranch)
+        .or_else(|| resume_branch.map(|b| b as &dyn PyBranch))
+        .unwrap_or(local_branch);
     // Push additional colocated branches - GenericBranch implements PyBranch
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
         match local_branch
@@ -340,13 +352,15 @@ pub fn propose_changes(
                         as Box<dyn Fn(String) -> bool>
                 });
 
-                // Get the target controldir (either resume_branch or the derived branch we just pushed)
+                // Push colocated branches into the same controldir we proposed
+                // from: the resume branch, or the fork we just created.
                 let target_controldir = if let Some(resume_branch) = resume_branch {
                     resume_branch.controldir()
                 } else {
-                    // We need to get the derived branch controldir from forge
-                    // For now, try to open from main_branch controldir with derived name
-                    main_branch.controldir()
+                    derived_branch
+                        .as_ref()
+                        .map(|b| b.controldir())
+                        .unwrap_or_else(|| main_branch.controldir())
                 };
 
                 match target_controldir.push_branch(
@@ -422,8 +436,8 @@ pub fn propose_changes(
         }
         Ok((resume_proposal, false))
     } else {
-        // Create new proposal - GenericBranch implements PyBranch so we can use it
-        let mut proposer = forge.get_proposer(main_branch, local_branch)?;
+        // Propose from the fork/source branch into the target (main) branch.
+        let mut proposer = forge.get_proposer(source_branch, main_branch)?;
         proposer = proposer.description(mp_description);
         if let Some(title) = title {
             proposer = proposer.title(title);

@@ -711,7 +711,7 @@ impl Workspace {
         tags: Option<HashMap<String, RevisionId>>,
         overwrite_existing: Option<bool>,
         owner: Option<&str>,
-    ) -> Result<(Box<dyn Branch>, url::Url), Error> {
+    ) -> Result<(GenericBranch, url::Url), Error> {
         let main_branch = self.main_branch();
         let target_branch = target_branch.or(main_branch).unwrap();
         let forge = if let Some(forge) = forge {
