@@ -177,6 +177,7 @@ impl From<PyPublishError> for PyErr {
         import_exception!(breezy.errors, UnsupportedOperation);
         import_exception!(breezy.errors, MergeProposalExists);
         import_exception!(breezy.errors, PermissionDenied);
+        import_exception!(breezy.errors, ReadOnlyError);
         import_exception!(breezy.forge, UnsupportedForge);
         import_exception!(breezy.forge, ForgeLoginRequired);
 
@@ -207,6 +208,7 @@ impl From<PyPublishError> for PyErr {
                 )
             }
             silver_platter::publish::Error::NoTargetBranch => PyErr::new::<NoTargetBranch, _>(()),
+            silver_platter::publish::Error::ReadOnly => PyErr::new::<ReadOnlyError, _>("ReadOnly"),
         }
     }
 }
