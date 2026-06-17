@@ -510,6 +510,9 @@ pub enum Error {
     /// Permission denied
     PermissionDenied,
 
+    /// Target branch is read-only (push not possible via this transport)
+    ReadOnly,
+
     /// No target branch
     NoTargetBranch,
 }
@@ -520,6 +523,7 @@ impl From<BrzError> for Error {
             BrzError::DivergedBranches => Error::DivergedBranches(),
             BrzError::NotBranchError(..) => Error::UnrelatedBranchExists,
             BrzError::PermissionDenied(..) => Error::PermissionDenied,
+            BrzError::ReadOnly => Error::ReadOnly,
             BrzError::UnsupportedForge(s) => Error::UnsupportedForge(s),
             BrzError::ForgeLoginRequired => Error::ForgeLoginRequired,
             _ => Error::Other(e),
@@ -543,6 +547,7 @@ impl std::fmt::Display for Error {
             Error::BranchOpenError(e) => write!(f, "{}", e),
             Error::EmptyMergeProposal => write!(f, "Empty merge proposal"),
             Error::PermissionDenied => write!(f, "Permission denied"),
+            Error::ReadOnly => write!(f, "Read-only"),
             Error::UnrelatedBranchExists => write!(f, "Unrelated branch exists"),
             Error::InsufficientChangesForNewProposal => {
                 write!(f, "Insufficient changes for new proposal")
@@ -848,6 +853,14 @@ pub fn publish_changes(
                         mode = Mode::Propose;
                     } else {
                         log::info!("permission denied during push");
+                        return Err(e);
+                    }
+                }
+                Err(e @ Error::ReadOnly) => {
+                    if mode == Mode::AttemptPush {
+                        log::info!("push target is read-only, falling back to propose");
+                        mode = Mode::Propose;
+                    } else {
                         return Err(e);
                     }
                 }
