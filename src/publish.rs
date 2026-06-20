@@ -808,9 +808,9 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
-    let write_lock = main_branch.lock_write()?;
     match mode {
         Mode::PushDerived => {
+            let write_lock = main_branch.lock_write()?;
             let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
             let (_remote_branch, _public_url) = push_derived_changes(
                 local_branch,
@@ -822,6 +822,7 @@ pub fn publish_changes(
                 tags,
                 Some(stop_revision),
             )?;
+            std::mem::drop(write_lock);
             return Ok(PublishResult {
                 mode,
                 target_branch: main_branch.get_user_url(),
@@ -951,7 +952,6 @@ pub fn publish_changes(
         auto_merge,
         work_in_progress,
     )?;
-    std::mem::drop(write_lock);
     Ok(PublishResult {
         mode,
         proposal: Some(proposal),
