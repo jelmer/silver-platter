@@ -808,28 +808,29 @@ pub fn publish_changes(
             log::info!("No changes added; making sure merge proposal is up to date.");
         }
     }
+    if mode == Mode::PushDerived {
+        let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
+        let (_remote_branch, _public_url) = push_derived_changes(
+            local_branch,
+            main_branch,
+            forge_ref,
+            name,
+            overwrite_existing,
+            derived_owner,
+            tags,
+            Some(stop_revision),
+        )?;
+        return Ok(PublishResult {
+            mode,
+            target_branch: main_branch.get_user_url(),
+            forge: forge.cloned(),
+            proposal: None,
+            is_new: None,
+        });
+    }
+
     let write_lock = main_branch.lock_write()?;
     match mode {
-        Mode::PushDerived => {
-            let forge_ref = forge.as_ref().unwrap(); // We checked above that forge is required for this mode
-            let (_remote_branch, _public_url) = push_derived_changes(
-                local_branch,
-                main_branch,
-                forge_ref,
-                name,
-                overwrite_existing,
-                derived_owner,
-                tags,
-                Some(stop_revision),
-            )?;
-            return Ok(PublishResult {
-                mode,
-                target_branch: main_branch.get_user_url(),
-                forge: forge.cloned(),
-                proposal: None,
-                is_new: None,
-            });
-        }
         Mode::Push | Mode::AttemptPush => {
             let read_lock = local_branch.lock_read()?;
             // breezy would do this check too, but we want to be *really* sure.
@@ -883,6 +884,7 @@ pub fn publish_changes(
         }
         Mode::Propose => { // Handled below
         }
+        Mode::PushDerived => unreachable!("handled before write lock"),
     }
 
     assert_eq!(mode, Mode::Propose);
