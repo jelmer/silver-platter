@@ -233,6 +233,17 @@ impl BranchOpenError {
     }
 }
 
+/// Resolve which branch name to open.
+///
+/// An explicit name always takes priority; otherwise falls back to the
+/// URL's own "branch" segment parameter.
+fn resolved_branch_name<'a>(
+    explicit: Option<&'a str>,
+    params: &'a std::collections::HashMap<String, String>,
+) -> Option<&'a str> {
+    explicit.or_else(|| params.get("branch").map(|s| s.as_str()))
+}
+
 /// Open a branch from a URL.
 pub fn open_branch(
     url: &url::Url,
@@ -241,16 +252,7 @@ pub fn open_branch(
     name: Option<&str>,
 ) -> Result<GenericBranch, BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
-
-    let name_owned;
-    let name = if let Some(name) = name {
-        Some(name)
-    } else if let Some(param_name) = params.get("name") {
-        name_owned = param_name.clone();
-        Some(name_owned.as_str())
-    } else {
-        None
-    };
+    let name = resolved_branch_name(name, &params);
 
     let transport = get_transport(&url, possible_transports)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
@@ -272,16 +274,7 @@ pub fn open_branch_containing(
     name: Option<&str>,
 ) -> Result<(GenericBranch, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
-
-    let name_owned;
-    let name = if let Some(name) = name {
-        Some(name)
-    } else if let Some(param_name) = params.get("name") {
-        name_owned = param_name.clone();
-        Some(name_owned.as_str())
-    } else {
-        None
-    };
+    let name = resolved_branch_name(name, &params);
 
     let transport = match get_transport(&url, possible_transports) {
         Ok(transport) => transport,
@@ -324,7 +317,30 @@ pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use url::Url;
+
+    #[test]
+    fn test_resolved_branch_name() {
+        let mut params = HashMap::new();
+        params.insert("branch".to_string(), "lintian-fixes/main".to_string());
+
+        // Test branch param
+        assert_eq!(
+            resolved_branch_name(None, &params),
+            Some("lintian-fixes/main")
+        );
+
+        // Test explicit override
+        assert_eq!(
+            resolved_branch_name(Some("other"), &params),
+            Some("other")
+        );
+
+        // Test no branch param
+        let empty = HashMap::new();
+        assert_eq!(resolved_branch_name(None, &empty), None);
+    }
 
     #[test]
     fn test_branch_open_error_display() {
