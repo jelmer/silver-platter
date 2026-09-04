@@ -176,7 +176,7 @@ impl From<PyPublishError> for PyErr {
         import_exception!(breezy.errors, NotBranchError);
         import_exception!(breezy.errors, UnsupportedOperation);
         import_exception!(breezy.errors, MergeProposalExists);
-        import_exception!(breezy.errors, PermissionDenied);
+        import_exception!(dromedary.errors, PermissionDenied);
         import_exception!(breezy.errors, ReadOnlyError);
         import_exception!(breezy.forge, UnsupportedForge);
         import_exception!(breezy.forge, ForgeLoginRequired);
@@ -1266,7 +1266,7 @@ fn merge_conflicts(
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
     import_exception!(breezy.errors, UnknownFormat);
-    import_exception!(breezy.errors, PermissionDenied);
+    import_exception!(dromedary.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
