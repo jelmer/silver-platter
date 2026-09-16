@@ -322,8 +322,7 @@ pub fn open_packaging_branch(
             }
         }
     } else {
-        let (url, params) =
-            breezyshim::urlutils::split_segment_parameters(&location.parse().unwrap());
+        let (url, params) = crate::vcs::split_branch_segment(&location.parse().unwrap());
         let branch_name = params.get("branch").map(|b| {
             percent_encoding::percent_decode_str(b)
                 .decode_utf8()

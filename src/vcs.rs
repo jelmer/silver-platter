@@ -2,9 +2,7 @@
 use breezyshim::branch::GenericBranch;
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::error::Error as BrzError;
-use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, Branch, Transport,
-};
+use breezyshim::{get_transport, join_segment_parameters, Branch, Transport};
 use percent_encoding::{utf8_percent_encode, CONTROLS};
 
 #[derive(Debug)]
@@ -244,6 +242,37 @@ fn resolved_branch_name<'a>(
     explicit.or_else(|| params.get("branch").map(|s| s.as_str()))
 }
 
+/// breezy's own `split_segment_parameters()` locates the segment-parameter
+/// marker by looking at the LAST "/" in the path, so it breaks whenever a
+/// parameter's value itself contains a "/" (e.g. a colocated branch name
+/// like "bump-versions/main") - the last "/" found is the one inside the
+/// value, not the one separating it from the real path, so nothing matches
+/// and the whole URL comes back unchanged with an empty params map.
+/// Reproduced directly on breezy 3.3.22: ",branch=main" parses fine,
+/// ",branch=bump-versions/main" does not (either version works fine on
+/// breezy 3.4.0.dev). Segment parameters are always appended directly
+/// after the real path's own trailing "/", so parse that convention here
+/// instead of depending on which breezy happens to be installed.
+pub(crate) fn split_branch_segment(
+    url: &url::Url,
+) -> (url::Url, std::collections::HashMap<String, String>) {
+    let path = url.path();
+    let mut params = std::collections::HashMap::new();
+    let Some(slash_idx) = path.find("/,") else {
+        return (url.clone(), params);
+    };
+    let (base_path, tail) = path.split_at(slash_idx + 1);
+    let tail = &tail[1..]; // drop the leading ","
+    for kv in tail.split(',') {
+        if let Some((k, v)) = kv.split_once('=') {
+            params.insert(k.to_string(), v.to_string());
+        }
+    }
+    let mut new_url = url.clone();
+    new_url.set_path(base_path);
+    (new_url, params)
+}
+
 /// Open a branch from a URL.
 pub fn open_branch(
     url: &url::Url,
@@ -251,7 +280,7 @@ pub fn open_branch(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<GenericBranch, BranchOpenError> {
-    let (url, params) = split_segment_parameters(url);
+    let (url, params) = split_branch_segment(url);
     let name = resolved_branch_name(name, &params);
 
     let transport = get_transport(&url, possible_transports)
@@ -273,7 +302,7 @@ pub fn open_branch_containing(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<(GenericBranch, String), BranchOpenError> {
-    let (url, params) = split_segment_parameters(url);
+    let (url, params) = split_branch_segment(url);
     let name = resolved_branch_name(name, &params);
 
     let transport = match get_transport(&url, possible_transports) {
@@ -304,7 +333,7 @@ pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
         None => branch.get_user_url(),
         Some(ref name) if name.is_empty() => branch.get_user_url(),
         Some(name) => {
-            let (url, mut params) = split_segment_parameters(&branch.get_user_url());
+            let (url, mut params) = split_branch_segment(&branch.get_user_url());
             params.insert(
                 "branch".to_string(),
                 utf8_percent_encode(&name, CONTROLS).to_string(),

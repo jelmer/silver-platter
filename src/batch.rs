@@ -764,7 +764,7 @@ fn publish_one(
                     let resume_branch_url =
                         existing_proposal.get_source_branch_url().unwrap().unwrap();
                     let (resume_branch_url, params) =
-                        breezyshim::urlutils::split_segment_parameters(&resume_branch_url);
+                        crate::vcs::split_branch_segment(&resume_branch_url);
                     let resume_branch_name = params.get("branch");
                     let resume_branch = match crate::vcs::open_branch(
                         &resume_branch_url,
