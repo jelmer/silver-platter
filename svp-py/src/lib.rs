@@ -14,6 +14,33 @@ use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
 
+/// Build a `PermissionDenied`, which moved from `breezy.errors` to
+/// `dromedary.errors` in breezy 3.4. Probes both, so either version works.
+fn permission_denied_err(msg: Option<String>) -> PyErr {
+    static CACHE: std::sync::OnceLock<Option<Py<PyAny>>> = std::sync::OnceLock::new();
+    Python::attach(|py| {
+        let resolved = CACHE.get_or_init(|| {
+            ["dromedary.errors", "breezy.errors"]
+                .iter()
+                .find_map(|m| {
+                    py.import(*m)
+                        .ok()
+                        .and_then(|m| m.getattr("PermissionDenied").ok())
+                })
+                .map(|o| o.unbind())
+        });
+        match resolved {
+            Some(ty) => match ty.bind(py).call1((msg,)) {
+                Ok(inst) => PyErr::from_value(inst),
+                Err(e) => e,
+            },
+            None => PyRuntimeError::new_err(
+                "PermissionDenied is in neither dromedary.errors nor breezy.errors",
+            ),
+        }
+    })
+}
+
 create_exception!(
     silver_platter,
     UnrelatedBranchExists,
@@ -176,7 +203,6 @@ impl From<PyPublishError> for PyErr {
         import_exception!(breezy.errors, NotBranchError);
         import_exception!(breezy.errors, UnsupportedOperation);
         import_exception!(breezy.errors, MergeProposalExists);
-        import_exception!(breezy.errors, PermissionDenied);
         import_exception!(breezy.errors, ReadOnlyError);
         import_exception!(breezy.forge, UnsupportedForge);
         import_exception!(breezy.forge, ForgeLoginRequired);
@@ -197,7 +223,7 @@ impl From<PyPublishError> for PyErr {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
             silver_platter::publish::Error::PermissionDenied => {
-                PyErr::new::<PermissionDenied, _>("PermissionDenied")
+                permission_denied_err(Some("PermissionDenied".to_string()))
             }
             silver_platter::publish::Error::EmptyMergeProposal => {
                 PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal")
@@ -1266,12 +1292,11 @@ fn merge_conflicts(
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
     import_exception!(breezy.errors, UnknownFormat);
-    import_exception!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
         silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
-        silver_platter::workspace::Error::PermissionDenied(e) => PermissionDenied::new_err((e,)),
+        silver_platter::workspace::Error::PermissionDenied(e) => permission_denied_err(e),
         silver_platter::workspace::Error::UnknownFormat(format) => {
             UnknownFormat::new_err((format,))
         }
