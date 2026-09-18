@@ -1070,7 +1070,7 @@ exit 0
         > = None;
         let get_title: Option<fn(&CommandResult, Option<&MergeProposal>) -> Option<String>> = None;
 
-        // The function should return a non-zero code (either 1 or 2 depending on the implementation details)
+        // The function should return 1 (success with changes)
         // The important part is that the script ran successfully but there was no merge proposal
         let result = apply_and_publish(
             &branch_url,
@@ -1092,7 +1092,7 @@ exit 0
             None,
         );
 
-        assert_eq!(result, 2, "Script with changes should return exit code 2");
+        assert_eq!(result, 1, "Script with changes should return exit code 1");
     }
 
     #[test]
@@ -1446,7 +1446,7 @@ exit 0
             Some(Path::new("frontend")),
         );
 
-        assert_eq!(result, 2, "Script with changes should return exit code 2");
+        assert_eq!(result, 1, "Script with changes should return exit code 1");
     }
 
     #[test]
