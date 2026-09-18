@@ -789,7 +789,7 @@ impl Workspace {
     /// Show the diff between the base tree and the local tree
     pub fn show_diff(
         &self,
-        outf: Box<dyn std::io::Write + Send>,
+        outf: &mut (dyn std::io::Write + Send),
         old_label: Option<&str>,
         new_label: Option<&str>,
     ) -> Result<(), BrzError> {

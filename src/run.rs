@@ -58,7 +58,7 @@ fn get_forge_and_proposals(
     derived_owner: Option<&str>,
 ) -> Result<
     (
-        Option<Box<Forge>>,
+        Option<Forge>,
         Vec<MergeProposal>,
         Option<GenericBranch>,
         bool,
@@ -109,7 +109,7 @@ fn get_forge_and_proposals(
             }
 
             Ok((
-                Some(Box::new(forge)),
+                Some(forge),
                 existing_proposals.unwrap_or_default(),
                 resume_branch,
                 overwrite,
@@ -550,7 +550,7 @@ pub fn apply_and_publish(
         mode,
         name,
         &result,
-        forge.as_deref(),
+        forge.as_ref(),
         overwrite,
         existing_proposal,
         derived_owner,
@@ -579,8 +579,7 @@ pub fn apply_and_publish(
     }
 
     if diff {
-        ws.show_diff(Box::new(std::io::stdout()), None, None)
-            .unwrap();
+        ws.show_diff(&mut std::io::stdout(), None, None).unwrap();
     }
 
     1
