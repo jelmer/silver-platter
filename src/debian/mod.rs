@@ -324,12 +324,9 @@ pub fn open_packaging_branch(
     } else {
         let (url, params) =
             breezyshim::urlutils::split_segment_parameters(&location.parse().unwrap());
-        let branch_name = params.get("branch").map(|b| {
-            percent_encoding::percent_decode_str(b)
-                .decode_utf8()
-                .unwrap()
-                .into_owned()
-        });
+        let branch_name = params
+            .get("branch")
+            .map(|b| crate::vcs::decode_segment_param(b));
         (url, branch_name, None)
     };
     let probers = crate::probers::select_probers(vcs_type.as_deref());

@@ -5,7 +5,19 @@ use breezyshim::error::Error as BrzError;
 use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, Transport,
 };
-use percent_encoding::{utf8_percent_encode, CONTROLS};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
+/// Segment-parameter values (e.g. a branch name) need `/` escaped too, on
+/// top of `CONTROLS` - unlike a URL's own path, a value can legitimately
+/// contain `/` (a colocated branch name like `bump-versions/main`), and an
+/// unescaped one is indistinguishable from another path/parameter boundary
+/// once joined back into the URL.
+const SEGMENT_PARAM_VALUE: &AsciiSet = &CONTROLS.add(b'/');
+
+/// Percent-decode a segment-parameter value pulled out of a URL, e.g. the
+/// `branch` param `split_segment_parameters` returns raw and undecoded.
+pub fn decode_segment_param(raw: &str) -> String {
+    percent_decode_str(raw).decode_utf8_lossy().into_owned()
+}
 
 #[derive(Debug)]
 /// Errors that can occur when opening a branch.
@@ -240,8 +252,12 @@ impl BranchOpenError {
 fn resolved_branch_name<'a>(
     explicit: Option<&'a str>,
     params: &'a std::collections::HashMap<String, String>,
-) -> Option<&'a str> {
-    explicit.or_else(|| params.get("branch").map(|s| s.as_str()))
+) -> Option<std::borrow::Cow<'a, str>> {
+    explicit.map(std::borrow::Cow::Borrowed).or_else(|| {
+        params
+            .get("branch")
+            .map(|s| std::borrow::Cow::Owned(decode_segment_param(s)))
+    })
 }
 
 /// Open a branch from a URL.
@@ -259,7 +275,7 @@ pub fn open_branch(
     let dir = open_from_transport(&transport, probers)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
 
-    dir.open_branch(name)
+    dir.open_branch(name.as_deref())
         .map(|branch| *branch)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))
 }
@@ -289,7 +305,7 @@ pub fn open_branch_containing(
         })?;
 
     let branch = dir
-        .open_branch(name)
+        .open_branch(name.as_deref())
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     Ok((*branch, subpath))
 }
@@ -307,7 +323,7 @@ pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
             let (url, mut params) = split_segment_parameters(&branch.get_user_url());
             params.insert(
                 "branch".to_string(),
-                utf8_percent_encode(&name, CONTROLS).to_string(),
+                utf8_percent_encode(&name, SEGMENT_PARAM_VALUE).to_string(),
             );
             join_segment_parameters(&url, params)
         }
@@ -328,15 +344,46 @@ mod tests {
         // Test branch param
         assert_eq!(
             resolved_branch_name(None, &params),
-            Some("lintian-fixes/main")
+            Some(std::borrow::Cow::Borrowed("lintian-fixes/main"))
         );
 
         // Test explicit override
-        assert_eq!(resolved_branch_name(Some("other"), &params), Some("other"));
+        assert_eq!(
+            resolved_branch_name(Some("other"), &params),
+            Some(std::borrow::Cow::Borrowed("other"))
+        );
 
         // Test no branch param
         let empty = HashMap::new();
         assert_eq!(resolved_branch_name(None, &empty), None);
+    }
+
+    #[test]
+    fn test_resolved_branch_name_decodes_percent_encoded_slash() {
+        // full_branch_url() escapes '/' in the branch name, so a colocated
+        // branch like "bump-versions/main" ends up in params as
+        // "bump-versions%2Fmain" - resolved_branch_name must decode it back.
+        let mut params = HashMap::new();
+        params.insert("branch".to_string(), "bump-versions%2Fmain".to_string());
+        assert_eq!(
+            resolved_branch_name(None, &params),
+            Some(std::borrow::Cow::Borrowed("bump-versions/main"))
+        );
+    }
+
+    #[test]
+    fn test_full_branch_url_escapes_slash_in_branch_name() {
+        // CONTROLS alone (the old encode-set) leaves '/' untouched - ambiguous
+        // with the URL's own path separators once joined back in.
+        assert_eq!(
+            utf8_percent_encode("bump-versions/main", CONTROLS).to_string(),
+            "bump-versions/main"
+        );
+        // SEGMENT_PARAM_VALUE (CONTROLS + '/') escapes it properly.
+        assert_eq!(
+            utf8_percent_encode("bump-versions/main", SEGMENT_PARAM_VALUE).to_string(),
+            "bump-versions%2Fmain"
+        );
     }
 
     #[test]
