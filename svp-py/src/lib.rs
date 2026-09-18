@@ -1476,9 +1476,9 @@ impl Workspace {
         old_label: Option<&str>,
         new_label: Option<&str>,
     ) -> PyResult<()> {
-        let outf = Box::new(pyo3_filelike::PyBinaryFile::from(outf));
+        let mut outf = pyo3_filelike::PyBinaryFile::from(outf);
 
-        self.0.show_diff(outf, old_label, new_label)?;
+        self.0.show_diff(&mut outf, old_label, new_label)?;
 
         Ok(())
     }
