@@ -587,7 +587,7 @@ fn script_runner(
     })
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct Forge(silver_platter::Forge);
 
