@@ -97,6 +97,38 @@ impl std::fmt::Display for BranchOpenError {
 }
 
 impl BranchOpenError {
+    /// Build a `RateLimited` error, reading the delay from the `Retry-After` header.
+    fn rate_limited(
+        url: url::Url,
+        e: &BrzError,
+        headers: &std::collections::HashMap<String, String>,
+    ) -> Self {
+        if let Some(retry_after) = headers.get("Retry-After") {
+            match retry_after.parse::<f64>() {
+                Ok(retry_after) => {
+                    return Self::RateLimited {
+                        url,
+                        description: e.to_string(),
+                        retry_after: Some(retry_after),
+                    };
+                }
+                Err(e) => {
+                    log::warn!("Unable to parse retry-after header: {}", retry_after);
+                    return Self::RateLimited {
+                        url,
+                        description: e.to_string(),
+                        retry_after: None,
+                    };
+                }
+            }
+        }
+        Self::RateLimited {
+            url,
+            description: e.to_string(),
+            retry_after: None,
+        }
+    }
+
     /// Convert a BrzError to a BranchOpenError.
     pub fn from_err(url: url::Url, e: &BrzError) -> Self {
         match e {
@@ -162,30 +194,7 @@ impl BranchOpenError {
             },
             BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
                 if msg.to_string().contains("Unexpected HTTP status 429") {
-                    if let Some(retry_after) = headers.get("Retry-After") {
-                        match retry_after.parse::<f64>() {
-                            Ok(retry_after) => {
-                                return Self::RateLimited {
-                                    url,
-                                    description: e.to_string(),
-                                    retry_after: Some(retry_after),
-                                };
-                            }
-                            Err(e) => {
-                                log::warn!("Unable to parse retry-after header: {}", retry_after);
-                                return Self::RateLimited {
-                                    url,
-                                    description: e.to_string(),
-                                    retry_after: None,
-                                };
-                            }
-                        }
-                    }
-                    Self::RateLimited {
-                        url,
-                        description: e.to_string(),
-                        retry_after: None,
-                    }
+                    Self::rate_limited(url, e, headers)
                 } else {
                     Self::Unavailable {
                         url,
@@ -193,6 +202,17 @@ impl BranchOpenError {
                     }
                 }
             }
+            BrzError::UnexpectedHttpStatus { code, headers, .. } => match code {
+                429 => Self::rate_limited(url, e, headers),
+                502 | 503 | 504 => Self::TemporarilyUnavailable {
+                    url,
+                    description: e.to_string(),
+                },
+                _ => Self::Unavailable {
+                    url,
+                    description: e.to_string(),
+                },
+            },
             BrzError::TransportError(message) => Self::Unavailable {
                 url,
                 description: message.to_string(),
