@@ -97,15 +97,19 @@ impl std::fmt::Display for SignError {
 
 impl std::error::Error for SignError {}
 
-/// debsign a changes file
-pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
-    let mut args = vec!["debsign".to_string()];
+fn debsign_args(path: &Path, keyid: Option<&str>) -> Vec<String> {
+    let mut args = Vec::new();
     if let Some(keyid) = keyid {
         args.push(format!("-k{}", keyid));
     }
     args.push(path.file_name().unwrap().to_string_lossy().to_string());
+    args
+}
+
+/// debsign a changes file
+pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
     let status = std::process::Command::new("debsign")
-        .args(&args)
+        .args(debsign_args(path, keyid))
         .current_dir(path.parent().unwrap())
         .status()?;
 
