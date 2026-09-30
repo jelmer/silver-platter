@@ -106,6 +106,34 @@ fn debsign_args(path: &Path, keyid: Option<&str>) -> Vec<String> {
     args
 }
 
+#[cfg(test)]
+mod debsign_args_tests {
+    use super::debsign_args;
+    use std::path::Path;
+
+    #[test]
+    fn test_no_keyid() {
+        assert_eq!(
+            vec!["foo_1.0-1_amd64.changes".to_string()],
+            debsign_args(Path::new("/tmp/build/foo_1.0-1_amd64.changes"), None)
+        );
+    }
+
+    #[test]
+    fn test_with_keyid() {
+        assert_eq!(
+            vec![
+                "-kC4C11B402FC851F291F065A9AAEF30C92E9098B8".to_string(),
+                "foo_1.0-1_amd64.changes".to_string()
+            ],
+            debsign_args(
+                Path::new("/tmp/build/foo_1.0-1_amd64.changes"),
+                Some("C4C11B402FC851F291F065A9AAEF30C92E9098B8")
+            )
+        );
+    }
+}
+
 /// debsign a changes file
 pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
     let status = std::process::Command::new("debsign")
