@@ -97,15 +97,47 @@ impl std::fmt::Display for SignError {
 
 impl std::error::Error for SignError {}
 
-/// debsign a changes file
-pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
-    let mut args = vec!["debsign".to_string()];
+fn debsign_args(path: &Path, keyid: Option<&str>) -> Vec<String> {
+    let mut args = Vec::new();
     if let Some(keyid) = keyid {
         args.push(format!("-k{}", keyid));
     }
     args.push(path.file_name().unwrap().to_string_lossy().to_string());
+    args
+}
+
+#[cfg(test)]
+mod debsign_args_tests {
+    use super::debsign_args;
+    use std::path::Path;
+
+    #[test]
+    fn test_no_keyid() {
+        assert_eq!(
+            vec!["foo_1.0-1_amd64.changes".to_string()],
+            debsign_args(Path::new("/tmp/build/foo_1.0-1_amd64.changes"), None)
+        );
+    }
+
+    #[test]
+    fn test_with_keyid() {
+        assert_eq!(
+            vec![
+                "-kC4C11B402FC851F291F065A9AAEF30C92E9098B8".to_string(),
+                "foo_1.0-1_amd64.changes".to_string()
+            ],
+            debsign_args(
+                Path::new("/tmp/build/foo_1.0-1_amd64.changes"),
+                Some("C4C11B402FC851F291F065A9AAEF30C92E9098B8")
+            )
+        );
+    }
+}
+
+/// debsign a changes file
+pub fn debsign(path: &Path, keyid: Option<&str>) -> Result<(), SignError> {
     let status = std::process::Command::new("debsign")
-        .args(&args)
+        .args(debsign_args(path, keyid))
         .current_dir(path.parent().unwrap())
         .status()?;
 
