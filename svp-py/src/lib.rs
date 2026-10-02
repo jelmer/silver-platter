@@ -75,7 +75,7 @@ create_exception!(
     pyo3::exceptions::PyException
 );
 
-#[pyclass(extends=PyException,subclass)]
+#[pyclass(extends=PyException, module = "silver_platter", subclass)]
 struct BranchError {
     #[pyo3(get)]
     url: String,
@@ -92,10 +92,58 @@ impl BranchError {
     }
 }
 
-create_exception!(silver_platter, BranchUnsupported, BranchError);
+#[pyclass(extends=BranchError, module = "silver_platter", subclass)]
+struct BranchUnsupported {
+    #[pyo3(get)]
+    vcs: Option<String>,
+}
+
+#[pymethods]
+impl BranchUnsupported {
+    #[new]
+    #[pyo3(signature = (url, message, vcs=None))]
+    fn new(url: String, message: String, vcs: Option<String>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(BranchError { url, message }).add_subclass(Self { vcs })
+    }
+
+    #[pyo3(signature = (url, message, vcs=None))]
+    fn __init__(
+        slf: &Bound<'_, Self>,
+        url: String,
+        message: String,
+        vcs: Option<String>,
+    ) -> PyResult<()> {
+        slf.setattr("args", (url, message, vcs))
+    }
+}
+
+#[pyclass(extends=BranchError, module = "silver_platter", subclass)]
+struct BranchRateLimited {
+    #[pyo3(get)]
+    retry_after: Option<f64>,
+}
+
+#[pymethods]
+impl BranchRateLimited {
+    #[new]
+    #[pyo3(signature = (url, message, retry_after=None))]
+    fn new(url: String, message: String, retry_after: Option<f64>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(BranchError { url, message }).add_subclass(Self { retry_after })
+    }
+
+    #[pyo3(signature = (url, message, retry_after=None))]
+    fn __init__(
+        slf: &Bound<'_, Self>,
+        url: String,
+        message: String,
+        retry_after: Option<f64>,
+    ) -> PyResult<()> {
+        slf.setattr("args", (url, message, retry_after))
+    }
+}
+
 create_exception!(silver_platter, BranchTemporarilyUnavailable, BranchError);
 create_exception!(silver_platter, BranchUnavailable, BranchError);
-create_exception!(silver_platter, BranchRateLimited, BranchError);
 create_exception!(silver_platter, BranchMissing, BranchError);
 
 // Newtype wrappers for PyO3 trait implementations
@@ -142,7 +190,7 @@ impl From<PyBranchOpenError> for PyErr {
                 url,
                 description,
                 vcs,
-            } => BranchUnsupported::new_err((url.to_string(), description, vcs)),
+            } => PyErr::new::<BranchUnsupported, _>((url.to_string(), description, vcs)),
             silver_platter::vcs::BranchOpenError::Missing { url, description } => {
                 BranchMissing::new_err((url.to_string(), description))
             }
@@ -150,7 +198,7 @@ impl From<PyBranchOpenError> for PyErr {
                 url,
                 description,
                 retry_after,
-            } => BranchRateLimited::new_err((url.to_string(), description, retry_after)),
+            } => PyErr::new::<BranchRateLimited, _>((url.to_string(), description, retry_after)),
             silver_platter::vcs::BranchOpenError::Unavailable { url, description } => {
                 BranchUnavailable::new_err((url.to_string(), description))
             }
