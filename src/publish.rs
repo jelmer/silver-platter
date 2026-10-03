@@ -158,7 +158,7 @@ pub fn find_existing_proposed(
     name: &str,
     overwrite_unrelated: bool,
     owner: Option<&str>,
-    _preferred_schemes: Option<&[&str]>,
+    preferred_schemes: Option<&[&str]>,
 ) -> Result<
     (
         Option<GenericBranch>,
@@ -167,7 +167,7 @@ pub fn find_existing_proposed(
     ),
     BrzError,
 > {
-    match forge.get_derived_branch_as_generic(main_branch, name, owner, None) {
+    match forge.get_derived_branch_as_generic(main_branch, name, owner, preferred_schemes) {
         Ok(derived_branch) => {
             // Found existing derived branch
             let proposals =
