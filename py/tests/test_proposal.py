@@ -18,9 +18,10 @@
 import os
 from io import BytesIO
 
+from breezy.errors import NotBranchError
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter import Workspace
+from silver_platter import Workspace, find_existing_proposed
 
 
 class WorkspaceTests(TestCaseWithTransport):
@@ -102,3 +103,36 @@ class WorkspaceTests(TestCaseWithTransport):
             self.assertContainsRe(
                 f.getvalue().decode("utf-8"), "\\+some content"
             )
+
+
+class RecordingForge:
+    def __init__(self):
+        self.calls = []
+
+    def get_derived_branch(self, main_branch, name, **kwargs):
+        self.calls.append((name, kwargs))
+        raise NotBranchError(name)
+
+
+class FindExistingProposedTests(TestCaseWithTransport):
+    def test_preferred_schemes(self):
+        b = self.make_branch("target")
+        forge = RecordingForge()
+        self.assertEqual(
+            (None, None, None),
+            find_existing_proposed(
+                b, forge, "branch", preferred_schemes=["https", "git"]
+            ),
+        )
+        self.assertEqual(
+            [("branch", {"preferred_schemes": ["https", "git"]})],
+            forge.calls,
+        )
+
+    def test_no_preferred_schemes(self):
+        b = self.make_branch("target")
+        forge = RecordingForge()
+        self.assertEqual(
+            (None, None, None), find_existing_proposed(b, forge, "branch")
+        )
+        self.assertEqual([("branch", {})], forge.calls)
