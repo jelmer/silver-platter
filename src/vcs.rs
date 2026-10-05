@@ -504,4 +504,27 @@ mod tests {
             _ => panic!("Expected TemporarilyUnavailable error"),
         }
     }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_full_branch_url_round_trips_slash_in_branch_name() {
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::prelude::*;
+        let _test_env = breezyshim::testing::TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let tree = create_standalone_workingtree(td.path(), "git").unwrap();
+        tree.build_commit()
+            .message("initial")
+            .committer("Joe Tester <joe@example.com>")
+            .commit()
+            .unwrap();
+        let branch = tree.controldir().create_branch(Some("a/b")).unwrap();
+        branch.pull(&tree.branch(), None).unwrap();
+
+        let url = full_branch_url(branch.as_ref());
+        assert!(url.as_str().ends_with(",branch=a%2Fb"), "{}", url);
+
+        let reopened = open_branch(&url, None, None, None).unwrap();
+        assert_eq!(reopened.name().as_deref(), Some("a/b"));
+    }
 }
