@@ -18,10 +18,10 @@
 import os
 from io import BytesIO
 
-from breezy.errors import NotBranchError
+from breezy.errors import DivergedBranches, NotBranchError
 from breezy.tests import TestCaseWithTransport
 
-from silver_platter import Workspace, find_existing_proposed
+from silver_platter import Workspace, find_existing_proposed, push_changes
 
 
 class WorkspaceTests(TestCaseWithTransport):
@@ -136,3 +136,15 @@ class FindExistingProposedTests(TestCaseWithTransport):
             (None, None, None), find_existing_proposed(b, forge, "branch")
         )
         self.assertEqual([("branch", {})], forge.calls)
+
+
+class PushChangesTests(TestCaseWithTransport):
+    def test_diverged(self):
+        main = self.make_branch_and_tree("main")
+        main.commit("base")
+        local = main.controldir.sprout("local").open_workingtree()
+        main.commit("on main")
+        local.commit("on local")
+        self.assertRaises(
+            DivergedBranches, push_changes, local.branch, main.branch
+        )

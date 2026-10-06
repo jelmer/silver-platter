@@ -231,7 +231,7 @@ impl From<PyPublishError> for PyErr {
 
         match e.0 {
             silver_platter::publish::Error::DivergedBranches() => {
-                PyErr::new::<DivergedBranches, _>("DivergedBranches")
+                Python::attach(|py| DivergedBranches::new_err((py.None(), py.None())))
             }
             silver_platter::publish::Error::Other(e) => e.into(),
             silver_platter::publish::Error::BranchOpenError(e) => PyBranchOpenError(e).into(),
