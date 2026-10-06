@@ -477,4 +477,74 @@ mod tests {
             _ => panic!("Expected TemporarilyUnavailable error"),
         }
     }
+
+    fn unexpected_http_status(code: u16, headers: &[(&str, &str)]) -> BranchOpenError {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = BrzError::UnexpectedHttpStatus {
+            url: url.clone(),
+            code,
+            extra: None,
+            headers: headers
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        };
+        BranchOpenError::from_err(url, &brz_err)
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_with_retry_after() {
+        match unexpected_http_status(429, &[("Retry-After", "30")]) {
+            BranchOpenError::RateLimited {
+                url,
+                description,
+                retry_after,
+            } => {
+                assert_eq!(url.as_str(), "https://example.com/repo");
+                assert_eq!(retry_after, Some(30.0));
+                assert!(description.contains("429"), "{}", description);
+            }
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_without_retry_after() {
+        match unexpected_http_status(429, &[]) {
+            BranchOpenError::RateLimited { retry_after, .. } => assert_eq!(retry_after, None),
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_503() {
+        match unexpected_http_status(503, &[]) {
+            BranchOpenError::TemporarilyUnavailable { description, .. } => {
+                assert!(description.contains("503"), "{}", description);
+            }
+            e => panic!("Expected TemporarilyUnavailable error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_502_and_504() {
+        for code in [502, 504] {
+            match unexpected_http_status(code, &[]) {
+                BranchOpenError::TemporarilyUnavailable { .. } => {}
+                e => panic!("Expected TemporarilyUnavailable error, got {:?}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_other() {
+        for code in [401, 500] {
+            match unexpected_http_status(code, &[]) {
+                BranchOpenError::Unavailable { description, .. } => {
+                    assert!(description.contains(&code.to_string()), "{}", description);
+                }
+                e => panic!("Expected Unavailable error, got {:?}", e),
+            }
+        }
+    }
 }
