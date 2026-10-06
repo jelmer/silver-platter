@@ -161,31 +161,8 @@ impl BranchOpenError {
                     .unwrap_or_else(|| format!("Invalid URL: {}", url)),
             },
             BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
-                if msg.to_string().contains("Unexpected HTTP status 429") {
-                    if let Some(retry_after) = headers.get("Retry-After") {
-                        match retry_after.parse::<f64>() {
-                            Ok(retry_after) => {
-                                return Self::RateLimited {
-                                    url,
-                                    description: e.to_string(),
-                                    retry_after: Some(retry_after),
-                                };
-                            }
-                            Err(e) => {
-                                log::warn!("Unable to parse retry-after header: {}", retry_after);
-                                return Self::RateLimited {
-                                    url,
-                                    description: e.to_string(),
-                                    retry_after: None,
-                                };
-                            }
-                        }
-                    }
-                    Self::RateLimited {
-                        url,
-                        description: e.to_string(),
-                        retry_after: None,
-                    }
+                if msg.contains("Unexpected HTTP status 429") {
+                    Self::rate_limited(url, e, headers)
                 } else {
                     Self::Unavailable {
                         url,
@@ -193,6 +170,13 @@ impl BranchOpenError {
                     }
                 }
             }
+            BrzError::UnexpectedHttpStatus {
+                code: 429, headers, ..
+            } => Self::rate_limited(url, e, headers),
+            BrzError::UnexpectedHttpStatus { .. } => Self::Unavailable {
+                url,
+                description: e.to_string(),
+            },
             BrzError::TransportError(message) => Self::Unavailable {
                 url,
                 description: message.to_string(),
@@ -229,6 +213,28 @@ impl BranchOpenError {
                 description: e.to_string(),
             },
             _ => Self::Other(e.to_string()),
+        }
+    }
+
+    fn rate_limited(
+        url: url::Url,
+        e: &BrzError,
+        headers: &std::collections::HashMap<String, String>,
+    ) -> Self {
+        let retry_after = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("Retry-After"))
+            .and_then(|(_, v)| match v.parse::<f64>() {
+                Ok(retry_after) => Some(retry_after),
+                Err(_) => {
+                    log::warn!("Unable to parse retry-after header: {}", v);
+                    None
+                }
+            });
+        Self::RateLimited {
+            url,
+            description: e.to_string(),
+            retry_after,
         }
     }
 }
@@ -455,6 +461,98 @@ mod tests {
                 assert_eq!(description, "Temporary failure in name resolution");
             }
             _ => panic!("Expected TemporarilyUnavailable error"),
+        }
+    }
+
+    fn unexpected_http_status(code: u16, headers: &[(&str, &str)]) -> BrzError {
+        BrzError::UnexpectedHttpStatus {
+            url: Url::parse("https://example.com/repo").unwrap(),
+            code,
+            extra: None,
+            headers: headers
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_is_rate_limited() {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = unexpected_http_status(429, &[("Retry-After", "60")]);
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::RateLimited {
+                url: err_url,
+                description,
+                retry_after,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, brz_err.to_string());
+                assert_eq!(retry_after, Some(60.0));
+            }
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_lowercase_retry_after() {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = unexpected_http_status(429, &[("retry-after", "5")]);
+        match BranchOpenError::from_err(url, &brz_err) {
+            BranchOpenError::RateLimited { retry_after, .. } => {
+                assert_eq!(retry_after, Some(5.0));
+            }
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_without_retry_after() {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = unexpected_http_status(429, &[]);
+        match BranchOpenError::from_err(url, &brz_err) {
+            BranchOpenError::RateLimited {
+                description,
+                retry_after,
+                ..
+            } => {
+                assert_eq!(description, brz_err.to_string());
+                assert_eq!(retry_after, None);
+            }
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_429_unparseable_retry_after() {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = unexpected_http_status(429, &[("Retry-After", "soon")]);
+        match BranchOpenError::from_err(url, &brz_err) {
+            BranchOpenError::RateLimited {
+                description,
+                retry_after,
+                ..
+            } => {
+                assert_eq!(description, brz_err.to_string());
+                assert_eq!(retry_after, None);
+            }
+            e => panic!("Expected RateLimited error, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_unexpected_http_status_other_is_unavailable() {
+        let url = Url::parse("https://example.com/repo").unwrap();
+        let brz_err = unexpected_http_status(502, &[]);
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unavailable {
+                url: err_url,
+                description,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, brz_err.to_string());
+            }
+            e => panic!("Expected Unavailable error, got {:?}", e),
         }
     }
 }
