@@ -775,7 +775,7 @@ impl SvpMcpServer {
     }
 }
 
-#[tool_handler]
+#[tool_handler(router = self.tool_router)]
 impl rmcp::handler::server::ServerHandler for SvpMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(
