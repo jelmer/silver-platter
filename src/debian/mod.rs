@@ -223,7 +223,9 @@ pub fn find_last_release_revid(
 }
 
 /// Pick the additional colocated branches to use for a given main branch.
-pub fn pick_additional_colocated_branches(main_branch: &GenericBranch) -> HashMap<String, String> {
+pub fn pick_additional_colocated_branches(
+    main_branch: &GenericBranch,
+) -> Result<HashMap<String, String>, breezyshim::error::Error> {
     let mut ret: HashMap<String, String> = vec![
         ("pristine-tar", "pristine-tar"),
         ("pristine-lfs", "pristine-lfs"),
@@ -242,11 +244,12 @@ pub fn pick_additional_colocated_branches(main_branch: &GenericBranch) -> HashMa
             ret.insert(parts.join("/"), "upstream".to_string());
         }
     }
-    let existing_branch_names = main_branch.controldir().branch_names().unwrap();
+    let existing_branch_names = main_branch.controldir().branch_names()?;
 
-    ret.into_iter()
+    Ok(ret
+        .into_iter()
         .filter(|(k, _)| existing_branch_names.contains(k))
-        .collect()
+        .collect())
 }
 
 /// Get source package metadata.
@@ -766,5 +769,33 @@ lintian-brush (0.35) UNRELEASED; urgency=medium
 "#,
             std::fs::read_to_string(td.path().join("debian/changelog")).unwrap()
         );
+    }
+
+    #[test]
+    fn test_pick_additional_colocated_branches_none_present() {
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        let branch = tree.branch();
+        assert_eq!(
+            pick_additional_colocated_branches(&branch).unwrap(),
+            HashMap::new()
+        );
+    }
+
+    #[test]
+    fn test_pick_additional_colocated_branches_error() {
+        let td = tempfile::tempdir().unwrap();
+        let tree = make_branch_and_tree(td.path());
+        let branch = tree.branch();
+        // A branch reference without a location makes opening the branch fail.
+        std::fs::write(
+            td.path().join(".bzr/branch/format"),
+            "Bazaar-NG Branch Reference Format 1\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            pick_additional_colocated_branches(&branch),
+            Err(breezyshim::error::Error::NoSuchFile(_))
+        ));
     }
 }
