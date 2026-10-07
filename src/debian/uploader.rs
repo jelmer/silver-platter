@@ -1219,9 +1219,19 @@ pub fn process_package(
         }
     };
     let mut ws_builder = crate::workspace::Workspace::builder();
-    ws_builder = ws_builder.additional_colocated_branches(
-        crate::debian::pick_additional_colocated_branches(&main_branch),
-    );
+    let additional_colocated_branches =
+        crate::debian::pick_additional_colocated_branches(&main_branch).map_err(|e| {
+            log::info!(
+                "{}: unable to list colocated branches: {}",
+                vcs_url.as_ref().unwrap(),
+                e
+            );
+            UploadPackageError::ProcessingFailure(
+                "vcs-error".to_string(),
+                Some(format!("Unable to list colocated branches: {}", e)),
+            )
+        })?;
+    ws_builder = ws_builder.additional_colocated_branches(additional_colocated_branches);
     let ws = ws_builder.main_branch(main_branch).build().unwrap();
     if source_name.is_none() {
         let control_path = subpath.join("debian/control");
