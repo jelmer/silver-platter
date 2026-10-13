@@ -265,4 +265,62 @@ mod tests {
         assert_eq!(tree.last_revision().unwrap(), revid);
         std::mem::drop(sprout);
     }
+
+    fn commit(wt: &GenericWorkingTree, message: &str) -> RevisionId {
+        wt.build_commit()
+            .message(message)
+            .allow_pointless(true)
+            .commit()
+            .unwrap()
+    }
+
+    // A git tree: the main branch, tag "v1" one commit ahead, branch "other" two ahead.
+    fn make_git_tree(base: &std::path::Path) -> (GenericWorkingTree, RevisionId, RevisionId) {
+        let wt = breezyshim::controldir::create_standalone_workingtree(base, "git").unwrap();
+        let main_revid = commit(&wt, "main");
+        let tagged_revid = commit(&wt, "tagged");
+        let other_revid = commit(&wt, "other");
+        let branch = wt.branch();
+        let other = branch.controldir().create_branch(Some("other")).unwrap();
+        other.generate_revision_history(&other_revid).unwrap();
+        branch.tags().unwrap().set_tag("v1", &tagged_revid).unwrap();
+        branch.generate_revision_history(&main_revid).unwrap();
+        (wt, tagged_revid, other_revid)
+    }
+
+    #[test]
+    #[serial]
+    fn test_sprout_git_fetches_tip_and_tags_only() {
+        let _test_env = TestEnv::new();
+        let base = tempfile::tempdir().unwrap();
+        let (wt, tagged_revid, other_revid) = make_git_tree(base.path());
+        let branch = wt.branch();
+        assert!(branch.repository().has_revision(&other_revid).unwrap());
+
+        let sprout = TempSprout::new(&branch, None).unwrap();
+
+        assert_eq!(sprout.last_revision().unwrap(), branch.last_revision());
+        let sprout_branch = sprout.workingtree.branch();
+        let tags = sprout_branch.tags().unwrap().get_tag_dict().unwrap();
+        assert_eq!(tags.get("v1"), Some(&tagged_revid));
+        let repository = sprout_branch.repository();
+        assert!(repository.has_revision(&tagged_revid).unwrap());
+        assert!(!repository.has_revision(&other_revid).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn test_sprout_git_additional_colocated_branch() {
+        let _test_env = TestEnv::new();
+        let base = tempfile::tempdir().unwrap();
+        let (wt, _tagged_revid, other_revid) = make_git_tree(base.path());
+
+        let colocated = HashMap::from([("other".to_string(), "other".to_string())]);
+        let sprout = TempSprout::new(&wt.branch(), Some(colocated)).unwrap();
+
+        let controldir = sprout.workingtree.branch().controldir();
+        let other = controldir.open_branch(Some("other")).unwrap();
+        assert_eq!(other.last_revision(), other_revid);
+        assert!(other.repository().has_revision(&other_revid).unwrap());
+    }
 }
