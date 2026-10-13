@@ -149,7 +149,7 @@ impl BranchOpenError {
                 description: "no colocated branch support".to_string(),
                 vcs: None,
             },
-            BrzError::Socket(e) => Self::Unavailable {
+            BrzError::Socket(e, ..) => Self::Unavailable {
                 url,
                 description: format!("Socket error: {}", e),
             },
