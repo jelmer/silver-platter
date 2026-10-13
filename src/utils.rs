@@ -99,11 +99,17 @@ pub fn create_temp_sprout(
         branch.format().supports_stacking() && branch.repository().format().supports_chks();
     let to_url: url::Url = url::Url::from_directory_path(path).unwrap();
 
+    // Without a revision the git fetch asks for every ref of the source.
+    let revision_id = Some(branch.last_revision()).filter(|r| !r.is_null());
+
     // preserve whatever source format we have.
-    let to_dir =
-        branch
-            .controldir()
-            .sprout(to_url, Some(branch), Some(true), Some(use_stacking), None)?;
+    let to_dir = branch.controldir().sprout(
+        to_url,
+        Some(branch),
+        Some(true),
+        Some(use_stacking),
+        revision_id.as_ref(),
+    )?;
 
     // TODO(jelmer): Fetch these during the initial clone
     for (from_branch_name, to_branch_name) in additional_colocated_branches.unwrap_or_default() {
