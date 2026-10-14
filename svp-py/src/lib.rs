@@ -223,7 +223,7 @@ impl From<PyPublishError> for PyErr {
     fn from(e: PyPublishError) -> Self {
         import_exception!(breezy.errors, NotBranchError);
         import_exception!(breezy.errors, UnsupportedOperation);
-        import_exception!(breezy.errors, MergeProposalExists);
+        import_exception!(breezy.forge, MergeProposalExists);
         import_exception!(breezy.errors, PermissionDenied);
         import_exception!(breezy.errors, ReadOnlyError);
         import_exception!(breezy.forge, UnsupportedForge);
@@ -1313,7 +1313,7 @@ fn merge_conflicts(
 }
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
-    import_exception!(breezy.errors, UnknownFormat);
+    import_exception!(breezy.errors, UnknownFormatError);
     import_exception!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
@@ -1321,7 +1321,7 @@ fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
         silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
         silver_platter::workspace::Error::PermissionDenied(e) => PermissionDenied::new_err((e,)),
         silver_platter::workspace::Error::UnknownFormat(format) => {
-            UnknownFormat::new_err((format,))
+            UnknownFormatError::new_err((format,))
         }
     }
 }
