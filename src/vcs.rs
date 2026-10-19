@@ -153,12 +153,11 @@ impl BranchOpenError {
                 url,
                 description: format!("Socket error: {}", e),
             },
-            BrzError::UnsupportedProtocol(url, extra) => Self::Unsupported {
-                url: url.parse().unwrap(),
-                description: if let Some(extra) = extra {
-                    format!("Unsupported protocol: {}", extra)
-                } else {
-                    "Unsupported protocol".to_string()
+            BrzError::UnsupportedProtocol(path, extra) => Self::Unsupported {
+                url: path.parse().unwrap_or(url),
+                description: match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() => format!("Unsupported protocol: {}", extra),
+                    _ => "Unsupported protocol".to_string(),
                 },
                 vcs: None,
             },
@@ -185,12 +184,12 @@ impl BranchOpenError {
                     extra.as_deref().unwrap_or("")
                 ),
             },
-            BrzError::InvalidURL(url, extra) => Self::Unavailable {
-                url: url.parse().unwrap(),
-                description: extra
-                    .as_ref()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("Invalid URL: {}", url)),
+            BrzError::InvalidURL(path, extra) => Self::Unavailable {
+                url: path.parse().unwrap_or(url),
+                description: match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() => extra.to_string(),
+                    _ => format!("Invalid URL: {}", path),
+                },
             },
             BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
                 if msg.to_string().contains("Unexpected HTTP status 429") {
