@@ -492,6 +492,39 @@ mod tests {
     }
 
     #[test]
+    fn test_branch_open_error_from_err_path_not_url() {
+        let url = Url::parse("lp:foo").unwrap();
+        let brz_err = BrzError::InvalidURL(
+            "Unknown Launchpad path: lp:foo".to_string(),
+            Some(String::new()),
+        );
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unavailable {
+                url: err_url,
+                description,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Invalid URL: Unknown Launchpad path: lp:foo");
+            }
+            e => panic!("Expected Unavailable error, got {:?}", e),
+        }
+
+        let brz_err = BrzError::UnsupportedProtocol("not a url".to_string(), Some(String::new()));
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unsupported {
+                url: err_url,
+                description,
+                vcs,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Unsupported protocol");
+                assert_eq!(vcs, None);
+            }
+            e => panic!("Expected Unsupported error, got {:?}", e),
+        }
+    }
+
+    #[test]
     fn test_unexpected_http_status_429_with_retry_after() {
         match unexpected_http_status(429, &[("Retry-After", "30")]) {
             BranchOpenError::RateLimited {
