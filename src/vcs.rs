@@ -556,4 +556,29 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_full_branch_url_escapes_name() {
+        use breezyshim::tree::WorkingTree;
+        let _test_env = breezyshim::testing::TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let format = breezyshim::controldir::ControlDirFormatRegistry::new()
+            .make_controldir("git")
+            .unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(td.path(), &format).unwrap();
+        let revid = wt.build_commit().message("x").commit().unwrap();
+        let branch = wt.controldir().create_branch(Some("debian/a,b")).unwrap();
+        branch.generate_revision_history(&revid).unwrap();
+        let url = full_branch_url(branch.as_ref());
+        assert_eq!(
+            url.as_str(),
+            format!(
+                "{},branch=debian%2Fa%2Cb",
+                Url::from_directory_path(td.path()).unwrap()
+            )
+        );
+        let reopened = open_branch(&url, None, None, None).unwrap();
+        assert_eq!(reopened.name(), Some("debian/a,b".to_string()));
+    }
 }
