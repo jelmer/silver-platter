@@ -142,6 +142,14 @@ mod debsign_args_tests {
             )
         );
     }
+
+    #[test]
+    fn test_dash_file_name() {
+        assert_eq!(
+            vec!["./-x_1.0-1_amd64.changes".to_string()],
+            debsign_args(Path::new("/tmp/build/-x_1.0-1_amd64.changes"), None)
+        );
+    }
 }
 
 /// debsign a changes file
