@@ -157,12 +157,11 @@ impl BranchOpenError {
                     format!("Socket error: {}", e)
                 },
             },
-            BrzError::UnsupportedProtocol(url, extra) => Self::Unsupported {
-                url: url.parse().unwrap(),
-                description: if let Some(extra) = extra {
-                    format!("Unsupported protocol: {}", extra)
-                } else {
-                    "Unsupported protocol".to_string()
+            BrzError::UnsupportedProtocol(path, extra) => Self::Unsupported {
+                url: path.parse().unwrap_or(url),
+                description: match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() => format!("Unsupported protocol: {}", extra),
+                    _ => "Unsupported protocol".to_string(),
                 },
                 vcs: None,
             },
@@ -189,12 +188,12 @@ impl BranchOpenError {
                     extra.as_deref().unwrap_or("")
                 ),
             },
-            BrzError::InvalidURL(url, extra) => Self::Unavailable {
-                url: url.parse().unwrap(),
-                description: extra
-                    .as_ref()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("Invalid URL: {}", url)),
+            BrzError::InvalidURL(path, extra) => Self::Unavailable {
+                url: path.parse().unwrap_or(url),
+                description: match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() => extra.to_string(),
+                    _ => format!("Invalid URL: {}", path),
+                },
             },
             BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
                 if msg.to_string().contains("Unexpected HTTP status 429") {
@@ -494,6 +493,39 @@ mod tests {
                 .collect(),
         };
         BranchOpenError::from_err(url, &brz_err)
+    }
+
+    #[test]
+    fn test_branch_open_error_from_err_path_not_url() {
+        let url = Url::parse("lp:foo").unwrap();
+        let brz_err = BrzError::InvalidURL(
+            "Unknown Launchpad path: lp:foo".to_string(),
+            Some(String::new()),
+        );
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unavailable {
+                url: err_url,
+                description,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Invalid URL: Unknown Launchpad path: lp:foo");
+            }
+            e => panic!("Expected Unavailable error, got {:?}", e),
+        }
+
+        let brz_err = BrzError::UnsupportedProtocol("not a url".to_string(), Some(String::new()));
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unsupported {
+                url: err_url,
+                description,
+                vcs,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Unsupported protocol");
+                assert_eq!(vcs, None);
+            }
+            e => panic!("Expected Unsupported error, got {:?}", e),
+        }
     }
 
     #[test]
