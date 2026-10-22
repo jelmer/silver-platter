@@ -149,9 +149,13 @@ impl BranchOpenError {
                 description: "no colocated branch support".to_string(),
                 vcs: None,
             },
-            BrzError::Socket(e) => Self::Unavailable {
+            BrzError::Socket(e, detail) => Self::Unavailable {
                 url,
-                description: format!("Socket error: {}", e),
+                description: if let Some(detail) = detail {
+                    format!("Socket error: {} ({})", e, detail)
+                } else {
+                    format!("Socket error: {}", e)
+                },
             },
             BrzError::UnsupportedProtocol(url, extra) => Self::Unsupported {
                 url: url.parse().unwrap(),
