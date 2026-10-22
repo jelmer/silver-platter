@@ -97,12 +97,22 @@ impl std::fmt::Display for SignError {
 
 impl std::error::Error for SignError {}
 
+/// The file name of `path`, prefixed with `./` if it would look like an option.
+fn file_name_arg(path: &Path) -> String {
+    let name = path.file_name().unwrap().to_string_lossy();
+    if name.starts_with('-') {
+        format!("./{}", name)
+    } else {
+        name.to_string()
+    }
+}
+
 fn debsign_args(path: &Path, keyid: Option<&str>) -> Vec<String> {
     let mut args = Vec::new();
     if let Some(keyid) = keyid {
         args.push(format!("-k{}", keyid));
     }
-    args.push(path.file_name().unwrap().to_string_lossy().to_string());
+    args.push(file_name_arg(path));
     args
 }
 
@@ -130,6 +140,14 @@ mod debsign_args_tests {
                 Path::new("/tmp/build/foo_1.0-1_amd64.changes"),
                 Some("C4C11B402FC851F291F065A9AAEF30C92E9098B8")
             )
+        );
+    }
+
+    #[test]
+    fn test_dash_file_name() {
+        assert_eq!(
+            vec!["./-x_1.0-1_amd64.changes".to_string()],
+            debsign_args(Path::new("/tmp/build/-x_1.0-1_amd64.changes"), None)
         );
     }
 }
@@ -182,9 +200,7 @@ pub fn dput_changes(path: &Path, host: Option<&str>) -> Result<(), UploadError> 
     if let Some(host) = host {
         cmd = cmd.arg(host)
     };
-    let status = cmd
-        .arg(path.file_name().unwrap().to_string_lossy().to_string())
-        .status()?;
+    let status = cmd.arg(file_name_arg(path)).status()?;
 
     if !status.success() {
         Err(UploadError::Failed("dput failed".to_string()))
