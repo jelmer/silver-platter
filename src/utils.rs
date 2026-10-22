@@ -118,6 +118,9 @@ pub fn create_temp_sprout(
                     Some(Box::new(|_ps| true)),
                 )?;
             }
+            Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
+                log::info!("Colocated branch {} not found, skipping", from_branch_name);
+            }
             Err(err) => {
                 log::warn!("Unable to clone branch {}: {}", from_branch_name, err);
                 return Err(err);
@@ -207,6 +210,37 @@ mod tests {
         let tree = sprout.tree();
         assert_eq!(tree.last_revision().unwrap(), revid);
         std::mem::drop(sprout);
+    }
+
+    #[test]
+    #[serial]
+    fn test_sprout_skips_missing_colocated_branch() {
+        let _test_env = TestEnv::new();
+        let base = tempfile::tempdir().unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(base.path(), "git").unwrap();
+        let revid = wt
+            .build_commit()
+            .message("Initial commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
+        let branch = wt.branch();
+        let upstream = branch.controldir().create_branch(Some("upstream")).unwrap();
+        upstream.generate_revision_history(&revid).unwrap();
+
+        let colocated = HashMap::from([
+            ("upstream".to_string(), "upstream".to_string()),
+            ("vendor".to_string(), "vendor".to_string()),
+        ]);
+        let sprout = TempSprout::new(&branch, Some(colocated)).unwrap();
+
+        let controldir = sprout.workingtree.branch().controldir();
+        let upstream = controldir.open_branch(Some("upstream")).unwrap();
+        assert_eq!(upstream.last_revision(), revid);
+        assert!(matches!(
+            controldir.open_branch(Some("vendor")),
+            Err(BrzError::NotBranchError(..))
+        ));
     }
 
     #[test]
