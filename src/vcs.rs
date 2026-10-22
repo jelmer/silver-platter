@@ -5,7 +5,7 @@ use breezyshim::error::Error as BrzError;
 use breezyshim::{
     get_transport, join_segment_parameters, split_segment_parameters, Branch, Transport,
 };
-use percent_encoding::{utf8_percent_encode, CONTROLS};
+use std::borrow::Cow;
 
 #[derive(Debug)]
 /// Errors that can occur when opening a branch.
@@ -260,12 +260,16 @@ impl BranchOpenError {
 /// Resolve which branch name to open.
 ///
 /// An explicit name always takes priority; otherwise falls back to the
-/// URL's own "branch" segment parameter.
+/// URL's own "branch" segment parameter, unescaped.
 fn resolved_branch_name<'a>(
     explicit: Option<&'a str>,
     params: &'a std::collections::HashMap<String, String>,
-) -> Option<&'a str> {
-    explicit.or_else(|| params.get("branch").map(|s| s.as_str()))
+) -> Option<Cow<'a, str>> {
+    explicit.map(Cow::Borrowed).or_else(|| {
+        params
+            .get("branch")
+            .map(|s| Cow::Owned(breezyshim::urlutils::unescape_utf8(s)))
+    })
 }
 
 /// Open a branch from a URL.
@@ -277,6 +281,7 @@ pub fn open_branch(
 ) -> Result<GenericBranch, BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
     let name = resolved_branch_name(name, &params);
+    let name = name.as_deref();
 
     let transport = get_transport(&url, possible_transports)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
@@ -299,6 +304,7 @@ pub fn open_branch_containing(
 ) -> Result<(GenericBranch, String), BranchOpenError> {
     let (url, params) = split_segment_parameters(url);
     let name = resolved_branch_name(name, &params);
+    let name = name.as_deref();
 
     let transport = match get_transport(&url, possible_transports) {
         Ok(transport) => transport,
@@ -331,7 +337,7 @@ pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
             let (url, mut params) = split_segment_parameters(&branch.get_user_url());
             params.insert(
                 "branch".to_string(),
-                utf8_percent_encode(&name, CONTROLS).to_string(),
+                breezyshim::urlutils::escape_utf8(&name, Some("")),
             );
             join_segment_parameters(&url, params)
         }
@@ -351,16 +357,19 @@ mod tests {
 
         // Test branch param
         assert_eq!(
-            resolved_branch_name(None, &params),
+            resolved_branch_name(None, &params).as_deref(),
             Some("lintian-fixes/main")
         );
 
         // Test explicit override
-        assert_eq!(resolved_branch_name(Some("other"), &params), Some("other"));
+        assert_eq!(
+            resolved_branch_name(Some("other"), &params).as_deref(),
+            Some("other")
+        );
 
         // Test no branch param
         let empty = HashMap::new();
-        assert_eq!(resolved_branch_name(None, &empty), None);
+        assert_eq!(resolved_branch_name(None, &empty).as_deref(), None);
     }
 
     #[test]
@@ -550,5 +559,30 @@ mod tests {
                 e => panic!("Expected Unavailable error, got {:?}", e),
             }
         }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_full_branch_url_escapes_name() {
+        use breezyshim::tree::WorkingTree;
+        let _test_env = breezyshim::testing::TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let format = breezyshim::controldir::ControlDirFormatRegistry::new()
+            .make_controldir("git")
+            .unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(td.path(), &format).unwrap();
+        let revid = wt.build_commit().message("x").commit().unwrap();
+        let branch = wt.controldir().create_branch(Some("debian/a,b")).unwrap();
+        branch.generate_revision_history(&revid).unwrap();
+        let url = full_branch_url(branch.as_ref());
+        assert_eq!(
+            url.as_str(),
+            format!(
+                "{},branch=debian%2Fa%2Cb",
+                Url::from_directory_path(td.path()).unwrap()
+            )
+        );
+        let reopened = open_branch(&url, None, None, None).unwrap();
+        assert_eq!(reopened.name(), Some("debian/a,b".to_string()));
     }
 }
