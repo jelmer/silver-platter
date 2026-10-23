@@ -70,7 +70,7 @@ jobs:
     needs:
       - build-wheels
       - build-sdist
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/svp-py-v')
     permissions:
       id-token: write
     environment:
