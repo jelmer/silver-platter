@@ -899,9 +899,9 @@ dependencies = [
 
 [[package]]
 name = "debian-changelog"
-version = "0.2.18"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e861544f3732a63762386518e660af2dc5637cdaf6d8f0091faf9ac00cc10755"
+checksum = "5b4fdf956d6a9b45c30f8caebef206aecfe4eafb1b723ec4f669c23bbd74e838"
 dependencies = [
  "chrono",
  "debversion",
