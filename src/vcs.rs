@@ -3,7 +3,8 @@ use breezyshim::branch::GenericBranch;
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::error::Error as BrzError;
 use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, Branch, Transport,
+    get_transport, join_segment_parameters, split_segment_parameters, try_split_segment_parameters,
+    Branch, Transport,
 };
 use percent_encoding::{utf8_percent_encode, CONTROLS};
 
@@ -275,7 +276,8 @@ pub fn open_branch(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<GenericBranch, BranchOpenError> {
-    let (url, params) = split_segment_parameters(url);
+    let (url, params) = try_split_segment_parameters(url)
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let name = resolved_branch_name(name, &params);
 
     let transport = get_transport(&url, possible_transports)
@@ -297,7 +299,8 @@ pub fn open_branch_containing(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<(GenericBranch, String), BranchOpenError> {
-    let (url, params) = split_segment_parameters(url);
+    let (url, params) = try_split_segment_parameters(url)
+        .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let name = resolved_branch_name(name, &params);
 
     let transport = match get_transport(&url, possible_transports) {
