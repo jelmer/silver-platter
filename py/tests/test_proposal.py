@@ -106,12 +106,20 @@ class WorkspaceTests(TestCaseWithTransport):
 
 
 class RecordingForge:
-    def __init__(self):
+    def __init__(self, derived=None):
         self.calls = []
+        self.proposal_calls = []
+        self.derived = derived
 
     def get_derived_branch(self, main_branch, name, **kwargs):
         self.calls.append((name, kwargs))
-        raise NotBranchError(name)
+        if self.derived is None:
+            raise NotBranchError(name)
+        return self.derived
+
+    def iter_proposals(self, source, target, status):
+        self.proposal_calls.append((source.user_url, target.user_url, status))
+        return iter([])
 
 
 class FindExistingProposedTests(TestCaseWithTransport):
@@ -136,6 +144,19 @@ class FindExistingProposedTests(TestCaseWithTransport):
             (None, None, None), find_existing_proposed(b, forge, "branch")
         )
         self.assertEqual([("branch", {})], forge.calls)
+
+    def test_existing_derived_branch(self):
+        b = self.make_branch("target")
+        derived = self.make_branch("derived")
+        forge = RecordingForge(derived)
+        resume, overwrite, proposals = find_existing_proposed(
+            b, forge, "branch"
+        )
+        self.assertEqual(derived.user_url, resume.user_url)
+        self.assertEqual((True, []), (overwrite, proposals))
+        self.assertEqual(
+            [(derived.user_url, b.user_url, "open")], forge.proposal_calls
+        )
 
 
 class PushChangesTests(TestCaseWithTransport):
