@@ -372,7 +372,7 @@ impl Workspace {
 
                 assert_eq!(
                     local_tree.last_revision().unwrap(),
-                    main_branch.last_revision()
+                    from_branch.last_revision()
                 );
             }
 
@@ -1258,6 +1258,179 @@ mod tests {
         );
 
         std::mem::drop(td);
+    }
+
+    fn sprout_tree(
+        from: &GenericBranch,
+        to: &std::path::Path,
+    ) -> breezyshim::workingtree::GenericWorkingTree {
+        from.controldir()
+            .sprout(
+                url::Url::from_directory_path(to).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+            .open_workingtree()
+            .unwrap()
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_continue_with_cached_branch() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        let revid1 = origin.build_commit().message("first").commit().unwrap();
+        let cached = sprout_tree(&origin.branch(), &td.path().join("cached"));
+        let resume = sprout_tree(&origin.branch(), &td.path().join("resume"));
+        let resume_revid = resume.build_commit().message("resume").commit().unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.branch())
+            .resume_branch(resume.branch())
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(!ws.refreshed());
+        assert!(ws.changes_since_main());
+        assert!(!ws.changes_since_base());
+        assert_eq!(
+            vec![("".to_string(), Some(revid1), Some(resume_revid))],
+            ws.changed_branches()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_continue_with_out_of_date_cached_branch() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin.build_commit().message("first").commit().unwrap();
+        let cached = sprout_tree(&origin.branch(), &td.path().join("cached"));
+        let revid2 = origin.build_commit().message("second").commit().unwrap();
+        let resume = sprout_tree(&origin.branch(), &td.path().join("resume"));
+        let resume_revid = resume.build_commit().message("resume").commit().unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.branch())
+            .resume_branch(resume.branch())
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(!ws.refreshed());
+        assert!(ws.changes_since_main());
+        assert_eq!(
+            vec![("".to_string(), Some(revid2), Some(resume_revid))],
+            ws.changed_branches()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_discard_with_cached_branch() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin.build_commit().message("first").commit().unwrap();
+        let cached = sprout_tree(&origin.branch(), &td.path().join("cached"));
+        let resume = sprout_tree(&origin.branch(), &td.path().join("resume"));
+        resume.build_commit().message("resume").commit().unwrap();
+        let revid2 = origin.build_commit().message("second").commit().unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.branch())
+            .resume_branch(resume.branch())
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(ws.refreshed());
+        assert!(!ws.changes_since_main());
+        assert_eq!(
+            vec![("".to_string(), Some(revid2.clone()), Some(revid2))],
+            ws.changed_branches()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_behind_main() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin.build_commit().message("first").commit().unwrap();
+        let resume = sprout_tree(&origin.branch(), &td.path().join("resume"));
+        let revid2 = origin.build_commit().message("second").commit().unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .resume_branch(resume.branch())
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(!ws.refreshed());
+        assert!(!ws.changes_since_main());
+        assert_eq!(
+            vec![("".to_string(), Some(revid2.clone()), Some(revid2))],
+            ws.changed_branches()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_behind_main_with_cached_branch() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+        origin.build_commit().message("first").commit().unwrap();
+        let resume = sprout_tree(&origin.branch(), &td.path().join("resume"));
+        let revid2 = origin.build_commit().message("second").commit().unwrap();
+        let cached = sprout_tree(&origin.branch(), &td.path().join("cached"));
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(cached.branch())
+            .resume_branch(resume.branch())
+            .dir(td.path().to_path_buf())
+            .build()
+            .unwrap();
+
+        assert!(!ws.refreshed());
+        assert!(!ws.changes_since_main());
+        assert_eq!(
+            vec![("".to_string(), Some(revid2.clone()), Some(revid2))],
+            ws.changed_branches()
+        );
     }
 
     #[test]
