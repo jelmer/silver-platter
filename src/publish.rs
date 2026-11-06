@@ -171,7 +171,7 @@ pub fn find_existing_proposed(
         Ok(derived_branch) => {
             // Found existing derived branch
             let proposals =
-                forge.iter_proposals(main_branch, main_branch, MergeProposalStatus::Open)?;
+                forge.iter_proposals(&derived_branch, main_branch, MergeProposalStatus::Open)?;
 
             // Filter proposals that are for our derived branch
             let derived_url = derived_branch.get_user_url();
