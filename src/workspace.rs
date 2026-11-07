@@ -372,7 +372,7 @@ impl Workspace {
 
                 assert_eq!(
                     local_tree.last_revision().unwrap(),
-                    main_branch.last_revision()
+                    from_branch.last_revision()
                 );
             }
 
@@ -1251,6 +1251,80 @@ mod tests {
         assert!(!ws.refreshed());
         assert!(!ws.changes_since_base());
 
+        assert_eq!(ws.local_tree().last_revision().unwrap(), resume_revid1);
+        assert_eq!(
+            vec![("".to_string(), Some(revid1), Some(resume_revid1))],
+            ws.changed_branches()
+        );
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    #[serial]
+    fn test_resume_continue_with_cached_branch() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+
+        let origin = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("origin"),
+            &ControlDirFormat::default(),
+        )
+        .unwrap();
+
+        let revid1 = origin
+            .build_commit()
+            .message("first commit")
+            .commit()
+            .unwrap();
+
+        let cached = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("cached")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let resume = origin
+            .branch()
+            .controldir()
+            .sprout(
+                url::Url::from_directory_path(td.path().join("resume")).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let resume_tree = resume.open_workingtree().unwrap();
+
+        let resume_revid1 = resume_tree
+            .build_commit()
+            .message("resume")
+            .commit()
+            .unwrap();
+
+        let ws_dir = td.path().join("ws");
+        std::fs::create_dir(&ws_dir).unwrap();
+
+        let ws = Workspace::builder()
+            .main_branch(origin.branch())
+            .cached_branch(*cached.open_branch(None).unwrap())
+            .resume_branch(resume_tree.branch())
+            .dir(ws_dir)
+            .build()
+            .unwrap();
+
+        assert!(ws.changes_since_main());
+        assert!(ws.any_branch_changes());
+        assert!(!ws.refreshed());
+        assert!(!ws.changes_since_base());
         assert_eq!(ws.local_tree().last_revision().unwrap(), resume_revid1);
         assert_eq!(
             vec![("".to_string(), Some(revid1), Some(resume_revid1))],
