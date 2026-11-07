@@ -119,7 +119,7 @@ pub fn create_temp_sprout(
                 )?;
             }
             Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
-                log::info!("Colocated branch {} not found, skipping", from_branch_name);
+                log::debug!("Colocated branch {} not found, skipping", from_branch_name);
             }
             Err(err) => {
                 log::warn!("Unable to clone branch {}: {}", from_branch_name, err);
