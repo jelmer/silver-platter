@@ -2,7 +2,9 @@
 
 use breezyshim::branch::PyBranch;
 use breezyshim::tree::PyTree;
-use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyAttributeError, PyException, PyModuleNotFoundError, PyRuntimeError, PyTypeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{create_exception, import_exception};
@@ -13,6 +15,43 @@ use silver_platter::{CommitPending, Mode};
 use std::collections::HashMap;
 use std::os::unix::io::FromRawFd;
 use std::path::{Path, PathBuf};
+
+/// Resolve `PermissionDenied`, which breezy 3.4 moved to `dromedary.errors`.
+fn permission_denied_type(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    const NAME: &str = "PermissionDenied";
+    static CACHE: std::sync::OnceLock<Py<PyAny>> = std::sync::OnceLock::new();
+    if let Some(ty) = CACHE.get() {
+        return Ok(ty.clone_ref(py));
+    }
+    for module in ["breezy.errors", "dromedary.errors"] {
+        let found = py.import(module).and_then(|m| m.getattr(NAME));
+        match found {
+            Ok(ty) => {
+                let ty = ty.unbind();
+                // A lost race just means another thread cached the same type.
+                let _ = CACHE.set(ty.clone_ref(py));
+                return Ok(ty);
+            }
+            Err(e)
+                if e.is_instance_of::<PyModuleNotFoundError>(py)
+                    || e.is_instance_of::<PyAttributeError>(py) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(PyRuntimeError::new_err(
+        "PermissionDenied is in neither breezy.errors nor dromedary.errors",
+    ))
+}
+
+fn permission_denied_err(msg: Option<String>) -> PyErr {
+    Python::attach(|py| match permission_denied_type(py) {
+        Ok(ty) => match ty.bind(py).call1((msg,)) {
+            Ok(inst) => PyErr::from_value(inst),
+            Err(e) => e,
+        },
+        Err(e) => e,
+    })
+}
 
 create_exception!(
     silver_platter,
@@ -224,7 +263,6 @@ impl From<PyPublishError> for PyErr {
         import_exception!(breezy.errors, NotBranchError);
         import_exception!(breezy.errors, UnsupportedOperation);
         import_exception!(breezy.errors, MergeProposalExists);
-        import_exception!(breezy.errors, PermissionDenied);
         import_exception!(breezy.errors, ReadOnlyError);
         import_exception!(breezy.forge, UnsupportedForge);
         import_exception!(breezy.forge, ForgeLoginRequired);
@@ -245,7 +283,7 @@ impl From<PyPublishError> for PyErr {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
             silver_platter::publish::Error::PermissionDenied => {
-                PyErr::new::<PermissionDenied, _>("PermissionDenied")
+                permission_denied_err(Some("PermissionDenied".to_string()))
             }
             silver_platter::publish::Error::EmptyMergeProposal => {
                 PyErr::new::<EmptyMergeProposal, _>("EmptyMergeProposal")
@@ -1314,12 +1352,11 @@ fn merge_conflicts(
 
 fn workspace_error_to_py_err(e: silver_platter::workspace::Error) -> PyErr {
     import_exception!(breezy.errors, UnknownFormat);
-    import_exception!(breezy.errors, PermissionDenied);
     match e {
         silver_platter::workspace::Error::BrzError(e) => e.into(),
         silver_platter::workspace::Error::IOError(e) => e.into(),
         silver_platter::workspace::Error::Other(e) => PyRuntimeError::new_err((e,)),
-        silver_platter::workspace::Error::PermissionDenied(e) => PermissionDenied::new_err((e,)),
+        silver_platter::workspace::Error::PermissionDenied(e) => permission_denied_err(e),
         silver_platter::workspace::Error::UnknownFormat(format) => {
             UnknownFormat::new_err((format,))
         }
