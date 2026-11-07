@@ -117,6 +117,7 @@ pub fn create_temp_sprout(
                     None,
                     Some(Box::new(|_ps| true)),
                 )?;
+                assert_eq!(add_branch.last_revision(), local_add_branch.last_revision());
             }
             Err(BrzError::NotBranchError(..)) | Err(BrzError::NoColocatedBranchSupport) => {
                 log::debug!("Colocated branch {} not found, skipping", from_branch_name);
