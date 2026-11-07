@@ -763,21 +763,14 @@ fn publish_one(
                     let existing_proposal = f.get_proposal_by_url(existing_proposal_url).unwrap();
                     let resume_branch_url =
                         existing_proposal.get_source_branch_url().unwrap().unwrap();
-                    let (resume_branch_url, params) =
-                        breezyshim::urlutils::split_segment_parameters(&resume_branch_url);
-                    let resume_branch_name = params.get("branch");
-                    let resume_branch = match crate::vcs::open_branch(
-                        &resume_branch_url,
-                        None,
-                        None,
-                        resume_branch_name.map(|x| x.as_str()),
-                    ) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            log::error!("{} {:?}: {}", resume_branch_url, resume_branch_name, e);
-                            return Err(e.into());
-                        }
-                    };
+                    let resume_branch =
+                        match crate::vcs::open_branch(&resume_branch_url, None, None, None) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                log::error!("{}: {}", resume_branch_url, e);
+                                return Err(e.into());
+                            }
+                        };
                     (Some(existing_proposal), Some(resume_branch))
                 } else {
                     (None, None)
