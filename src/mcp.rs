@@ -455,6 +455,13 @@ impl SvpMcpServer {
                     None,
                 )
             })?;
+        let subpath_str = subpath.to_str().ok_or_else(|| {
+            rmcp::ErrorData::new(
+                rmcp::model::ErrorCode::INVALID_PARAMS,
+                format!("Subpath {} is not valid UTF-8", subpath.display()),
+                None,
+            )
+        })?;
 
         breezyshim::workspace::check_clean_tree(
             &local_tree,
@@ -480,12 +487,14 @@ impl SvpMcpServer {
             std::process::Stdio::inherit(),
         )
         .map_err(|e| {
-            breezyshim::workspace::reset_tree(&local_tree, None, Some(subpath.as_path())).ok();
-            rmcp::ErrorData::new(
-                rmcp::model::ErrorCode::INTERNAL_ERROR,
-                format!("Script failed: {}", e),
-                None,
-            )
+            let message = match breezyshim::workspace::reset_tree(&local_tree, None, subpath_str) {
+                Ok(()) => format!("Script failed: {}", e),
+                Err(reset_err) => format!(
+                    "Script failed: {}; additionally failed to reset tree: {}",
+                    e, reset_err
+                ),
+            };
+            rmcp::ErrorData::new(rmcp::model::ErrorCode::INTERNAL_ERROR, message, None)
         })?;
 
         let mut info = Vec::new();

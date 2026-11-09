@@ -727,6 +727,7 @@ fn main() -> Result<(), i32> {
             };
 
             let (local_tree, subpath) = workingtree::open_containing(Path::new(".")).unwrap();
+            let subpath_str = subpath.to_str().expect("subpath is not valid UTF-8");
 
             check_clean_tree(
                 &local_tree,
@@ -761,7 +762,7 @@ fn main() -> Result<(), i32> {
                 Ok(result) => result,
                 Err(err) => {
                     error!("Failed: {}", err);
-                    reset_tree(&local_tree, None, Some(subpath.as_path())).unwrap();
+                    reset_tree(&local_tree, None, subpath_str).unwrap();
                     return Err(1);
                 }
             };

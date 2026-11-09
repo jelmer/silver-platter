@@ -402,9 +402,9 @@ dependencies = [
 
 [[package]]
 name = "breezyshim"
-version = "0.7.31"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2e741209ad8a1e9bf79995496a7e557a6ece771c6fa2ab0e8ad0640cbd85a60"
+checksum = "e81a65cf11ef065794bdada1cd5f0fe042057bf7a94a6558ef750d009ce99eca"
 dependencies = [
  "bazaar",
  "chrono",
@@ -893,9 +893,9 @@ dependencies = [
 
 [[package]]
 name = "debian-analyzer"
-version = "0.160.22"
+version = "0.160.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07e4810b272bdbbd3074270cf4a9de71723f8429da950b9fa71ec509b5ca7af8"
+checksum = "6171e65feff0b9cc2b9c79e43249dd552dae9ab5223e636258203d1af944d610"
 dependencies = [
  "breezyshim",
  "chrono",
@@ -2329,9 +2329,9 @@ checksum = "c797b9d6bb23aab2fc369c65f871be49214f5c759af65bde26ffaaa2b646b492"
 
 [[package]]
 name = "merge3"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b277bc3c7e2bc163abc6c0069f53715b52dc34442c0e807cc8758c7113524f"
+checksum = "cd3e8ff44de522626e1cb360cdc0b29041f3a3d2694dddb90ecfdac59245a2bd"
 dependencies = [
  "clap",
  "difflib",
@@ -2572,9 +2572,9 @@ checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
 
 [[package]]
 name = "patchkit"
-version = "0.2.2"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f21e87e02a475262c3166d32fea34710510448b37117cc448c1be03975816baf"
+checksum = "2808aa96d6e24f20f9ce36d5bf62abc59a0cc27a5d7ab4818611f298685fe04f"
 dependencies = [
  "chrono",
  "lazy-regex",
