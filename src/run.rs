@@ -278,7 +278,11 @@ fn publish_workspace_changes(
             error!("Failed to publish changes: {}", e);
             Err(2)
         }
-        Err(PublishError::PermissionDenied) => {
+        Err(PublishError::PermissionDenied(Some(reason))) => {
+            error!("Permission denied to create merge proposal: {}", reason);
+            Err(2)
+        }
+        Err(PublishError::PermissionDenied(None)) => {
             error!("Permission denied to create merge proposal.");
             Err(2)
         }

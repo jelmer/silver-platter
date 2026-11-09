@@ -507,8 +507,8 @@ pub enum Error {
     /// Empty merge proposal
     EmptyMergeProposal,
 
-    /// Permission denied
-    PermissionDenied,
+    /// Permission denied, with the forge's reason if it gave one
+    PermissionDenied(Option<String>),
 
     /// Target branch is read-only (push not possible via this transport)
     ReadOnly,
@@ -522,7 +522,7 @@ impl From<BrzError> for Error {
         match e {
             BrzError::DivergedBranches => Error::DivergedBranches(),
             BrzError::NotBranchError(..) => Error::UnrelatedBranchExists,
-            BrzError::PermissionDenied(..) => Error::PermissionDenied,
+            BrzError::PermissionDenied(_, reason) => Error::PermissionDenied(reason),
             BrzError::ReadOnly => Error::ReadOnly,
             BrzError::UnsupportedForge(s) => Error::UnsupportedForge(s),
             BrzError::ForgeLoginRequired => Error::ForgeLoginRequired,
@@ -546,7 +546,8 @@ impl std::fmt::Display for Error {
             Error::ForgeLoginRequired => write!(f, "Forge login required"),
             Error::BranchOpenError(e) => write!(f, "{}", e),
             Error::EmptyMergeProposal => write!(f, "Empty merge proposal"),
-            Error::PermissionDenied => write!(f, "Permission denied"),
+            Error::PermissionDenied(Some(reason)) => write!(f, "Permission denied: {}", reason),
+            Error::PermissionDenied(None) => write!(f, "Permission denied"),
             Error::ReadOnly => write!(f, "Read-only"),
             Error::UnrelatedBranchExists => write!(f, "Unrelated branch exists"),
             Error::InsufficientChangesForNewProposal => {
@@ -848,7 +849,7 @@ pub fn publish_changes(
                 tags.clone(),
                 Some(stop_revision),
             ) {
-                Err(e @ Error::PermissionDenied) => {
+                Err(e @ Error::PermissionDenied(_)) => {
                     if mode == Mode::AttemptPush {
                         log::info!("push access denied, falling back to propose");
                         mode = Mode::Propose;
@@ -1471,6 +1472,17 @@ class FakeForge:
                 Some(true),
                 Some(vec![Some(derived_url.clone())])
             )
+        );
+    }
+
+    #[test]
+    fn test_permission_denied_reason() {
+        let url = std::path::PathBuf::from("https://example.com/api/v4/merge_requests");
+        let errors = [Some("403 Forbidden".to_string()), None]
+            .map(|reason| Error::from(BrzError::PermissionDenied(url.clone(), reason)).to_string());
+        assert_eq!(
+            errors,
+            ["Permission denied: 403 Forbidden", "Permission denied"]
         );
     }
 }
