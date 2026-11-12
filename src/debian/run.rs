@@ -138,9 +138,15 @@ pub fn apply_and_publish(
 
     let mut ws_builder = Workspace::builder();
 
-    ws_builder = ws_builder.additional_colocated_branches(
-        crate::debian::pick_additional_colocated_branches(&main_branch),
-    );
+    let additional_colocated_branches =
+        match crate::debian::pick_additional_colocated_branches(&main_branch) {
+            Ok(branches) => branches,
+            Err(e) => {
+                error!("Unable to list colocated branches: {}", e);
+                return 2;
+            }
+        };
+    ws_builder = ws_builder.additional_colocated_branches(additional_colocated_branches);
 
     ws_builder = ws_builder.main_branch(main_branch);
 
