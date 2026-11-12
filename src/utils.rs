@@ -139,11 +139,14 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
     other_branch: &B2,
     other_revision: Option<&RevisionId>,
 ) -> Result<bool, BrzError> {
+    let main_lock = main_branch.lock_read()?;
     let other_revision = other_revision.map_or_else(|| other_branch.last_revision(), |r| r.clone());
     let other_repository = other_branch.repository();
+    let other_repository_lock = other_repository.lock_write()?;
     let graph = other_repository.get_graph();
 
     if graph.is_ancestor(&main_branch.last_revision(), &other_revision)? {
+        std::mem::drop(main_lock);
         return Ok(false);
     }
 
@@ -151,6 +154,7 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
         &main_branch.repository(),
         Some(&main_branch.last_revision()),
     )?;
+    let other_lock = other_branch.lock_read()?;
 
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
@@ -179,6 +183,9 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
     for hook in old_file_contents_mergers {
         MERGE_HOOKS.add("merge_file_content", hook).unwrap();
     }
+    std::mem::drop(other_lock);
+    std::mem::drop(other_repository_lock);
+    std::mem::drop(main_lock);
     Ok(result)
 }
 
@@ -293,5 +300,39 @@ mod tests {
         let tree = sprout.tree();
         assert_eq!(tree.last_revision().unwrap(), revid);
         std::mem::drop(sprout);
+    }
+
+    #[test]
+    #[serial]
+    fn test_merge_conflicts_up_to_date() {
+        let test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let main = breezyshim::controldir::create_standalone_workingtree(
+            &td.path().join("main"),
+            &breezyshim::controldir::ControlDirFormat::default(),
+        )
+        .unwrap();
+        main.build_commit()
+            .message("Initial commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
+        let other_url = url::Url::from_file_path(td.path().join("other")).unwrap();
+        let other = main
+            .controldir()
+            .sprout(other_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+        other
+            .build_commit()
+            .message("Other commit")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
+
+        assert!(!merge_conflicts(&main.branch(), &other.branch(), None).unwrap());
+        std::mem::drop(td);
+        std::mem::drop(test_env);
     }
 }
