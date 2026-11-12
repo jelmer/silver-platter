@@ -74,6 +74,7 @@ workspace = true
 features = [ "serde",]
 
 [dev-dependencies]
+pyo3 = ">=0.28,<0.31"
 serial_test = "3"
 
 [workspace.dependencies]

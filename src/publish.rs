@@ -171,7 +171,7 @@ pub fn find_existing_proposed(
         Ok(derived_branch) => {
             // Found existing derived branch
             let proposals =
-                forge.iter_proposals(main_branch, main_branch, MergeProposalStatus::Open)?;
+                forge.iter_proposals(&derived_branch, main_branch, MergeProposalStatus::Open)?;
 
             // Filter proposals that are for our derived branch
             let derived_url = derived_branch.get_user_url();
@@ -1382,5 +1382,95 @@ mod tests {
         // Test setting auto_merge to false
         let builder = builder.auto_merge(false);
         assert_eq!(builder.auto_merge, Some(false));
+    }
+
+    const FAKE_FORGE: &std::ffi::CStr = cr#"
+from breezy.branch import Branch
+from breezy.errors import NotBranchError
+
+
+class FakeProposal:
+    def __init__(self, source_url):
+        self.source_url = source_url
+
+    def get_source_branch_url(self):
+        return self.source_url
+
+
+class FakeForge:
+    def __init__(self, derived_url, proposals):
+        self.derived_url = derived_url
+        self.proposals = proposals
+
+    def get_derived_branch(self, main_branch, name, owner=None, preferred_schemes=None):
+        if self.derived_url is None:
+            raise NotBranchError(name)
+        return Branch.open(self.derived_url)
+
+    def iter_proposals(self, source_branch, target_branch, status):
+        for source_url, target_url in self.proposals:
+            if (source_url, target_url) == (source_branch.user_url, target_branch.user_url):
+                yield FakeProposal(source_url)
+"#;
+
+    fn fake_forge(derived_url: Option<&url::Url>, proposals: &[(&url::Url, &url::Url)]) -> Forge {
+        use pyo3::prelude::*;
+        Python::attach(|py| {
+            let m = PyModule::from_code(py, FAKE_FORGE, c"fake_forge.py", c"fake_forge").unwrap();
+            let proposals: Vec<(String, String)> = proposals
+                .iter()
+                .map(|(source, target)| (source.to_string(), target.to_string()))
+                .collect();
+            let forge = m
+                .getattr("FakeForge")
+                .unwrap()
+                .call1((derived_url.map(|u| u.to_string()), proposals))
+                .unwrap();
+            Forge::from(forge.unbind())
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn test_find_existing_proposed() {
+        let _test_env = TestEnv::new();
+        use breezyshim::controldir::create_standalone_workingtree;
+        use breezyshim::controldir::ControlDirFormat;
+        let td = tempfile::tempdir().unwrap();
+        let open = |name: &str| {
+            let path = td.path().join(name);
+            create_standalone_workingtree(&path, &ControlDirFormat::default()).unwrap();
+            breezyshim::branch::open_as_generic(&url::Url::from_directory_path(path).unwrap())
+                .unwrap()
+        };
+        let main = open("main");
+        let derived = open("derived");
+        let main_url = main.get_user_url();
+        let derived_url = derived.get_user_url();
+
+        let summary = |forge: &Forge| {
+            let (resume, overwrite, proposals) =
+                find_existing_proposed(&main, forge, "branch", false, None, None).unwrap();
+            (
+                resume.map(|b| b.get_user_url()),
+                overwrite,
+                proposals.map(|ps| {
+                    ps.iter()
+                        .map(|p| p.get_source_branch_url().unwrap())
+                        .collect::<Vec<_>>()
+                }),
+            )
+        };
+
+        assert_eq!(summary(&fake_forge(None, &[])), (None, None, None));
+        let forge = fake_forge(Some(&derived_url), &[(&derived_url, &main_url)]);
+        assert_eq!(
+            summary(&forge),
+            (
+                Some(derived_url.clone()),
+                Some(true),
+                Some(vec![Some(derived_url.clone())])
+            )
+        );
     }
 }
