@@ -17,6 +17,7 @@
 
 import shutil
 
+from breezy.errors import UnknownFormatError
 from breezy.revision import NULL_REVISION
 from breezy.tests import TestCaseWithTransport
 
@@ -53,6 +54,26 @@ class TestWorkspace(TestCaseWithTransport):
                 [("", None, ws.local_tree.last_revision())],
                 ws.result_branches(),
             )
+
+    def test_unknown_format(self):
+        tree = self.make_branch_and_tree("origin")
+        tree.commit("first commit")
+        open_branch = tree.branch.controldir.open_branch
+
+        def open_branch_unknown_format(name=None, *args, **kwargs):
+            if name == "other":
+                # A text format: breezyshim cannot convert a bytes one yet.
+                raise UnknownFormatError("Bogus branch format", kind="branch")
+            return open_branch(name, *args, **kwargs)
+
+        tree.branch.controldir.open_branch = open_branch_unknown_format
+        self.assertRaises(
+            UnknownFormatError,
+            Workspace,
+            tree.branch,
+            dir=self.test_dir,
+            additional_colocated_branches=["other"],
+        )
 
     def test_basic(self):
         tree = self.make_branch_and_tree("origin")
