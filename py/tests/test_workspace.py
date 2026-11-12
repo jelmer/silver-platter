@@ -15,12 +15,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import os
 import shutil
 
 from breezy.revision import NULL_REVISION
 from breezy.tests import TestCaseWithTransport
 
 from silver_platter import Workspace
+
+try:
+    from breezy.errors import PermissionDenied
+except ImportError:  # breezy 3.4 moved it
+    from dromedary.errors import PermissionDenied
 
 
 class TestWorkspace(TestCaseWithTransport):
@@ -39,6 +45,15 @@ class TestWorkspace(TestCaseWithTransport):
                 [("", NULL_REVISION, ws.local_tree.last_revision())],
                 ws.result_branches(),
             )
+
+    def test_permission_denied(self):
+        tree = self.make_branch_and_tree("origin")
+        tree.commit("first commit")
+        path = os.path.join(self.test_dir, "unwritable")
+        os.mkdir(path)
+        os.chmod(path, 0o555)
+        self.addCleanup(os.chmod, path, 0o755)
+        self.assertRaises(PermissionDenied, Workspace, tree.branch, path=path)
 
     def test_without_main(self):
         with Workspace(None, dir=self.test_dir) as ws:
