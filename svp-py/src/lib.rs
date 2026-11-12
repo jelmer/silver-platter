@@ -244,7 +244,7 @@ impl From<PyPublishError> for PyErr {
             silver_platter::publish::Error::UnrelatedBranchExists => {
                 PyErr::new::<UnrelatedBranchExists, _>("UnrelatedBranchExists")
             }
-            silver_platter::publish::Error::PermissionDenied => {
+            silver_platter::publish::Error::PermissionDenied(_) => {
                 PyErr::new::<PermissionDenied, _>("PermissionDenied")
             }
             silver_platter::publish::Error::EmptyMergeProposal => {
