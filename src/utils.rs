@@ -155,7 +155,7 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
     // Reset custom merge hooks, since they could make it harder to detect
     // conflicted merges that would appear on the hosting site.
     let old_file_contents_mergers = MERGE_HOOKS.get("merge_file_content").unwrap();
-    MERGE_HOOKS.clear("merge_file_contents").unwrap();
+    MERGE_HOOKS.clear("merge_file_content").unwrap();
 
     let other_tree = other_repository.revision_tree(&other_revision).unwrap();
     let result = match Merger::from_revision_ids(
@@ -167,8 +167,8 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
         Ok(mut merger) => {
             merger.set_merge_type(MergeType::Merge3);
             let tree_merger = merger.make_merger().unwrap();
-            let tt = tree_merger.make_preview_transform().unwrap();
-            !tt.cooked_conflicts().unwrap().is_empty()
+            let _tt = tree_merger.make_preview_transform().unwrap();
+            !tree_merger.cooked_conflicts().unwrap().is_empty()
         }
         Err(MergeError::UnrelatedBranches) => {
             // Unrelated branches don't technically *have* to lead to
@@ -186,6 +186,7 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
 mod tests {
     use super::*;
     use breezyshim::testing::TestEnv;
+    use breezyshim::tree::MutableTree;
     use serial_test::serial;
 
     #[test]
@@ -242,6 +243,47 @@ mod tests {
             controldir.open_branch(Some("vendor")),
             Err(BrzError::NotBranchError(..))
         ));
+    }
+
+    #[test]
+    #[serial]
+    fn test_merge_conflicts() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let main_path = td.path().join("main");
+        let main =
+            breezyshim::controldir::create_standalone_workingtree(&main_path, "git").unwrap();
+        std::fs::write(main_path.join("a"), "a\n").unwrap();
+        MutableTree::add(&main, &[std::path::Path::new("a")]).unwrap();
+        main.build_commit().message("add a").commit().unwrap();
+
+        let other_url = url::Url::from_file_path(td.path().join("other")).unwrap();
+        let other = main
+            .controldir()
+            .sprout(other_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+        std::fs::write(other.basedir().join("a"), "other\n").unwrap();
+        other.build_commit().message("change a").commit().unwrap();
+        let conflicts = || {
+            let (main_branch, other_branch) = (main.branch(), other.branch());
+            let _main_lock = main_branch.lock_read().unwrap();
+            let _other_lock = other_branch.lock_read().unwrap();
+            merge_conflicts(&main_branch, &other_branch, None).unwrap()
+        };
+        assert!(!conflicts());
+
+        let hooks = MERGE_HOOKS.get("merge_file_content").unwrap().len();
+        std::fs::write(main_path.join("b"), "b\n").unwrap();
+        MutableTree::add(&main, &[std::path::Path::new("b")]).unwrap();
+        main.build_commit().message("add b").commit().unwrap();
+        assert!(!conflicts());
+
+        std::fs::write(main_path.join("a"), "main\n").unwrap();
+        main.build_commit().message("change a").commit().unwrap();
+        assert!(conflicts());
+        assert_eq!(hooks, MERGE_HOOKS.get("merge_file_content").unwrap().len());
     }
 
     #[test]
