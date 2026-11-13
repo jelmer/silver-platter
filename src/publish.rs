@@ -1013,6 +1013,7 @@ pub fn check_proposal_diff_empty(
     let tree_merger = merger.make_merger()?;
     let tt = tree_merger.make_preview_transform()?;
     let mut changes = tt.iter_changes()?;
+    tt.finalize()?;
     std::mem::drop(lock);
     Ok(!changes.any(|_| true))
 }
