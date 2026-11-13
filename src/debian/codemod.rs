@@ -369,7 +369,12 @@ pub fn script_runner(
     };
 
     if commit_pending {
-        if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
+        if update_changelog
+            && result.description.is_some()
+            && local_tree
+                .has_changes()
+                .map_err(|e| Error::Other(format!("Failed to check for changes: {}", e)))?
+        {
             let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
             {
                 Some(Some((name, email))) => Some((name, email)),
@@ -423,4 +428,68 @@ pub fn script_runner(
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::testing::TestEnv;
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
+    use serial_test::serial;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    #[serial]
+    fn test_tree_error() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let probe = td.path().join("probe");
+        std::fs::write(&probe, "").unwrap();
+        std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&probe).is_ok() {
+            // Root can read unreadable files.
+            return;
+        }
+        let d = td.path().join("t");
+        let tree = create_standalone_workingtree(&d, "git").unwrap();
+        std::fs::create_dir(d.join("debian")).unwrap();
+        std::fs::write(
+            d.join("debian/changelog"),
+            "foo (1.0-1) unstable; urgency=medium\n\n  * Initial release.\n\n -- Joe Example <joe@example.com>  Mon, 01 Jan 2024 00:00:00 +0000\n",
+        )
+        .unwrap();
+        std::fs::write(d.join("bar"), "bar").unwrap();
+        tree.add(&[
+            std::path::Path::new("debian"),
+            std::path::Path::new("debian/changelog"),
+            std::path::Path::new("bar"),
+        ])
+        .unwrap();
+        tree.build_commit().message("initial").commit().unwrap();
+        let script_path = td.path().join("script.sh");
+        std::fs::write(
+            &script_path,
+            "#!/bin/sh\necho foo > bar\nchmod 000 bar\necho Did a thing\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let err = super::script_runner(
+            &tree,
+            &[script_path.to_str().unwrap()],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+            Some(true),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, super::Error::Other(ref m) if m.starts_with("Failed to check for changes: "))
+        );
+    }
 }
