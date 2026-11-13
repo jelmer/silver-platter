@@ -368,7 +368,8 @@ pub fn script_runner(
     };
 
     if commit_pending {
-        if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
+        let description = result.description.as_deref().unwrap();
+        if update_changelog && !description.trim().is_empty() && local_tree.has_changes().unwrap() {
             let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
             {
                 Some(Some((name, email))) => Some((name, email)),
@@ -378,7 +379,7 @@ pub fn script_runner(
             add_changelog_entry(
                 local_tree,
                 &debian_path.join("changelog"),
-                vec![result.description.as_ref().unwrap().as_str()].as_slice(),
+                vec![description].as_slice(),
                 maintainer.as_ref(),
                 None,
                 None,
@@ -387,9 +388,14 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
+        if description.trim().is_empty() && local_tree.has_changes().unwrap() {
+            return Err(Error::Other(
+                "Script left changes but gave no description to commit them with".to_string(),
+            ));
+        }
         let mut builder = local_tree
             .build_commit()
-            .message(result.description.as_ref().unwrap())
+            .message(description)
             .allow_pointless(false);
         if let Some(committer) = committer {
             builder = builder.committer(committer);
