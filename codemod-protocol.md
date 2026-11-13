@@ -16,7 +16,7 @@ Codemods are commands that Silver-Platter runs in version control checkouts to m
 Silver-Platter runs your codemod in a clean VCS checkout. You can:
 
 - **Make and commit changes yourself** - Full control over the commit process
-- **Just make changes** - Silver-Platter will auto-commit with a reasonable message
+- **Just make changes** - Silver-Platter commits them with your description (stdout, or `description` in the result JSON) as the message; the run fails if there is none
 - **Make no changes** - Exit successfully to indicate no changes were needed
 
 By default, uncommitted changes are discarded (with a warning). Use `--autocommit` to have Silver-Platter commit them automatically.

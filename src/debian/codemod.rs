@@ -369,7 +369,10 @@ pub fn script_runner(
     };
 
     if commit_pending {
-        if update_changelog && result.description.is_some() && local_tree.has_changes().unwrap() {
+        if update_changelog
+            && !result.description.as_ref().unwrap().trim().is_empty()
+            && local_tree.has_changes().unwrap()
+        {
             let maintainer = match extra_env.map(|e| get_maintainer_from_env(|k| e.get(k).cloned()))
             {
                 Some(Some((name, email))) => Some((name, email)),
@@ -388,6 +391,13 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
+        if result.description.as_ref().unwrap().trim().is_empty()
+            && local_tree.has_changes().unwrap()
+        {
+            return Err(Error::Other(
+                "Script left changes but gave no description to commit them with".to_string(),
+            ));
+        }
         let mut builder = local_tree
             .build_commit()
             .message(result.description.as_ref().unwrap())
