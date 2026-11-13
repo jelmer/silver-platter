@@ -54,6 +54,7 @@ struct Success {
     pub target_branch_url: Option<url::Url>,
     #[serde(rename = "commit-message")]
     pub commit_message: Option<String>,
+    pub description: Option<String>,
 }
 
 /// Write a success to the SVP API
@@ -90,6 +91,7 @@ where
         debian: None,
         target_branch_url: None,
         commit_message: None,
+        description: None,
     })
     .unwrap();
 }
@@ -110,6 +112,7 @@ pub fn report_success_debian<T>(
         debian: Some(DebianContext { changelog }),
         target_branch_url: None,
         commit_message: None,
+        description: None,
     })
     .unwrap();
 }
@@ -183,6 +186,7 @@ pub struct Reporter {
     versions: HashMap<String, String>,
     target_branch_url: Option<url::Url>,
     commit_message: Option<String>,
+    description: Option<String>,
 }
 
 impl Reporter {
@@ -192,6 +196,7 @@ impl Reporter {
             versions,
             target_branch_url: None,
             commit_message: None,
+            description: None,
         }
     }
 
@@ -215,6 +220,11 @@ impl Reporter {
         self.commit_message = Some(message);
     }
 
+    /// Set the description of the changes
+    pub fn set_description(&mut self, description: String) {
+        self.description = Some(description);
+    }
+
     /// Report success
     pub fn report_success<T>(self, value: Option<i32>, context: Option<T>)
     where
@@ -227,6 +237,7 @@ impl Reporter {
             debian: None,
             target_branch_url: self.target_branch_url,
             commit_message: self.commit_message,
+            description: self.description,
         })
         .unwrap();
     }
@@ -247,6 +258,7 @@ impl Reporter {
             debian: Some(DebianContext { changelog }),
             target_branch_url: self.target_branch_url,
             commit_message: self.commit_message,
+            description: self.description,
         })
         .unwrap();
     }
@@ -265,5 +277,36 @@ impl Reporter {
         transient: Option<bool>,
     ) -> ! {
         report_fatal(self.versions, code, description, hint, transient);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reporter_report_success() {
+        let td = tempfile::tempdir().unwrap();
+        let result_path = td.path().join("result.json");
+        std::env::set_var("SVP_API", "1");
+        std::env::set_var("SVP_RESULT", &result_path);
+        let mut reporter = Reporter::new(HashMap::from([("foo".to_string(), "1.0".to_string())]));
+        reporter.set_commit_message("Fix typos".to_string());
+        reporter.set_description("Fix two typos in the README".to_string());
+        reporter.report_success(Some(10), Some(serde_json::json!({"fixed": 2})));
+        let result: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&result_path).unwrap()).unwrap();
+        assert_eq!(
+            result,
+            serde_json::json!({
+                "versions": {"foo": "1.0"},
+                "value": 10,
+                "context": {"fixed": 2},
+                "debian": null,
+                "target-branch-url": null,
+                "commit-message": "Fix typos",
+                "description": "Fix two typos in the README",
+            })
+        );
     }
 }
