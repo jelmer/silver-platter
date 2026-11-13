@@ -356,6 +356,13 @@ pub fn script_runner(
         local_tree
             .smart_add(&[local_tree.abspath(subpath).unwrap().as_path()])
             .unwrap();
+        if result.description.as_ref().unwrap().trim().is_empty()
+            && local_tree.has_changes().unwrap()
+        {
+            return Err(Error::Other(
+                "Script left changes but gave no description to commit them with".to_string(),
+            ));
+        }
         let mut builder = local_tree
             .build_commit()
             .message(result.description.as_ref().unwrap())
@@ -636,6 +643,52 @@ echo Did a thing
         assert_eq!(result.old_revision, old_revid);
         assert_eq!(result.new_revision, tree.last_revision().unwrap());
         assert_eq!(result.description.as_deref().unwrap(), "Did a thing\n");
+
+        std::mem::drop(td);
+    }
+
+    #[test]
+    #[serial]
+    fn test_changes_without_description() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree = create_standalone_workingtree(&d, "bzr").unwrap();
+        let script_path = td.path().join("script.sh");
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+echo foo > bar
+"#,
+        )
+        .unwrap();
+
+        make_executable(&script_path);
+
+        let old_revid = tree
+            .build_commit()
+            .message("initial")
+            .allow_pointless(true)
+            .commit()
+            .unwrap();
+        let script_path_str = script_path.to_str().unwrap();
+        let err = super::script_runner(
+            &tree,
+            &[script_path_str],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Script left changes but gave no description to commit them with"
+        );
+        assert_eq!(tree.last_revision().unwrap(), old_revid);
 
         std::mem::drop(td);
     }
