@@ -234,8 +234,7 @@ pub fn script_runner(
 
     let cl_path = debian_path.join("changelog");
     let source_name = match local_tree.get_file_text(&cl_path) {
-        Ok(text) => debian_changelog::ChangeLog::read(text.as_slice())
-            .unwrap()
+        Ok(text) => debian_changelog::ChangeLog::read(text.as_slice())?
             .iter()
             .next()
             .and_then(|e| e.package()),
@@ -423,4 +422,49 @@ pub fn script_runner(
         serialized_context: result.serialized_context,
         target_branch_url: result.target_branch_url,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use breezyshim::controldir::create_standalone_workingtree;
+    use breezyshim::testing::TestEnv;
+    use breezyshim::tree::MutableTree;
+    use breezyshim::WorkingTree;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_changelog_parse_error() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path().join("t");
+        let tree = create_standalone_workingtree(&d, "git").unwrap();
+        std::fs::create_dir(d.join("debian")).unwrap();
+        std::fs::write(
+            d.join("debian/changelog"),
+            "dpkg (1.3.0) unstable; urgency=low (HIGH for new source format)\n\n  * New source format.\n\n -- Joe Example <joe@example.com>  Mon, 01 Jan 1996 00:00:00 +0000\n",
+        )
+        .unwrap();
+        tree.add(&[
+            std::path::Path::new("debian"),
+            std::path::Path::new("debian/changelog"),
+        ])
+        .unwrap();
+        tree.build_commit().message("initial").commit().unwrap();
+
+        let err = super::script_runner(
+            &tree,
+            &["true"],
+            std::path::Path::new(""),
+            crate::CommitPending::Auto,
+            None,
+            Some("Joe Example <joe@example.com>"),
+            None,
+            std::process::Stdio::null(),
+            Some(true),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, super::Error::ChangelogParse(_)));
+    }
 }
