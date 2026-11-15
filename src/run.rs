@@ -675,6 +675,7 @@ mod tests {
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo "new content" > README.md
+echo "Update README"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
@@ -1169,6 +1170,7 @@ exit 0
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo $TEST_VAR > README.md
+echo "Update README"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "env_script.sh", script_content);
@@ -1481,6 +1483,7 @@ exit 0
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo "modified content" > file.txt
+echo "Update file.txt"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "modify_file.sh", script_content);
