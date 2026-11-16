@@ -3,10 +3,9 @@ use breezyshim::branch::GenericBranch;
 use breezyshim::controldir::{open_containing_from_transport, open_from_transport};
 use breezyshim::error::Error as BrzError;
 use breezyshim::{
-    get_transport, join_segment_parameters, split_segment_parameters, try_split_segment_parameters,
-    Branch, Transport,
+    get_transport, join_segment_parameters_encoded, try_split_segment_parameters_decoded, Branch,
+    Transport,
 };
-use percent_encoding::{utf8_percent_encode, CONTROLS};
 
 #[derive(Debug)]
 /// Errors that can occur when opening a branch.
@@ -276,7 +275,7 @@ pub fn open_branch(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<GenericBranch, BranchOpenError> {
-    let (url, params) = try_split_segment_parameters(url)
+    let (url, params) = try_split_segment_parameters_decoded(url)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let name = resolved_branch_name(name, &params);
 
@@ -299,7 +298,7 @@ pub fn open_branch_containing(
     probers: Option<&[&dyn breezyshim::controldir::PyProber]>,
     name: Option<&str>,
 ) -> Result<(GenericBranch, String), BranchOpenError> {
-    let (url, params) = try_split_segment_parameters(url)
+    let (url, params) = try_split_segment_parameters_decoded(url)
         .map_err(|e| BranchOpenError::from_err(url.clone(), &e))?;
     let name = resolved_branch_name(name, &params);
 
@@ -330,14 +329,10 @@ pub fn full_branch_url(branch: &dyn Branch) -> url::Url {
     match branch.name() {
         None => branch.get_user_url(),
         Some(ref name) if name.is_empty() => branch.get_user_url(),
-        Some(name) => {
-            let (url, mut params) = split_segment_parameters(&branch.get_user_url());
-            params.insert(
-                "branch".to_string(),
-                utf8_percent_encode(&name, CONTROLS).to_string(),
-            );
-            join_segment_parameters(&url, params)
-        }
+        Some(name) => join_segment_parameters_encoded(
+            &branch.get_user_url(),
+            std::collections::HashMap::from([("branch".to_string(), name)]),
+        ),
     }
 }
 
@@ -553,5 +548,30 @@ mod tests {
                 e => panic!("Expected Unavailable error, got {:?}", e),
             }
         }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_full_branch_url_escapes_name() {
+        use breezyshim::tree::WorkingTree;
+        let _test_env = breezyshim::testing::TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let format = breezyshim::controldir::ControlDirFormatRegistry::new()
+            .make_controldir("git")
+            .unwrap();
+        let wt = breezyshim::controldir::create_standalone_workingtree(td.path(), &format).unwrap();
+        let revid = wt.build_commit().message("x").commit().unwrap();
+        let branch = wt.controldir().create_branch(Some("debian/a,b")).unwrap();
+        branch.generate_revision_history(&revid).unwrap();
+        let url = full_branch_url(branch.as_ref());
+        assert_eq!(
+            url.as_str(),
+            format!(
+                "{},branch=debian%2Fa%2Cb",
+                Url::from_directory_path(td.path()).unwrap()
+            )
+        );
+        let reopened = open_branch(&url, None, None, None).unwrap();
+        assert_eq!(reopened.name(), Some("debian/a,b".to_string()));
     }
 }
