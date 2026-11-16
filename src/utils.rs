@@ -168,8 +168,10 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
             // conflicted merges that would appear on the hosting site.
             merger.set_run_hooks(false)?;
             let tree_merger = merger.make_merger().unwrap();
-            let _tt = tree_merger.make_preview_transform().unwrap();
-            !tree_merger.cooked_conflicts().unwrap().is_empty()
+            let tt = tree_merger.make_preview_transform().unwrap();
+            let conflicted = !tree_merger.cooked_conflicts().unwrap().is_empty();
+            tt.finalize()?;
+            conflicted
         }
         Err(MergeError::UnrelatedBranches) => {
             // Unrelated branches don't technically *have* to lead to
