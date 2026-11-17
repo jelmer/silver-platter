@@ -43,6 +43,15 @@ pub fn select_probers(vcs_type: Option<&str>) -> Vec<Box<dyn breezyshim::control
         .into_iter()
         .flatten()
         .collect(),
+        Some("hg") => [
+            breezyshim::mercurial::SmartHgProber::new()
+                .map(|prober| Box::new(prober) as Box<dyn breezyshim::controldir::PyProber>),
+            Some(Box::new(breezyshim::mercurial::LocalHgProber::new())
+                as Box<dyn breezyshim::controldir::PyProber>),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
         Some(vcs_type) => get_prober(vcs_type).into_iter().collect(),
         None => breezyshim::controldir::all_probers(),
     }
@@ -85,6 +94,20 @@ mod tests {
             let probers = probers.iter().map(|p| p.as_ref()).collect::<Vec<_>>();
             crate::vcs::open_branch(&url, None, Some(&probers), None).unwrap();
         }
+    }
+
+    #[test]
+    fn test_select_probers_local_hg() {
+        let td = tempfile::tempdir().unwrap();
+        std::fs::create_dir(td.path().join(".hg")).unwrap();
+        std::fs::write(td.path().join(".hg/requires"), "store\n").unwrap();
+        let url = url::Url::from_directory_path(td.path()).unwrap();
+        let probers = super::select_probers(Some("hg"));
+        let probers = probers.iter().map(|p| p.as_ref()).collect::<Vec<_>>();
+        assert!(matches!(
+            crate::vcs::open_branch(&url, None, Some(&probers), None),
+            Err(crate::vcs::BranchOpenError::Unsupported { vcs: Some(vcs), .. }) if vcs == "hg"
+        ));
     }
 
     #[test]
