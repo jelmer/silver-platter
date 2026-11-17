@@ -1531,6 +1531,7 @@ pub fn process_package(
                 .tags()
                 .unwrap()
                 .lookup_tag(tag_name)
+                .map(Some)
                 .unwrap(),
         );
     }

@@ -614,7 +614,7 @@ impl Workspace {
         overwrite_existing: Option<bool>,
         existing_proposal: Option<MergeProposal>,
         reviewers: Option<Vec<String>>,
-        tags: Option<HashMap<String, RevisionId>>,
+        tags: Option<HashMap<String, Option<RevisionId>>>,
         derived_owner: Option<&str>,
         allow_collaboration: Option<bool>,
         stop_revision: Option<&RevisionId>,
@@ -654,7 +654,7 @@ impl Workspace {
         target_branch: Option<&GenericBranch>,
         forge: Option<Forge>,
         existing_proposal: Option<MergeProposal>,
-        tags: Option<HashMap<String, RevisionId>>,
+        tags: Option<HashMap<String, Option<RevisionId>>>,
         labels: Option<Vec<String>>,
         overwrite_existing: Option<bool>,
         commit_message: Option<&str>,
@@ -708,7 +708,7 @@ impl Workspace {
         name: &str,
         target_branch: Option<&GenericBranch>,
         forge: Option<Forge>,
-        tags: Option<HashMap<String, RevisionId>>,
+        tags: Option<HashMap<String, Option<RevisionId>>>,
         overwrite_existing: Option<bool>,
         owner: Option<&str>,
     ) -> Result<(GenericBranch, url::Url), Error> {
@@ -737,12 +737,12 @@ impl Workspace {
     }
 
     /// Push the specified tags to the main branch
-    pub fn push_tags(&self, tags: HashMap<String, RevisionId>) -> Result<(), Error> {
+    pub fn push_tags(&self, tags: HashMap<String, Option<RevisionId>>) -> Result<(), Error> {
         self.push(Some(tags))
     }
 
     /// Push the changes back to the main branch
-    pub fn push(&self, tags: Option<HashMap<String, RevisionId>>) -> Result<(), Error> {
+    pub fn push(&self, tags: Option<HashMap<String, Option<RevisionId>>>) -> Result<(), Error> {
         let main_branch = self.main_branch().unwrap();
 
         // Get forge for the main branch
