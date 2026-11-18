@@ -261,7 +261,11 @@ pub fn apply_and_publish(
             error!("No changes to publish.");
             return 2;
         }
-        Err(PublishError::PermissionDenied) => {
+        Err(PublishError::PermissionDenied(Some(reason))) => {
+            error!("Permission denied to create merge proposal: {}", reason);
+            return 2;
+        }
+        Err(PublishError::PermissionDenied(None)) => {
             error!("Permission denied to create merge proposal.");
             return 2;
         }
