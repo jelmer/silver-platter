@@ -13,7 +13,7 @@ use breezyshim::{Branch, Forge, MergeProposal, RevisionId, Transport};
 use std::collections::HashMap;
 
 fn _tag_selector_from_tags(
-    tags: std::collections::HashMap<String, RevisionId>,
+    tags: std::collections::HashMap<String, Option<RevisionId>>,
 ) -> impl Fn(String) -> bool {
     move |tag| tags.contains_key(tag.as_str())
 }
@@ -24,6 +24,23 @@ fn _tag_selector_from_tags_ref(
     Box::new(move |tag| tags.contains_key(tag.as_str()))
 }
 
+/// Delete the tags that have no revision from a pushed branch.
+fn delete_removed_tags(
+    branch: &dyn Branch,
+    tags: &HashMap<String, Option<RevisionId>>,
+) -> Result<(), BrzError> {
+    let branch_tags = branch.tags()?;
+    for (name, revision) in tags {
+        if revision.is_none() {
+            match branch_tags.delete_tag(name) {
+                Ok(()) | Err(BrzError::NoSuchTag(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Push derived changes
 pub fn push_derived_changes(
     local_branch: &dyn PyBranch,
@@ -32,7 +49,7 @@ pub fn push_derived_changes(
     name: &str,
     overwrite_existing: Option<bool>,
     owner: Option<&str>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<(GenericBranch, url::Url), BrzError> {
     let tags = tags.unwrap_or_default();
@@ -43,8 +60,9 @@ pub fn push_derived_changes(
         overwrite_existing,
         owner,
         stop_revision,
-        Some(Box::new(_tag_selector_from_tags(tags))),
+        Some(Box::new(_tag_selector_from_tags(tags.clone()))),
     )?;
+    delete_removed_tags(&remote_branch, &tags)?;
     Ok((remote_branch, public_branch_url))
 }
 
@@ -53,7 +71,7 @@ pub fn push_result(
     local_branch: &GenericBranch,
     remote_branch: &GenericBranch,
     additional_colocated_branches: Option<&[(String, String)]>,
-    tags: Option<&std::collections::HashMap<String, RevisionId>>,
+    tags: Option<&std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<(), BrzError> {
     let tag_selector = if let Some(tags) = tags {
@@ -67,6 +85,9 @@ pub fn push_result(
         stop_revision,
         Some(Box::new(tag_selector)),
     )?;
+    if let Some(tags) = tags {
+        delete_removed_tags(remote_branch, tags)?;
+    }
 
     if let Some(branches) = additional_colocated_branches {
         for (from_branch_name, to_branch_name) in branches {
@@ -108,7 +129,7 @@ pub fn push_result(
 /// * `forge` - Forge to push to
 /// * `possible_transports` - Possible transports to use
 /// * `additional_colocated_branches` - Additional colocated branches to push
-/// * `tags` - Tags to push
+/// * `tags` - Tags to push, with no revision for a tag to delete
 /// * `stop_revision` - Revision to stop pushing at
 pub fn push_changes(
     local_branch: &GenericBranch,
@@ -116,7 +137,7 @@ pub fn push_changes(
     forge: Option<&Forge>,
     possible_transports: Option<&mut Vec<Transport>>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<&RevisionId>,
 ) -> Result<(), Error> {
     let push_url = if let Some(forge) = forge {
@@ -262,7 +283,7 @@ pub fn find_existing_proposed_classified(
 /// * `additional_colocated_branches` - Additional colocated branches to propose
 /// * `allow_empty` - Whether to allow empty merge proposals
 /// * `reviewers` - List of reviewers
-/// * `tags` - Tags to push (None for default behaviour)
+/// * `tags` - Tags to push, with no revision for a tag to delete (None for default behaviour)
 /// * `owner` - Derived branch owner
 /// * `stop_revision` - Revision to stop pushing at
 /// * `allow_collaboration` - Allow target branch owners to modify source branch
@@ -288,7 +309,7 @@ pub fn propose_changes(
     additional_colocated_branches: Option<Vec<(String, String)>>,
     allow_empty: Option<bool>,
     _reviewers: Option<Vec<String>>,
-    tags: Option<HashMap<String, RevisionId>>,
+    tags: Option<HashMap<String, Option<RevisionId>>>,
     owner: Option<&str>,
     stop_revision: Option<&RevisionId>,
     _allow_collaboration: Option<bool>,
@@ -316,6 +337,9 @@ pub fn propose_changes(
             stop_revision,
             tag_selector,
         )?;
+        if let Some(tags) = tags.as_ref() {
+            delete_removed_tags(resume_branch, tags)?;
+        }
         derived_branch = None;
     } else {
         let tag_selector = tags.as_ref().map(|tag_map| {
@@ -330,6 +354,9 @@ pub fn propose_changes(
             stop_revision,
             tag_selector,
         )?;
+        if let Some(tags) = tags.as_ref() {
+            delete_removed_tags(&branch, tags)?;
+        }
         derived_branch = Some(branch);
     }
 
@@ -579,7 +606,7 @@ pub struct PublishBuilder<'a> {
     overwrite_existing: Option<bool>,
     existing_proposal: Option<MergeProposal>,
     reviewers: Option<Vec<String>>,
-    tags: Option<HashMap<String, RevisionId>>,
+    tags: Option<HashMap<String, Option<RevisionId>>>,
     derived_owner: Option<&'a str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<&'a RevisionId>,
@@ -658,8 +685,8 @@ impl<'a> PublishBuilder<'a> {
         self
     }
 
-    /// Sets tags to apply to the published branch.
-    pub fn tags(mut self, tags: HashMap<String, RevisionId>) -> Self {
+    /// Sets tags to apply to the published branch; a tag with no revision is deleted.
+    pub fn tags(mut self, tags: HashMap<String, Option<RevisionId>>) -> Self {
         self.tags = Some(tags);
         self
     }
@@ -742,7 +769,7 @@ impl<'a> PublishBuilder<'a> {
 /// * `overwrite_existing` - Whether to overwrite existing (but unrelated) branch
 /// * `existing_proposal` - Existing proposal to update
 /// * `reviewers` - List of reviewers for merge proposal
-/// * `tags` - Tags to push (None for default behaviour)
+/// * `tags` - Tags to push, with no revision for a tag to delete (None for default behaviour)
 /// * `derived_owner` - Name of any derived branch
 /// * `allow_collaboration` - Whether to allow target branch owners to modify source branch.
 /// * `auto_merge` - Enable merging once CI passes
@@ -762,7 +789,7 @@ pub fn publish_changes(
     overwrite_existing: Option<bool>,
     existing_proposal: Option<MergeProposal>,
     reviewers: Option<Vec<String>>,
-    tags: Option<HashMap<String, RevisionId>>,
+    tags: Option<HashMap<String, Option<RevisionId>>>,
     derived_owner: Option<&str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<&RevisionId>,
@@ -1202,8 +1229,23 @@ mod tests {
             .message("Some change")
             .commit()
             .unwrap();
-        push_result(&source.branch(), &target, None, None, None).unwrap();
+        source
+            .branch()
+            .tags()
+            .unwrap()
+            .set_tag("v1", &revid)
+            .unwrap();
+        target.tags().unwrap().set_tag("old", &revid).unwrap();
+        let tags = HashMap::from([
+            ("v1".to_string(), Some(revid.clone())),
+            ("old".to_string(), None),
+        ]);
+        push_result(&source.branch(), &target, None, Some(&tags), None).unwrap();
         assert_eq!(target.last_revision(), revid);
+        assert_eq!(
+            target.tags().unwrap().get_tag_dict().unwrap(),
+            HashMap::from([("v1".to_string(), revid)])
+        );
     }
 
     #[test]
@@ -1276,8 +1318,8 @@ mod tests {
         let main_branch = tree.branch();
 
         let mut tags = HashMap::new();
-        tags.insert("v1.0".to_string(), RevisionId::from(b"rev1".to_vec()));
-        tags.insert("v2.0".to_string(), RevisionId::from(b"rev2".to_vec()));
+        tags.insert("v1.0".to_string(), Some(RevisionId::from(b"rev1".to_vec())));
+        tags.insert("v2.0".to_string(), None);
 
         let builder = PublishBuilder::new(&local_branch, &main_branch, "test-branch", Mode::Push)
             .tags(tags.clone());

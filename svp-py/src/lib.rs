@@ -600,7 +600,7 @@ fn push_derived_changes(
     name: &str,
     overwrite_existing: Option<bool>,
     owner: Option<&str>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<(Py<PyAny>, String)> {
     let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
@@ -687,7 +687,7 @@ fn push_changes(
     forge: Option<Py<PyAny>>,
     possible_transports: Option<Vec<Py<PyAny>>>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
     let mut possible_transports: Option<Vec<silver_platter::Transport>> =
@@ -714,7 +714,7 @@ fn push_result(
     local_branch: Py<PyAny>,
     remote_branch: Py<PyAny>,
     additional_colocated_branches: Option<Vec<(String, String)>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     stop_revision: Option<RevisionId>,
 ) -> PyResult<()> {
     let local_branch: breezyshim::branch::GenericBranch = local_branch.extract(py)?;
@@ -788,7 +788,7 @@ fn propose_changes(
     additional_colocated_branches: Option<Vec<(String, String)>>,
     allow_empty: Option<bool>,
     reviewers: Option<Vec<String>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     owner: Option<&str>,
     stop_revision: Option<RevisionId>,
     allow_collaboration: Option<bool>,
@@ -864,7 +864,7 @@ fn publish_changes(
     overwrite_existing: Option<bool>,
     existing_proposal: Option<&MergeProposal>,
     reviewers: Option<Vec<String>>,
-    tags: Option<std::collections::HashMap<String, RevisionId>>,
+    tags: Option<std::collections::HashMap<String, Option<RevisionId>>>,
     derived_owner: Option<&str>,
     allow_collaboration: Option<bool>,
     stop_revision: Option<RevisionId>,
