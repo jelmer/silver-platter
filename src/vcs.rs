@@ -158,15 +158,22 @@ impl BranchOpenError {
                     format!("Socket error: {}", e)
                 },
             },
-            BrzError::UnsupportedProtocol(url, extra) => Self::Unsupported {
-                url: url.parse().unwrap(),
-                description: if let Some(extra) = extra {
-                    format!("Unsupported protocol: {}", extra)
-                } else {
-                    "Unsupported protocol".to_string()
-                },
-                vcs: None,
-            },
+            BrzError::UnsupportedProtocol(path, extra) => {
+                let parsed = path.parse();
+                let mut description = match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() => format!("Unsupported protocol: {}", extra),
+                    _ => "Unsupported protocol".to_string(),
+                };
+                // Keep a path that is not a URL in the description.
+                if parsed.is_err() {
+                    description = format!("{}: {}", description, path);
+                }
+                Self::Unsupported {
+                    url: parsed.unwrap_or(url),
+                    description,
+                    vcs: None,
+                }
+            }
             BrzError::ConnectionError(msg) => {
                 if e.to_string()
                     .contains("Temporary failure in name resolution")
@@ -190,13 +197,18 @@ impl BranchOpenError {
                     extra.as_deref().unwrap_or("")
                 ),
             },
-            BrzError::InvalidURL(url, extra) => Self::Unavailable {
-                url: url.parse().unwrap(),
-                description: extra
-                    .as_ref()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("Invalid URL: {}", url)),
-            },
+            BrzError::InvalidURL(path, extra) => {
+                let parsed = path.parse();
+                let description = match extra.as_deref() {
+                    Some(extra) if !extra.is_empty() && parsed.is_ok() => extra.to_string(),
+                    Some(extra) if !extra.is_empty() => format!("Invalid URL: {}: {}", path, extra),
+                    _ => format!("Invalid URL: {}", path),
+                };
+                Self::Unavailable {
+                    url: parsed.unwrap_or(url),
+                    description,
+                }
+            }
             BrzError::InvalidHttpResponse(_path, msg, _orig_error, headers) => {
                 if msg.to_string().contains("Unexpected HTTP status 429") {
                     Self::rate_limited(url, e, headers)
@@ -497,6 +509,47 @@ mod tests {
                 .collect(),
         };
         BranchOpenError::from_err(url, &brz_err)
+    }
+
+    #[test]
+    fn test_branch_open_error_from_err_path_not_url() {
+        let url = Url::parse("lp:foo").unwrap();
+        let brz_err = BrzError::InvalidURL(
+            "Unknown Launchpad path: lp:foo".to_string(),
+            Some(String::new()),
+        );
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unavailable {
+                url: err_url,
+                description,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Invalid URL: Unknown Launchpad path: lp:foo");
+            }
+            e => panic!("Expected Unavailable error, got {:?}", e),
+        }
+
+        let brz_err = BrzError::InvalidURL("not a url".to_string(), Some("bad port".to_string()));
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unavailable { description, .. } => {
+                assert_eq!(description, "Invalid URL: not a url: bad port");
+            }
+            e => panic!("Expected Unavailable error, got {:?}", e),
+        }
+
+        let brz_err = BrzError::UnsupportedProtocol("not a url".to_string(), Some(String::new()));
+        match BranchOpenError::from_err(url.clone(), &brz_err) {
+            BranchOpenError::Unsupported {
+                url: err_url,
+                description,
+                vcs,
+            } => {
+                assert_eq!(err_url, url);
+                assert_eq!(description, "Unsupported protocol: not a url");
+                assert_eq!(vcs, None);
+            }
+            e => panic!("Expected Unsupported error, got {:?}", e),
+        }
     }
 
     #[test]
