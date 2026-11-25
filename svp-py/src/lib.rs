@@ -1022,9 +1022,10 @@ pub(crate) mod debian {
         main_branch: Py<PyAny>,
     ) -> PyResult<HashMap<String, String>> {
         let main_branch: breezyshim::branch::GenericBranch = main_branch.extract(py)?;
-        Ok(silver_platter::debian::pick_additional_colocated_branches(
-            &main_branch,
-        ))
+        Ok(
+            silver_platter::debian::pick_additional_colocated_branches(&main_branch)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?,
+        )
     }
 
     #[pyclass]
