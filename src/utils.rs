@@ -1,7 +1,7 @@
 //! Utility functions for working with branches.
 use breezyshim::branch::{Branch, PyBranch};
 use breezyshim::error::Error as BrzError;
-use breezyshim::merge::{Error as MergeError, MergeType, Merger, MERGE_HOOKS};
+use breezyshim::merge::{Error as MergeError, MergeType, Merger};
 use breezyshim::repository::Repository;
 use breezyshim::tree::WorkingTree;
 use breezyshim::workingtree::GenericWorkingTree;
@@ -155,11 +155,6 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
         Some(&main_branch.last_revision()),
     )?;
 
-    // Reset custom merge hooks, since they could make it harder to detect
-    // conflicted merges that would appear on the hosting site.
-    let old_file_contents_mergers = MERGE_HOOKS.get("merge_file_content").unwrap();
-    MERGE_HOOKS.clear("merge_file_contents").unwrap();
-
     let other_tree = other_repository.revision_tree(&other_revision).unwrap();
     let result = match Merger::from_revision_ids(
         &other_tree,
@@ -169,9 +164,14 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
     ) {
         Ok(mut merger) => {
             merger.set_merge_type(MergeType::Merge3);
+            // Skip custom merge hooks, since they could make it harder to detect
+            // conflicted merges that would appear on the hosting site.
+            merger.set_run_hooks(false)?;
             let tree_merger = merger.make_merger().unwrap();
             let tt = tree_merger.make_preview_transform().unwrap();
-            !tt.cooked_conflicts().unwrap().is_empty()
+            let conflicted = !tree_merger.cooked_conflicts().unwrap().is_empty();
+            tt.finalize()?;
+            conflicted
         }
         Err(MergeError::UnrelatedBranches) => {
             // Unrelated branches don't technically *have* to lead to
@@ -179,9 +179,6 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
             true
         }
     };
-    for hook in old_file_contents_mergers {
-        MERGE_HOOKS.add("merge_file_content", hook).unwrap();
-    }
     std::mem::drop(other_lock);
     std::mem::drop(other_repository_lock);
     std::mem::drop(main_lock);
@@ -192,6 +189,7 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
 mod tests {
     use super::*;
     use breezyshim::testing::TestEnv;
+    use breezyshim::tree::MutableTree;
     use serial_test::serial;
 
     #[test]
@@ -248,6 +246,40 @@ mod tests {
             controldir.open_branch(Some("vendor")),
             Err(BrzError::NotBranchError(..))
         ));
+    }
+
+    #[test]
+    #[serial]
+    fn test_merge_conflicts() {
+        let _test_env = TestEnv::new();
+        let td = tempfile::tempdir().unwrap();
+        let main_path = td.path().join("main");
+        let main =
+            breezyshim::controldir::create_standalone_workingtree(&main_path, "git").unwrap();
+        std::fs::write(main_path.join("a"), "a\n").unwrap();
+        MutableTree::add(&main, &[std::path::Path::new("a")]).unwrap();
+        main.build_commit().message("add a").commit().unwrap();
+
+        let other_url = url::Url::from_file_path(td.path().join("other")).unwrap();
+        let other = main
+            .controldir()
+            .sprout(other_url, None, None, None, None)
+            .unwrap()
+            .open_workingtree()
+            .unwrap();
+        std::fs::write(other.basedir().join("a"), "other\n").unwrap();
+        other.build_commit().message("change a").commit().unwrap();
+        let conflicts = || merge_conflicts(&main.branch(), &other.branch(), None).unwrap();
+        assert!(!conflicts());
+
+        std::fs::write(main_path.join("b"), "b\n").unwrap();
+        MutableTree::add(&main, &[std::path::Path::new("b")]).unwrap();
+        main.build_commit().message("add b").commit().unwrap();
+        assert!(!conflicts());
+
+        std::fs::write(main_path.join("a"), "main\n").unwrap();
+        main.build_commit().message("change a").commit().unwrap();
+        assert!(conflicts());
     }
 
     #[test]
