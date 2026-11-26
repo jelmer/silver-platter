@@ -180,7 +180,7 @@ pub fn merge_conflicts<B1: PyBranch, B2: PyBranch>(
         }
     };
     for hook in old_file_contents_mergers {
-        MERGE_HOOKS.add("merge_file_content", hook).unwrap();
+        MERGE_HOOKS.hook("merge_file_content", hook).unwrap();
     }
     std::mem::drop(other_lock);
     std::mem::drop(other_repository_lock);
