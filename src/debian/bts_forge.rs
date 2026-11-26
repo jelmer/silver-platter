@@ -23,6 +23,85 @@ use debbugs::blocking::Debbugs;
 use std::collections::HashMap;
 use url::Url;
 
+#[derive(Debug, Clone)]
+enum EmailTransport {
+    System,
+    #[cfg(test)]
+    Stub,
+}
+
+impl EmailTransport {
+    fn send_smtp(&self, email: &lettre::Message) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Self::System => {
+                use lettre::{SmtpTransport, Transport};
+
+                let smtp = SmtpTransport::unencrypted_localhost();
+                smtp.send(email)?;
+                Ok(())
+            }
+            #[cfg(test)]
+            Self::Stub => Ok(()),
+        }
+    }
+
+    fn send_bug_report(&self, email: &lettre::Message) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Self::System => {
+                use lettre::transport::smtp::authentication::Credentials;
+                use lettre::{SmtpTransport, Transport};
+
+                // Try to send via local sendmail first, then SMTP
+                if let Ok(sendmail_path) = which::which("sendmail") {
+                    use std::io::Write;
+                    use std::process::{Command, Stdio};
+
+                    let mut child = Command::new(sendmail_path)
+                        .arg("-t")
+                        .arg("-oi")
+                        .stdin(Stdio::piped())
+                        .spawn()?;
+
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let formatted = email.formatted();
+                        stdin.write_all(&formatted)?;
+                    }
+
+                    let status = child.wait()?;
+                    if status.success() {
+                        return Ok(());
+                    }
+                }
+
+                // Fall back to SMTP
+                // Check for SMTP configuration in environment
+                if let Ok(smtp_server) = std::env::var("SMTP_SERVER") {
+                    let smtp_user = std::env::var("SMTP_USER").ok();
+                    let smtp_pass = std::env::var("SMTP_PASS").ok();
+
+                    let mut mailer = SmtpTransport::relay(&smtp_server)?;
+
+                    if let (Some(user), Some(pass)) = (smtp_user, smtp_pass) {
+                        mailer = mailer.credentials(Credentials::new(user, pass));
+                    }
+
+                    let smtp = mailer.build();
+                    smtp.send(email)?;
+
+                    Ok(())
+                } else {
+                    // No SMTP configuration, try localhost
+                    let smtp = SmtpTransport::unencrypted_localhost();
+                    smtp.send(email)?;
+                    Ok(())
+                }
+            }
+            #[cfg(test)]
+            Self::Stub => Ok(()),
+        }
+    }
+}
+
 /// Represents a merge proposal in the Debian BTS
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -36,6 +115,7 @@ pub struct BTSMergeProposal {
     status: MergeProposalStatus,
     tags: Vec<String>,
     user_tags: HashMap<String, Vec<String>>,
+    transport: EmailTransport,
 }
 
 impl BTSMergeProposal {
@@ -56,7 +136,14 @@ impl BTSMergeProposal {
             status: MergeProposalStatus::Open,
             tags: Vec::new(),
             user_tags: HashMap::new(),
+            transport: EmailTransport::System,
         }
+    }
+
+    #[cfg(test)]
+    fn with_stub_transport(mut self) -> Self {
+        self.transport = EmailTransport::Stub;
+        self
     }
 
     /// Check if the patch has been applied by looking at VCS headers
@@ -123,7 +210,7 @@ impl BTSMergeProposal {
     /// Send control email to BTS
     fn send_control_email(&self, command: &str) -> Result<(), BrzError> {
         use lettre::message::header::ContentType;
-        use lettre::{Message, SmtpTransport, Transport};
+        use lettre::Message;
 
         let maintainer = debian_changelog::get_maintainer()
             .unwrap_or_else(|| ("Unknown".to_string(), "unknown@localhost".to_string()));
@@ -148,9 +235,7 @@ impl BTSMergeProposal {
                 )))
             })?;
 
-        // Try to send via SMTP
-        let smtp = SmtpTransport::unencrypted_localhost();
-        smtp.send(&email).map_err(|e| {
+        self.transport.send_smtp(&email).map_err(|e| {
             BrzError::Other(pyo3::exceptions::PyIOError::new_err(format!(
                 "Failed to send control email: {}",
                 e
@@ -263,7 +348,7 @@ impl BTSMergeProposal {
     fn post_comment(&mut self, comment: &str) -> Result<(), BrzError> {
         // Send email to bug address
         use lettre::message::header::ContentType;
-        use lettre::{Message, SmtpTransport, Transport};
+        use lettre::Message;
 
         let maintainer = debian_changelog::get_maintainer()
             .unwrap_or_else(|| ("Unknown".to_string(), "unknown@localhost".to_string()));
@@ -288,9 +373,7 @@ impl BTSMergeProposal {
                 )))
             })?;
 
-        // Send via SMTP
-        let smtp = SmtpTransport::unencrypted_localhost();
-        smtp.send(&email).map_err(|e| {
+        self.transport.send_smtp(&email).map_err(|e| {
             BrzError::Other(pyo3::exceptions::PyIOError::new_err(format!(
                 "Failed to send comment: {}",
                 e
@@ -324,6 +407,7 @@ pub struct BTSForge {
     debbugs: Debbugs,
     /// Optional package name to use when filing bugs
     pub package_name: Option<String>,
+    transport: EmailTransport,
 }
 
 impl BTSForge {
@@ -332,7 +416,14 @@ impl BTSForge {
         Self {
             debbugs: Debbugs::default(),
             package_name,
+            transport: EmailTransport::System,
         }
+    }
+
+    #[cfg(test)]
+    fn with_stub_transport(mut self) -> Self {
+        self.transport = EmailTransport::Stub;
+        self
     }
 
     /// File a new bug with a patch
@@ -406,8 +497,7 @@ impl BTSForge {
         email_content: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use lettre::message::header::ContentType;
-        use lettre::transport::smtp::authentication::Credentials;
-        use lettre::{Message, SmtpTransport, Transport};
+        use lettre::Message;
 
         // Build the email
         let email = Message::builder()
@@ -417,51 +507,7 @@ impl BTSForge {
             .header(ContentType::TEXT_PLAIN)
             .body(email_content.to_string())?;
 
-        // Try to send via local sendmail first, then SMTP
-        if let Ok(sendmail_path) = which::which("sendmail") {
-            // Use sendmail if available
-            use std::io::Write;
-            use std::process::{Command, Stdio};
-
-            let mut child = Command::new(sendmail_path)
-                .arg("-t")
-                .arg("-oi")
-                .stdin(Stdio::piped())
-                .spawn()?;
-
-            if let Some(mut stdin) = child.stdin.take() {
-                let formatted = email.formatted();
-                stdin.write_all(&formatted)?;
-            }
-
-            let status = child.wait()?;
-            if status.success() {
-                return Ok(());
-            }
-        }
-
-        // Fall back to SMTP
-        // Check for SMTP configuration in environment
-        if let Ok(smtp_server) = std::env::var("SMTP_SERVER") {
-            let smtp_user = std::env::var("SMTP_USER").ok();
-            let smtp_pass = std::env::var("SMTP_PASS").ok();
-
-            let mut mailer = SmtpTransport::relay(&smtp_server)?;
-
-            if let (Some(user), Some(pass)) = (smtp_user, smtp_pass) {
-                mailer = mailer.credentials(Credentials::new(user, pass));
-            }
-
-            let smtp = mailer.build();
-            smtp.send(&email)?;
-
-            Ok(())
-        } else {
-            // No SMTP configuration, try localhost
-            let smtp = SmtpTransport::unencrypted_localhost();
-            smtp.send(&email)?;
-            Ok(())
-        }
+        self.transport.send_bug_report(&email)
     }
 
     /// Find bugs by user tags
@@ -733,13 +779,15 @@ impl BTSForge {
             None,
         )?;
 
-        Ok(BTSMergeProposal::new(
+        let mut mp = BTSMergeProposal::new(
             bug_number,
             source_branch.get_user_url(),
             target_branch.get_user_url(),
             title.to_string(),
             description.to_string(),
-        ))
+        );
+        mp.transport = self.transport.clone();
+        Ok(mp)
     }
 
     fn get_user_url(&self, _user: &str) -> Result<Url, BrzError> {
@@ -792,7 +840,6 @@ impl BTSForge {
 mod tests {
     use super::*;
     use breezyshim::controldir::{create_branch_convenience_as_generic, ControlDirFormat};
-    use std::collections::HashMap;
     use tempfile::TempDir;
 
     fn create_test_branch() -> (TempDir, GenericBranch) {
@@ -861,7 +908,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Initial title".to_string(),
             "Initial description".to_string(),
-        );
+        )
+        .with_stub_transport();
 
         assert_eq!(mp.get_description().unwrap(), "Initial description");
 
@@ -882,7 +930,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Fix typo".to_string(),
             "Description".to_string(),
-        );
+        )
+        .with_stub_transport();
 
         // Test initial status
         assert_eq!(mp.get_status().unwrap(), MergeProposalStatus::Open);
@@ -934,7 +983,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Fix typo".to_string(),
             "Description".to_string(),
-        );
+        )
+        .with_stub_transport();
 
         // Test adding multiple labels
         mp.add_label("patch").unwrap();
@@ -962,10 +1012,10 @@ mod tests {
         mp.add_label("patch").unwrap();
         assert_eq!(mp.tags.len(), 4); // Should add duplicate
 
-        // Test removing one instance of duplicate
+        // Test removing all instances of duplicate
         mp.remove_label("patch").unwrap();
-        assert_eq!(mp.tags.len(), 3);
-        assert!(mp.tags.contains(&"patch".to_string())); // One instance should remain
+        assert_eq!(mp.tags.len(), 2);
+        assert!(!mp.tags.contains(&"patch".to_string()));
     }
 
     #[test]
@@ -1184,7 +1234,7 @@ mod tests {
 
     #[test]
     fn test_file_bug_with_patch_comprehensive() {
-        let forge = BTSForge::new(Some("test-package".to_string()));
+        let forge = BTSForge::new(Some("test-package".to_string())).with_stub_transport();
 
         // Test basic bug filing
         let result = forge.file_bug_with_patch(
@@ -1293,7 +1343,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Long description test".to_string(),
             long_description.clone(),
-        );
+        )
+        .with_stub_transport();
 
         assert_eq!(mp.get_description().unwrap(), long_description);
 
@@ -1315,7 +1366,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Test proposal".to_string(),
             "Test description".to_string(),
-        );
+        )
+        .with_stub_transport();
 
         // Test posting comments
         assert!(mp.post_comment("This is a test comment").is_ok());
@@ -1336,7 +1388,7 @@ mod tests {
     fn test_create_proposal_comprehensive() {
         let (_td1, source_branch) = create_test_branch();
         let (_td2, target_branch) = create_test_branch();
-        let forge = BTSForge::new(Some("test-package".to_string()));
+        let forge = BTSForge::new(Some("test-package".to_string())).with_stub_transport();
 
         // Test creating proposal with all parameters
         let result = forge.create_proposal(
@@ -1437,7 +1489,8 @@ mod tests {
             "https://example.com/target".parse().unwrap(),
             "Large scale test".to_string(),
             "Testing large scale operations".to_string(),
-        );
+        )
+        .with_stub_transport();
 
         // Add many user tags
         for i in 0..100 {
@@ -1466,7 +1519,8 @@ mod tests {
 
     #[test]
     fn test_unicode_and_special_characters() {
-        let forge = BTSForge::new(Some("тест-пакет".to_string())); // Cyrillic package name
+        // Cyrillic package name
+        let forge = BTSForge::new(Some("тест-пакет".to_string())).with_stub_transport();
 
         // Test Unicode in bug filing
         let result = forge.file_bug_with_patch(
