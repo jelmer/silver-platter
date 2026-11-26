@@ -1056,6 +1056,7 @@ exit 0
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo "new content" > README.md
+echo "Update README"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
@@ -1120,6 +1121,7 @@ exit 0
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo "new content" > README.md
+echo "Update README"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "successful_script.sh", script_content);
@@ -1412,6 +1414,7 @@ exit 0
         std::fs::create_dir(&script_dir).unwrap();
         let script_content = r#"#!/bin/sh
 echo '{"name": "frontend", "version": "2.0.0"}' > package.json
+echo "Update package.json"
 exit 0
 "#;
         let script_path = create_test_script(&script_dir, "update_package.sh", script_content);
